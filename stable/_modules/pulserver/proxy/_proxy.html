@@ -36,7 +36,7 @@
     <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
     <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
     <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
-    <link rel="stylesheet" type="text/css" href="../../../_static/pulserver.css?v=e08ae8f3" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/pulserver.css?v=6854ff42" />
   
   <!-- So that users can add custom icons -->
   <script defer src="../../../_static/scripts/fontawesome.js?digest=90905a2f556bf617f1a9"></script>
@@ -44,7 +44,7 @@
   <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../../../_static/documentation_options.js?v=b196e8ce"></script>
+    <script src="../../../_static/documentation_options.js?v=a6e268a8"></script>
     <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -55,18 +55,19 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.2.1';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.2.2';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+    <script src="../../../_static/capabilities.js?v=421ebb92"></script>
     <link rel="canonical" href="https://pulserver.github.io/pulserver/stable/_modules/pulserver/proxy/_proxy.html" />
     <link rel="icon" href="../../../_static/pulserver-mark.svg"/>
     <link rel="index" title="Index" href="../../../genindex.html" />
     <link rel="search" title="Search" href="../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.2.1" />
+  <meta name="docsearch:version" content="v0.2.2" />
   
     
     <script src="../../../_static/searchtools.js"></script>
@@ -113,46 +114,6 @@
 
   
     <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
-<div class="bd-header__inner bd-page-width">
-  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
-    <span class="fa-solid fa-bars"></span>
-  </button>
-  
-  
-  <div class="col-lg-9 navbar-header-items">
-    
-    
-    <div class="navbar-header-items__end">
-      
-        <div class="navbar-item navbar-persistent--container">
-          
-
-<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
- <i class="fa-solid fa-magnifying-glass"></i>
- <span class="search-button__default-text">Search</span>
- <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
-</button>
-        </div>
-      
-      
-    </div>
-    
-  </div>
-  
-  
-    <div class="navbar-persistent--mobile">
-
-<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
- <i class="fa-solid fa-magnifying-glass"></i>
- <span class="search-button__default-text">Search</span>
- <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
-</button>
-    </div>
-  
-
-  
-</div>
-
     </header>
   
 
@@ -236,50 +197,50 @@
         </ul>
         <ul class="nav bd-sidenav">
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../user-guide/index.html">User guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/running.html">Running the services</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/running.html">Services</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../user-guide/scanner-sequences.html">Scanner sequences</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../user-guide/reconstruction-plugins.html">Reconstruction plugins</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/reconstruction-client.html">Reconstruction clients</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/virtual-scanner.html">Scanning a phantom without a scanner</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/reconstruction-client.html">Reconstruction client</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../developer-guide/index.html">Developer guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/prerequisites.html">Development prerequisites</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/installation.html">Editable installation</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/workflow.html">Development workflow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/installation.html">Development setup</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/workflow.html">Contribution workflow</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/style.html">Coding style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/documentation.html">Documentation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/terminology.html">Terminology and conventions</a></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../../../developer-guide/internals/index.html">Internals</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/calibration.html">Calibration, noise and coil compression</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/ir-cache.html">IR cache</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/protocol-wire.html">Protocol text blocks</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/reconstruction-proxy.html">Reconstruction proxy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/sar-ratios.html">SAR ratios against a reference pulse</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/pre-commit.html">Pre-commit</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/pull-requests.html">Pull requests</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/releases.html">Releases</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/code-of-conduct.html">Code of conduct</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../../../explanations/architecture.html">Architecture</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../explanations/protocol.html">Protocol resolution</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../explanations/designs.html">Designs and the design store</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../explanations/scanner-representation.html">Scanner representation (PulSeg)</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../explanations/virtual-scanner.html">The virtual scanner</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../explanations/reconstruction.html">Raw-data enrichment and routing</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../explanations/calibration.html">Calibration, noise and coil compression</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/safety-checks.html">Safety checks</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/scanner-representation.html">PulSeg representation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/raw-data.html">MRD enrichment</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/reconstruction-session.html">Reconstruction session</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/reconstruction.html">Reconstruction plugins and calibration context</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../examples/index.html">Examples</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../../../examples/course.html">Course</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/01_protocol_to_image.html">1. From protocol to image</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/02_sequence_plugin.html">2. A scanner sequence and its protocol</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/03_scanner_representation.html">3. Scanner representation</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/04_reconstruction_plugin.html">4. A reconstruction plugin</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/05_testing_on_the_virtual_scanner.html">5. Testing on the virtual scanner</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/01_protocol_to_image.html">1. Your first scan</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/02_sequence_plugin.html">2. Your sequence in the scanner UI</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/03_scanner_representation.html">3. What the scanner plays</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/04_reconstruction_plugin.html">4. What your recon receives</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/05_recon_plugin.html">5. Your recon plugin</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/06_testing_on_the_virtual_scanner.html">6. Test your pair on the virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../../../examples/tours.html">Tours</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -674,104 +635,108 @@
 <span class="k">class</span><span class="w"> </span><span class="nc">ReconProxy</span><span class="p">(</span><span class="n">_Listener</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Routes each series of an MRD stream to a reconstruction.</span>
 
-<span class="sd">    One thread per client connection, which carries one series: an optional</span>
-<span class="sd">    config text, the header, one acquisition per readout of the chain and a</span>
-<span class="sd">    ``CLOSE``. The header's ``pulserver_design`` names the design of the store</span>
-<span class="sd">    the series was played from; its readout table enriches the header and</span>
-<span class="sd">    every acquisition, and the reconstruction receives the chain's sequence</span>
-<span class="sd">    description as a text message after the header and before the first</span>
-<span class="sd">    acquisition (:func:`~pulserver.proxy._seqdesc.message`), which is not</span>
-<span class="sd">    sent back to the client. The readouts arrive demodulated to the</span>
-<span class="sd">    prescribed field-of-view centre by the playout</span>
-<span class="sd">    (:func:`pulserver.ir.prescribe`), and their samples are passed on as</span>
-<span class="sd">    received. The reconstruction plugin is the one the client's config text</span>
-<span class="sd">    names. A series that breaks this is refused with a text naming the reason</span>
-<span class="sd">    and a ``CLOSE``, and what the client still sends is discarded until it</span>
-<span class="sd">    closes the connection.</span>
+<span class="sd">    A client connection carries one series and is served by a thread of its</span>
+<span class="sd">    own: an optional config text, the header, one acquisition per readout of</span>
+<span class="sd">    the chain and a ``CLOSE``. The header's ``pulserver_design`` user parameter</span>
+<span class="sd">    names the design of the store the series was played from. Its readout</span>
+<span class="sd">    table enriches the header and every acquisition; the samples are passed on</span>
+<span class="sd">    as received, demodulated to the prescribed field-of-view centre by the</span>
+<span class="sd">    playout (:func:`pulserver.ir.prescribe`). The reconstruction receives the</span>
+<span class="sd">    chain's sequence description as a text message, after the header and</span>
+<span class="sd">    before the first acquisition</span>
+<span class="sd">    (:func:`~pulserver.proxy._seqdesc.message`); the message is not sent back</span>
+<span class="sd">    to the client. The reconstruction plugin is the one the client's config</span>
+<span class="sd">    text names. A series that breaks these rules is refused with a text naming</span>
+<span class="sd">    the reason and a ``CLOSE``, and what the client still sends is discarded</span>
+<span class="sd">    until it closes the connection.</span>
 
-<span class="sd">    The enriched series is reconstructed by a local worker, or, with</span>
-<span class="sd">    ``forward``, by the MRD server at that address. Whatever reconstructs it,</span>
-<span class="sd">    its images, DICOM and text go back to the client as they arrive, the</span>
+<span class="sd">    The series is reconstructed by a local worker or, with ``forward``, by the</span>
+<span class="sd">    MRD server at that address, which is sent a config file message naming</span>
+<span class="sd">    ``forward_config`` or else the series' plugin (the client's config text is</span>
+<span class="sd">    not forwarded) and decides by its own slots and queue when the series</span>
+<span class="sd">    runs. Images, DICOM and text go back to the client as they arrive. The</span>
 <span class="sd">    client's close closes the reconstruction's stream, and the</span>
-<span class="sd">    reconstruction's close closes the client. A message the proxy has no</span>
-<span class="sd">    reader for ends what goes back, with a text naming its type. Once the</span>
-<span class="sd">    client's stream ends, the proxy waits for the reconstruction to close,</span>
-<span class="sd">    however long it takes, unless ``recon_timeout`` caps it.</span>
+<span class="sd">    reconstruction's close closes the client. A message the proxy has no reader</span>
+<span class="sd">    for ends what goes back, with a text naming its type. Once the client's</span>
+<span class="sd">    stream ends, the proxy waits for the reconstruction to close unless</span>
+<span class="sd">    ``recon_timeout`` caps it.</span>
 
-<span class="sd">    A local series holds a slot for as long as it runs. On a host with GPUs,</span>
-<span class="sd">    found through ``CUDA_VISIBLE_DEVICES`` or ``nvidia-smi``, each slot holds</span>
-<span class="sd">    one, ``gpu_slots`` slots per GPU, and the reconstruction reads it as</span>
-<span class="sd">    ``context.device``. A series that finds every slot busy is queued instead:</span>
-<span class="sd">    its enriched stream is written to a file of ``queue`` while it arrives, its</span>
+<span class="sd">    A local series holds a slot while it runs. On a host with GPUs, found</span>
+<span class="sd">    through ``CUDA_VISIBLE_DEVICES`` or ``nvidia-smi``, each slot holds one GPU,</span>
+<span class="sd">    ``gpu_slots`` slots per GPU, and the reconstruction reads it as</span>
+<span class="sd">    ``context.device``. A series that finds every slot busy is queued: its</span>
+<span class="sd">    enriched stream is written to a file of ``queue`` while it arrives, its</span>
 <span class="sd">    client stays connected, and the file is replayed to a worker and deleted</span>
-<span class="sd">    once a slot frees. The series of one exam share a directory under the</span>
-<span class="sd">    system's temporary directory, through which a reconstruction reads what an</span>
-<span class="sd">    earlier series of the exam stored in its</span>
-<span class="sd">    :class:`~pulserver.recon.ExamCache`. It is deleted once a header names</span>
-<span class="sd">    another exam, or nothing has leased it for</span>
+<span class="sd">    once a slot frees.</span>
+
+<span class="sd">    The series of one exam share a directory under the system's temporary</span>
+<span class="sd">    directory, through which a reconstruction reads what an earlier series of</span>
+<span class="sd">    the exam stored in its :class:`~pulserver.recon.ExamCache`. The directory</span>
+<span class="sd">    is deleted once a header names another exam, or nothing has leased it for</span>
 <span class="sd">    :data:`~pulserver.recon._runtime.exam.EXAM_IDLE` seconds, and no series of</span>
 <span class="sd">    the exam still runs on any proxy.</span>
 
-<span class="sd">    A series whose sequence sets ``EnablePmc`` is corrected for motion while</span>
-<span class="sd">    it plays: the poses its reconstruction states are published into the</span>
-<span class="sd">    pose file the scan reads, ``motion.buf`` in the design's directory,</span>
-<span class="sd">    rather than sent to the client. A forwarded series publishes the poses the</span>
-<span class="sd">    server passes back.</span>
+<span class="sd">    A series whose sequence sets ``EnablePmc`` is corrected for motion while it</span>
+<span class="sd">    plays: the poses its reconstruction states are published into the pose</span>
+<span class="sd">    file the scan reads, ``motion.buf`` in the design's directory, rather than</span>
+<span class="sd">    sent to the client. A forwarded series publishes the poses the server</span>
+<span class="sd">    passes back.</span>
 
 <span class="sd">    What goes back to a client is also written to a directory under the</span>
 <span class="sd">    system's temporary directory, shared with every other proxy on this host,</span>
-<span class="sd">    and removed once the client has had all of it. When the client has gone,</span>
-<span class="sd">    it is kept: a client opening a series with the same ``measurementID`` is</span>
-<span class="sd">    sent it, after it is complete, in place of a new reconstruction. Kept</span>
-<span class="sd">    output nobody takes up is removed after a day.</span>
-
-<span class="sd">    A forwarded series is sent on as it arrives; the server's own slots and</span>
-<span class="sd">    queue determine when it is reconstructed. The server is sent a config file message naming</span>
-<span class="sd">    ``forward_config``, or else the series' reconstruction plugin; the client's</span>
-<span class="sd">    config text itself is not forwarded.</span>
+<span class="sd">    and removed once the client has had all of it. When the client has gone, it</span>
+<span class="sd">    is kept: a client opening a series with the same ``measurementID`` is sent</span>
+<span class="sd">    it, once complete, in place of a new reconstruction. Kept output nobody</span>
+<span class="sd">    takes up is removed after a day.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
-<span class="sd">    store</span>
+<span class="sd">    store : Path | str</span>
 <span class="sd">        Directory of designs, as the design calls write it; read only.</span>
-<span class="sd">    plugins</span>
+<span class="sd">    plugins : PluginPath, default=None</span>
 <span class="sd">        Directories of reconstruction plugin files, ``&lt;plugin&gt;.py``, in search</span>
 <span class="sd">        order; required unless the proxy forwards.</span>
-<span class="sd">    slots</span>
+<span class="sd">    slots : int, default=None</span>
 <span class="sd">        Series reconstructed at once; derived from memory and the GPUs when</span>
 <span class="sd">        ``None``.</span>
-<span class="sd">    gpu_slots</span>
+<span class="sd">    gpu_slots : int, default=1</span>
 <span class="sd">        Series reconstructed at once on each GPU, when ``slots`` is ``None``.</span>
-<span class="sd">    spares</span>
+<span class="sd">    spares : int, default=1</span>
 <span class="sd">        Warm worker processes waiting for a series.</span>
-<span class="sd">    recon_timeout</span>
+<span class="sd">    recon_timeout : float, default=None</span>
 <span class="sd">        Seconds a reconstruction may take after the stream ends before it is</span>
 <span class="sd">        stopped and the client told so; ``None`` waits for its close. A local</span>
 <span class="sd">        worker is terminated; a forwarded series' connection is closed.</span>
-<span class="sd">    queue</span>
+<span class="sd">    queue : Path | str, default=None</span>
 <span class="sd">        Directory the queued series are written to; a temporary directory,</span>
 <span class="sd">        removed on :meth:`close`, when ``None``.</span>
-<span class="sd">    slot_directory</span>
+<span class="sd">    slot_directory : Path | str, default=None</span>
 <span class="sd">        Directory the slots are held in, shared with every other proxy on this</span>
 <span class="sd">        host so they count against one set;</span>
 <span class="sd">        :data:`~pulserver.recon._runtime.concurrency.DEFAULT_SLOT_DIRECTORY`</span>
 <span class="sd">        when ``None``.</span>
-<span class="sd">    exam_directory</span>
+<span class="sd">    exam_directory : Path | str, default=None</span>
 <span class="sd">        Directory the caches of an exam are held in, shared with every other</span>
 <span class="sd">        proxy on this host so a map one series measures reaches a series on</span>
 <span class="sd">        another;</span>
 <span class="sd">        :data:`~pulserver.recon._runtime.exam.DEFAULT_EXAM_DIRECTORY` when</span>
 <span class="sd">        ``None``. An exam's directory is removed when the last proxy on that</span>
 <span class="sd">        exam lets go of it.</span>
-<span class="sd">    forward</span>
+<span class="sd">    forward : tuple[str, int], default=None</span>
 <span class="sd">        ``(host, port)`` of the MRD server that reconstructs every series;</span>
 <span class="sd">        local workers when ``None``.</span>
-<span class="sd">    forward_config</span>
+<span class="sd">    forward_config : str, default=None</span>
 <span class="sd">        Config name sent to that server instead of the reconstruction plugin.</span>
-<span class="sd">    dicom</span>
+<span class="sd">    dicom : bool, default=False</span>
 <span class="sd">        Convert each image to DICOM, from the enriched header, before it is</span>
-<span class="sd">        relayed. Whatever reconstructed it: a client that reads DICOM alone,</span>
-<span class="sd">        such as a scanner's, needs this of a plugin that emits images.</span>
+<span class="sd">        relayed, whatever reconstructed it. Needed by a client that reads</span>
+<span class="sd">        DICOM alone, with a plugin that emits images.</span>
+<span class="sd">    save_to : Path | str, default=None</span>
+<span class="sd">        Directory each series is kept in, as the scanner sent it, so that it</span>
+<span class="sd">        can be reconstructed again offline; not kept when ``None``.</span>
+<span class="sd">    idle_timeout : float, default=None</span>
+<span class="sd">        Seconds without a client after which :meth:`serve` returns, counted</span>
+<span class="sd">        from the last client to leave; never when ``None``.</span>
 
 <span class="sd">    Attributes</span>
 <span class="sd">    ----------</span>
@@ -885,34 +850,39 @@
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
-<span class="sd">    plugins</span>
+<span class="sd">    plugins : PluginPath</span>
 <span class="sd">        Directories of reconstruction plugin files, ``&lt;plugin&gt;.py``, in search</span>
 <span class="sd">        order.</span>
-<span class="sd">    slots</span>
+<span class="sd">    slots : int, default=None</span>
 <span class="sd">        Series reconstructed at once; derived from memory and the GPUs when</span>
 <span class="sd">        ``None``.</span>
-<span class="sd">    gpu_slots</span>
+<span class="sd">    gpu_slots : int, default=1</span>
 <span class="sd">        Series reconstructed at once on each GPU, when ``slots`` is ``None``.</span>
-<span class="sd">    spares</span>
+<span class="sd">    spares : int, default=1</span>
 <span class="sd">        Warm worker processes waiting for a series.</span>
-<span class="sd">    recon_timeout</span>
+<span class="sd">    recon_timeout : float, default=None</span>
 <span class="sd">        Seconds a worker may take after the stream ends before it is</span>
 <span class="sd">        terminated and the client told so; ``None`` waits for its close.</span>
-<span class="sd">    queue</span>
+<span class="sd">    queue : Path | str, default=None</span>
 <span class="sd">        Directory the queued series are written to; a temporary directory,</span>
 <span class="sd">        removed on :meth:`close`, when ``None``.</span>
-<span class="sd">    slot_directory</span>
+<span class="sd">    slot_directory : Path | str, default=None</span>
 <span class="sd">        Directory the slots are held in, shared with every other proxy on this</span>
 <span class="sd">        host so they count against one set;</span>
 <span class="sd">        :data:`~pulserver.recon._runtime.concurrency.DEFAULT_SLOT_DIRECTORY`</span>
 <span class="sd">        when ``None``.</span>
-<span class="sd">    exam_directory</span>
+<span class="sd">    exam_directory : Path | str, default=None</span>
 <span class="sd">        Directory the caches of an exam are held in, shared with every other</span>
 <span class="sd">        proxy on this host so a map one series measures reaches a series on</span>
 <span class="sd">        another;</span>
 <span class="sd">        :data:`~pulserver.recon._runtime.exam.DEFAULT_EXAM_DIRECTORY` when</span>
 <span class="sd">        ``None``. An exam's directory is removed when the last proxy on that</span>
 <span class="sd">        exam lets go of it.</span>
+<span class="sd">    save_to : Path | str, default=None</span>
+<span class="sd">        Directory each series is kept in, as received; not kept when ``None``.</span>
+<span class="sd">    idle_timeout : float, default=None</span>
+<span class="sd">        Seconds without a client after which :meth:`serve` returns; never when</span>
+<span class="sd">        ``None``.</span>
 
 <span class="sd">    Attributes</span>
 <span class="sd">    ----------</span>

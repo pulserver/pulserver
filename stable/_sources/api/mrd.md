@@ -11,7 +11,7 @@ The acquisition and header objects are those of the `ismrmrd` package; the
 functions here read flags, counters and user parameters from them by their MRD
 names. {class}`ReadoutTable` and {class}`SequenceDefinitions` are read from the
 sequence files of a design and are what the reconstruction proxy enriches a
-stream from (see {doc}`../explanations/reconstruction`).
+stream from (see {doc}`../explanations/raw-data`).
 
 ## Acquisitions
 
@@ -33,6 +33,8 @@ stream from (see {doc}`../explanations/reconstruction`).
 | {obj}`~pulserver.mrd.LOOP_COUNTERS` | Encoding counters that become buffer axes when they vary, outermost first. |
 | {obj}`~pulserver.mrd.user_parameter` | A header user parameter by name. |
 | {obj}`~pulserver.mrd.max_stored_value` | Largest pixel value of the header's stored bit depth. |
+| {obj}`~pulserver.mrd.diffusion_table` | The b-value and logical direction of each volume, as the proxy states them. |
+| {obj}`~pulserver.mrd.DIFFUSION_TABLE` | Name of the user parameter string the diffusion table is stated in. |
 
 ## Images
 

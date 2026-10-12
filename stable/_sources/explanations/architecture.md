@@ -3,116 +3,122 @@
 ```{admonition} TL;DR
 :class: tldr
 
-- An acquisition through pulserver has four tasks: design for the prescribed
-  protocol, conversion into the scanner representation, playout and
-  reconstruction. pulserver performs the first, second and fourth; the
-  scanner's interpreter plays the sequence.
-- The Pulseq representation, the engines (pypulseqpp and the reconstruction a
-  plugin imports), pulserver's orchestration and scanner execution are kept
-  distinct.
-- The design calls run on the scanner host and the reconstruction proxy on
-  the reconstruction computer; they share the design store, and exchange a
-  protocol block, Pulseq files, the IR cache and an MRD stream.
+- Two services: design calls on the scanner host, the reconstruction proxy on the reconstruction computer.
+- Each design is stored once, under the SHA-256 of what it depends on, and never modified.
+- The interpreter only presents, plays and streams; pypulseqpp designs and your plugin's engine reconstructs.
 ```
 
-A Pulseq sequence is a vendor-independent description of an acquisition. To
-acquire data with one on a clinical scanner, four tasks have to be performed:
-the sequence is designed for the protocol the operator prescribes, converted
-into a form the scanner hardware can play, played, and its raw data
-reconstructed into images returned to the console. Pulserver performs the
-first, second and fourth of these on computers beside the scanner, and a
-vendor-specific interpreter performs the third on the scanner itself.
+You write a sequence plugin and a recon plugin. The design calls answer each
+protocol edit, design and check the sequence, and store it. The proxy receives
+each series, completes it from the stored design and runs your recon plugin.
+Lesson 1 of the {doc}`Course <../examples/course>` runs one acquisition through
+both on the virtual scanner.
 
-## Layers
+## Capabilities
 
-Four layers are kept distinct throughout the documentation.
+:::{container} capabilities
 
-Pulseq representation
-: The content of a `.seq` file: blocks, event libraries, shapes, definitions
-  and extensions. It is the design of record for every acquisition.
+- **Answers the interpreter's design calls, one command per call or through a warm server.**
 
-Engines
-: [pypulseqpp](https://github.com/pulserver/pypulseqpp) designs and writes the
-  sequence. The reconstruction is whatever a reconstruction plugin imports,
-  normally [bartorch](https://github.com/mcencini/bartorch). Pulserver
-  implements neither sequence design nor reconstruction algorithms.
+  Code: `pulserver design`, {mod}`pulserver.host`. Tests: *a forwarded call replies as the call answered in its own process*; *a crashing plugin fails only its call*; *a call is answered while another runs* (`test_design_server.py`).
+- **Identifies a design by the SHA-256 of its plugin, sources, package versions, limits, VOP file and resolved protocol.**
 
-Orchestration
-: Pulserver: the resolution of a protocol against a sequence function, the
-  storage of the resulting designs, the conversion of a design into the scanner
-  IR, and the routing and enrichment of raw data.
+  Code: {func}`~pulserver.host.design_identity`. Tests: *one resolved protocol is one design*; *an edited plugin is another design of the same protocol*; *a design is one of the VOP file contents its SAR ratios came from* (`test_design_service.py`).
+- **Designs a request once, whether it arrives as typed or as resolved.**
 
-Scanner execution
-: The interpreter: the vendor-specific program that presents the protocol in
-  the scanner UI, loads the IR, plays the sequence and streams the raw data. It
-  contains no sequence or reconstruction logic.
+  Code: {func}`~pulserver.host.design_identity`. Test: *a request is generated once whether or not it resolves to itself* (`test_design_service.py`).
+- **Identifies an imported Pulseq chain by its files and the prescription it is imported at.**
 
-## Services and data flow
+  Code: `pulserver design import`. Test: *importing the same files at the same prescription is one design* (`test_design_service.py`).
+- **Gives each design a 72-bit identifier that travels in three float32 fields of the raw-data header.**
+
+  Code: {func}`~pulserver.host.design_id`. Tests: *a design identifier is three integers a float32 holds exactly*; *a design identifier holding another identity is refused* (`test_design_service.py`).
+- **Writes a design whole or not at all, once, and never modifies it.**
+
+  Code: {mod}`pulserver.host`. Tests: *a design being written is invisible until it is whole*; *two processes designing one protocol at once store it once*; *a stored design holds the files its manifest records and no other* (`test_design_service.py`).
+- **Prunes the store least recently used first.**
+
+  Code: `pulserver design prune`. Tests: *pruning removes the designs unused for longest first*; *a design found again is used again*; *pruning keeps a design used within the day whatever the limits* (`test_design_service.py`).
+- **Pushes each design to a proxy on another computer, which stores it only if every file matches the manifest.**
+
+  Code: {class}`~pulserver.proxy.DesignIntake`. Tests: *a generation pushes the design it replies*; *the intake refuses a tampered bundle with the reason* (`test_design_push.py`).
+- **Reads each design once on the reconstruction side and keeps the most recently read.**
+
+  Code: {class}`~pulserver.proxy.DesignCache`. Tests: *the least recently read design is read again when next named*; *a series naming no stored design is refused* (`test_proxy.py`).
+- **Writes a log of each call and each reconstruction, including the output of the processes it spawns.**
+
+  Code: {mod}`pulserver.host`. Tests: *a call naming a log file appends its outcome there* (`test_design_server.py`); *a logfile collects log output warnings and spawned children* (`test_logs.py`).
+
+:::
+
+## Division of responsibility
+
+- **The interpreter** shows the protocol, plays the IR cache and streams the raw data. It holds no sequence or reconstruction logic.
+- **pypulseqpp** designs the sequence; any Pulseq tool can supply an imported chain instead.
+- **The reconstruction engine** is whatever your recon plugin imports, usually bartorch.
+
+## Method
 
 ```{figure} ../_static/architecture.svg
 :figclass: only-light
 
-The two pulserver services between the scanner and the engines, and the
-design store: one directory both reach, or the proxy's own, to which the design
-calls push each design.
+The two services between the scanner and the engines, and the design store they share.
 ```
 
 ```{figure} ../_static/architecture-dark.svg
 :figclass: only-dark
 
-The two pulserver services between the scanner and the engines, and the
-design store: one directory both reach, or the proxy's own, to which the design
-calls push each design.
+The two services between the scanner and the engines, and the design store they share.
 ```
 
-The design calls, {mod}`pulserver.host`, run on the scanner host and answer
-the interpreter host process of each running sequence, one command per call or
-through a warm server. The reconstruction proxy, {mod}`pulserver.proxy`, runs on
-the reconstruction computer and answers the scanner's reconstruction client.
-One acquisition proceeds as follows.
+### Acquisition flow
 
-1. On each protocol edit, the interpreter host process requests validation,
-   naming the scanner-sequence plugin, the scanner limits and the requested
-   protocol. The call evaluates the protocol with the plugin, which for a
-   shipped sequence designs it with pypulseqpp, and replies with the protocol
-   the design achieves and the scan time, or with the error the design raised
-   ({doc}`protocol`).
-2. When the scan is prepared, the process requests the design. The call designs
-   the sequence, checks it, and stores the Pulseq files and the IR cache as a
-   design of the design store, pushes the design to the proxy when the proxy
-   keeps a store of its own, and replies its identifier ({doc}`designs`,
-   {doc}`scanner-representation`). The interpreter loads the IR cache and plays the sequence.
-3. The reconstruction client streams the raw data of the series as MRD. The
-   header names the design the series was played from, and the client's config
-   names the reconstruction plugin.
-4. The proxy reads the design's sequence files, completes the MRD header and
-   every acquisition from them, and runs the reconstruction plugin the config
-   names in a worker process, or forwards the completed series to a
-   reconstruction server on another computer ({doc}`reconstruction`). The
-   images return to the console through the client's connection.
+1. Each protocol edit: the call evaluates it with your plugin and replies with the achieved values and scan time ({doc}`protocol`).
+2. Scan preparation: the call designs, checks ({doc}`safety-checks`), converts ({doc}`scanner-representation`) and stores, and replies with the identifier.
+3. Acquisition: the client streams MRD; the header names the design and the configuration names the recon plugin.
+4. Reconstruction: the proxy completes the stream from the design ({doc}`raw-data`) and runs your plugin in a worker ({doc}`reconstruction`).
 
-## Representations at each boundary
+### Design identity
+
+No design call keeps state; the store is all that persists. A changed plugin,
+sequence function, package version or VOP file is a new design of the same
+protocol. The identifier is the first 18 hexadecimal digits of the identity,
+split into three float32 header fields because a float32 holds every integer
+below $2^{24}$ exactly.
+
+### Design store
+
+```text
+designs/
+  3f9c0a1b2c3d4e5f60/
+    sequence.seq          first file of the NextSequence chain, binary Pulseq
+    sequence_main.seq     the remaining files, when there are prescans
+    sequence.pseg         IR cache
+    resolved.protocol
+    manifest.json         identity and identifier, limits, package versions,
+                          creation time, plugin and source, scan time,
+                          field-of-view offset, SHA-256 of every file
+```
+
+The proxy reads the Pulseq files, not the cache: the cache is derived for
+playout, and the Pulseq files are the design of record.
+
+### Interfaces
 
 | Representation | Written by | Read by |
 | --- | --- | --- |
 | Protocol block (`[Protocol]` … `[Protocol End]`) | Design calls and interpreter | Both; the grammar is in {mod}`pulserver.protocol` and `pulseg_protocol.h` |
 | Pulseq files, binary form | pypulseqpp, in a design call | The IR conversion and the reconstruction proxy |
 | IR cache (`.pseg`) | {func}`pulserver.ir.convert` | The interpreter, through the C library in `src/c/` |
-| MRD stream | Reconstruction client; the proxy, forwarding | Reconstruction proxy and its workers; a reconstruction server |
+| MRD stream | Reconstruction client; the proxy, when forwarding | The proxy and its workers |
 
-The reconstruction side reads the Pulseq files of a design, not its IR cache:
-the cache is a derived representation for playout, and the Pulseq files remain
-the design of record.
+Orchestration is Python, the IR passes are C++ (`src/cpp/ir/`), and the library
+the interpreter links is C89 (`src/c/`), for the vendor toolchains.
 
-## Implementation languages
+## Examples
 
-The orchestration is Python. The passes that compute the IR run only on the
-host and are C++, in `src/cpp/ir/`. The code that reads the IR cache and walks
-it during playout is linked into the interpreter, whose vendor toolchains
-accept ANSI C; it is therefore C89, in `src/c/`, and depends on nothing that
-runs only on the host.
-
-## See also
-
-* {doc}`../user-guide/running` — starting the two services.
-* {doc}`../api/index` — the Python interface of each service.
+- {doc}`../generated/gallery/01-course/01_protocol_to_image`: one acquisition
+  through both services on the virtual scanner.
+- {doc}`../user-guide/running`: starting the two services, pushing designs and
+  pruning the store.
+- {doc}`../api/host`: the design calls and the store.

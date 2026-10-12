@@ -1,21 +1,25 @@
 # Internals
 
-The implementation behind the concepts of {doc}`../../explanations/index`: the
-layouts, wire formats, schedules and numerical methods a contributor changing
-that code has to keep.
+Implementation design behind the {doc}`../../explanations/index`: layouts,
+wire formats, schedules and numerical methods, for maintainers and interpreter
+authors.
 
-| Page | Scope |
+| Page | Contents |
 | --- | --- |
-| {doc}`ir-cache` | Waves, the two stages of a playout, the heaviest repetition, the cache file and its playback, and the C89 constraint. |
-| {doc}`protocol-wire` | The text blocks in which the host and the interpreter exchange protocols and RF descriptions. |
-| {doc}`reconstruction-proxy` | The placement of readouts in a reconstruction unit's buffers, and the proxy's workers. |
-| {doc}`virtual-scanner` | The Fourier engine's timeline, event streams, bases and grids, export to external simulators, and what a run on the virtual scanner establishes. |
+| {doc}`calibration` | Prewhitening, coil compression, sensitivity maps and the reuse of stored maps. |
+| {doc}`ir-cache` | Conversion passes, waves, playout stages, the heaviest repetition, the cache file and the C89 library. |
+| {doc}`protocol-wire` | RF layout, protocol keys and values, and the protocol text blocks. |
+| {doc}`reconstruction-proxy` | Reconstruction units, image headers, enrichment and trajectory rules, readout placement and workers. |
+| {doc}`sar-ratios` | pTx SAR ratios from VOPs against a reference pulse. |
+| {doc}`virtual-scanner` | Played trajectory, signal model, coils, Fourier engine, export, test coverage and scan clock. |
 
 ```{toctree}
 :hidden:
 
+calibration
 ir-cache
 protocol-wire
 reconstruction-proxy
+sar-ratios
 virtual-scanner
 ```

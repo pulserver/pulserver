@@ -26,6 +26,20 @@ control variable, are described in {doc}`../explanations/protocol`.
 | {obj}`~pulserver.design.load_plugin` | Import a plugin file and instantiate the sequence plugin it defines. |
 | {obj}`~pulserver.design.load_exam` | Open the cache of the current exam, given to a design hook as `exam`. |
 
+## Options
+
+A plugin's options are module constants a parameter file sets when the plugin
+is loaded, so that they shape its sequence function and the protocol it
+declares. A design call selects the file by number: set `N` of a plugin whose
+file is `<script>.py` is `parameters/<script>/<NN>.toml`, and set 0 loads the
+plugin with its defaults.
+
+| Object | Description |
+| --- | --- |
+| {obj}`~pulserver.design.option` | The value of an option: the parameter file's, else its default. |
+| {obj}`~pulserver.design.read_options` | The options a parameter file sets. |
+| {obj}`~pulserver.design.OptionError` | An option a parameter file sets that the plugin does not declare or take. |
+
 ## RF layout
 
 The RF an evaluation states: the RF definitions of a sequence, the instances of
@@ -47,5 +61,7 @@ one TR in play order and the protocol entry each instance's amplitude follows
 | {obj}`~pulserver.design.BoolParam` | Checkbox. |
 | {obj}`~pulserver.design.ChoiceParam` | Choice among the members of a `StrEnum`; the argument receives the member. |
 | {obj}`~pulserver.design.StringListParam` | Deprecated: a `ChoiceParam` over an enum built from option strings. |
+| {obj}`~pulserver.design.AveragesParam` | Number of signal averages, NEX, which every plugin lists unless it declares its own: the main sequence is played that many times in its block table. |
+| {obj}`~pulserver.design.StatedParam` | Choice the sequence states, bound to no argument, such as a 3D sequence's `imaging_mode`; any other value is refused. |
 | {obj}`~pulserver.design.ConfigParam` | Value declared to the interpreter; not shown or edited. |
 | {obj}`~pulserver.design.Description` | Read-only text row. |

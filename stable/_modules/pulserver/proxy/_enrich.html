@@ -36,7 +36,7 @@
     <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
     <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
     <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
-    <link rel="stylesheet" type="text/css" href="../../../_static/pulserver.css?v=e08ae8f3" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/pulserver.css?v=6854ff42" />
   
   <!-- So that users can add custom icons -->
   <script defer src="../../../_static/scripts/fontawesome.js?digest=90905a2f556bf617f1a9"></script>
@@ -44,7 +44,7 @@
   <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../../../_static/documentation_options.js?v=b196e8ce"></script>
+    <script src="../../../_static/documentation_options.js?v=a6e268a8"></script>
     <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -55,18 +55,19 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.2.1';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.2.2';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+    <script src="../../../_static/capabilities.js?v=421ebb92"></script>
     <link rel="canonical" href="https://pulserver.github.io/pulserver/stable/_modules/pulserver/proxy/_enrich.html" />
     <link rel="icon" href="../../../_static/pulserver-mark.svg"/>
     <link rel="index" title="Index" href="../../../genindex.html" />
     <link rel="search" title="Search" href="../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.2.1" />
+  <meta name="docsearch:version" content="v0.2.2" />
   
     
     <script src="../../../_static/searchtools.js"></script>
@@ -113,46 +114,6 @@
 
   
     <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
-<div class="bd-header__inner bd-page-width">
-  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
-    <span class="fa-solid fa-bars"></span>
-  </button>
-  
-  
-  <div class="col-lg-9 navbar-header-items">
-    
-    
-    <div class="navbar-header-items__end">
-      
-        <div class="navbar-item navbar-persistent--container">
-          
-
-<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
- <i class="fa-solid fa-magnifying-glass"></i>
- <span class="search-button__default-text">Search</span>
- <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
-</button>
-        </div>
-      
-      
-    </div>
-    
-  </div>
-  
-  
-    <div class="navbar-persistent--mobile">
-
-<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
- <i class="fa-solid fa-magnifying-glass"></i>
- <span class="search-button__default-text">Search</span>
- <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
-</button>
-    </div>
-  
-
-  
-</div>
-
     </header>
   
 
@@ -236,50 +197,50 @@
         </ul>
         <ul class="nav bd-sidenav">
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../user-guide/index.html">User guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/running.html">Running the services</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/running.html">Services</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../user-guide/scanner-sequences.html">Scanner sequences</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../user-guide/reconstruction-plugins.html">Reconstruction plugins</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/reconstruction-client.html">Reconstruction clients</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/virtual-scanner.html">Scanning a phantom without a scanner</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/reconstruction-client.html">Reconstruction client</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../developer-guide/index.html">Developer guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/prerequisites.html">Development prerequisites</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/installation.html">Editable installation</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/workflow.html">Development workflow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/installation.html">Development setup</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/workflow.html">Contribution workflow</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/style.html">Coding style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/documentation.html">Documentation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/terminology.html">Terminology and conventions</a></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../../../developer-guide/internals/index.html">Internals</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/calibration.html">Calibration, noise and coil compression</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/ir-cache.html">IR cache</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/protocol-wire.html">Protocol text blocks</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/reconstruction-proxy.html">Reconstruction proxy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/sar-ratios.html">SAR ratios against a reference pulse</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/pre-commit.html">Pre-commit</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/pull-requests.html">Pull requests</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/releases.html">Releases</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/code-of-conduct.html">Code of conduct</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../../../explanations/architecture.html">Architecture</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../explanations/protocol.html">Protocol resolution</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../explanations/designs.html">Designs and the design store</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../explanations/scanner-representation.html">Scanner representation (PulSeg)</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../explanations/virtual-scanner.html">The virtual scanner</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../explanations/reconstruction.html">Raw-data enrichment and routing</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../explanations/calibration.html">Calibration, noise and coil compression</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/safety-checks.html">Safety checks</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/scanner-representation.html">PulSeg representation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/raw-data.html">MRD enrichment</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/reconstruction-session.html">Reconstruction session</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/reconstruction.html">Reconstruction plugins and calibration context</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../examples/index.html">Examples</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../../../examples/course.html">Course</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/01_protocol_to_image.html">1. From protocol to image</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/02_sequence_plugin.html">2. A scanner sequence and its protocol</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/03_scanner_representation.html">3. Scanner representation</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/04_reconstruction_plugin.html">4. A reconstruction plugin</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/05_testing_on_the_virtual_scanner.html">5. Testing on the virtual scanner</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/01_protocol_to_image.html">1. Your first scan</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/02_sequence_plugin.html">2. Your sequence in the scanner UI</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/03_scanner_representation.html">3. What the scanner plays</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/04_reconstruction_plugin.html">4. What your recon receives</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/05_recon_plugin.html">5. Your recon plugin</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/06_testing_on_the_virtual_scanner.html">6. Test your pair on the virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../../../examples/tours.html">Tours</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -479,20 +440,23 @@
 <span class="p">]</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">dataclasses</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">ismrmrd.xsd</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">xsd</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pypulseqpp.io</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_diffusion_table</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">.._accelerators</span><span class="w"> </span><span class="kn">import</span> <span class="n">require</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.._labels</span><span class="w"> </span><span class="kn">import</span> <span class="n">MRD_COUNTERS</span><span class="p">,</span> <span class="n">MRD_FLAGS</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..mrd._acquisitions</span><span class="w"> </span><span class="kn">import</span> <span class="n">AcquisitionFlag</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">..mrd._metadata</span><span class="w"> </span><span class="kn">import</span> <span class="n">user_parameter</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..mrd._metadata</span><span class="w"> </span><span class="kn">import</span> <span class="n">DIFFUSION_TABLE</span><span class="p">,</span> <span class="n">user_parameter</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..mrd._sequence</span><span class="w"> </span><span class="kn">import</span> <span class="n">ReadoutTable</span><span class="p">,</span> <span class="n">SequenceDefinitions</span><span class="p">,</span> <span class="n">read_chain</span>
 
 <span class="n">_F</span> <span class="o">=</span> <span class="n">AcquisitionFlag</span>
+<span class="n">_log</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="s2">"pulserver.proxy"</span><span class="p">)</span>
 
 <span class="c1">#: Counter label, its first and last boundary flags, and whether it selects a</span>
 <span class="c1">#: whole image rather than a position within one.</span>
@@ -540,10 +504,14 @@
 <span class="sd">        Whether the space holds the subsequence's ``NAV`` readouts.</span>
 <span class="sd">    matrix</span>
 <span class="sd">        ``(x, y, z)`` from ``Matrix``, or ``NavMatrix`` for a navigator;</span>
-<span class="sd">        ``None`` when undefined.</span>
+<span class="sd">        ``None`` when undefined. 1 along z in a slice stack, a file that</span>
+<span class="sd">        writes no ``PAR`` and defines ``SlicePositions`` or writes more than</span>
+<span class="sd">        one ``SLC``: its z counts the slices, each an image of its own.</span>
 <span class="sd">    fov_mm</span>
 <span class="sd">        ``(x, y, z)`` from ``FOV``, or ``NavFOV`` for a navigator, in mm;</span>
-<span class="sd">        ``None`` when undefined.</span>
+<span class="sd">        ``None`` when undefined. In a slice stack, z is one slice's:</span>
+<span class="sd">        ``SliceThickness``, or the file's z shared among its slices when that</span>
+<span class="sd">        is undefined.</span>
 <span class="sd">    trajectory</span>
 <span class="sd">        Whether some readout of the space keeps more than one k axis, which</span>
 <span class="sd">        makes the space non-Cartesian.</span>
@@ -607,6 +575,11 @@
 <span class="sd">        ``float32`` dwell, in µs.</span>
 <span class="sd">    encoding_space : ndarray</span>
 <span class="sd">        ``int32`` index into :attr:`spaces`.</span>
+<span class="sd">    slice_offset_m : ndarray</span>
+<span class="sd">        ``float64`` centre of each readout's slice along the logical slice</span>
+<span class="sd">        axis from the field-of-view centre, in m: the ``SlicePositions`` entry</span>
+<span class="sd">        its ``SLC`` indexes, in a file whose readouts are slices of a stack</span>
+<span class="sd">        (:class:`TableSpace`), and 0 elsewhere.</span>
 <span class="sd">    spaces : tuple of TableSpace</span>
 <span class="sd">        Numbered in chain order: each subsequence's primary space, then its</span>
 <span class="sd">        navigator space when it has ``NAV`` readouts.</span>
@@ -619,6 +592,10 @@
 <span class="sd">        The field-of-view shift the scanner plays the chain at, in m, along</span>
 <span class="sd">        the axes the design's blocks are rotated onto, as</span>
 <span class="sd">        :func:`pulserver.ir.prescribe` takes it.</span>
+<span class="sd">    diffusion : tuple of ndarray or None</span>
+<span class="sd">        ``(b, g)`` read from the table file the first file of the chain to</span>
+<span class="sd">        name one names (:func:`pypulseqpp.io.get_diffusion_table`); None when</span>
+<span class="sd">        no file names one or the table cannot be read.</span>
 <span class="sd">    """</span>
 
     <span class="n">counters</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]</span>
@@ -628,11 +605,13 @@
     <span class="n">sample_time_us</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
     <span class="n">encoding_space</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
     <span class="n">num_samples</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+    <span class="n">slice_offset_m</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
     <span class="n">spaces</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">TableSpace</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span>
     <span class="n">sequence_parameters</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]]</span>
     <span class="n">_files</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">ReadoutTable</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="n">dataclasses</span><span class="o">.</span><span class="n">field</span><span class="p">(</span><span class="nb">repr</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
     <span class="n">_first_rows</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">=</span> <span class="n">dataclasses</span><span class="o">.</span><span class="n">field</span><span class="p">(</span><span class="nb">repr</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
     <span class="n">fov_offset_m</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>
+    <span class="n">diffusion</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__len__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
         <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_samples</span><span class="o">.</span><span class="n">size</span><span class="p">)</span>
@@ -706,7 +685,10 @@
         <span class="n">te</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="n">ti</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="n">flip</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">diffusion</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="k">for</span> <span class="n">subsequence</span><span class="p">,</span> <span class="p">(</span><span class="n">_</span><span class="p">,</span> <span class="n">seq</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">read_chain</span><span class="p">(</span><span class="n">path</span><span class="p">)):</span>
+            <span class="k">if</span> <span class="n">diffusion</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">diffusion</span> <span class="o">=</span> <span class="n">_diffusion</span><span class="p">(</span><span class="n">seq</span><span class="p">)</span>
             <span class="n">definitions</span> <span class="o">=</span> <span class="n">SequenceDefinitions</span><span class="o">.</span><span class="n">from_sequence</span><span class="p">(</span><span class="n">seq</span><span class="p">)</span>
             <span class="n">readouts</span> <span class="o">=</span> <span class="n">ReadoutTable</span><span class="o">.</span><span class="n">from_sequence</span><span class="p">(</span><span class="n">seq</span><span class="p">)</span>
             <span class="n">part</span><span class="p">,</span> <span class="n">part_spaces</span> <span class="o">=</span> <span class="n">_map_readouts</span><span class="p">(</span>
@@ -762,11 +744,13 @@
             <span class="n">sample_time_us</span><span class="o">=</span><span class="n">joined</span><span class="p">(</span><span class="s2">"sample_time_us"</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">),</span>
             <span class="n">encoding_space</span><span class="o">=</span><span class="n">encoding_space</span><span class="p">,</span>
             <span class="n">num_samples</span><span class="o">=</span><span class="n">joined</span><span class="p">(</span><span class="s2">"num_samples"</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">int32</span><span class="p">),</span>
+            <span class="n">slice_offset_m</span><span class="o">=</span><span class="n">joined</span><span class="p">(</span><span class="s2">"slice_offset_m"</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span>
             <span class="n">spaces</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="n">spaces</span><span class="p">),</span>
             <span class="n">sequence_parameters</span><span class="o">=</span><span class="n">parameters</span><span class="p">,</span>
             <span class="n">_files</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="n">files</span><span class="p">),</span>
             <span class="n">_first_rows</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">cumsum</span><span class="p">([</span><span class="mi">0</span><span class="p">]</span> <span class="o">+</span> <span class="p">[</span><span class="nb">len</span><span class="p">(</span><span class="n">file</span><span class="p">)</span> <span class="k">for</span> <span class="n">file</span> <span class="ow">in</span> <span class="n">files</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]]),</span>
             <span class="n">fov_offset_m</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">value</span><span class="p">)</span> <span class="k">for</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">fov_offset_m</span><span class="p">),</span>
+            <span class="n">diffusion</span><span class="o">=</span><span class="n">diffusion</span><span class="p">,</span>
         <span class="p">)</span></div>
 </div>
 
@@ -775,7 +759,9 @@
 <span class="k">def</span><span class="w"> </span><span class="nf">_shift_phase</span><span class="p">(</span>
     <span class="n">k</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">converted_m</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">moved_m</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Return the receive phase a shift leaves to the proxy, in rad, or None when it is zero.</span>
+<span class="w">    </span><span class="sd">"""Return the receive phase a field-of-view shift needs applied to the samples, in rad.</span>
+
+<span class="sd">    None when the phase is negligible.</span>
 
 <span class="sd">    ``2 pi c . (k(t) - k(t_c) - k'(t_c) (t - t_c)) + 2 pi m . k(t)``: the</span>
 <span class="sd">    curvature of the converted shift ``c`` about the line through the window</span>
@@ -799,10 +785,26 @@
     <span class="k">return</span> <span class="n">phase</span> <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">phase</span><span class="p">)</span><span class="o">.</span><span class="n">max</span><span class="p">()</span> <span class="o">&gt;</span> <span class="mf">1e-9</span> <span class="k">else</span> <span class="kc">None</span>
 
 
+<span class="k">def</span><span class="w"> </span><span class="nf">_diffusion</span><span class="p">(</span><span class="n">seq</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">get_diffusion_table</span><span class="p">(</span><span class="n">seq</span><span class="p">)</span>
+    <span class="k">except</span> <span class="p">(</span><span class="ne">OSError</span><span class="p">,</span> <span class="ne">ValueError</span><span class="p">)</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
+        <span class="n">_log</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">"the diffusion table is not stated in the header: </span><span class="si">%s</span><span class="s2">"</span><span class="p">,</span> <span class="n">error</span><span class="p">)</span>
+        <span class="k">return</span> <span class="kc">None</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_set_user_string</span><span class="p">(</span><span class="n">header</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">header</span><span class="o">.</span><span class="n">userParameters</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">header</span><span class="o">.</span><span class="n">userParameters</span> <span class="o">=</span> <span class="n">xsd</span><span class="o">.</span><span class="n">userParametersType</span><span class="p">()</span>
+    <span class="n">strings</span> <span class="o">=</span> <span class="n">header</span><span class="o">.</span><span class="n">userParameters</span><span class="o">.</span><span class="n">userParameterString</span>
+    <span class="n">strings</span><span class="p">[:]</span> <span class="o">=</span> <span class="p">[</span><span class="n">entry</span> <span class="k">for</span> <span class="n">entry</span> <span class="ow">in</span> <span class="n">strings</span> <span class="k">if</span> <span class="n">entry</span><span class="o">.</span><span class="n">name</span> <span class="o">!=</span> <span class="n">name</span><span class="p">]</span>
+    <span class="n">strings</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">xsd</span><span class="o">.</span><span class="n">userParameterStringType</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span> <span class="n">value</span><span class="o">=</span><span class="n">value</span><span class="p">))</span>
+
+
 <div class="viewcode-block" id="enrich_header">
 <a class="viewcode-back" href="../../../generated/pulserver.proxy.enrich_header.html#pulserver.proxy.enrich_header">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">enrich_header</span><span class="p">(</span><span class="n">header</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">table</span><span class="p">:</span> <span class="n">SequenceTable</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Describe the table's encoding spaces and sequence parameters in an MRD header.</span>
+<span class="w">    </span><span class="sd">"""Write the table's encoding spaces and sequence parameters into an MRD header, in place.</span>
 
 <span class="sd">    For every space, sets ``reconSpace`` from the sequence's matrix and field</span>
 <span class="sd">    of view when defined, and ``encodedSpace`` from them with the readout of a</span>
@@ -814,7 +816,9 @@
 <span class="sd">    ``kspace_encoding_step_1`` and ``_2`` and the middle of the range for the</span>
 <span class="sd">    others, and ``trajectory`` is ``OTHER`` or ``CARTESIAN``. Other fields of</span>
 <span class="sd">    an existing encoding are kept; missing encodings are appended. Sequence</span>
-<span class="sd">    parameters the table holds replace the header's.</span>
+<span class="sd">    parameters the table holds replace the header's, and its diffusion table</span>
+<span class="sd">    becomes the ``diffusion_table`` user parameter string, one ``x y z b`` row</span>
+<span class="sd">    per volume (:func:`pulserver.mrd.diffusion_table`).</span>
 <span class="sd">    """</span>
     <span class="n">parameters</span> <span class="o">=</span> <span class="n">header</span><span class="o">.</span><span class="n">sequenceParameters</span>
     <span class="k">if</span> <span class="n">table</span><span class="o">.</span><span class="n">sequence_parameters</span> <span class="ow">and</span> <span class="n">parameters</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
@@ -828,6 +832,16 @@
     <span class="p">):</span>
         <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">table</span><span class="o">.</span><span class="n">sequence_parameters</span><span class="p">:</span>
             <span class="nb">setattr</span><span class="p">(</span><span class="n">parameters</span><span class="p">,</span> <span class="n">field</span><span class="p">,</span> <span class="nb">list</span><span class="p">(</span><span class="n">table</span><span class="o">.</span><span class="n">sequence_parameters</span><span class="p">[</span><span class="n">key</span><span class="p">]))</span>
+    <span class="k">if</span> <span class="n">table</span><span class="o">.</span><span class="n">diffusion</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">b</span><span class="p">,</span> <span class="n">g</span> <span class="o">=</span> <span class="n">table</span><span class="o">.</span><span class="n">diffusion</span>
+        <span class="n">_set_user_string</span><span class="p">(</span>
+            <span class="n">header</span><span class="p">,</span>
+            <span class="n">DIFFUSION_TABLE</span><span class="p">,</span>
+            <span class="s2">"</span><span class="se">\n</span><span class="s2">"</span><span class="o">.</span><span class="n">join</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">x</span><span class="si">:</span><span class="s2">.6g</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">y</span><span class="si">:</span><span class="s2">.6g</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">z</span><span class="si">:</span><span class="s2">.6g</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">value</span><span class="si">:</span><span class="s2">.6g</span><span class="si">}</span><span class="s2">"</span>
+                <span class="k">for</span> <span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">z</span><span class="p">),</span> <span class="n">value</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">g</span><span class="p">,</span> <span class="n">b</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="p">),</span>
+        <span class="p">)</span>
 
     <span class="n">encodings</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">header</span><span class="o">.</span><span class="n">encoding</span> <span class="ow">or</span> <span class="p">())</span>
     <span class="k">for</span> <span class="n">index</span><span class="p">,</span> <span class="n">space</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">table</span><span class="o">.</span><span class="n">spaces</span><span class="p">):</span>
@@ -907,7 +921,9 @@
 <span class="sd">    ``encoding_space_ref``, and ``center_sample`` unless k does not move</span>
 <span class="sd">    across the readout, in which case the received value stays. A readout</span>
 <span class="sd">    whose k moves gets it as ``traj``, trailing constant axes dropped, unless</span>
-<span class="sd">    it is a Cartesian readout sampled on its flat top alone.</span>
+<span class="sd">    it is a Cartesian readout sampled on its flat top alone. The received</span>
+<span class="sd">    ``position``, the field-of-view centre, is moved along ``slice_dir`` to</span>
+<span class="sd">    the centre of the readout's slice (:attr:`SequenceTable.slice_offset_m`).</span>
 
 <span class="sd">    The samples are left as received, except where</span>
 <span class="sd">    :meth:`SequenceTable.readout_phase_modulation` gives a phase, with the</span>
@@ -942,6 +958,13 @@
         <span class="n">acquisition</span><span class="o">.</span><span class="n">center_sample</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">table</span><span class="o">.</span><span class="n">center_sample</span><span class="p">[</span><span class="n">index</span><span class="p">])</span>
     <span class="n">acquisition</span><span class="o">.</span><span class="n">sample_time_us</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">table</span><span class="o">.</span><span class="n">sample_time_us</span><span class="p">[</span><span class="n">index</span><span class="p">])</span>
     <span class="n">acquisition</span><span class="o">.</span><span class="n">encoding_space_ref</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">table</span><span class="o">.</span><span class="n">encoding_space</span><span class="p">[</span><span class="n">index</span><span class="p">])</span>
+    <span class="n">offset_mm</span> <span class="o">=</span> <span class="mf">1e3</span> <span class="o">*</span> <span class="nb">float</span><span class="p">(</span><span class="n">table</span><span class="o">.</span><span class="n">slice_offset_m</span><span class="p">[</span><span class="n">index</span><span class="p">])</span>
+    <span class="k">if</span> <span class="n">offset_mm</span><span class="p">:</span>
+        <span class="n">acquisition</span><span class="o">.</span><span class="n">position</span><span class="p">[:]</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="nb">float</span><span class="p">(</span><span class="n">acquisition</span><span class="o">.</span><span class="n">position</span><span class="p">[</span><span class="n">axis</span><span class="p">])</span>
+            <span class="o">+</span> <span class="n">offset_mm</span> <span class="o">*</span> <span class="nb">float</span><span class="p">(</span><span class="n">acquisition</span><span class="o">.</span><span class="n">slice_dir</span><span class="p">[</span><span class="n">axis</span><span class="p">])</span>
+            <span class="k">for</span> <span class="n">axis</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span>
+        <span class="p">]</span>
 
     <span class="n">modulation</span> <span class="o">=</span> <span class="n">table</span><span class="o">.</span><span class="n">readout_phase_modulation</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="n">fov_offset_m</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">modulation</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
@@ -985,21 +1008,23 @@
     <span class="n">local_space</span> <span class="o">=</span> <span class="n">navigator</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span>
     <span class="n">_mark_boundaries</span><span class="p">(</span><span class="n">flags</span><span class="p">,</span> <span class="n">counters</span><span class="p">,</span> <span class="n">local_space</span><span class="p">,</span> <span class="nb">set</span><span class="p">(</span><span class="n">labels</span><span class="p">))</span>
 
+    <span class="n">stack</span> <span class="o">=</span> <span class="n">_is_slice_stack</span><span class="p">(</span><span class="n">labels</span><span class="p">,</span> <span class="n">definitions</span><span class="p">)</span>
     <span class="n">spaces</span> <span class="o">=</span> <span class="p">[]</span>
     <span class="n">navigates</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="n">navigator</span><span class="o">.</span><span class="n">any</span><span class="p">())</span>
     <span class="k">for</span> <span class="n">local</span><span class="p">,</span> <span class="n">is_navigator</span> <span class="ow">in</span> <span class="p">((</span><span class="mi">0</span><span class="p">,</span> <span class="kc">False</span><span class="p">),</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="kc">True</span><span class="p">)):</span>
         <span class="k">if</span> <span class="n">is_navigator</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">navigates</span><span class="p">:</span>
             <span class="k">break</span>
+        <span class="n">matrix</span> <span class="o">=</span> <span class="n">definitions</span><span class="o">.</span><span class="n">navigator_matrix</span> <span class="k">if</span> <span class="n">is_navigator</span> <span class="k">else</span> <span class="n">definitions</span><span class="o">.</span><span class="n">matrix</span>
         <span class="n">fov</span> <span class="o">=</span> <span class="n">definitions</span><span class="o">.</span><span class="n">navigator_fov</span> <span class="k">if</span> <span class="n">is_navigator</span> <span class="k">else</span> <span class="n">definitions</span><span class="o">.</span><span class="n">fov</span>
+        <span class="k">if</span> <span class="n">stack</span><span class="p">:</span>
+            <span class="n">matrix</span><span class="p">,</span> <span class="n">fov</span> <span class="o">=</span> <span class="n">_one_slice</span><span class="p">(</span><span class="n">matrix</span><span class="p">,</span> <span class="n">fov</span><span class="p">,</span> <span class="n">definitions</span><span class="o">.</span><span class="n">slice_thickness</span><span class="p">)</span>
         <span class="n">members</span> <span class="o">=</span> <span class="n">local_space</span> <span class="o">==</span> <span class="n">local</span> <span class="k">if</span> <span class="n">navigates</span> <span class="k">else</span> <span class="nb">slice</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
         <span class="n">trajectory</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">((</span><span class="n">readouts</span><span class="o">.</span><span class="n">trajectory_dimensions</span><span class="p">[</span><span class="n">members</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">any</span><span class="p">())</span>
         <span class="n">spaces</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
             <span class="n">TableSpace</span><span class="p">(</span>
                 <span class="n">subsequence</span><span class="o">=</span><span class="n">subsequence</span><span class="p">,</span>
                 <span class="n">navigator</span><span class="o">=</span><span class="n">is_navigator</span><span class="p">,</span>
-                <span class="n">matrix</span><span class="o">=</span><span class="n">definitions</span><span class="o">.</span><span class="n">navigator_matrix</span>
-                <span class="k">if</span> <span class="n">is_navigator</span>
-                <span class="k">else</span> <span class="n">definitions</span><span class="o">.</span><span class="n">matrix</span><span class="p">,</span>
+                <span class="n">matrix</span><span class="o">=</span><span class="n">matrix</span><span class="p">,</span>
                 <span class="n">fov_mm</span><span class="o">=</span><span class="kc">None</span> <span class="k">if</span> <span class="n">fov</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="nb">tuple</span><span class="p">(</span><span class="nb">round</span><span class="p">(</span><span class="mf">1e3</span> <span class="o">*</span> <span class="n">v</span><span class="p">,</span> <span class="mi">9</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">fov</span><span class="p">),</span>
                 <span class="n">trajectory</span><span class="o">=</span><span class="n">trajectory</span><span class="p">,</span>
                 <span class="n">centre_line</span><span class="o">=</span><span class="kc">None</span> <span class="k">if</span> <span class="n">is_navigator</span> <span class="k">else</span> <span class="n">definitions</span><span class="o">.</span><span class="n">centre_line</span><span class="p">,</span>
@@ -1027,8 +1052,70 @@
         <span class="s2">"sample_time_us"</span><span class="p">:</span> <span class="mf">1e6</span> <span class="o">*</span> <span class="n">readouts</span><span class="o">.</span><span class="n">dwell</span><span class="p">,</span>
         <span class="s2">"encoding_space"</span><span class="p">:</span> <span class="n">first_space</span> <span class="o">+</span> <span class="n">local_space</span><span class="p">,</span>
         <span class="s2">"num_samples"</span><span class="p">:</span> <span class="n">readouts</span><span class="o">.</span><span class="n">num_samples</span><span class="p">,</span>
+        <span class="s2">"slice_offset_m"</span><span class="p">:</span> <span class="n">_slice_offsets</span><span class="p">(</span><span class="n">labels</span><span class="p">,</span> <span class="n">definitions</span><span class="p">,</span> <span class="n">count</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">stack</span>
+        <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">count</span><span class="p">),</span>
     <span class="p">}</span>
     <span class="k">return</span> <span class="n">part</span><span class="p">,</span> <span class="n">spaces</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_is_slice_stack</span><span class="p">(</span>
+    <span class="n">labels</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">],</span> <span class="n">definitions</span><span class="p">:</span> <span class="n">SequenceDefinitions</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Whether a subsequence excites its slices one by one.</span>
+
+<span class="sd">    True when it writes no ``PAR`` and either defines ``SlicePositions`` or</span>
+<span class="sd">    writes more than one ``SLC``; its ``Matrix`` and ``FOV`` along z then state</span>
+<span class="sd">    the stack.</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="s2">"PAR"</span> <span class="ow">in</span> <span class="n">labels</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">False</span>
+    <span class="n">slices</span> <span class="o">=</span> <span class="n">labels</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"SLC"</span><span class="p">)</span>
+    <span class="n">varies</span> <span class="o">=</span> <span class="n">slices</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">slices</span><span class="p">)</span><span class="o">.</span><span class="n">size</span> <span class="o">&gt;</span> <span class="mi">1</span>
+    <span class="k">return</span> <span class="nb">bool</span><span class="p">(</span><span class="n">definitions</span><span class="o">.</span><span class="n">slice_positions</span><span class="p">)</span> <span class="ow">or</span> <span class="n">varies</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_one_slice</span><span class="p">(</span>
+    <span class="n">matrix</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">fov</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">thickness</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Return the matrix and field of view of one slice of a stack, in m.</span>
+
+<span class="sd">    One sample along z, over ``thickness`` when the sequence defines it, else</span>
+<span class="sd">    the stack's field of view shared among its ``Matrix`` z slices.</span>
+<span class="sd">    """</span>
+    <span class="n">slices</span> <span class="o">=</span> <span class="mi">1</span> <span class="k">if</span> <span class="n">matrix</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="nb">max</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">matrix</span><span class="p">[</span><span class="mi">2</span><span class="p">]),</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">matrix</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">matrix</span> <span class="o">=</span> <span class="p">(</span><span class="n">matrix</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">matrix</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">fov</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">fov</span> <span class="o">=</span> <span class="p">(</span><span class="n">fov</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">fov</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">fov</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">/</span> <span class="n">slices</span> <span class="k">if</span> <span class="n">thickness</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">thickness</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">matrix</span><span class="p">,</span> <span class="n">fov</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_slice_offsets</span><span class="p">(</span>
+    <span class="n">labels</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">],</span> <span class="n">definitions</span><span class="p">:</span> <span class="n">SequenceDefinitions</span><span class="p">,</span> <span class="n">count</span><span class="p">:</span> <span class="nb">int</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the ``SlicePositions`` entry each readout's ``SLC`` indexes, in m.</span>
+
+<span class="sd">    Zeros where the sequence defines no ``SlicePositions``.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If a readout's ``SLC`` indexes no entry.</span>
+<span class="sd">    """</span>
+    <span class="n">positions</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">definitions</span><span class="o">.</span><span class="n">slice_positions</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">positions</span><span class="o">.</span><span class="n">size</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">count</span><span class="p">)</span>
+    <span class="n">slices</span> <span class="o">=</span> <span class="n">labels</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"SLC"</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">count</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int32</span><span class="p">))</span>
+    <span class="n">outside</span> <span class="o">=</span> <span class="p">(</span><span class="n">slices</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span> <span class="o">|</span> <span class="p">(</span><span class="n">slices</span> <span class="o">&gt;=</span> <span class="n">positions</span><span class="o">.</span><span class="n">size</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">outside</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"a readout has SLC=</span><span class="si">{</span><span class="nb">int</span><span class="p">(</span><span class="n">slices</span><span class="p">[</span><span class="n">outside</span><span class="p">][</span><span class="mi">0</span><span class="p">])</span><span class="si">}</span><span class="s2">, and the sequence "</span>
+            <span class="sa">f</span><span class="s2">"defines </span><span class="si">{</span><span class="n">positions</span><span class="o">.</span><span class="n">size</span><span class="si">}</span><span class="s2"> SlicePositions"</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="n">positions</span><span class="p">[</span><span class="n">slices</span><span class="p">]</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_ramp_sampled</span><span class="p">(</span><span class="n">readouts</span><span class="p">:</span> <span class="n">ReadoutTable</span><span class="p">,</span> <span class="n">index</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
@@ -1058,7 +1145,9 @@
 <span class="k">def</span><span class="w"> </span><span class="nf">_full_echo</span><span class="p">(</span>
     <span class="n">samples</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">centre</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">reverse</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Return the samples of the largest full echo the readouts are parts of, or ``None`` for no readouts.</span>
+<span class="w">    </span><span class="sd">"""Return the samples of the largest full echo the readouts are parts of.</span>
+
+<span class="sd">    ``None`` for no readouts.</span>
 
 <span class="sd">    A readout is a full echo when its ``center_sample`` is ``samples // 2``,</span>
 <span class="sd">    which is also taken of one whose k does not move (``centre`` -1);</span>
@@ -1079,7 +1168,11 @@
     <span class="n">space</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
     <span class="n">written</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Set the first and last flags of every written counter, keyed by space and the other written image counters."""</span>
+<span class="w">    </span><span class="sd">"""Set the first and last flags of every written counter, in place.</span>
+
+<span class="sd">    A boundary is keyed by the encoding space and the other written</span>
+<span class="sd">    image-selecting counters.</span>
+<span class="sd">    """</span>
     <span class="n">sets</span> <span class="o">=</span> <span class="p">[]</span>
     <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">first</span><span class="p">,</span> <span class="n">last</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">_BOUNDARY_COUNTERS</span><span class="p">:</span>
         <span class="k">if</span> <span class="n">name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">written</span><span class="p">:</span>
@@ -1095,7 +1188,10 @@
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_limit</span><span class="p">(</span><span class="n">values</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">centre</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Return the ``limitType`` of a counter's values, centred on ``centre`` or, where it is ``None``, on the middle of the range."""</span>
+<span class="w">    </span><span class="sd">"""Return the ``limitType`` of a counter's values.</span>
+
+<span class="sd">    Centred on ``centre``, or on the middle of the range where it is ``None``.</span>
+<span class="sd">    """</span>
     <span class="n">minimum</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">values</span><span class="o">.</span><span class="n">min</span><span class="p">())</span> <span class="k">if</span> <span class="n">values</span><span class="o">.</span><span class="n">size</span> <span class="k">else</span> <span class="mi">0</span>
     <span class="n">maximum</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">values</span><span class="o">.</span><span class="n">max</span><span class="p">())</span> <span class="k">if</span> <span class="n">values</span><span class="o">.</span><span class="n">size</span> <span class="k">else</span> <span class="mi">0</span>
     <span class="k">return</span> <span class="n">xsd</span><span class="o">.</span><span class="n">limitType</span><span class="p">(</span>
@@ -1106,7 +1202,9 @@
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_encoding_space</span><span class="p">(</span><span class="n">space</span><span class="p">:</span> <span class="n">TableSpace</span><span class="p">,</span> <span class="n">current</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">widened</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Return an ``encodingSpaceType`` from the space's definitions, falling back to ``current`` per field.</span>
+<span class="w">    </span><span class="sd">"""Return an ``encodingSpaceType`` from the space's definitions.</span>
+
+<span class="sd">    Each field the space leaves undefined is taken from ``current``.</span>
 
 <span class="sd">    With ``widened``, a defined matrix has as many samples along the readout as</span>
 <span class="sd">    the space's full echo, and a defined field of view the extent of them.</span>

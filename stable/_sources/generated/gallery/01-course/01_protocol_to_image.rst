@@ -18,28 +18,31 @@
 .. _sphx_glr_generated_gallery_01-course_01_protocol_to_image.py:
 
 
-===========================
-1. From protocol to image
-===========================
+==================
+1. Your first scan
+==================
 
-A scan through pulserver passes four stages: a scanner sequence resolves the
-protocol the operator edits and designs the sequence, the design is converted
-into the representation the scanner plays, the scanner plays it, and the raw
-data are enriched from the sequence and reconstructed. This lesson runs all
-four in one process, on the virtual scanner, and returns an image.
+In this lesson you run a whole scan without writing any plugin. You use a
+sequence and a reconstruction that ship with pulserver (``gre2d``, a 2D
+gradient echo, and ``pics``, a compressed-sensing reconstruction with BART),
+and the virtual scanner plays the sequence on a phantom. You will do what a
+scanner does: ask for the protocol, edit it, start the scan and get the image
+back.
+
+Every step you run here is one step of the README's *How it works*. The rest
+of the course opens them one at a time, and replaces the shipped plugins with
+your own.
 
 **Learning objectives**
 
-- List the protocol of a shipped scanner sequence, edit it, validate it and
-  generate a design, as an interpreter does through the design calls.
-- Start an exam on a phantom and scan a stored design on it.
-- Name the four stages a scan passes, and the lesson of this course that
-  treats each.
+- Run the six steps of a scan in one notebook.
+- See what the operator sees: the protocol, and what pulserver sends back
+  after an edit.
+- Know which lesson of the course covers each step.
 
-The next lesson writes the scanner sequence this lesson takes from the shipped
-plugins.
+Next: :doc:`02_sequence_plugin`, where you write the sequence plugin yourself.
 
-.. GENERATED FROM PYTHON SOURCE LINES 23-29
+.. GENERATED FROM PYTHON SOURCE LINES 26-36
 
 
 
@@ -48,20 +51,22 @@ plugins.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 30-40
+.. GENERATED FROM PYTHON SOURCE LINES 37-49
 
-A console in one process
-------------------------
+A scanner in your notebook
+--------------------------
 
-:class:`~pulserver.virtual.Console` answers what a scanner console asks of
-pulserver: the design calls, an exam on a subject, and a scan. It is given
-the scanner limits as the ``[Limits]`` block an interpreter sends, and a
-design store, here a temporary directory. With ``recon_plugins`` it
-reconstructs each scan in this process, as the reconstruction proxy would.
-An empty list of plugin directories leaves the shipped plugins, which are
-found by name.
+A :class:`~pulserver.virtual.Console` stands in for the scanner: it makes
+the same calls a scanner makes, plays the sequence on a phantom, and
+reconstructs in this process instead of in a separate reconstruction server.
 
-.. GENERATED FROM PYTHON SOURCE LINES 40-58
+It needs two things. The **system** is the scanner's hardware: field
+strength, maximum gradient amplitude and slew rate. These are the arguments
+of Pulseq's ``system`` object (:class:`pypulseqpp.Opts`), written as the text
+block a scanner sends; raster times and dead times you leave out take their
+defaults. The **store** is the folder where finished sequences are kept.
+
+.. GENERATED FROM PYTHON SOURCE LINES 49-67
 
 .. code-block:: Python
 
@@ -72,7 +77,7 @@ found by name.
 
     from pulserver import virtual
 
-    limits = """[Limits]
+    system = """[Limits]
     B0: 3.0
     max_grad: 40
     grad_unit: mT/m
@@ -81,7 +86,7 @@ found by name.
     [Limits End]
     """
     store = Path(tempfile.mkdtemp())
-    console = virtual.Console(plugins=[], limits=limits, store=store, recon_plugins=[])
+    console = virtual.Console(plugins=[], limits=system, store=store, recon_plugins=[])
 
 
 
@@ -90,31 +95,25 @@ found by name.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 59-67
+.. GENERATED FROM PYTHON SOURCE LINES 68-75
 
-The protocol
-------------
+Step 1: the protocol
+--------------------
 
-The ``list`` call returns the protocol of the shipped ``gre2d``, pypulseqpp's
-2D gradient echo bound to the scanner UI: each entry's value, range and
-unit, in the text block the interpreter reads. The block ends with the
-prescription entries, the field-of-view offset and rotation, which the
-interpreter fills from the scanner's; they are left out of the print.
+When the operator opens a sequence, the scanner asks pulserver which
+parameters to show. This is the reply for ``gre2d``: one line per parameter,
+with its type, current value, range and unit. The scanner builds its UI from
+it.
 
-.. GENERATED FROM PYTHON SOURCE LINES 67-78
+.. GENERATED FROM PYTHON SOURCE LINES 75-81
 
 .. code-block:: Python
 
-    from pulserver.protocol import (
-        UIParam,
-        format_values,
-        parse_listing,
-        parse_validation,
-    )
+    from pulserver.protocol import UIParam, format_values, parse_listing, parse_validation
 
     listing = console.design("list", "gre2d")["reply"]
     block = listing[listing.index("[Protocol]") :]
-    print(block[: block.index("fov_offset_x")])
+    print("\n".join(block.splitlines()[:12]) + "\n...")
 
 
 
@@ -125,6 +124,7 @@ interpreter fills from the scanner's; they are left out of the print.
  .. code-block:: none
 
     [Protocol]
+    imaging_mode: stringlist|0|2d|3d
     flip: float|typein|12.0|1.0|90.0|1.0|deg
     TE: int|dropdown|8000|1000|80000|10|us|-2|5000|8000
     TR: int|dropdown|250000|1000|5000000|1|us|-1
@@ -134,21 +134,23 @@ interpreter fills from the scanner's; they are left out of the print.
     nx: int|typein|128|32|512|2|
     ny: int|typein|128|32|512|2|
     nslices: int|typein|1|1|64|1|
-    slice_thickness: float|typein|5.0|1.0|20.0|1.0|mm
-    Ry: int|typein|1|1|4|1|
+    slice_spacing: float|typein|0.0|0.0|100.0|0.1|mm
+    ...
 
 
 
 
+.. GENERATED FROM PYTHON SOURCE LINES 82-89
 
-.. GENERATED FROM PYTHON SOURCE LINES 79-83
+Step 2: an edit
+---------------
 
-An edit is a value block sent back. The matrix is reduced to 64 by 64, and
-the ``validate`` call resolves the request: it designs the sequence under the
-limits and replies with the protocol the design achieves and the scan time.
-The entries the design changed are printed beside the values requested.
+The operator changes the matrix to 64 by 64. The scanner sends the new values
+back, and pulserver asks the sequence what it can achieve with them. The
+reply says whether the protocol is valid, the scan time, and any value the
+sequence had to change: here the receiver bandwidth.
 
-.. GENERATED FROM PYTHON SOURCE LINES 83-96
+.. GENERATED FROM PYTHON SOURCE LINES 89-102
 
 .. code-block:: Python
 
@@ -173,18 +175,22 @@ The entries the design changed are printed beside the values requested.
 
  .. code-block:: none
 
-    valid: True, scan time 20.0 s
+    valid: True, scan time 22.2 s
     bandwidth: requested 250000.0, achieved 100000.0
 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 97-99
+.. GENERATED FROM PYTHON SOURCE LINES 103-109
 
-The ``generate`` call designs the sequence, checks it, converts it into the
-IR cache and stores both as a design. The reply is the design's identifier.
+Step 3: the sequence for the scanner
+------------------------------------
 
-.. GENERATED FROM PYTHON SOURCE LINES 99-104
+The operator presses *Scan*. pulserver designs the whole sequence, checks it
+against the limits, converts it into the cache the scanner plays and keeps
+both in the store under one identifier.
+
+.. GENERATED FROM PYTHON SOURCE LINES 109-114
 
 .. code-block:: Python
 
@@ -201,25 +207,28 @@ IR cache and stores both as a design. The reply is the design's identifier.
 
  .. code-block:: none
 
-    GENERATED 9065d598faaa5c9196
+    GENERATED 71e45886fc60ff0519
 
     ['manifest.json', 'resolved.protocol', 'sequence.pseg', 'sequence.seq']
 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 105-113
+.. GENERATED FROM PYTHON SOURCE LINES 115-126
 
-The scan
---------
+Steps 4 to 6: scan and reconstruct
+----------------------------------
 
-An exam names its subject and coil: here the vials phantom, seven water vials
-and one fat vial, in the body coil, which transmits and receives on one
-channel. The scan plays the stored design on the phantom's tissue with the
-virtual scanner's Fourier engine, sends the raw data to the reconstruction,
-here ``pics``, and receives the images as DICOM.
+An exam puts a subject in the scanner. Here it is a phantom of eight vials,
+seven of water with different T1 and T2 and one of fat, in the body coil.
+The exam returns a localizer, a quick image of the phantom, as the scanner
+would.
 
-.. GENERATED FROM PYTHON SOURCE LINES 113-144
+The scan then plays the stored sequence on the phantom, pulserver labels the
+raw data from the sequence, and ``pics`` reconstructs it. The images come
+back as DICOM, as they would on the console.
+
+.. GENERATED FROM PYTHON SOURCE LINES 126-171
 
 .. code-block:: Python
 
@@ -228,7 +237,8 @@ here ``pics``, and receives the images as DICOM.
 
     import pydicom
 
-    console.exam("vials", coil="body")
+    localizer = [pydicom.dcmread(io.BytesIO(f)) for f in console.exam("vials", coil="body")]
+
     received = []
     status = console.scan(
         design,
@@ -249,7 +259,7 @@ here ``pics``, and receives the images as DICOM.
 
 
 .. image-sg:: /generated/gallery/01-course/images/sphx_glr_01_protocol_to_image_001.png
-   :alt: 01 protocol to image
+   :alt: the phantom (localizer), your scan: gre2d + pics
    :srcset: /generated/gallery/01-course/images/sphx_glr_01_protocol_to_image_001.png
    :class: sphx-glr-single-img
 
@@ -258,36 +268,62 @@ here ``pics``, and receives the images as DICOM.
 
  .. code-block:: none
 
-    WARNING:pulserver.recon.gadgets:readouts are not prewhitened: the stream has no noise readouts before its first other readout, and the exam stores no noise covariance for its coil labels
     status 0, 1 image of (64, 64)
 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 145-162
+.. GENERATED FROM PYTHON SOURCE LINES 172-182
 
-The four stages
----------------
+The localizer is drawn from the phantom's geometry. Your image is
+reconstructed from raw data the virtual scanner simulated, at the 64 x 64
+matrix you set. Both are drawn on the same millimetre scale: your image
+covers the protocol's 220 mm field of view, the localizer a wider one.
 
-The image is the end of four stages, which the rest of the course takes one
-at a time.
+What you just ran
+-----------------
 
-1. **Design.** The scanner sequence binds a pypulseqpp sequence function to
-   the protocol entries and resolves each request
-   (:doc:`02_sequence_plugin`).
-2. **Scanner representation.** The design is converted into base blocks,
-   virtual segments and an execution stream, the IR cache the interpreter
-   loads (:doc:`03_scanner_representation`).
-3. **Playout.** The interpreter plays the cache; here the virtual scanner
-   plays it on a phantom (:doc:`/explanations/virtual-scanner`).
-4. **Reconstruction.** The raw data are enriched from the sequence that
-   played them and reconstructed by a reconstruction plugin
-   (:doc:`04_reconstruction_plugin`).
+Each call above was one step of a scan. The rest of the course opens them in
+the same order:
+
+.. GENERATED FROM PYTHON SOURCE LINES 182-225
+
+
+
+
+.. image-sg:: /generated/gallery/01-course/images/sphx_glr_01_protocol_to_image_002.png
+   :alt: 01 protocol to image
+   :srcset: /generated/gallery/01-course/images/sphx_glr_01_protocol_to_image_002.png
+   :class: sphx-glr-single-img
+
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 226-243
+
+- Lesson 2 replaces the shipped ``gre2d`` plugin with your own: steps 1 and 2.
+- Lesson 3 looks inside what ``generate`` produced: step 3.
+- Lessons 4 and 5 follow the raw data into a reconstruction plugin you write:
+  steps 5 and 6.
+- Lesson 6 puts your two plugins together on the virtual scanner: step 4.
+
+As a spec
+---------
+
+What this lesson did, stated the way you would ask an agent for it:
+
+.. code-block:: text
+
+   On pulserver's virtual console at 3 T (40 mT/m, 150 T/m/s), list the
+   shipped gre2d protocol, set a 64 x 64 matrix, generate the design, and
+   scan it on the vials phantom in the body coil with the pics
+   reconstruction. Show the localizer next to the image.
 
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.537 seconds)
+   **Total running time of the script:** (0 minutes 0.719 seconds)
 
 
 .. _sphx_glr_download_generated_gallery_01-course_01_protocol_to_image.py:

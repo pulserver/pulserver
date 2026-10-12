@@ -36,7 +36,7 @@
     <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
     <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
     <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
-    <link rel="stylesheet" type="text/css" href="../../../_static/pulserver.css?v=e08ae8f3" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/pulserver.css?v=6854ff42" />
   
   <!-- So that users can add custom icons -->
   <script defer src="../../../_static/scripts/fontawesome.js?digest=90905a2f556bf617f1a9"></script>
@@ -44,7 +44,7 @@
   <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../../../_static/documentation_options.js?v=b196e8ce"></script>
+    <script src="../../../_static/documentation_options.js?v=a6e268a8"></script>
     <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -55,18 +55,19 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.2.1';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.2.2';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+    <script src="../../../_static/capabilities.js?v=421ebb92"></script>
     <link rel="canonical" href="https://pulserver.github.io/pulserver/stable/_modules/pulserver/host/_service.html" />
     <link rel="icon" href="../../../_static/pulserver-mark.svg"/>
     <link rel="index" title="Index" href="../../../genindex.html" />
     <link rel="search" title="Search" href="../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.2.1" />
+  <meta name="docsearch:version" content="v0.2.2" />
   
     
     <script src="../../../_static/searchtools.js"></script>
@@ -113,46 +114,6 @@
 
   
     <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
-<div class="bd-header__inner bd-page-width">
-  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
-    <span class="fa-solid fa-bars"></span>
-  </button>
-  
-  
-  <div class="col-lg-9 navbar-header-items">
-    
-    
-    <div class="navbar-header-items__end">
-      
-        <div class="navbar-item navbar-persistent--container">
-          
-
-<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
- <i class="fa-solid fa-magnifying-glass"></i>
- <span class="search-button__default-text">Search</span>
- <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
-</button>
-        </div>
-      
-      
-    </div>
-    
-  </div>
-  
-  
-    <div class="navbar-persistent--mobile">
-
-<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
- <i class="fa-solid fa-magnifying-glass"></i>
- <span class="search-button__default-text">Search</span>
- <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
-</button>
-    </div>
-  
-
-  
-</div>
-
     </header>
   
 
@@ -236,50 +197,50 @@
         </ul>
         <ul class="nav bd-sidenav">
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../user-guide/index.html">User guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/running.html">Running the services</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/running.html">Services</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../user-guide/scanner-sequences.html">Scanner sequences</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../user-guide/reconstruction-plugins.html">Reconstruction plugins</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/reconstruction-client.html">Reconstruction clients</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/virtual-scanner.html">Scanning a phantom without a scanner</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/reconstruction-client.html">Reconstruction client</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../developer-guide/index.html">Developer guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/prerequisites.html">Development prerequisites</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/installation.html">Editable installation</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/workflow.html">Development workflow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/installation.html">Development setup</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/workflow.html">Contribution workflow</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/style.html">Coding style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/documentation.html">Documentation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/terminology.html">Terminology and conventions</a></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../../../developer-guide/internals/index.html">Internals</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/calibration.html">Calibration, noise and coil compression</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/ir-cache.html">IR cache</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/protocol-wire.html">Protocol text blocks</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/reconstruction-proxy.html">Reconstruction proxy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/sar-ratios.html">SAR ratios against a reference pulse</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/pre-commit.html">Pre-commit</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/pull-requests.html">Pull requests</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/releases.html">Releases</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/code-of-conduct.html">Code of conduct</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../../../explanations/architecture.html">Architecture</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../explanations/protocol.html">Protocol resolution</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../explanations/designs.html">Designs and the design store</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../explanations/scanner-representation.html">Scanner representation (PulSeg)</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../explanations/virtual-scanner.html">The virtual scanner</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../explanations/reconstruction.html">Raw-data enrichment and routing</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../explanations/calibration.html">Calibration, noise and coil compression</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/safety-checks.html">Safety checks</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/scanner-representation.html">PulSeg representation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/raw-data.html">MRD enrichment</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/reconstruction-session.html">Reconstruction session</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/reconstruction.html">Reconstruction plugins and calibration context</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../examples/index.html">Examples</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../../../examples/course.html">Course</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/01_protocol_to_image.html">1. From protocol to image</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/02_sequence_plugin.html">2. A scanner sequence and its protocol</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/03_scanner_representation.html">3. Scanner representation</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/04_reconstruction_plugin.html">4. A reconstruction plugin</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/05_testing_on_the_virtual_scanner.html">5. Testing on the virtual scanner</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/01_protocol_to_image.html">1. Your first scan</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/02_sequence_plugin.html">2. Your sequence in the scanner UI</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/03_scanner_representation.html">3. What the scanner plays</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/04_reconstruction_plugin.html">4. What your recon receives</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/05_recon_plugin.html">5. Your recon plugin</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/06_testing_on_the_virtual_scanner.html">6. Test your pair on the virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../../../examples/tours.html">Tours</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -481,13 +442,19 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">concurrent.futures</span><span class="w"> </span><span class="kn">import</span> <span class="n">ThreadPoolExecutor</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">functools</span><span class="w"> </span><span class="kn">import</span> <span class="n">lru_cache</span><span class="p">,</span> <span class="n">partial</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">NamedTuple</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">pypulseqpp</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pp</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">..</span><span class="w"> </span><span class="kn">import</span> <span class="n">__version__</span><span class="p">,</span> <span class="n">_plugins</span><span class="p">,</span> <span class="n">ir</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.._plugins</span><span class="w"> </span><span class="kn">import</span> <span class="n">PluginPath</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">..design</span><span class="w"> </span><span class="kn">import</span> <span class="n">RfLayout</span><span class="p">,</span> <span class="n">SequencePlugin</span><span class="p">,</span> <span class="n">load_plugin</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..design</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">OptionError</span><span class="p">,</span>
+    <span class="n">RfLayout</span><span class="p">,</span>
+    <span class="n">SequencePlugin</span><span class="p">,</span>
+    <span class="n">load_plugin</span><span class="p">,</span>
+    <span class="n">read_options</span><span class="p">,</span>
+<span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..ir._convert</span><span class="w"> </span><span class="kn">import</span> <span class="n">_payload</span><span class="p">,</span> <span class="n">_read_chain</span><span class="p">,</span> <span class="n">_write_cache</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..mrd._sequence</span><span class="w"> </span><span class="kn">import</span> <span class="n">designed_chain</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..protocol</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
@@ -502,7 +469,7 @@
     <span class="n">prescribed_offset</span><span class="p">,</span>
     <span class="n">prescribed_rotation</span><span class="p">,</span>
 <span class="p">)</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">._blocks</span><span class="w"> </span><span class="kn">import</span> <span class="n">parse_import</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">._blocks</span><span class="w"> </span><span class="kn">import</span> <span class="n">import_averages</span><span class="p">,</span> <span class="n">parse_import</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._limits</span><span class="w"> </span><span class="kn">import</span> <span class="n">design_system</span><span class="p">,</span> <span class="n">split_limits</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._push</span><span class="w"> </span><span class="kn">import</span> <span class="n">push</span> <span class="k">as</span> <span class="n">push_design</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._store</span><span class="w"> </span><span class="kn">import</span> <span class="n">DesignStore</span><span class="p">,</span> <span class="n">design_identity</span>
@@ -531,15 +498,64 @@
         <span class="k">raise</span> <span class="n">CallError</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">error</span><span class="p">))</span> <span class="kn">from</span><span class="w"> </span><span class="kc">None</span>
 
 
+<span class="k">def</span><span class="w"> </span><span class="nf">parameter_file</span><span class="p">(</span>
+    <span class="n">path</span><span class="p">:</span> <span class="n">Path</span><span class="p">,</span> <span class="n">parameter_set</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">parameters</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Path</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the parameter file of set ``parameter_set`` for the plugin file ``path``; ``None`` for set 0.</span>
+
+<span class="sd">    The file is ``&lt;parameters&gt;/&lt;script&gt;/&lt;NN&gt;.toml``, the set number in two</span>
+<span class="sd">    digits at least. ``&lt;script&gt;`` is the stem of the plugin file once its</span>
+<span class="sd">    symbolic links are followed, so a slot ``sequence3.py`` linked to</span>
+<span class="sd">    ``src/fse3d.py`` reads ``fse3d/``. ``parameters`` defaults to the</span>
+<span class="sd">    ``parameters`` directory beside the plugin directory.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    CallError</span>
+<span class="sd">        If the set is negative, or positive and its file does not exist.</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="n">parameter_set</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">CallError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"parameter set </span><span class="si">{</span><span class="n">parameter_set</span><span class="si">}</span><span class="s2"> is negative"</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">parameter_set</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="n">directory</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">parameters</span><span class="p">)</span> <span class="k">if</span> <span class="n">parameters</span> <span class="k">else</span> <span class="n">path</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">parent</span> <span class="o">/</span> <span class="s2">"parameters"</span>
+    <span class="n">script</span> <span class="o">=</span> <span class="n">path</span><span class="o">.</span><span class="n">resolve</span><span class="p">()</span><span class="o">.</span><span class="n">stem</span>
+    <span class="n">file</span> <span class="o">=</span> <span class="n">directory</span> <span class="o">/</span> <span class="n">script</span> <span class="o">/</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">parameter_set</span><span class="si">:</span><span class="s2">02d</span><span class="si">}</span><span class="s2">.toml"</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">file</span><span class="o">.</span><span class="n">is_file</span><span class="p">():</span>
+        <span class="k">raise</span> <span class="n">CallError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"parameter set </span><span class="si">{</span><span class="n">parameter_set</span><span class="si">}</span><span class="s2"> of </span><span class="si">{</span><span class="n">script</span><span class="si">}</span><span class="s2">: no file </span><span class="si">{</span><span class="n">file</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">file</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">_Variant</span><span class="p">(</span><span class="n">NamedTuple</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""A plugin file and the parameter file it is loaded with, if any."""</span>
+
+    <span class="n">path</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">parameters</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_variant</span><span class="p">(</span>
+    <span class="n">plugins</span><span class="p">:</span> <span class="n">PluginPath</span><span class="p">,</span>
+    <span class="n">plugin</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">parameter_set</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">parameters</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">_Variant</span><span class="p">:</span>
+    <span class="n">path</span> <span class="o">=</span> <span class="n">plugin_path</span><span class="p">(</span><span class="n">plugins</span><span class="p">,</span> <span class="n">plugin</span><span class="p">)</span>
+    <span class="n">file</span> <span class="o">=</span> <span class="n">parameter_file</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">parameter_set</span><span class="p">,</span> <span class="n">parameters</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">_Variant</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">path</span><span class="p">),</span> <span class="kc">None</span> <span class="k">if</span> <span class="n">file</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="nb">str</span><span class="p">(</span><span class="n">file</span><span class="p">))</span>
+
+
 <span class="k">def</span><span class="w"> </span><span class="nf">list_protocol</span><span class="p">(</span>
     <span class="n">plugins</span><span class="p">:</span> <span class="n">PluginPath</span><span class="p">,</span>
     <span class="n">plugin</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
     <span class="n">limits</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">rf_definitions</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">parameter_set</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
+    <span class="n">parameters</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Reply ``PROTOCOL`` and the plugin's listing block, and its RF definitions where asked.</span>
 
-<span class="sd">    The listing depends on the plugin file and the installed packages only.</span>
+<span class="sd">    The listing depends on the plugin file, the file of ``parameter_set``</span>
+<span class="sd">    (see :func:`parameter_file`) and the installed packages only.</span>
 <span class="sd">    With ``rf_definitions``, the ``[RfDefinitions]`` block of the plugin's</span>
 <span class="sd">    evaluation at its default protocol under ``limits`` follows it, naming the</span>
 <span class="sd">    definitions, and the peak amplitudes, the RF layouts of later validations</span>
@@ -552,8 +568,8 @@
 <span class="sd">    CallError</span>
 <span class="sd">        If ``rf_definitions`` is asked without ``limits``.</span>
 <span class="sd">    """</span>
-    <span class="n">path</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">plugin_path</span><span class="p">(</span><span class="n">plugins</span><span class="p">,</span> <span class="n">plugin</span><span class="p">))</span>
-    <span class="n">reply</span> <span class="o">=</span> <span class="s2">"PROTOCOL</span><span class="se">\n</span><span class="s2">"</span> <span class="o">+</span> <span class="n">format_listing</span><span class="p">(</span><span class="n">_listing</span><span class="p">(</span><span class="n">path</span><span class="p">))</span>
+    <span class="n">variant</span> <span class="o">=</span> <span class="n">_variant</span><span class="p">(</span><span class="n">plugins</span><span class="p">,</span> <span class="n">plugin</span><span class="p">,</span> <span class="n">parameter_set</span><span class="p">,</span> <span class="n">parameters</span><span class="p">)</span>
+    <span class="n">reply</span> <span class="o">=</span> <span class="s2">"PROTOCOL</span><span class="se">\n</span><span class="s2">"</span> <span class="o">+</span> <span class="n">format_listing</span><span class="p">(</span><span class="n">_listing</span><span class="p">(</span><span class="n">variant</span><span class="p">))</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="n">rf_definitions</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">reply</span>
     <span class="k">if</span> <span class="n">limits</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
@@ -562,7 +578,7 @@
             <span class="s2">"carries none"</span>
         <span class="p">)</span>
     <span class="n">layout</span> <span class="o">=</span> <span class="n">_default_rf_layout</span><span class="p">(</span>
-        <span class="n">path</span><span class="p">,</span> <span class="n">_read</span><span class="p">(</span><span class="n">limits</span><span class="p">),</span> <span class="sa">f</span><span class="s2">"the RF definitions of </span><span class="si">{</span><span class="n">plugin</span><span class="si">}</span><span class="s2"> are not listed"</span>
+        <span class="n">variant</span><span class="p">,</span> <span class="n">_read</span><span class="p">(</span><span class="n">limits</span><span class="p">),</span> <span class="sa">f</span><span class="s2">"the RF definitions of </span><span class="si">{</span><span class="n">plugin</span><span class="si">}</span><span class="s2"> are not listed"</span>
     <span class="p">)</span>
     <span class="k">if</span> <span class="n">layout</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">reply</span> <span class="o">+=</span> <span class="n">format_rf_definitions</span><span class="p">(</span><span class="n">layout</span><span class="o">.</span><span class="n">instances</span><span class="p">)</span>
@@ -576,6 +592,8 @@
     <span class="n">block</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
     <span class="n">rf_layout</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="n">exam</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">parameter_set</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
+    <span class="n">parameters</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Reply ``VALID &lt;seconds&gt;`` or ``INVALID``, an ``INFO`` line and the value block.</span>
 
@@ -586,17 +604,19 @@
 <span class="sd">    listing states, read by evaluating the plugin again at its default</span>
 <span class="sd">    protocol. Where that evaluation is invalid, a warning is logged and the</span>
 <span class="sd">    amplitudes are the layout's own. ``exam`` is the directory of the current</span>
-<span class="sd">    exam's cache, which the plugin's hooks read where they take it.</span>
+<span class="sd">    exam's cache, which the plugin's hooks read where they take it. The</span>
+<span class="sd">    plugin is loaded with the options of ``parameter_set``, as</span>
+<span class="sd">    :func:`list_protocol` loads it.</span>
 <span class="sd">    """</span>
-    <span class="n">path</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">plugin_path</span><span class="p">(</span><span class="n">plugins</span><span class="p">,</span> <span class="n">plugin</span><span class="p">))</span>
-    <span class="n">listing</span> <span class="o">=</span> <span class="n">_listing</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+    <span class="n">variant</span> <span class="o">=</span> <span class="n">_variant</span><span class="p">(</span><span class="n">plugins</span><span class="p">,</span> <span class="n">plugin</span><span class="p">,</span> <span class="n">parameter_set</span><span class="p">,</span> <span class="n">parameters</span><span class="p">)</span>
+    <span class="n">listing</span> <span class="o">=</span> <span class="n">_listing</span><span class="p">(</span><span class="n">variant</span><span class="p">)</span>
     <span class="n">request</span> <span class="o">=</span> <span class="n">_request</span><span class="p">(</span><span class="n">block</span><span class="p">,</span> <span class="n">listing</span><span class="p">)</span>
     <span class="n">limits</span> <span class="o">=</span> <span class="n">_read</span><span class="p">(</span><span class="n">limits</span><span class="p">)</span>
-    <span class="n">validation</span> <span class="o">=</span> <span class="n">_validated</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">limits</span><span class="p">,</span> <span class="n">request</span><span class="p">,</span> <span class="n">exam</span><span class="p">)</span>
+    <span class="n">validation</span> <span class="o">=</span> <span class="n">_validated</span><span class="p">(</span><span class="n">variant</span><span class="p">,</span> <span class="n">limits</span><span class="p">,</span> <span class="n">request</span><span class="p">,</span> <span class="n">exam</span><span class="p">)</span>
     <span class="n">listed</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
     <span class="k">if</span> <span class="n">rf_layout</span> <span class="ow">and</span> <span class="n">validation</span><span class="o">.</span><span class="n">valid</span> <span class="ow">and</span> <span class="n">validation</span><span class="o">.</span><span class="n">rf_layout</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">default</span> <span class="o">=</span> <span class="n">_default_rf_layout</span><span class="p">(</span>
-            <span class="n">path</span><span class="p">,</span>
+            <span class="n">variant</span><span class="p">,</span>
             <span class="n">limits</span><span class="p">,</span>
             <span class="sa">f</span><span class="s2">"the RF layout of </span><span class="si">{</span><span class="n">plugin</span><span class="si">}</span><span class="s2"> is not stated over the listed peaks"</span><span class="p">,</span>
         <span class="p">)</span>
@@ -617,11 +637,14 @@
     <span class="n">store</span><span class="p">:</span> <span class="n">DesignStore</span><span class="p">,</span>
     <span class="n">push</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">exam</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">parameter_set</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
+    <span class="n">parameters</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Reply ``GENERATED &lt;id&gt;`` for the design a request resolves to.</span>
 
-<span class="sd">    A design already stored for the resolved protocol, the plugin source, the</span>
-<span class="sd">    package versions and the limits is returned without designing again.</span>
+<span class="sd">    A design already stored for the resolved protocol, the plugin's options,</span>
+<span class="sd">    the plugin source, the package versions and the limits is returned</span>
+<span class="sd">    without designing again.</span>
 <span class="sd">    Otherwise the sequence is designed once, under the scanner limits</span>
 <span class="sd">    capped by the design limits ``design_max_grad`` and ``design_max_slew``,</span>
 <span class="sd">    written in the logical frame, checked in the physical frame of the</span>
@@ -640,13 +663,13 @@
 <span class="sd">        If the request is invalid or the design fails a check, when nothing</span>
 <span class="sd">        is stored; or if the design cannot be pushed, when it stays stored.</span>
 <span class="sd">    """</span>
-    <span class="n">path</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">plugin_path</span><span class="p">(</span><span class="n">plugins</span><span class="p">,</span> <span class="n">plugin</span><span class="p">))</span>
-    <span class="n">listing</span> <span class="o">=</span> <span class="n">_listing</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+    <span class="n">variant</span> <span class="o">=</span> <span class="n">_variant</span><span class="p">(</span><span class="n">plugins</span><span class="p">,</span> <span class="n">plugin</span><span class="p">,</span> <span class="n">parameter_set</span><span class="p">,</span> <span class="n">parameters</span><span class="p">)</span>
+    <span class="n">listing</span> <span class="o">=</span> <span class="n">_listing</span><span class="p">(</span><span class="n">variant</span><span class="p">)</span>
     <span class="n">request</span> <span class="o">=</span> <span class="n">_request</span><span class="p">(</span><span class="n">block</span><span class="p">,</span> <span class="n">listing</span><span class="p">)</span>
     <span class="n">limits</span> <span class="o">=</span> <span class="n">_read</span><span class="p">(</span><span class="n">limits</span><span class="p">)</span>
     <span class="n">system</span><span class="p">,</span> <span class="n">options</span><span class="p">,</span> <span class="n">checked</span> <span class="o">=</span> <span class="n">split_limits</span><span class="p">(</span><span class="n">limits</span><span class="p">)</span>
     <span class="n">design</span> <span class="o">=</span> <span class="n">design_system</span><span class="p">(</span><span class="n">limits</span><span class="p">)</span>
-    <span class="n">scanner</span> <span class="o">=</span> <span class="n">_plugin</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+    <span class="n">scanner</span> <span class="o">=</span> <span class="n">_plugin</span><span class="p">(</span><span class="n">variant</span><span class="p">)</span>
     <span class="n">requested</span> <span class="o">=</span> <span class="p">{</span><span class="n">key</span><span class="p">:</span> <span class="n">p</span><span class="o">.</span><span class="n">value</span> <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">listing</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">p</span><span class="o">.</span><span class="n">editable</span><span class="p">}</span>
     <span class="n">requested</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">request</span><span class="p">)</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="n">scanner</span><span class="o">.</span><span class="n">reads_exam</span><span class="p">:</span>
@@ -656,8 +679,10 @@
         <span class="n">validation</span> <span class="o">=</span> <span class="n">scanner</span><span class="o">.</span><span class="n">validate</span><span class="p">(</span><span class="n">design</span><span class="p">,</span> <span class="n">validation</span><span class="o">.</span><span class="n">values</span><span class="p">,</span> <span class="n">exam</span><span class="p">)</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="n">validation</span><span class="o">.</span><span class="n">valid</span><span class="p">:</span>
         <span class="k">raise</span> <span class="n">CallError</span><span class="p">(</span><span class="n">validation</span><span class="o">.</span><span class="n">info</span><span class="p">)</span>
-    <span class="n">source</span> <span class="o">=</span> <span class="n">_source</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+    <span class="n">source</span> <span class="o">=</span> <span class="n">_source</span><span class="p">(</span><span class="n">variant</span><span class="p">)</span>
     <span class="n">identified</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">validation</span><span class="o">.</span><span class="n">values</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">scanner</span><span class="o">.</span><span class="n">options</span><span class="p">:</span>
+        <span class="n">identified</span><span class="p">[</span><span class="s2">"options"</span><span class="p">]</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">scanner</span><span class="o">.</span><span class="n">options</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">exam</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">identified</span><span class="p">[</span><span class="s2">"exam"</span><span class="p">]</span> <span class="o">=</span> <span class="n">_exam_digest</span><span class="p">(</span><span class="n">exam</span><span class="p">)</span>
     <span class="n">identity</span> <span class="o">=</span> <span class="n">design_identity</span><span class="p">(</span><span class="n">plugin</span><span class="p">,</span> <span class="n">identified_limits</span><span class="p">(</span><span class="n">limits</span><span class="p">),</span> <span class="n">identified</span><span class="p">,</span> <span class="n">source</span><span class="p">)</span>
@@ -689,6 +714,7 @@
         <span class="n">manifest</span> <span class="o">=</span> <span class="p">{</span>
             <span class="o">**</span><span class="n">_record</span><span class="p">(</span><span class="n">limits</span><span class="p">),</span>
             <span class="s2">"plugin"</span><span class="p">:</span> <span class="n">plugin</span><span class="p">,</span>
+            <span class="s2">"options"</span><span class="p">:</span> <span class="nb">dict</span><span class="p">(</span><span class="n">scanner</span><span class="o">.</span><span class="n">options</span><span class="p">),</span>
             <span class="s2">"source"</span><span class="p">:</span> <span class="n">source</span><span class="p">,</span>
             <span class="s2">"scan_time"</span><span class="p">:</span> <span class="n">validation</span><span class="o">.</span><span class="n">duration</span><span class="p">,</span>
             <span class="s2">"fov_offset_mm"</span><span class="p">:</span> <span class="p">[</span><span class="mf">1e3</span> <span class="o">*</span> <span class="n">value</span> <span class="k">for</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">offset</span><span class="p">],</span>
@@ -709,10 +735,12 @@
 <span class="w">    </span><span class="sd">"""Reply ``IMPORTED &lt;id&gt;`` for a sequence file, its chain and their IR cache.</span>
 
 <span class="sd">    The files are identified by their names and contents and the</span>
-<span class="sd">    prescription of the import block. A chain already stored is returned;</span>
-<span class="sd">    otherwise it is copied, checked and converted as :func:`generate` does,</span>
-<span class="sd">    and pushed as :func:`generate` pushes. The first file is also reachable as</span>
-<span class="sd">    ``sequence.seq``.</span>
+<span class="sd">    prescription and averages of the import block. A chain already stored is</span>
+<span class="sd">    returned; otherwise it is copied, its main sequence, the last file, is</span>
+<span class="sd">    played as many times as the block's ``nex`` line asks, written into its</span>
+<span class="sd">    block table as binary Pulseq, and the chain is checked and converted as</span>
+<span class="sd">    :func:`generate` does, and pushed as :func:`generate` pushes. The first</span>
+<span class="sd">    file is also reachable as ``sequence.seq``.</span>
 
 <span class="sd">    Raises</span>
 <span class="sd">    ------</span>
@@ -722,6 +750,7 @@
 <span class="sd">    """</span>
     <span class="k">try</span><span class="p">:</span>
         <span class="n">first</span><span class="p">,</span> <span class="n">offset_mm</span><span class="p">,</span> <span class="n">rotation</span> <span class="o">=</span> <span class="n">parse_import</span><span class="p">(</span><span class="n">block</span><span class="p">)</span>
+        <span class="n">averages</span> <span class="o">=</span> <span class="n">import_averages</span><span class="p">(</span><span class="n">block</span><span class="p">)</span>
     <span class="k">except</span> <span class="ne">ValueError</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
         <span class="k">raise</span> <span class="n">CallError</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">error</span><span class="p">))</span> <span class="kn">from</span><span class="w"> </span><span class="kc">None</span>
     <span class="n">limits</span> <span class="o">=</span> <span class="n">_read</span><span class="p">(</span><span class="n">limits</span><span class="p">)</span>
@@ -732,6 +761,8 @@
         <span class="s2">"fov_offset_mm"</span><span class="p">:</span> <span class="nb">list</span><span class="p">(</span><span class="n">offset_mm</span><span class="p">),</span>
         <span class="s2">"fov_rotation"</span><span class="p">:</span> <span class="n">rotation</span><span class="o">.</span><span class="n">ravel</span><span class="p">()</span><span class="o">.</span><span class="n">tolist</span><span class="p">(),</span>
     <span class="p">}</span>
+    <span class="k">if</span> <span class="n">averages</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="n">values</span><span class="p">[</span><span class="s2">"nex"</span><span class="p">]</span> <span class="o">=</span> <span class="n">averages</span>
     <span class="n">identity</span> <span class="o">=</span> <span class="n">design_identity</span><span class="p">(</span><span class="s2">""</span><span class="p">,</span> <span class="n">identified_limits</span><span class="p">(</span><span class="n">limits</span><span class="p">),</span> <span class="n">values</span><span class="p">)</span>
     <span class="n">found</span> <span class="o">=</span> <span class="n">store</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="n">identity</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">found</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
@@ -740,6 +771,8 @@
     <span class="k">try</span><span class="p">:</span>
         <span class="k">for</span> <span class="n">file</span> <span class="ow">in</span> <span class="n">files</span><span class="p">:</span>
             <span class="n">shutil</span><span class="o">.</span><span class="n">copyfile</span><span class="p">(</span><span class="n">file</span><span class="p">,</span> <span class="n">staged</span> <span class="o">/</span> <span class="n">file</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">averages</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">_play_averages</span><span class="p">(</span><span class="n">staged</span> <span class="o">/</span> <span class="n">files</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">averages</span><span class="p">)</span>
         <span class="n">entry</span> <span class="o">=</span> <span class="n">staged</span> <span class="o">/</span> <span class="n">_ENTRY</span>
         <span class="k">if</span> <span class="n">files</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">name</span> <span class="o">!=</span> <span class="n">_ENTRY</span><span class="p">:</span>
             <span class="n">entry</span><span class="o">.</span><span class="n">symlink_to</span><span class="p">(</span><span class="n">files</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
@@ -851,29 +884,45 @@
 
 
 <span class="nd">@lru_cache</span><span class="p">(</span><span class="n">maxsize</span><span class="o">=</span><span class="mi">32</span><span class="p">)</span>
-<span class="k">def</span><span class="w"> </span><span class="nf">_cached</span><span class="p">(</span><span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">mtime_ns</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SequencePlugin</span><span class="p">:</span>  <span class="c1"># noqa: ARG001 -- part of the key</span>
-    <span class="k">return</span> <span class="n">load_plugin</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="n">path</span><span class="p">))</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_cached</span><span class="p">(</span><span class="n">variant</span><span class="p">:</span> <span class="n">_Variant</span><span class="p">,</span> <span class="n">mtimes_ns</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">SequencePlugin</span><span class="p">:</span>  <span class="c1"># noqa: ARG001 -- part of the key</span>
+    <span class="n">options</span> <span class="o">=</span> <span class="p">{}</span> <span class="k">if</span> <span class="n">variant</span><span class="o">.</span><span class="n">parameters</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">read_options</span><span class="p">(</span><span class="n">variant</span><span class="o">.</span><span class="n">parameters</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">load_plugin</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="n">variant</span><span class="o">.</span><span class="n">path</span><span class="p">),</span> <span class="n">options</span><span class="p">)</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_plugin</span><span class="p">(</span><span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SequencePlugin</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Return the plugin at ``path``, imported again when the file changed."""</span>
-    <span class="k">return</span> <span class="n">_cached</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">Path</span><span class="p">(</span><span class="n">path</span><span class="p">)</span><span class="o">.</span><span class="n">stat</span><span class="p">()</span><span class="o">.</span><span class="n">st_mtime_ns</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_mtimes</span><span class="p">(</span><span class="n">variant</span><span class="p">:</span> <span class="n">_Variant</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Return the modification times of the files of a variant, which change when either is edited."""</span>
+    <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="n">f</span><span class="p">)</span><span class="o">.</span><span class="n">stat</span><span class="p">()</span><span class="o">.</span><span class="n">st_mtime_ns</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">variant</span> <span class="k">if</span> <span class="n">f</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">)</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_listing</span><span class="p">(</span><span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="n">Parameter</span><span class="p">]:</span>
-    <span class="k">return</span> <span class="n">_plugin</span><span class="p">(</span><span class="n">path</span><span class="p">)</span><span class="o">.</span><span class="n">listing</span><span class="p">()</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_plugin</span><span class="p">(</span><span class="n">variant</span><span class="p">:</span> <span class="n">_Variant</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SequencePlugin</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the plugin of a variant, imported again when either of its files changed.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    CallError</span>
+<span class="sd">        If the parameter file is not TOML, or sets options the plugin does</span>
+<span class="sd">        not declare or values it does not take.</span>
+<span class="sd">    """</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">_cached</span><span class="p">(</span><span class="n">variant</span><span class="p">,</span> <span class="n">_mtimes</span><span class="p">(</span><span class="n">variant</span><span class="p">))</span>
+    <span class="k">except</span> <span class="n">OptionError</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">CallError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">variant</span><span class="o">.</span><span class="n">parameters</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">error</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="kc">None</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_source</span><span class="p">(</span><span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Return a digest of the code that designs with the plugin at ``path``.</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_listing</span><span class="p">(</span><span class="n">variant</span><span class="p">:</span> <span class="n">_Variant</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="n">Parameter</span><span class="p">]:</span>
+    <span class="k">return</span> <span class="n">_plugin</span><span class="p">(</span><span class="n">variant</span><span class="p">)</span><span class="o">.</span><span class="n">listing</span><span class="p">()</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_source</span><span class="p">(</span><span class="n">variant</span><span class="p">:</span> <span class="n">_Variant</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return a digest of the code that designs with the plugin of a variant.</span>
 
 <span class="sd">    Covers the plugin file, the source file of the app it binds, and the</span>
 <span class="sd">    installed versions of pypulseqpp and pulserver. A :func:`functools.partial`</span>
 <span class="sd">    app is covered through the function it wraps. Modules the app imports from</span>
 <span class="sd">    elsewhere are covered only through those versions.</span>
 <span class="sd">    """</span>
-    <span class="n">digest</span> <span class="o">=</span> <span class="n">hashlib</span><span class="o">.</span><span class="n">sha256</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="n">path</span><span class="p">)</span><span class="o">.</span><span class="n">read_bytes</span><span class="p">())</span>
-    <span class="n">app</span> <span class="o">=</span> <span class="n">_plugin</span><span class="p">(</span><span class="n">path</span><span class="p">)</span><span class="o">.</span><span class="n">app</span>
+    <span class="n">digest</span> <span class="o">=</span> <span class="n">hashlib</span><span class="o">.</span><span class="n">sha256</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="n">variant</span><span class="o">.</span><span class="n">path</span><span class="p">)</span><span class="o">.</span><span class="n">read_bytes</span><span class="p">())</span>
+    <span class="n">app</span> <span class="o">=</span> <span class="n">_plugin</span><span class="p">(</span><span class="n">variant</span><span class="p">)</span><span class="o">.</span><span class="n">app</span>
     <span class="k">while</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">app</span><span class="p">,</span> <span class="n">functools</span><span class="o">.</span><span class="n">partial</span><span class="p">):</span>
         <span class="n">app</span> <span class="o">=</span> <span class="n">app</span><span class="o">.</span><span class="n">func</span>
     <span class="k">try</span><span class="p">:</span>
@@ -887,12 +936,12 @@
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_validated</span><span class="p">(</span>
-    <span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">variant</span><span class="p">:</span> <span class="n">_Variant</span><span class="p">,</span>
     <span class="n">limits</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
     <span class="n">request</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
     <span class="n">exam</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Validation</span><span class="p">:</span>
-    <span class="k">return</span> <span class="n">_plugin</span><span class="p">(</span><span class="n">path</span><span class="p">)</span><span class="o">.</span><span class="n">validate</span><span class="p">(</span><span class="n">design_system</span><span class="p">(</span><span class="n">limits</span><span class="p">),</span> <span class="n">request</span><span class="p">,</span> <span class="n">exam</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">_plugin</span><span class="p">(</span><span class="n">variant</span><span class="p">)</span><span class="o">.</span><span class="n">validate</span><span class="p">(</span><span class="n">design_system</span><span class="p">(</span><span class="n">limits</span><span class="p">),</span> <span class="n">request</span><span class="p">,</span> <span class="n">exam</span><span class="p">)</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_exam_digest</span><span class="p">(</span><span class="n">exam</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
@@ -906,16 +955,16 @@
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_default_rf_layout</span><span class="p">(</span>
-    <span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">limits</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">unavailable</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">variant</span><span class="p">:</span> <span class="n">_Variant</span><span class="p">,</span> <span class="n">limits</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">unavailable</span><span class="p">:</span> <span class="nb">str</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">RfLayout</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Return the RF layout of the plugin's evaluation at its default protocol, the RF the listing states.</span>
 
 <span class="sd">    ``None`` where the evaluation states none. Where it is invalid, a warning</span>
 <span class="sd">    that begins with ``unavailable`` is logged and the result is ``None``. The</span>
-<span class="sd">    evaluation is made once per plugin file, as last modified, and limits.</span>
+<span class="sd">    evaluation is made once per variant, as last modified, and limits.</span>
 <span class="sd">    """</span>
     <span class="n">evaluated</span> <span class="o">=</span> <span class="n">_default_validation</span><span class="p">(</span>
-        <span class="n">path</span><span class="p">,</span> <span class="n">Path</span><span class="p">(</span><span class="n">path</span><span class="p">)</span><span class="o">.</span><span class="n">stat</span><span class="p">()</span><span class="o">.</span><span class="n">st_mtime_ns</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">limits</span><span class="o">.</span><span class="n">items</span><span class="p">()))</span>
+        <span class="n">variant</span><span class="p">,</span> <span class="n">_mtimes</span><span class="p">(</span><span class="n">variant</span><span class="p">),</span> <span class="nb">tuple</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">limits</span><span class="o">.</span><span class="n">items</span><span class="p">()))</span>
     <span class="p">)</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="n">evaluated</span><span class="o">.</span><span class="n">valid</span><span class="p">:</span>
         <span class="n">_log</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
@@ -925,8 +974,19 @@
 
 
 <span class="nd">@lru_cache</span><span class="p">(</span><span class="n">maxsize</span><span class="o">=</span><span class="mi">32</span><span class="p">)</span>
-<span class="k">def</span><span class="w"> </span><span class="nf">_default_validation</span><span class="p">(</span><span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">mtime_ns</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">limits</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Validation</span><span class="p">:</span>  <span class="c1"># noqa: ARG001 -- part of the key</span>
-    <span class="k">return</span> <span class="n">_validated</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="nb">dict</span><span class="p">(</span><span class="n">limits</span><span class="p">),</span> <span class="p">{})</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_default_validation</span><span class="p">(</span>
+    <span class="n">variant</span><span class="p">:</span> <span class="n">_Variant</span><span class="p">,</span>
+    <span class="n">mtimes_ns</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span>  <span class="c1"># noqa: ARG001 -- part of the key</span>
+    <span class="n">limits</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Validation</span><span class="p">:</span>
+    <span class="k">return</span> <span class="n">_validated</span><span class="p">(</span><span class="n">variant</span><span class="p">,</span> <span class="nb">dict</span><span class="p">(</span><span class="n">limits</span><span class="p">),</span> <span class="p">{})</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_play_averages</span><span class="p">(</span><span class="n">path</span><span class="p">:</span> <span class="n">Path</span><span class="p">,</span> <span class="n">averages</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Rewrite the sequence file at ``path`` as binary Pulseq, played ``averages`` times in its block table."""</span>
+    <span class="n">seq</span> <span class="o">=</span> <span class="n">pp</span><span class="o">.</span><span class="n">io</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">path</span><span class="p">))</span>
+    <span class="n">seq</span><span class="o">.</span><span class="n">expand_repeats</span><span class="p">(</span><span class="n">averages</span><span class="p">)</span>
+    <span class="n">pp</span><span class="o">.</span><span class="n">io</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">seq</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">path</span><span class="p">),</span> <span class="n">binary</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">remove_duplicates</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_chain</span><span class="p">(</span><span class="n">first</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>

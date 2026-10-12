@@ -18,54 +18,53 @@
 .. _sphx_glr_generated_gallery_01-course_04_reconstruction_plugin.py:
 
 
-================================
-4. A reconstruction plugin
-================================
+============================
+4. What your recon receives
+============================
 
-The raw data a scanner's reconstruction client streams carry the samples of
-each readout and little else: the encoding counters and flags it records
-describe the interpreter's loop, not the sequence. The reconstruction proxy
-replaces them with what the sequence states, then hands the readouts to a
-reconstruction plugin grouped into reconstruction units. This lesson acquires
-a series of the design from the first lesson, enriches it, and reconstructs it
-with a plugin of its own. The enrichment is described in
-:doc:`/explanations/reconstruction`.
+The scanner sends its raw data back the way Gadgetron expects it: as an
+ISMRMRD (MRD) stream, a header followed by one *acquisition* per readout. A
+scanner knows little about your sequence, so most of what a reconstruction
+needs is missing from that stream. pulserver fills it in from your sequence
+before your recon plugin sees a single readout.
+
+In this lesson you look at the data at each stage, and you write a recon
+plugin that reconstructs nothing yet: it only shows what arrives. Lesson 5
+turns it into a reconstruction.
 
 **Learning objectives**
 
-- Record a series as a scanner client sends it, from a stored design.
-- Read what :class:`~pulserver.proxy.SequenceTable`,
-  :func:`~pulserver.proxy.enrich_header` and
-  :func:`~pulserver.proxy.enrich_acquisition` add to the stream: encoding
-  spaces, counters, flags and, where needed, a trajectory and a phase.
-- Write a :class:`~pulserver.recon.ReconPlugin` and run it on the series
-  offline, as the proxy's workers run it.
+- Read an MRD stream as the scanner sends it.
+- See what pulserver fills in from your sequence: the encoding in the header,
+  and the counters and flags of every readout.
+- Write a plugin that runs a step on every readout and receives the sorted
+  k-space when a slice is complete.
+- If you know Gadgetron, map each of its pieces to pulserver's.
 
-The previous lesson walked the cache this series is played from.
+Previous: :doc:`03_scanner_representation`. Next: :doc:`05_recon_plugin`,
+where your plugin reconstructs the image.
 
-.. GENERATED FROM PYTHON SOURCE LINES 27-33
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 28-39
 
 
 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 34-44
 
-The design and the series
--------------------------
 
-The protocol of the first lesson resolves to the same design, so generating
-it again returns the stored one. :func:`~pulserver.virtual.simulate` acquires
-a phantom of four coils, sampled as tissue on a 2 mm grid, by the virtual
-scanner's Fourier engine, and
-:func:`~pulserver.virtual.record` writes the series to an ISMRMRD file as the
-scanner's client sends it: the design identifier in the header, and the
-samples of each readout.
+.. GENERATED FROM PYTHON SOURCE LINES 40-48
 
-.. GENERATED FROM PYTHON SOURCE LINES 44-81
+A series from the virtual scanner
+---------------------------------
+
+The console generates ``gre2d`` at 64 by 64, as in
+lesson 1. :func:`~pulserver.virtual.simulate` plays it on a phantom of two
+ellipses seen by four coils, and :func:`~pulserver.virtual.record` writes
+what the scanner would send: an MRD file whose header names the design, and
+the samples of each readout.
+
+.. GENERATED FROM PYTHON SOURCE LINES 48-87
 
 .. code-block:: Python
 
@@ -78,7 +77,7 @@ samples of each readout.
     from pulserver import virtual
     from pulserver.protocol import UIParam, format_values, parse_listing
 
-    limits = """[Limits]
+    system = """[Limits]
     B0: 3.0
     max_grad: 40
     grad_unit: mT/m
@@ -87,7 +86,7 @@ samples of each readout.
     [Limits End]
     """
     store = Path(tempfile.mkdtemp())
-    console = virtual.Console(plugins=[], limits=limits, store=store)
+    console = virtual.Console(plugins=[], limits=system, store=store)
     listing = console.design("list", "gre2d")["reply"]
     entries = parse_listing(listing[listing.index("[Protocol]") :])
     values = {key: entry.value for key, entry in entries.items()}
@@ -97,8 +96,10 @@ samples of each readout.
 
     phantom = virtual.Phantom(
         [
-            virtual.Ellipse((0.0, 0.0, 0.0), (0.08, 0.06)),
-            virtual.Ellipse((0.03, 0.01, 0.0), (0.015, 0.015), intensity=-0.5),
+            virtual.Ellipse((0.0, 0.0, 0.0), (0.08, 0.06), t1=0.8, t2=0.08),
+            virtual.Ellipse(
+                (0.03, 0.01, 0.0), (0.015, 0.015), intensity=-0.5, t1=0.8, t2=0.08
+            ),
         ],
         coils=4,
     )
@@ -119,12 +120,15 @@ samples of each readout.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 82-84
+.. GENERATED FROM PYTHON SOURCE LINES 88-93
 
-As received, the header's encoding space holds placeholder sizes, and every
-acquisition the same encoding counters.
+As the scanner sends it
+-----------------------
 
-.. GENERATED FROM PYTHON SOURCE LINES 84-94
+Open the file with the ``ismrmrd`` package, as a Gadgetron gadget would see
+the stream:
+
+.. GENERATED FROM PYTHON SOURCE LINES 93-123
 
 .. code-block:: Python
 
@@ -134,9 +138,13 @@ acquisition the same encoding counters.
         dataset.read_acquisition(i) for i in range(dataset.number_of_acquisitions())
     ]
     dataset.close()
+
+
+
     matrix = header.encoding[0].encodedSpace.matrixSize
-    print(f"encoded matrix {matrix.x} x {matrix.y}")
-    print("phase-encoding counters:", {a.idx.kspace_encode_step_1 for a in received})
+    print(f"header: encoded matrix {matrix.x} x {matrix.y}")
+    print("readout 1: ", describe(received[0]))
+    print("readout 64:", describe(received[-1]))
 
 
 
@@ -146,23 +154,31 @@ acquisition the same encoding counters.
 
  .. code-block:: none
 
-    encoded matrix 1 x 1
-    phase-encoding counters: {0}
+    header: encoded matrix 1 x 1
+    readout 1:  line 0, slice 0, echo sample 0, flags []
+    readout 64: line 0, slice 0, echo sample 0, flags ['LAST_IN_MEASUREMENT']
 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 95-102
+.. GENERATED FROM PYTHON SOURCE LINES 124-138
 
-Enrichment
-----------
+The header does not know the matrix, and every readout claims to be line 0
+of slice 0, with no flags but the one that ends the measurement. Sorting these readouts into k-space is
+impossible: the scanner played your sequence without knowing what each
+readout encodes.
 
-The proxy finds the design the header names and tabulates its readouts in
-play order. Each row gives one acquisition its encoding counters, its flags
-and its encoding space; the header receives the encoding spaces, matrix and
-field of view the sequence defines.
+What pulserver fills in
+-----------------------
 
-.. GENERATED FROM PYTHON SOURCE LINES 102-120
+The sequence carries this information. Its *labels*, the ``pp.make_label`` events of
+Pulseq (``LIN``, ``SLC``, ...), say which line and slice each readout
+encodes, and its definitions give the matrix and the field of view.
+pulserver's reconstruction proxy finds the design the header names and
+copies all of this into the stream. You do not call it yourself; here you
+run the same functions to see the result:
+
+.. GENERATED FROM PYTHON SOURCE LINES 138-150
 
 .. code-block:: Python
 
@@ -173,16 +189,10 @@ field of view the sequence defines.
     for row, acquisition in enumerate(received):
         enrich_acquisition(acquisition, table, row)
 
-    space = header.encoding[0]
-    print(
-        f"encoded {space.encodedSpace.matrixSize.x} x {space.encodedSpace.matrixSize.y}, "
-        f"reconstructed {space.reconSpace.matrixSize.x} x {space.reconSpace.matrixSize.y}"
-    )
-    print("LIN of the first readouts:", [a.idx.kspace_encode_step_1 for a in received[:4]])
-    print(
-        "last readout closes the slice:", received[-1].isFlagSet(ismrmrd.ACQ_LAST_IN_SLICE)
-    )
-    print("trajectory dimensions:", received[0].trajectory_dimensions)
+    matrix = header.encoding[0].encodedSpace.matrixSize
+    print(f"header: encoded matrix {matrix.x} x {matrix.y}")
+    print("readout 1: ", describe(received[0]))
+    print("readout 64:", describe(received[-1]))
 
 
 
@@ -192,77 +202,95 @@ field of view the sequence defines.
 
  .. code-block:: none
 
-    encoded 128 x 64, reconstructed 64 x 64
-    LIN of the first readouts: [0, 1, 2, 3]
-    last readout closes the slice: True
-    trajectory dimensions: 0
+    header: encoded matrix 128 x 64
+    readout 1:  line 0, slice 0, echo sample 64, flags ['FIRST_IN_ENCODE_STEP1', 'FIRST_IN_SEGMENT', 'FIRST_IN_SLICE', 'LAST_IN_ENCODE_STEP1']
+    readout 64: line 63, slice 0, echo sample 64, flags ['FIRST_IN_ENCODE_STEP1', 'LAST_IN_ENCODE_STEP1', 'LAST_IN_MEASUREMENT', 'LAST_IN_SEGMENT', 'LAST_IN_SLICE']
 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 121-127
+.. GENERATED FROM PYTHON SOURCE LINES 151-157
 
-The readouts sample the flat top of the readout gradient, so they are placed
-by their counters and carry no trajectory. Nor does any carry a phase: the
-field-of-view offset of a design is played as frequency and phase offsets,
-which are the whole of its phase on a flat top. The proxy computes a phase
-only where the readout gradient varies during sampling, which a Tour treats
-(:doc:`/generated/gallery/02-tours/03_fov_offset_enrichment`).
+Now the header holds the matrix, 128 samples by 64 lines (the readout is
+oversampled twice), and every readout its line. The echo sample says where
+the echo is. The flags mark the first readout of the slice and the last,
+and the last one is what tells a reconstruction that the slice is complete.
 
-.. GENERATED FROM PYTHON SOURCE LINES 127-130
+Here is the order the lines arrive in, before and after:
 
-.. code-block:: Python
-
-    shifted = SequenceTable.read(sequence, fov_offset_m=(0.02, 0.0, 0.0))
-    print("phase applied at a 20 mm offset:", shifted.readout_phase_modulation(0))
+.. GENERATED FROM PYTHON SOURCE LINES 157-183
 
 
 
 
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    phase applied at a 20 mm offset: None
+.. image-sg:: /generated/gallery/01-course/images/sphx_glr_04_reconstruction_plugin_001.png
+   :alt: as the scanner sends it, after pulserver
+   :srcset: /generated/gallery/01-course/images/sphx_glr_04_reconstruction_plugin_001.png
+   :class: sphx-glr-single-img
 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 131-140
 
-A plugin
---------
+.. GENERATED FROM PYTHON SOURCE LINES 184-207
 
-A :class:`~pulserver.recon.ReconPlugin` declares how readouts are grouped
-into reconstruction units and when a unit closes, here at
-``LAST_IN_SLICE``, a flag enrichment supplies, and reconstructs each unit in
-:meth:`~pulserver.recon.ReconPlugin.recon`. The unit's k-space is
-``(coils, phase encodes, readout)``, its readout oversampled; the image is
-cropped to the reconstruction matrix, ``image_shape``.
+``gre2d`` acquires its lines in order, from the bottom of k-space to the
+top. A sequence with another order, or with interleaved slices, is sorted
+the same way: the counters say where each readout goes, whatever the order
+it arrives in.
 
-.. GENERATED FROM PYTHON SOURCE LINES 140-160
+A plugin that reconstructs nothing
+----------------------------------
+
+A recon plugin works like a Gadgetron chain, in two stages.
+
+1. Each readout, as it arrives, passes through the plugin's **gadgets**:
+   small per-readout steps such as noise prewhitening or removing the
+   readout oversampling. A gadget returns the samples to keep, or ``None``
+   to drop the readout.
+2. pulserver then places the readout in k-space by its counters. When the
+   flag named in ``triggers`` arrives, here ``LAST_IN_SLICE``, the k-space
+   of that slice is complete, and pulserver calls the plugin's ``recon``
+   with it.
+
+This plugin has one gadget, which collects the lines it has seen, and a ``recon``
+that prints what it receives and returns nothing. pulserver runs every
+stream on a fresh copy of the plugin, so anything you want to keep after the
+run goes somewhere outside it, here the list ``kept``:
+
+.. GENERATED FROM PYTHON SOURCE LINES 207-238
 
 .. code-block:: Python
 
     from pulserver import recon
     from pulserver.mrd import AcquisitionFlag
 
+    kept = []
 
-    class Fft(recon.ReconPlugin):
+
+    class CountLines(recon.Gadget):
         def __init__(self):
-            super().__init__(triggers={"imaging": AcquisitionFlag.LAST_IN_SLICE})
+            self.lines = set()
+
+        def __call__(self, acquisition, data):
+            self.lines.add(acquisition.idx.kspace_encode_step_1)
+            return data  # the samples, unchanged
+
+
+    class ShowWhatArrives(recon.ReconPlugin):
+        def __init__(self):
+            super().__init__(
+                gadgets=[CountLines()],
+                triggers={"imaging": AcquisitionFlag.LAST_IN_SLICE},
+            )
 
         def recon(self, context, branch, data):  # noqa: ARG002
-            kspace = data.data.kspace
-            image = np.fft.fftshift(
-                np.fft.ifft2(np.fft.ifftshift(kspace, axes=(-2, -1))), axes=(-2, -1)
-            )
-            combined = np.sqrt((np.abs(image) ** 2).sum(axis=0))
-            rows, columns = data.data.image_shape[-2:]
-            top = (combined.shape[0] - rows) // 2
-            left = (combined.shape[1] - columns) // 2
-            return recon.ReconResult(combined[top : top + rows, left : left + columns])
+            buffer = data.data
+            print(f"branch {branch!r}: {len(self.gadgets[0].lines)} lines seen")
+            print(f"k-space: {buffer.kspace.shape}, axes {buffer.axes}")
+            print(f"image to return: {buffer.image_shape}")
+            kept.append(buffer.kspace)
+            return None
 
 
 
@@ -272,53 +300,106 @@ cropped to the reconstruction matrix, ``image_shape``.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 161-164
+.. GENERATED FROM PYTHON SOURCE LINES 239-242
 
-:meth:`~pulserver.recon.ReconPlugin.run` reconstructs a recorded series in
-this process through the same hooks a worker drives; with ``store`` it
-enriches the series from its design first, as the proxy does.
+:meth:`~pulserver.recon.ReconPlugin.run` sends a recorded series through a
+plugin in this process. Given the ``store`` of designs, it fills in the
+stream from the design first, exactly as the proxy does on a scanner:
 
-.. GENERATED FROM PYTHON SOURCE LINES 164-181
+.. GENERATED FROM PYTHON SOURCE LINES 242-245
 
 .. code-block:: Python
 
-    images = [
-        out
-        for out in Fft().run(str(series), store=str(store))
-        if isinstance(out, ismrmrd.Image)
-    ]
-    print(f"{len(images)} image of {np.squeeze(images[0].data).shape}")
+    plugin = ShowWhatArrives()
+    outputs = plugin.run(str(series), store=str(store))
 
 
 
-
-
-.. image-sg:: /generated/gallery/01-course/images/sphx_glr_04_reconstruction_plugin_001.png
-   :alt: 04 reconstruction plugin
-   :srcset: /generated/gallery/01-course/images/sphx_glr_04_reconstruction_plugin_001.png
-   :class: sphx-glr-single-img
 
 
 .. rst-class:: sphx-glr-script-out
 
  .. code-block:: none
 
-    1 image of (64, 64)
+    branch 'imaging': 64 lines seen
+    k-space: (4, 64, 128), axes ('coil', 'phase_encode', 'readout')
+    image to return: (64, 64)
 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 182-186
+.. GENERATED FROM PYTHON SOURCE LINES 246-250
 
-A plugin file holds the class and a module-level ``PLUGIN`` instance; the
-proxy loads it by name from its plugin directories
-(:doc:`/user-guide/reconstruction-plugins`). The fifth lesson tests a whole
-acquisition on the virtual scanner.
+``recon`` was called once, when the 64th readout closed the slice. It
+received the k-space of the slice with the coils first, then the lines, then
+the readout samples; and the matrix of the image it should return, 64 by 64.
+This is the k-space it received, one panel per coil:
+
+.. GENERATED FROM PYTHON SOURCE LINES 250-260
+
+
+
+
+.. image-sg:: /generated/gallery/01-course/images/sphx_glr_04_reconstruction_plugin_002.png
+   :alt: coil 1, coil 2, coil 3, coil 4
+   :srcset: /generated/gallery/01-course/images/sphx_glr_04_reconstruction_plugin_002.png
+   :class: sphx-glr-single-img
+
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 261-305
+
+If you know Gadgetron
+---------------------
+
+The pieces map one to one:
+
+.. list-table::
+   :header-rows: 1
+
+   * - Gadgetron
+     - pulserver
+   * - A Python gadget looping over ``connection``
+     - A :class:`~pulserver.recon.Gadget` in ``gadgets``, called per readout
+   * - ``AcquisitionAccumulateTriggerGadget``, ``trigger_dimension``
+     - ``triggers={branch: flag}``
+   * - ``BucketToBufferGadget``, ``N_dimension`` and ``S_dimension``
+     - ``axes`` and ``merge``
+   * - ``buffer.data``, ``buffer.ref``
+     - ``data.data``, ``data.ref``
+   * - The XML chain
+     - The plugin's constructor
+   * - ``connection.send(image)``
+     - ``return recon.ReconResult(image)``
+   * - ``gadgetron_ismrmrd_client``
+     - ``plugin.run(...)`` here, the proxy on a scanner
+
+The difference is where the counters come from. In Gadgetron the scanner's
+own sequence writes them; here pulserver writes them from your Pulseq
+labels, and the sorting needs no sequence-specific code in the
+reconstruction.
+
+As a spec
+---------
+
+What this lesson did, stated the way you would ask an agent for it:
+
+.. code-block:: text
+
+   Record a 64 x 64 gre2d series on pulserver's virtual scanner with a
+   four-coil phantom. Print the MRD header's encoded matrix and the line,
+   slice, echo sample and flags of the first and last readout, before and
+   after enrichment from the design. Then write a pulserver ReconPlugin
+   triggered on LAST_IN_SLICE, with a gadget that collects the lines seen,
+   whose recon prints the k-space shape, axes and image shape it receives
+   and returns nothing; run it on the series with the design store.
 
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.639 seconds)
+   **Total running time of the script:** (0 minutes 1.069 seconds)
 
 
 .. _sphx_glr_download_generated_gallery_01-course_04_reconstruction_plugin.py:

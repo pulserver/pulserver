@@ -36,7 +36,7 @@
     <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
     <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
     <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
-    <link rel="stylesheet" type="text/css" href="../../../_static/pulserver.css?v=e08ae8f3" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/pulserver.css?v=6854ff42" />
   
   <!-- So that users can add custom icons -->
   <script defer src="../../../_static/scripts/fontawesome.js?digest=90905a2f556bf617f1a9"></script>
@@ -44,7 +44,7 @@
   <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../../../_static/documentation_options.js?v=b196e8ce"></script>
+    <script src="../../../_static/documentation_options.js?v=a6e268a8"></script>
     <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -55,18 +55,19 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.2.1';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.2.2';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+    <script src="../../../_static/capabilities.js?v=421ebb92"></script>
     <link rel="canonical" href="https://pulserver.github.io/pulserver/stable/_modules/pulserver/protocol/_keys.html" />
     <link rel="icon" href="../../../_static/pulserver-mark.svg"/>
     <link rel="index" title="Index" href="../../../genindex.html" />
     <link rel="search" title="Search" href="../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.2.1" />
+  <meta name="docsearch:version" content="v0.2.2" />
   
     
     <script src="../../../_static/searchtools.js"></script>
@@ -113,46 +114,6 @@
 
   
     <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
-<div class="bd-header__inner bd-page-width">
-  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
-    <span class="fa-solid fa-bars"></span>
-  </button>
-  
-  
-  <div class="col-lg-9 navbar-header-items">
-    
-    
-    <div class="navbar-header-items__end">
-      
-        <div class="navbar-item navbar-persistent--container">
-          
-
-<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
- <i class="fa-solid fa-magnifying-glass"></i>
- <span class="search-button__default-text">Search</span>
- <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
-</button>
-        </div>
-      
-      
-    </div>
-    
-  </div>
-  
-  
-    <div class="navbar-persistent--mobile">
-
-<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
- <i class="fa-solid fa-magnifying-glass"></i>
- <span class="search-button__default-text">Search</span>
- <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
-</button>
-    </div>
-  
-
-  
-</div>
-
     </header>
   
 
@@ -236,50 +197,50 @@
         </ul>
         <ul class="nav bd-sidenav">
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../user-guide/index.html">User guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/running.html">Running the services</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/running.html">Services</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../user-guide/scanner-sequences.html">Scanner sequences</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../user-guide/reconstruction-plugins.html">Reconstruction plugins</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/reconstruction-client.html">Reconstruction clients</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/virtual-scanner.html">Scanning a phantom without a scanner</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/reconstruction-client.html">Reconstruction client</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../developer-guide/index.html">Developer guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/prerequisites.html">Development prerequisites</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/installation.html">Editable installation</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/workflow.html">Development workflow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/installation.html">Development setup</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/workflow.html">Contribution workflow</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/style.html">Coding style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/documentation.html">Documentation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/terminology.html">Terminology and conventions</a></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../../../developer-guide/internals/index.html">Internals</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/calibration.html">Calibration, noise and coil compression</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/ir-cache.html">IR cache</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/protocol-wire.html">Protocol text blocks</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/reconstruction-proxy.html">Reconstruction proxy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/sar-ratios.html">SAR ratios against a reference pulse</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/pre-commit.html">Pre-commit</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/pull-requests.html">Pull requests</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/releases.html">Releases</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/code-of-conduct.html">Code of conduct</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../../../explanations/architecture.html">Architecture</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../explanations/protocol.html">Protocol resolution</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../explanations/designs.html">Designs and the design store</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../explanations/scanner-representation.html">Scanner representation (PulSeg)</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../explanations/virtual-scanner.html">The virtual scanner</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../explanations/reconstruction.html">Raw-data enrichment and routing</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../explanations/calibration.html">Calibration, noise and coil compression</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/safety-checks.html">Safety checks</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/scanner-representation.html">PulSeg representation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/raw-data.html">MRD enrichment</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/reconstruction-session.html">Reconstruction session</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/reconstruction.html">Reconstruction plugins and calibration context</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../examples/index.html">Examples</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../../../examples/course.html">Course</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/01_protocol_to_image.html">1. From protocol to image</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/02_sequence_plugin.html">2. A scanner sequence and its protocol</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/03_scanner_representation.html">3. Scanner representation</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/04_reconstruction_plugin.html">4. A reconstruction plugin</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/05_testing_on_the_virtual_scanner.html">5. Testing on the virtual scanner</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/01_protocol_to_image.html">1. Your first scan</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/02_sequence_plugin.html">2. Your sequence in the scanner UI</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/03_scanner_representation.html">3. What the scanner plays</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/04_reconstruction_plugin.html">4. What your recon receives</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/05_recon_plugin.html">5. Your recon plugin</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/06_testing_on_the_virtual_scanner.html">6. Test your pair on the virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../../../examples/tours.html">Tours</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -486,8 +447,8 @@
         <span class="fm">__format__</span> <span class="o">=</span> <span class="nb">str</span><span class="o">.</span><span class="fm">__format__</span>
 
 
-<span class="c1"># user0_value .. user18_value and user0_name .. user18_name.</span>
-<span class="n">NUM_USER_ENTRIES</span> <span class="o">=</span> <span class="mi">19</span>
+<span class="c1"># user0_value .. user45_value and user0_name .. user45_name.</span>
+<span class="n">NUM_USER_ENTRIES</span> <span class="o">=</span> <span class="mi">46</span>
 
 
 <div class="viewcode-block" id="FloatKey">
@@ -500,15 +461,36 @@
 <span class="sd">    microseconds. ``TA`` is read-only information.</span>
 <span class="sd">    """</span>
 
-    <span class="n">SAT_X_LOC1</span> <span class="o">=</span> <span class="s2">"sat_x_loc1"</span>
-    <span class="n">SAT_X_LOC2</span> <span class="o">=</span> <span class="s2">"sat_x_loc2"</span>
-    <span class="n">SAT_Y_LOC1</span> <span class="o">=</span> <span class="s2">"sat_y_loc1"</span>
-    <span class="n">SAT_Y_LOC2</span> <span class="o">=</span> <span class="s2">"sat_y_loc2"</span>
-    <span class="n">SAT_Z_LOC1</span> <span class="o">=</span> <span class="s2">"sat_z_loc1"</span>
-    <span class="n">SAT_Z_LOC2</span> <span class="o">=</span> <span class="s2">"sat_z_loc2"</span>
-    <span class="n">SAT_X_THICKNESS</span> <span class="o">=</span> <span class="s2">"sat_x_thickness"</span>
-    <span class="n">SAT_Y_THICKNESS</span> <span class="o">=</span> <span class="s2">"sat_y_thickness"</span>
-    <span class="n">SAT_Z_THICKNESS</span> <span class="o">=</span> <span class="s2">"sat_z_thickness"</span>
+    <span class="n">EXSAT1_NORMAL_X</span> <span class="o">=</span> <span class="s2">"exsat1_normal_x"</span>
+    <span class="n">EXSAT1_NORMAL_Y</span> <span class="o">=</span> <span class="s2">"exsat1_normal_y"</span>
+    <span class="n">EXSAT1_NORMAL_Z</span> <span class="o">=</span> <span class="s2">"exsat1_normal_z"</span>
+    <span class="n">EXSAT2_NORMAL_X</span> <span class="o">=</span> <span class="s2">"exsat2_normal_x"</span>
+    <span class="n">EXSAT2_NORMAL_Y</span> <span class="o">=</span> <span class="s2">"exsat2_normal_y"</span>
+    <span class="n">EXSAT2_NORMAL_Z</span> <span class="o">=</span> <span class="s2">"exsat2_normal_z"</span>
+    <span class="n">EXSAT3_NORMAL_X</span> <span class="o">=</span> <span class="s2">"exsat3_normal_x"</span>
+    <span class="n">EXSAT3_NORMAL_Y</span> <span class="o">=</span> <span class="s2">"exsat3_normal_y"</span>
+    <span class="n">EXSAT3_NORMAL_Z</span> <span class="o">=</span> <span class="s2">"exsat3_normal_z"</span>
+    <span class="n">EXSAT4_NORMAL_X</span> <span class="o">=</span> <span class="s2">"exsat4_normal_x"</span>
+    <span class="n">EXSAT4_NORMAL_Y</span> <span class="o">=</span> <span class="s2">"exsat4_normal_y"</span>
+    <span class="n">EXSAT4_NORMAL_Z</span> <span class="o">=</span> <span class="s2">"exsat4_normal_z"</span>
+    <span class="n">EXSAT5_NORMAL_X</span> <span class="o">=</span> <span class="s2">"exsat5_normal_x"</span>
+    <span class="n">EXSAT5_NORMAL_Y</span> <span class="o">=</span> <span class="s2">"exsat5_normal_y"</span>
+    <span class="n">EXSAT5_NORMAL_Z</span> <span class="o">=</span> <span class="s2">"exsat5_normal_z"</span>
+    <span class="n">EXSAT6_NORMAL_X</span> <span class="o">=</span> <span class="s2">"exsat6_normal_x"</span>
+    <span class="n">EXSAT6_NORMAL_Y</span> <span class="o">=</span> <span class="s2">"exsat6_normal_y"</span>
+    <span class="n">EXSAT6_NORMAL_Z</span> <span class="o">=</span> <span class="s2">"exsat6_normal_z"</span>
+    <span class="n">EXSAT1_LOC</span> <span class="o">=</span> <span class="s2">"exsat1_loc"</span>
+    <span class="n">EXSAT2_LOC</span> <span class="o">=</span> <span class="s2">"exsat2_loc"</span>
+    <span class="n">EXSAT3_LOC</span> <span class="o">=</span> <span class="s2">"exsat3_loc"</span>
+    <span class="n">EXSAT4_LOC</span> <span class="o">=</span> <span class="s2">"exsat4_loc"</span>
+    <span class="n">EXSAT5_LOC</span> <span class="o">=</span> <span class="s2">"exsat5_loc"</span>
+    <span class="n">EXSAT6_LOC</span> <span class="o">=</span> <span class="s2">"exsat6_loc"</span>
+    <span class="n">EXSAT1_THICKNESS</span> <span class="o">=</span> <span class="s2">"exsat1_thickness"</span>
+    <span class="n">EXSAT2_THICKNESS</span> <span class="o">=</span> <span class="s2">"exsat2_thickness"</span>
+    <span class="n">EXSAT3_THICKNESS</span> <span class="o">=</span> <span class="s2">"exsat3_thickness"</span>
+    <span class="n">EXSAT4_THICKNESS</span> <span class="o">=</span> <span class="s2">"exsat4_thickness"</span>
+    <span class="n">EXSAT5_THICKNESS</span> <span class="o">=</span> <span class="s2">"exsat5_thickness"</span>
+    <span class="n">EXSAT6_THICKNESS</span> <span class="o">=</span> <span class="s2">"exsat6_thickness"</span>
 
     <span class="n">DELAY_TIME</span> <span class="o">=</span> <span class="s2">"delay_time"</span>
     <span class="n">TRIGGER_DELAY</span> <span class="o">=</span> <span class="s2">"trigger_delay"</span>
@@ -558,11 +540,10 @@
 <span class="k">class</span><span class="w"> </span><span class="nc">IntKey</span><span class="p">(</span><span class="n">StrEnum</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Keys the interpreter declares as integer."""</span>
 
-    <span class="n">SAT_X</span> <span class="o">=</span> <span class="s2">"sat_x"</span>
-    <span class="n">SAT_Y</span> <span class="o">=</span> <span class="s2">"sat_y"</span>
-    <span class="n">SAT_Z</span> <span class="o">=</span> <span class="s2">"sat_z"</span>
+    <span class="n">HEART_RATE</span> <span class="o">=</span> <span class="s2">"heart_rate"</span>
     <span class="n">NUM_FRAMES</span> <span class="o">=</span> <span class="s2">"num_frames"</span>
     <span class="n">DIFFUSION_DIRECTIONS</span> <span class="o">=</span> <span class="s2">"diffusion_directions"</span>
+    <span class="n">DIFFUSION_TABLE</span> <span class="o">=</span> <span class="s2">"diffusion_table"</span>
     <span class="n">NUM_SHOTS</span> <span class="o">=</span> <span class="s2">"num_shots"</span>
     <span class="n">ETL</span> <span class="o">=</span> <span class="s2">"etl"</span>
     <span class="n">NUM_ECHOES</span> <span class="o">=</span> <span class="s2">"num_echoes"</span>
@@ -570,7 +551,9 @@
     <span class="n">NY</span> <span class="o">=</span> <span class="s2">"ny"</span>
     <span class="n">NSLICES</span> <span class="o">=</span> <span class="s2">"nslices"</span>
     <span class="n">NUM_SLABS</span> <span class="o">=</span> <span class="s2">"num_slabs"</span>
-    <span class="n">OVERLAP_LOCATIONS</span> <span class="o">=</span> <span class="s2">"overlap_locations"</span></div>
+    <span class="n">OVERLAP_LOCATIONS</span> <span class="o">=</span> <span class="s2">"overlap_locations"</span>
+    <span class="c1"># Bit n - 1 set for each explicit saturation band n the operator places.</span>
+    <span class="n">EXSAT_MASK</span> <span class="o">=</span> <span class="s2">"exsat_mask"</span></div>
 
 
 
@@ -594,13 +577,15 @@
 <span class="w">    </span><span class="sd">"""Keys the interpreter declares as string lists.</span>
 
 <span class="sd">    Their options are :class:`SequenceType`, :class:`ImagingMode`,</span>
-<span class="sd">    :class:`PreparationType` and :class:`TriggerType`, in that order.</span>
+<span class="sd">    :class:`PreparationType`, :class:`TriggerType` and :class:`Excitation`, in</span>
+<span class="sd">    that order.</span>
 <span class="sd">    """</span>
 
     <span class="n">SEQUENCE_TYPE</span> <span class="o">=</span> <span class="s2">"sequence_type"</span>
     <span class="n">IMAGING_MODE</span> <span class="o">=</span> <span class="s2">"imaging_mode"</span>
     <span class="n">PREPARATION_TYPE</span> <span class="o">=</span> <span class="s2">"preparation_type"</span>
-    <span class="n">TRIGGER_TYPE</span> <span class="o">=</span> <span class="s2">"trigger_type"</span></div>
+    <span class="n">TRIGGER_TYPE</span> <span class="o">=</span> <span class="s2">"trigger_type"</span>
+    <span class="n">EXCITATION</span> <span class="o">=</span> <span class="s2">"excitation"</span></div>
 
 
 
@@ -621,7 +606,7 @@
 <div class="viewcode-block" id="UserKey">
 <a class="viewcode-back" href="../../../generated/pulserver.protocol.UserKey.html#pulserver.protocol.UserKey">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">UserKey</span><span class="p">(</span><span class="n">StrEnum</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">"""Keys of the float user entries, ``user0_value`` to ``user18_value``.</span>
+<span class="w">    </span><span class="sd">"""Keys of the float user entries, ``user0_value`` to ``user45_value``.</span>
 
 <span class="sd">    ``UserKey.USER3`` is ``UIParam.user_value(3)``. The entry is a</span>
 <span class="sd">    :class:`~pulserver.design.FloatParam`; the description naming it is bound</span>
@@ -646,14 +631,41 @@
     <span class="n">USER15</span> <span class="o">=</span> <span class="s2">"user15_value"</span>
     <span class="n">USER16</span> <span class="o">=</span> <span class="s2">"user16_value"</span>
     <span class="n">USER17</span> <span class="o">=</span> <span class="s2">"user17_value"</span>
-    <span class="n">USER18</span> <span class="o">=</span> <span class="s2">"user18_value"</span></div>
+    <span class="n">USER18</span> <span class="o">=</span> <span class="s2">"user18_value"</span>
+    <span class="n">USER19</span> <span class="o">=</span> <span class="s2">"user19_value"</span>
+    <span class="n">USER20</span> <span class="o">=</span> <span class="s2">"user20_value"</span>
+    <span class="n">USER21</span> <span class="o">=</span> <span class="s2">"user21_value"</span>
+    <span class="n">USER22</span> <span class="o">=</span> <span class="s2">"user22_value"</span>
+    <span class="n">USER23</span> <span class="o">=</span> <span class="s2">"user23_value"</span>
+    <span class="n">USER24</span> <span class="o">=</span> <span class="s2">"user24_value"</span>
+    <span class="n">USER25</span> <span class="o">=</span> <span class="s2">"user25_value"</span>
+    <span class="n">USER26</span> <span class="o">=</span> <span class="s2">"user26_value"</span>
+    <span class="n">USER27</span> <span class="o">=</span> <span class="s2">"user27_value"</span>
+    <span class="n">USER28</span> <span class="o">=</span> <span class="s2">"user28_value"</span>
+    <span class="n">USER29</span> <span class="o">=</span> <span class="s2">"user29_value"</span>
+    <span class="n">USER30</span> <span class="o">=</span> <span class="s2">"user30_value"</span>
+    <span class="n">USER31</span> <span class="o">=</span> <span class="s2">"user31_value"</span>
+    <span class="n">USER32</span> <span class="o">=</span> <span class="s2">"user32_value"</span>
+    <span class="n">USER33</span> <span class="o">=</span> <span class="s2">"user33_value"</span>
+    <span class="n">USER34</span> <span class="o">=</span> <span class="s2">"user34_value"</span>
+    <span class="n">USER35</span> <span class="o">=</span> <span class="s2">"user35_value"</span>
+    <span class="n">USER36</span> <span class="o">=</span> <span class="s2">"user36_value"</span>
+    <span class="n">USER37</span> <span class="o">=</span> <span class="s2">"user37_value"</span>
+    <span class="n">USER38</span> <span class="o">=</span> <span class="s2">"user38_value"</span>
+    <span class="n">USER39</span> <span class="o">=</span> <span class="s2">"user39_value"</span>
+    <span class="n">USER40</span> <span class="o">=</span> <span class="s2">"user40_value"</span>
+    <span class="n">USER41</span> <span class="o">=</span> <span class="s2">"user41_value"</span>
+    <span class="n">USER42</span> <span class="o">=</span> <span class="s2">"user42_value"</span>
+    <span class="n">USER43</span> <span class="o">=</span> <span class="s2">"user43_value"</span>
+    <span class="n">USER44</span> <span class="o">=</span> <span class="s2">"user44_value"</span>
+    <span class="n">USER45</span> <span class="o">=</span> <span class="s2">"user45_value"</span></div>
 
 
 
 <div class="viewcode-block" id="UserNameKey">
 <a class="viewcode-back" href="../../../generated/pulserver.protocol.UserNameKey.html#pulserver.protocol.UserNameKey">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">UserNameKey</span><span class="p">(</span><span class="n">StrEnum</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">"""Keys of the descriptions naming the user entries, ``user0_name`` to ``user18_name``.</span>
+<span class="w">    </span><span class="sd">"""Keys of the descriptions naming the user entries, ``user0_name`` to ``user45_name``.</span>
 
 <span class="sd">    ``UserNameKey.USER3`` is ``UIParam.user_name(3)``. The entry is a</span>
 <span class="sd">    :class:`~pulserver.design.Description`.</span>
@@ -677,13 +689,49 @@
     <span class="n">USER15</span> <span class="o">=</span> <span class="s2">"user15_name"</span>
     <span class="n">USER16</span> <span class="o">=</span> <span class="s2">"user16_name"</span>
     <span class="n">USER17</span> <span class="o">=</span> <span class="s2">"user17_name"</span>
-    <span class="n">USER18</span> <span class="o">=</span> <span class="s2">"user18_name"</span></div>
+    <span class="n">USER18</span> <span class="o">=</span> <span class="s2">"user18_name"</span>
+    <span class="n">USER19</span> <span class="o">=</span> <span class="s2">"user19_name"</span>
+    <span class="n">USER20</span> <span class="o">=</span> <span class="s2">"user20_name"</span>
+    <span class="n">USER21</span> <span class="o">=</span> <span class="s2">"user21_name"</span>
+    <span class="n">USER22</span> <span class="o">=</span> <span class="s2">"user22_name"</span>
+    <span class="n">USER23</span> <span class="o">=</span> <span class="s2">"user23_name"</span>
+    <span class="n">USER24</span> <span class="o">=</span> <span class="s2">"user24_name"</span>
+    <span class="n">USER25</span> <span class="o">=</span> <span class="s2">"user25_name"</span>
+    <span class="n">USER26</span> <span class="o">=</span> <span class="s2">"user26_name"</span>
+    <span class="n">USER27</span> <span class="o">=</span> <span class="s2">"user27_name"</span>
+    <span class="n">USER28</span> <span class="o">=</span> <span class="s2">"user28_name"</span>
+    <span class="n">USER29</span> <span class="o">=</span> <span class="s2">"user29_name"</span>
+    <span class="n">USER30</span> <span class="o">=</span> <span class="s2">"user30_name"</span>
+    <span class="n">USER31</span> <span class="o">=</span> <span class="s2">"user31_name"</span>
+    <span class="n">USER32</span> <span class="o">=</span> <span class="s2">"user32_name"</span>
+    <span class="n">USER33</span> <span class="o">=</span> <span class="s2">"user33_name"</span>
+    <span class="n">USER34</span> <span class="o">=</span> <span class="s2">"user34_name"</span>
+    <span class="n">USER35</span> <span class="o">=</span> <span class="s2">"user35_name"</span>
+    <span class="n">USER36</span> <span class="o">=</span> <span class="s2">"user36_name"</span>
+    <span class="n">USER37</span> <span class="o">=</span> <span class="s2">"user37_name"</span>
+    <span class="n">USER38</span> <span class="o">=</span> <span class="s2">"user38_name"</span>
+    <span class="n">USER39</span> <span class="o">=</span> <span class="s2">"user39_name"</span>
+    <span class="n">USER40</span> <span class="o">=</span> <span class="s2">"user40_name"</span>
+    <span class="n">USER41</span> <span class="o">=</span> <span class="s2">"user41_name"</span>
+    <span class="n">USER42</span> <span class="o">=</span> <span class="s2">"user42_name"</span>
+    <span class="n">USER43</span> <span class="o">=</span> <span class="s2">"user43_name"</span>
+    <span class="n">USER44</span> <span class="o">=</span> <span class="s2">"user44_name"</span>
+    <span class="n">USER45</span> <span class="o">=</span> <span class="s2">"user45_name"</span></div>
 
 
 
 <span class="c1">#: A key of the protocol: the wire name of any entry the interpreter knows,</span>
 <span class="c1">#: as the member of the enum that groups it.</span>
 <span class="n">ProtocolKey</span> <span class="o">=</span> <span class="n">FloatKey</span> <span class="o">|</span> <span class="n">IntKey</span> <span class="o">|</span> <span class="n">BoolKey</span> <span class="o">|</span> <span class="n">EnumKey</span> <span class="o">|</span> <span class="n">ConfigKey</span> <span class="o">|</span> <span class="n">UserKey</span> <span class="o">|</span> <span class="n">UserNameKey</span>
+
+
+<span class="c1">#: Explicit saturation bands a protocol can carry, exsat1 to exsat6.</span>
+<span class="n">NUM_EXSAT_BANDS</span> <span class="o">=</span> <span class="mi">6</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_check_band</span><span class="p">(</span><span class="n">n</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="mi">1</span> <span class="o">&lt;=</span> <span class="n">n</span> <span class="o">&lt;=</span> <span class="n">NUM_EXSAT_BANDS</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"saturation bands are numbered 1 to </span><span class="si">{</span><span class="n">NUM_EXSAT_BANDS</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_check_user_index</span><span class="p">(</span><span class="n">n</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
@@ -710,15 +758,6 @@
 <span class="sd">    &lt;UserKey.USER3: 'user3_value'&gt;</span>
 <span class="sd">    """</span>
 
-    <span class="n">SAT_X_LOC1</span> <span class="o">=</span> <span class="n">FloatKey</span><span class="o">.</span><span class="n">SAT_X_LOC1</span>
-    <span class="n">SAT_X_LOC2</span> <span class="o">=</span> <span class="n">FloatKey</span><span class="o">.</span><span class="n">SAT_X_LOC2</span>
-    <span class="n">SAT_Y_LOC1</span> <span class="o">=</span> <span class="n">FloatKey</span><span class="o">.</span><span class="n">SAT_Y_LOC1</span>
-    <span class="n">SAT_Y_LOC2</span> <span class="o">=</span> <span class="n">FloatKey</span><span class="o">.</span><span class="n">SAT_Y_LOC2</span>
-    <span class="n">SAT_Z_LOC1</span> <span class="o">=</span> <span class="n">FloatKey</span><span class="o">.</span><span class="n">SAT_Z_LOC1</span>
-    <span class="n">SAT_Z_LOC2</span> <span class="o">=</span> <span class="n">FloatKey</span><span class="o">.</span><span class="n">SAT_Z_LOC2</span>
-    <span class="n">SAT_X_THICKNESS</span> <span class="o">=</span> <span class="n">FloatKey</span><span class="o">.</span><span class="n">SAT_X_THICKNESS</span>
-    <span class="n">SAT_Y_THICKNESS</span> <span class="o">=</span> <span class="n">FloatKey</span><span class="o">.</span><span class="n">SAT_Y_THICKNESS</span>
-    <span class="n">SAT_Z_THICKNESS</span> <span class="o">=</span> <span class="n">FloatKey</span><span class="o">.</span><span class="n">SAT_Z_THICKNESS</span>
     <span class="n">DELAY_TIME</span> <span class="o">=</span> <span class="n">FloatKey</span><span class="o">.</span><span class="n">DELAY_TIME</span>
     <span class="n">TRIGGER_DELAY</span> <span class="o">=</span> <span class="n">FloatKey</span><span class="o">.</span><span class="n">TRIGGER_DELAY</span>
     <span class="n">TRIGGER_WINDOW</span> <span class="o">=</span> <span class="n">FloatKey</span><span class="o">.</span><span class="n">TRIGGER_WINDOW</span>
@@ -753,11 +792,10 @@
     <span class="n">COMPRESSED_SENSING</span> <span class="o">=</span> <span class="n">FloatKey</span><span class="o">.</span><span class="n">COMPRESSED_SENSING</span>
     <span class="n">MULTIBAND</span> <span class="o">=</span> <span class="n">FloatKey</span><span class="o">.</span><span class="n">MULTIBAND</span>
 
-    <span class="n">SAT_X</span> <span class="o">=</span> <span class="n">IntKey</span><span class="o">.</span><span class="n">SAT_X</span>
-    <span class="n">SAT_Y</span> <span class="o">=</span> <span class="n">IntKey</span><span class="o">.</span><span class="n">SAT_Y</span>
-    <span class="n">SAT_Z</span> <span class="o">=</span> <span class="n">IntKey</span><span class="o">.</span><span class="n">SAT_Z</span>
+    <span class="n">HEART_RATE</span> <span class="o">=</span> <span class="n">IntKey</span><span class="o">.</span><span class="n">HEART_RATE</span>
     <span class="n">NUM_FRAMES</span> <span class="o">=</span> <span class="n">IntKey</span><span class="o">.</span><span class="n">NUM_FRAMES</span>
     <span class="n">DIFFUSION_DIRECTIONS</span> <span class="o">=</span> <span class="n">IntKey</span><span class="o">.</span><span class="n">DIFFUSION_DIRECTIONS</span>
+    <span class="n">DIFFUSION_TABLE</span> <span class="o">=</span> <span class="n">IntKey</span><span class="o">.</span><span class="n">DIFFUSION_TABLE</span>
     <span class="n">NUM_SHOTS</span> <span class="o">=</span> <span class="n">IntKey</span><span class="o">.</span><span class="n">NUM_SHOTS</span>
     <span class="n">ETL</span> <span class="o">=</span> <span class="n">IntKey</span><span class="o">.</span><span class="n">ETL</span>
     <span class="n">NUM_ECHOES</span> <span class="o">=</span> <span class="n">IntKey</span><span class="o">.</span><span class="n">NUM_ECHOES</span>
@@ -766,6 +804,7 @@
     <span class="n">NSLICES</span> <span class="o">=</span> <span class="n">IntKey</span><span class="o">.</span><span class="n">NSLICES</span>
     <span class="n">NUM_SLABS</span> <span class="o">=</span> <span class="n">IntKey</span><span class="o">.</span><span class="n">NUM_SLABS</span>
     <span class="n">OVERLAP_LOCATIONS</span> <span class="o">=</span> <span class="n">IntKey</span><span class="o">.</span><span class="n">OVERLAP_LOCATIONS</span>
+    <span class="n">EXSAT_MASK</span> <span class="o">=</span> <span class="n">IntKey</span><span class="o">.</span><span class="n">EXSAT_MASK</span>
 
     <span class="n">FAT_SAT</span> <span class="o">=</span> <span class="n">BoolKey</span><span class="o">.</span><span class="n">FAT_SAT</span>
     <span class="n">SPOILER</span> <span class="o">=</span> <span class="n">BoolKey</span><span class="o">.</span><span class="n">SPOILER</span>
@@ -778,12 +817,13 @@
     <span class="n">IMAGING_MODE</span> <span class="o">=</span> <span class="n">EnumKey</span><span class="o">.</span><span class="n">IMAGING_MODE</span>
     <span class="n">PREPARATION_TYPE</span> <span class="o">=</span> <span class="n">EnumKey</span><span class="o">.</span><span class="n">PREPARATION_TYPE</span>
     <span class="n">TRIGGER_TYPE</span> <span class="o">=</span> <span class="n">EnumKey</span><span class="o">.</span><span class="n">TRIGGER_TYPE</span>
+    <span class="n">EXCITATION</span> <span class="o">=</span> <span class="n">EnumKey</span><span class="o">.</span><span class="n">EXCITATION</span>
 
 <div class="viewcode-block" id="UIParam.user_value">
 <a class="viewcode-back" href="../../../generated/pulserver.protocol.UIParam.user_value.html#pulserver.protocol.UIParam.user_value">[docs]</a>
     <span class="nd">@staticmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">user_value</span><span class="p">(</span><span class="n">n</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">UserKey</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Return the key of float user entry ``n``, 0 to 18.</span>
+<span class="w">        </span><span class="sd">"""Return the key of float user entry ``n``, 0 to 45.</span>
 
 <span class="sd">        Raises</span>
 <span class="sd">        ------</span>
@@ -794,11 +834,56 @@
         <span class="k">return</span> <span class="n">UserKey</span><span class="p">[</span><span class="sa">f</span><span class="s2">"USER</span><span class="si">{</span><span class="n">n</span><span class="si">}</span><span class="s2">"</span><span class="p">]</span></div>
 
 
+<div class="viewcode-block" id="UIParam.exsat_normal">
+<a class="viewcode-back" href="../../../generated/pulserver.protocol.UIParam.exsat_normal.html#pulserver.protocol.UIParam.exsat_normal">[docs]</a>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">exsat_normal</span><span class="p">(</span><span class="n">n</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">FloatKey</span><span class="p">,</span> <span class="n">FloatKey</span><span class="p">,</span> <span class="n">FloatKey</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""Return the keys of the normal of explicit saturation band ``n``, 1 to 6, along the physical x, y and z axes.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If ``n`` is out of range.</span>
+<span class="sd">        """</span>
+        <span class="n">_check_band</span><span class="p">(</span><span class="n">n</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">FloatKey</span><span class="p">[</span><span class="sa">f</span><span class="s2">"EXSAT</span><span class="si">{</span><span class="n">n</span><span class="si">}</span><span class="s2">_NORMAL_</span><span class="si">{</span><span class="n">axis</span><span class="si">}</span><span class="s2">"</span><span class="p">]</span> <span class="k">for</span> <span class="n">axis</span> <span class="ow">in</span> <span class="s2">"XYZ"</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="UIParam.exsat_loc">
+<a class="viewcode-back" href="../../../generated/pulserver.protocol.UIParam.exsat_loc.html#pulserver.protocol.UIParam.exsat_loc">[docs]</a>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">exsat_loc</span><span class="p">(</span><span class="n">n</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">FloatKey</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Return the key of the position of explicit saturation band ``n``, 1 to 6: its centre's distance from the isocentre along its normal, in mm.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If ``n`` is out of range.</span>
+<span class="sd">        """</span>
+        <span class="n">_check_band</span><span class="p">(</span><span class="n">n</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">FloatKey</span><span class="p">[</span><span class="sa">f</span><span class="s2">"EXSAT</span><span class="si">{</span><span class="n">n</span><span class="si">}</span><span class="s2">_LOC"</span><span class="p">]</span></div>
+
+
+<div class="viewcode-block" id="UIParam.exsat_thickness">
+<a class="viewcode-back" href="../../../generated/pulserver.protocol.UIParam.exsat_thickness.html#pulserver.protocol.UIParam.exsat_thickness">[docs]</a>
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">exsat_thickness</span><span class="p">(</span><span class="n">n</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">FloatKey</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Return the key of the thickness of explicit saturation band ``n``, 1 to 6, in mm.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        ------</span>
+<span class="sd">        ValueError</span>
+<span class="sd">            If ``n`` is out of range.</span>
+<span class="sd">        """</span>
+        <span class="n">_check_band</span><span class="p">(</span><span class="n">n</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">FloatKey</span><span class="p">[</span><span class="sa">f</span><span class="s2">"EXSAT</span><span class="si">{</span><span class="n">n</span><span class="si">}</span><span class="s2">_THICKNESS"</span><span class="p">]</span></div>
+
+
 <div class="viewcode-block" id="UIParam.user_name">
 <a class="viewcode-back" href="../../../generated/pulserver.protocol.UIParam.user_name.html#pulserver.protocol.UIParam.user_name">[docs]</a>
     <span class="nd">@staticmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">user_name</span><span class="p">(</span><span class="n">n</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">UserNameKey</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Return the key of the description naming user entry ``n``, 0 to 18.</span>
+<span class="w">        </span><span class="sd">"""Return the key of the description naming user entry ``n``, 0 to 45.</span>
 
 <span class="sd">        Raises</span>
 <span class="sd">        ------</span>
@@ -853,6 +938,21 @@
     <span class="n">NONE</span> <span class="o">=</span> <span class="s2">"none"</span>
     <span class="n">RESPIRATORY</span> <span class="o">=</span> <span class="s2">"physio1"</span>
     <span class="n">ECG</span> <span class="o">=</span> <span class="s2">"physio2"</span></div>
+
+
+
+<div class="viewcode-block" id="Excitation">
+<a class="viewcode-back" href="../../../generated/pulserver.protocol.Excitation.html#pulserver.protocol.Excitation">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">Excitation</span><span class="p">(</span><span class="n">StrEnum</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Options of ``excitation``.</span>
+
+<span class="sd">    The values are the excitations ``pypulseqpp.sequences.EXCITATIONS``</span>
+<span class="sd">    names: ``spsp`` excites water alone within the slab.</span>
+<span class="sd">    """</span>
+
+    <span class="n">SLAB</span> <span class="o">=</span> <span class="s2">"slab"</span>
+    <span class="n">SPSP</span> <span class="o">=</span> <span class="s2">"spsp"</span>
+    <span class="n">NONSELECTIVE</span> <span class="o">=</span> <span class="s2">"nonselective"</span></div>
 
 
 

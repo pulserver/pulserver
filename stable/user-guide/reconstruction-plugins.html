@@ -37,7 +37,7 @@
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-binder.css?v=f4aeca0c" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-dataframe.css?v=2082cf3c" />
     <link rel="stylesheet" type="text/css" href="../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
-    <link rel="stylesheet" type="text/css" href="../_static/pulserver.css?v=e08ae8f3" />
+    <link rel="stylesheet" type="text/css" href="../_static/pulserver.css?v=6854ff42" />
   
   <!-- So that users can add custom icons -->
   <script defer src="../_static/scripts/fontawesome.js?digest=90905a2f556bf617f1a9"></script>
@@ -45,7 +45,7 @@
   <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../_static/documentation_options.js?v=b196e8ce"></script>
+    <script src="../_static/documentation_options.js?v=a6e268a8"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -56,20 +56,21 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.2.1';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.2.2';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+    <script src="../_static/capabilities.js?v=421ebb92"></script>
     <link rel="canonical" href="https://pulserver.github.io/pulserver/stable/user-guide/reconstruction-plugins.html" />
     <link rel="icon" href="../_static/pulserver-mark.svg"/>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
-    <link rel="next" title="Reconstruction clients" href="reconstruction-client.html" />
+    <link rel="next" title="Reconstruction client" href="reconstruction-client.html" />
     <link rel="prev" title="Scanner sequences" href="scanner-sequences.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.2.1" />
+  <meta name="docsearch:version" content="v0.2.2" />
   
     
     <script src="../_static/searchtools.js"></script>
@@ -116,50 +117,6 @@
 
   
     <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
-<div class="bd-header__inner bd-page-width">
-  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
-    <span class="fa-solid fa-bars"></span>
-  </button>
-  
-  
-  <div class="col-lg-9 navbar-header-items">
-    
-    
-    <div class="navbar-header-items__end">
-      
-        <div class="navbar-item navbar-persistent--container">
-          
-
-<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
- <i class="fa-solid fa-magnifying-glass"></i>
- <span class="search-button__default-text">Search</span>
- <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
-</button>
-        </div>
-      
-      
-    </div>
-    
-  </div>
-  
-  
-    <div class="navbar-persistent--mobile">
-
-<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
- <i class="fa-solid fa-magnifying-glass"></i>
- <span class="search-button__default-text">Search</span>
- <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
-</button>
-    </div>
-  
-
-  
-    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
-      <span class="fa-solid fa-outdent"></span>
-    </button>
-  
-</div>
-
     </header>
   
 
@@ -241,50 +198,50 @@
         </ul>
         <ul class="current nav bd-sidenav">
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">User guide</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
-<li class="toctree-l2"><a class="reference internal" href="running.html">Running the services</a></li>
+<li class="toctree-l2"><a class="reference internal" href="running.html">Services</a></li>
 <li class="toctree-l2"><a class="reference internal" href="scanner-sequences.html">Scanner sequences</a></li>
 <li class="toctree-l2 current active"><a class="current reference internal" href="#">Reconstruction plugins</a></li>
-<li class="toctree-l2"><a class="reference internal" href="reconstruction-client.html">Reconstruction clients</a></li>
-<li class="toctree-l2"><a class="reference internal" href="virtual-scanner.html">Scanning a phantom without a scanner</a></li>
+<li class="toctree-l2"><a class="reference internal" href="reconstruction-client.html">Reconstruction client</a></li>
+<li class="toctree-l2"><a class="reference internal" href="virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../developer-guide/index.html">Developer guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/prerequisites.html">Development prerequisites</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/installation.html">Editable installation</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/workflow.html">Development workflow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/installation.html">Development setup</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../developer-guide/workflow.html">Contribution workflow</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../developer-guide/style.html">Coding style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../developer-guide/documentation.html">Documentation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../developer-guide/terminology.html">Terminology and conventions</a></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../developer-guide/internals/index.html">Internals</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/calibration.html">Calibration, noise and coil compression</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/ir-cache.html">IR cache</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/protocol-wire.html">Protocol text blocks</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/reconstruction-proxy.html">Reconstruction proxy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/sar-ratios.html">SAR ratios against a reference pulse</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/pre-commit.html">Pre-commit</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/pull-requests.html">Pull requests</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../developer-guide/releases.html">Releases</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../developer-guide/code-of-conduct.html">Code of conduct</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/architecture.html">Architecture</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../explanations/protocol.html">Protocol resolution</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../explanations/designs.html">Designs and the design store</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../explanations/scanner-representation.html">Scanner representation (PulSeg)</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../explanations/virtual-scanner.html">The virtual scanner</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../explanations/reconstruction.html">Raw-data enrichment and routing</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../explanations/calibration.html">Calibration, noise and coil compression</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/safety-checks.html">Safety checks</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/scanner-representation.html">PulSeg representation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/raw-data.html">MRD enrichment</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/reconstruction-session.html">Reconstruction session</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/reconstruction.html">Reconstruction plugins and calibration context</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../explanations/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../examples/index.html">Examples</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../examples/course.html">Course</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/01_protocol_to_image.html">1. From protocol to image</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/02_sequence_plugin.html">2. A scanner sequence and its protocol</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/03_scanner_representation.html">3. Scanner representation</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/04_reconstruction_plugin.html">4. A reconstruction plugin</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/05_testing_on_the_virtual_scanner.html">5. Testing on the virtual scanner</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/01_protocol_to_image.html">1. Your first scan</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/02_sequence_plugin.html">2. Your sequence in the scanner UI</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/03_scanner_representation.html">3. What the scanner plays</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/04_reconstruction_plugin.html">4. What your recon receives</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/05_recon_plugin.html">5. Your recon plugin</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../generated/gallery/01-course/06_testing_on_the_virtual_scanner.html">6. Test your pair on the virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../examples/tours.html">Tours</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -530,13 +487,15 @@
             <nav aria-label="Page">
                 <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reconstruction-units">Reconstruction units</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#hooks">Hooks</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#plugin-hooks">Plugin hooks</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#readout-placement">Readout placement</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#non-cartesian-data">Non-Cartesian data</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coil-sensitivities-noise-and-compression">Coil sensitivities, noise and compression</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#dicom-pixel-values">DICOM pixel values</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#diffusion-tables">Diffusion tables</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#logging">Logging</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#running-a-plugin-offline">Running a plugin offline</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#offline-reconstruction">Offline reconstruction</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#shipped-reconstructions">Shipped reconstructions</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>
 </ul>
             </nav>
@@ -555,10 +514,12 @@
 reconstruction proxy, holding a <a class="reference internal" href="../generated/pulserver.recon.ReconPlugin.html#pulserver.recon.ReconPlugin" title="pulserver.recon.ReconPlugin"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReconPlugin</span></code></a> subclass
 and a module-level <code class="docutils literal notranslate"><span class="pre">PLUGIN</span></code> instance. This one is <code class="docutils literal notranslate"><span class="pre">bart</span> <span class="pre">pics</span></code> on ESPIRiT maps:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># recon/gre.py</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">bartorch.tools</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">bt</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+
 <span class="kn">from</span><span class="w"> </span><span class="nn">bartorch</span><span class="w"> </span><span class="kn">import</span> <span class="n">apps</span><span class="p">,</span> <span class="n">priors</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pulserver</span><span class="w"> </span><span class="kn">import</span> <span class="n">recon</span>
+
 
 <span class="k">class</span><span class="w"> </span><span class="nc">Pics</span><span class="p">(</span><span class="n">recon</span><span class="o">.</span><span class="n">ReconPlugin</span><span class="p">):</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">recon</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">,</span> <span class="n">branch</span><span class="p">,</span> <span class="n">data</span><span class="p">):</span>
@@ -567,36 +528,37 @@ and a module-level <code class="docutils literal notranslate"><span class="pre">
         <span class="n">image</span> <span class="o">=</span> <span class="n">apps</span><span class="o">.</span><span class="n">pics</span><span class="p">(</span><span class="n">kspace</span><span class="p">,</span> <span class="n">maps</span><span class="p">,</span> <span class="n">regularizers</span><span class="o">=</span><span class="n">priors</span><span class="o">.</span><span class="n">Wavelet</span><span class="p">((</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">2</span><span class="p">),</span> <span class="mf">0.005</span><span class="p">))</span>
         <span class="k">return</span> <span class="n">recon</span><span class="o">.</span><span class="n">ReconResult</span><span class="p">(</span><span class="n">image</span><span class="o">.</span><span class="n">abs</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">())</span>
 
+
 <span class="n">PLUGIN</span> <span class="o">=</span> <span class="n">Pics</span><span class="p">()</span>
 </pre></div>
 </div>
 <p><code class="docutils literal notranslate"><span class="pre">data</span></code> is the <a class="reference internal" href="../generated/pulserver.recon.ReconData.html#pulserver.recon.ReconData" title="pulserver.recon.ReconData"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReconData</span></code></a> of one reconstruction unit,
 and <code class="docutils literal notranslate"><span class="pre">data.data</span></code> its k-space, <code class="docutils literal notranslate"><span class="pre">(coils,</span> <span class="pre">...,</span> <span class="pre">readout)</span></code>, with the axes
 <code class="docutils literal notranslate"><span class="pre">data.data.axes</span></code> names. Readouts are placed by their echo along the readout and
-by their encoding counters along the encoded axes
-(<a class="reference internal" href="../developer-guide/internals/reconstruction-proxy.html#reconstruction-placement"><span class="std std-ref">Placement</span></a>); a sequence sets the counters with
-<a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.sequences.Labels.html#pypulseqpp.sequences.Labels" title="(in pypulseqpp latest)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pypulseqpp.sequences.Labels</span></code></a> or <code class="docutils literal notranslate"><span class="pre">pp.make_label</span></code> as in PyPulseq, and a
-readout placed over another is warned about.
-The proxy runs the plugin in a worker process, one per series, over an MRD
+by their encoding counters along the encoded axes (<a class="reference internal" href="#readout-placement"><span class="std std-ref">Readout placement</span></a>); a
+sequence sets the counters with <a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.sequences.Labels.html#pypulseqpp.sequences.Labels" title="(in pypulseqpp latest)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pypulseqpp.sequences.Labels</span></code></a> or
+<code class="docutils literal notranslate"><span class="pre">pp.make_label</span></code> as in PyPulseq, and a readout placed over another raises a
+warning.</p>
+<p>The proxy runs the plugin in a worker process, one per series, over an MRD
 stream enriched from the sequence’s design
-(<a class="reference internal" href="../explanations/reconstruction.html"><span class="doc">Raw-data enrichment and routing</span></a>). The client names the plugin of a series
-in its config text (<a class="reference internal" href="reconstruction-client.html"><span class="doc">Reconstruction clients</span></a>), independently of the
+(<a class="reference internal" href="../explanations/reconstruction-session.html"><span class="doc">Reconstruction session</span></a>). The client names the plugin of
+a series in its config (<a class="reference internal" href="reconstruction-client.html"><span class="doc">Reconstruction client</span></a>), independently of the
 scanner-sequence plugin the series was played from.</p>
 <section id="reconstruction-units">
 <h2>Reconstruction units<a class="headerlink" href="#reconstruction-units" title="Link to this heading">#</a></h2>
-<p>A <em>reconstruction unit</em> is the set of readouts reconstructed together. It
-holds the readouts of one branch and one encoding space that share their
-slice, contrast, cardiac phase, repetition, set and average counters; the
-<code class="docutils literal notranslate"><span class="pre">segment</span></code> and user counters do not separate units. A counter named in <code class="docutils literal notranslate"><span class="pre">axes</span></code>
-becomes an axis of the unit’s k-space instead, so that the echoes or averages
-of an image are one unit.</p>
+<p>A reconstruction unit is the set of readouts reconstructed together
+(<a class="reference internal" href="../explanations/reconstruction.html"><span class="doc">Reconstruction plugins and calibration context</span></a>): those of one branch and one encoding
+space that share their slice, contrast, cardiac phase, repetition, set and
+average counters. The <code class="docutils literal notranslate"><span class="pre">segment</span></code> and user counters do not separate units. A
+counter named in <code class="docutils literal notranslate"><span class="pre">axes</span></code> becomes an axis of the unit’s k-space instead, so that
+the echoes or averages of an image are one unit.</p>
 <p>A unit closes when the flag <code class="docutils literal notranslate"><span class="pre">triggers</span></code> names for its branch has arrived at every
-position along its <code class="docutils literal notranslate"><span class="pre">axes</span></code>, and <code class="docutils literal notranslate"><span class="pre">recon</span></code> is called with it once. A unit is
-released when <code class="docutils literal notranslate"><span class="pre">recon</span></code> returns: no reference to it remains, so a series holds
-only the units open at once, and a plugin that needs the data of an earlier unit
-keeps the parts it needs. A unit still open at the last readout of the
-measurement (<code class="docutils literal notranslate"><span class="pre">LAST_IN_MEASUREMENT</span></code>) or at the end of the stream is reconstructed
-then, under its own branch, in the order the units opened.</p>
+position along its <code class="docutils literal notranslate"><span class="pre">axes</span></code> and <code class="docutils literal notranslate"><span class="pre">merge</span></code> counters, and <code class="docutils literal notranslate"><span class="pre">recon</span></code> is called with it
+once. The unit is released when <code class="docutils literal notranslate"><span class="pre">recon</span></code> returns, so a series holds only the
+units open at once, and a plugin that needs the data of an earlier unit keeps
+the parts it needs. A unit still open at the last readout of the measurement
+(<code class="docutils literal notranslate"><span class="pre">LAST_IN_MEASUREMENT</span></code>) or at the end of the stream is reconstructed then,
+under its own branch, in the order the units opened.</p>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
 <tr class="row-odd"><th class="head"><p>Argument</p></th>
@@ -608,19 +570,19 @@ then, under its own branch, in the order the units opened.</p>
 <td><p><a class="reference internal" href="../generated/pulserver.recon.Gadget.html#pulserver.recon.Gadget" title="pulserver.recon.Gadget"><code class="xref py py-class docutils literal notranslate"><span class="pre">Gadget</span></code></a> steps run over each readout before it is placed</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">triggers</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">{branch:</span> <span class="pre">flag}</span></code>, the <a class="reference internal" href="../generated/pulserver.mrd.AcquisitionFlag.html#pulserver.mrd.AcquisitionFlag" title="pulserver.mrd.AcquisitionFlag"><code class="xref py py-class docutils literal notranslate"><span class="pre">AcquisitionFlag</span></code></a> closing a unit of the branch, several combined with <code class="docutils literal notranslate"><span class="pre">|</span></code>. The first branch is that of every readout <code class="docutils literal notranslate"><span class="pre">branch_for</span></code> does not route elsewhere. The default is <code class="docutils literal notranslate"><span class="pre">{&quot;imaging&quot;:</span> <span class="pre">LAST_IN_MEASUREMENT}</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">{branch:</span> <span class="pre">flag}</span></code>, the <a class="reference internal" href="../generated/pulserver.mrd.AcquisitionFlag.html#pulserver.mrd.AcquisitionFlag" title="pulserver.mrd.AcquisitionFlag"><code class="xref py py-class docutils literal notranslate"><span class="pre">AcquisitionFlag</span></code></a> closing a unit of the branch, several combined with <code class="docutils literal notranslate"><span class="pre">|</span></code>. The first branch receives every readout <code class="docutils literal notranslate"><span class="pre">branch_for</span></code> does not route elsewhere. <code class="docutils literal notranslate"><span class="pre">{&quot;imaging&quot;:</span> <span class="pre">LAST_IN_MEASUREMENT}</span></code> by default</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">axes</span></code></p></td>
-<td><p>the counters that are axes of a unit instead of separating units</p></td>
+<td><p>The counters that are axes of a unit instead of separating units</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">merge</span></code></p></td>
-<td><p>the counters that neither separate units nor are axes: a unit waits for its closing flag at each of their values, and their readouts fill one k-space, as the place in a train (<code class="docutils literal notranslate"><span class="pre">contrast</span></code>, <code class="docutils literal notranslate"><span class="pre">ECO</span></code>) of an echo train or an inversion shot does</p></td>
+<td><p>The counters that neither separate units nor are axes: a unit waits for its closing flag at each of their values, and their readouts fill one k-space, as the place in an echo train or an inversion shot (<code class="docutils literal notranslate"><span class="pre">contrast</span></code>, <code class="docutils literal notranslate"><span class="pre">ECO</span></code>) does</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">require_flags</span></code>, <code class="docutils literal notranslate"><span class="pre">reject_flags</span></code></p></td>
-<td><p>the flags an acquisition must all carry, and those any one of which excludes it</p></td>
+<td><p>The flags an acquisition must all carry, and those any one of which excludes it</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">buffered</span></code></p></td>
-<td><p>whether readouts are placed in <code class="docutils literal notranslate"><span class="pre">data.data</span></code> and <code class="docutils literal notranslate"><span class="pre">data.ref</span></code>; with <code class="docutils literal notranslate"><span class="pre">False</span></code> a plugin reads <code class="docutils literal notranslate"><span class="pre">data.acquisitions</span></code> and a unit closes at its first flag, whatever its <code class="docutils literal notranslate"><span class="pre">axes</span></code></p></td>
+<td><p>Whether readouts are placed in <code class="docutils literal notranslate"><span class="pre">data.data</span></code> and <code class="docutils literal notranslate"><span class="pre">data.ref</span></code>; with <code class="docutils literal notranslate"><span class="pre">False</span></code>, a plugin reads <code class="docutils literal notranslate"><span class="pre">data.acquisitions</span></code> and a unit closes at its first flag, whatever its <code class="docutils literal notranslate"><span class="pre">axes</span></code></p></td>
 </tr>
 </tbody>
 </table>
@@ -634,19 +596,19 @@ then, under its own branch, in the order the units opened.</p>
 </thead>
 <tbody>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">data</span></code></p></td>
-<td><p>the k-space of the imaging readouts, a <a class="reference internal" href="../generated/pulserver.recon.ReconBuffer.html#pulserver.recon.ReconBuffer" title="pulserver.recon.ReconBuffer"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReconBuffer</span></code></a>, or <code class="docutils literal notranslate"><span class="pre">None</span></code> when the unit placed none</p></td>
+<td><p>The k-space of the imaging readouts, a <a class="reference internal" href="../generated/pulserver.recon.ReconBuffer.html#pulserver.recon.ReconBuffer" title="pulserver.recon.ReconBuffer"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReconBuffer</span></code></a>, or <code class="docutils literal notranslate"><span class="pre">None</span></code> when the unit placed none</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">ref</span></code></p></td>
-<td><p>the k-space of the parallel-imaging calibration readouts, laid out as <code class="docutils literal notranslate"><span class="pre">data</span></code> but holding only the lines of the phase-encode and partition axes its readouts cover, which start at <code class="docutils literal notranslate"><span class="pre">ref.origin</span></code> on the grid of <code class="docutils literal notranslate"><span class="pre">data</span></code>; <code class="docutils literal notranslate"><span class="pre">None</span></code> when the unit has none</p></td>
+<td><p>The k-space of the parallel-imaging calibration readouts, laid out as <code class="docutils literal notranslate"><span class="pre">data</span></code> but holding only the phase-encode and partition lines its readouts cover, starting at <code class="docutils literal notranslate"><span class="pre">ref.origin</span></code> on the grid of <code class="docutils literal notranslate"><span class="pre">data</span></code>; <code class="docutils literal notranslate"><span class="pre">None</span></code> when the unit has none</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">counters</span></code></p></td>
-<td><p>the unit’s image counters not in <code class="docutils literal notranslate"><span class="pre">axes</span></code>, by MRD name</p></td>
+<td><p>The unit’s image counters not in <code class="docutils literal notranslate"><span class="pre">axes</span></code>, by MRD name</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">waveforms</span></code></p></td>
-<td><p>the waveforms received since the previous unit closed</p></td>
+<td><p>The waveforms received since the previous unit closed</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">acquisitions</span></code></p></td>
-<td><p>every readout the unit received, as it arrived</p></td>
+<td><p>Every readout the unit received, in arrival order</p></td>
 </tr>
 </tbody>
 </table>
@@ -655,8 +617,8 @@ then, under its own branch, in the order the units opened.</p>
 <code class="docutils literal notranslate"><span class="pre">IS_PARALLEL_CALIBRATION_AND_IMAGING</span></code> in both, and one flagged
 <code class="docutils literal notranslate"><span class="pre">IS_PHASECORR_DATA</span></code> in neither unless it is also a calibration readout.</p>
 </section>
-<section id="hooks">
-<h2>Hooks<a class="headerlink" href="#hooks" title="Link to this heading">#</a></h2>
+<section id="plugin-hooks">
+<h2>Plugin hooks<a class="headerlink" href="#plugin-hooks" title="Link to this heading">#</a></h2>
 <p>The runtime calls three hooks over one stream:</p>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
@@ -679,12 +641,12 @@ then, under its own branch, in the order the units opened.</p>
 </div>
 <p>Only <code class="docutils literal notranslate"><span class="pre">recon</span></code> has to be written. The runtime passes every acquisition to
 <a class="reference internal" href="../generated/pulserver.recon.ReconPlugin.receive.html#pulserver.recon.ReconPlugin.receive" title="pulserver.recon.ReconPlugin.receive"><code class="xref py py-meth docutils literal notranslate"><span class="pre">receive()</span></code></a>, which is not overridden: it
-applies <code class="docutils literal notranslate"><span class="pre">require_flags</span></code> and <code class="docutils literal notranslate"><span class="pre">reject_flags</span></code>, runs the <code class="docutils literal notranslate"><span class="pre">gadgets</span></code> over the readout,
-adds it to the unit of the branch
-<a class="reference internal" href="../generated/pulserver.recon.ReconPlugin.branch_for.html#pulserver.recon.ReconPlugin.branch_for" title="pulserver.recon.ReconPlugin.branch_for"><code class="xref py py-meth docutils literal notranslate"><span class="pre">branch_for()</span></code></a> names, and calls <code class="docutils literal notranslate"><span class="pre">recon</span></code> for each
-unit that closes. <code class="docutils literal notranslate"><span class="pre">branch_for</span></code> returns no branch for a noise measurement, nor for
-a navigator readout unless <code class="docutils literal notranslate"><span class="pre">triggers</span></code> declares a <code class="docutils literal notranslate"><span class="pre">&quot;navigator&quot;</span></code> branch; every
-other readout belongs to the first branch <code class="docutils literal notranslate"><span class="pre">triggers</span></code> declares.</p>
+applies <code class="docutils literal notranslate"><span class="pre">require_flags</span></code> and <code class="docutils literal notranslate"><span class="pre">reject_flags</span></code>, runs the <code class="docutils literal notranslate"><span class="pre">gadgets</span></code> over the
+readout, adds it to the unit of the branch
+<a class="reference internal" href="../generated/pulserver.recon.ReconPlugin.branch_for.html#pulserver.recon.ReconPlugin.branch_for" title="pulserver.recon.ReconPlugin.branch_for"><code class="xref py py-meth docutils literal notranslate"><span class="pre">branch_for()</span></code></a> names, and calls <code class="docutils literal notranslate"><span class="pre">recon</span></code> for
+each unit that closes. <code class="docutils literal notranslate"><span class="pre">branch_for</span></code> returns no branch for a noise measurement,
+nor for a navigator readout unless <code class="docutils literal notranslate"><span class="pre">triggers</span></code> declares a <code class="docutils literal notranslate"><span class="pre">&quot;navigator&quot;</span></code> branch;
+every other readout belongs to the first branch <code class="docutils literal notranslate"><span class="pre">triggers</span></code> declares.</p>
 <div class="highlight-pycon notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">pulserver.mrd</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">mrd</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">pulserver.recon</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">recon</span>
@@ -711,30 +673,20 @@ space, the position, orientation and physiology time stamps are those of the
 unit’s reference acquisition, <code class="docutils literal notranslate"><span class="pre">data.data.reference</span></code>, and the time stamp is the
 earliest of the unit’s acquisitions. <code class="docutils literal notranslate"><span class="pre">reference=&lt;acquisition&gt;</span></code> takes the
 geometry from another acquisition. The MRD image holds the array as returned,
-<code class="docutils literal notranslate"><span class="pre">float32</span></code> or <code class="docutils literal notranslate"><span class="pre">complex64</span></code>, with no scale applied.</p>
-<p><code class="docutils literal notranslate"><span class="pre">dicom=True</span></code> sends the result as DICOM instead, and the integer pixels are made
-then. The first floating-point image of a series fixes the rescale of its
-DICOM pixels, and a result states its own in its attributes:</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">return</span> <span class="n">recon</span><span class="o">.</span><span class="n">ReconResult</span><span class="p">(</span>
-    <span class="n">image</span><span class="p">,</span>
-    <span class="n">dicom</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-    <span class="n">attributes</span><span class="o">=</span><span class="p">{</span><span class="s2">"RescaleSlope"</span><span class="p">:</span> <span class="mf">1e-4</span><span class="p">,</span> <span class="s2">"RescaleIntercept"</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">},</span>
-<span class="p">)</span>
-</pre></div>
-</div>
-<p>A value outside the range of the stored integers is clipped and counted; see
-<a class="reference internal" href="../explanations/reconstruction.html"><span class="doc">Raw-data enrichment and routing</span></a>.</p>
+<code class="docutils literal notranslate"><span class="pre">float32</span></code> or <code class="docutils literal notranslate"><span class="pre">complex64</span></code>, with no scale applied. <code class="docutils literal notranslate"><span class="pre">dicom=True</span></code> sends the result
+as DICOM instead (<a class="reference internal" href="#dicom-pixel-values"><span class="std std-ref">DICOM pixel values</span></a>).</p>
 <p>Each series runs on its own copy of <code class="docutils literal notranslate"><span class="pre">PLUGIN</span></code>
-(<a class="reference internal" href="../generated/pulserver.recon.ReconPlugin.spawn.html#pulserver.recon.ReconPlugin.spawn" title="pulserver.recon.ReconPlugin.spawn"><code class="xref py py-meth docutils literal notranslate"><span class="pre">spawn()</span></code></a>). <code class="docutils literal notranslate"><span class="pre">context.exam</span></code>, an
+(<a class="reference internal" href="../generated/pulserver.recon.ReconPlugin.spawn.html#pulserver.recon.ReconPlugin.spawn" title="pulserver.recon.ReconPlugin.spawn"><code class="xref py py-meth docutils literal notranslate"><span class="pre">spawn()</span></code></a>), and a hook reaches its gadgets
+through <code class="docutils literal notranslate"><span class="pre">self.gadget(kind)</span></code>. <code class="docutils literal notranslate"><span class="pre">context.exam</span></code>, an
 <a class="reference internal" href="../generated/pulserver.recon.ExamCache.html#pulserver.recon.ExamCache" title="pulserver.recon.ExamCache"><code class="xref py py-class docutils literal notranslate"><span class="pre">ExamCache</span></code></a>, is shared by the series of one exam, such
 as for a coil calibration; under the proxy a stored value reaches the next
-series pickled, as a copy without its <code class="docutils literal notranslate"><span class="pre">cleanup</span></code>.</p>
-<p><code class="docutils literal notranslate"><span class="pre">context.device</span></code> is the GPU the proxy gave the series, such as <code class="docutils literal notranslate"><span class="pre">&quot;cuda:0&quot;</span></code>, or
-<code class="docutils literal notranslate"><span class="pre">None</span></code>. A child process started with the <code class="docutils literal notranslate"><span class="pre">spawn</span></code> method runs functions from
-importable modules, not from the plugin file.</p>
+series pickled, as a copy without its <code class="docutils literal notranslate"><span class="pre">cleanup</span></code>. <code class="docutils literal notranslate"><span class="pre">context.device</span></code> is the GPU
+the proxy gave the series, such as <code class="docutils literal notranslate"><span class="pre">&quot;cuda:0&quot;</span></code>, or <code class="docutils literal notranslate"><span class="pre">None</span></code>. A child process
+started with the <code class="docutils literal notranslate"><span class="pre">spawn</span></code> method runs functions from importable modules, not
+from the plugin file.</p>
 </section>
 <section id="readout-placement">
-<h2>Readout placement<a class="headerlink" href="#readout-placement" title="Link to this heading">#</a></h2>
+<span id="id1"></span><h2>Readout placement<a class="headerlink" href="#readout-placement" title="Link to this heading">#</a></h2>
 <p>A readout of a Cartesian encoding space is placed so that its echo,
 <code class="docutils literal notranslate"><span class="pre">center_sample</span></code>, lies at sample <code class="docutils literal notranslate"><span class="pre">N</span> <span class="pre">//</span> <span class="pre">2</span></code> of the readout axis, the samples from
 <code class="docutils literal notranslate"><span class="pre">discard_pre</span></code> to <code class="docutils literal notranslate"><span class="pre">number_of_samples</span> <span class="pre">-</span> <span class="pre">discard_post</span></code> being the ones copied. The
@@ -743,16 +695,16 @@ encoded axis, <code class="docutils literal notranslate"><span class="pre">cente
 encoding limits, so the counters of a partial-Fourier or undersampled scan
 need not start at 0. A readout or a line that falls outside the buffer raises a
 <code class="docutils literal notranslate"><span class="pre">ValueError</span></code>. <code class="docutils literal notranslate"><span class="pre">data.data.readout</span></code> is the first and last sample placed.</p>
-<p>A plugin brings its readouts to the reconstruction matrix with two gadgets,
-run in this order. <a class="reference internal" href="../generated/pulserver.recon.AsymmetricEcho.html#pulserver.recon.AsymmetricEcho" title="pulserver.recon.AsymmetricEcho"><code class="xref py py-class docutils literal notranslate"><span class="pre">AsymmetricEcho</span></code></a> zero-fills a
-partial echo to the full echo that is symmetric about its <code class="docutils literal notranslate"><span class="pre">center_sample</span></code>, and
-declares the zeros as discarded so that they are not placed.
+<p>Two gadgets bring the readouts to the reconstruction matrix, run in this order.
+<a class="reference internal" href="../generated/pulserver.recon.AsymmetricEcho.html#pulserver.recon.AsymmetricEcho" title="pulserver.recon.AsymmetricEcho"><code class="xref py py-class docutils literal notranslate"><span class="pre">AsymmetricEcho</span></code></a> zero-fills a partial echo to the full
+echo that is symmetric about its <code class="docutils literal notranslate"><span class="pre">center_sample</span></code>, and declares the zeros
+discarded so that they are not placed.
 <a class="reference internal" href="../generated/pulserver.recon.RemoveReadoutOversampling.html#pulserver.recon.RemoveReadoutOversampling" title="pulserver.recon.RemoveReadoutOversampling"><code class="xref py py-class docutils literal notranslate"><span class="pre">RemoveReadoutOversampling</span></code></a> crops a full echo to the
 readout field of view of the reconstruction, the ratio of the header’s encoded
-to reconstructed field of view along the readout, and needs bartorch (the
-<code class="docutils literal notranslate"><span class="pre">coils</span></code> extra). A gadget states the echo of the readout it returns by assigning
-<code class="docutils literal notranslate"><span class="pre">center_sample</span></code>, <code class="docutils literal notranslate"><span class="pre">discard_pre</span></code> and <code class="docutils literal notranslate"><span class="pre">discard_post</span></code> of the acquisition it is
-given, which is a copy of the one the stream delivered:</p>
+to reconstructed field of view along the readout. A gadget states the echo of
+the readout it returns by assigning <code class="docutils literal notranslate"><span class="pre">center_sample</span></code>, <code class="docutils literal notranslate"><span class="pre">discard_pre</span></code> and
+<code class="docutils literal notranslate"><span class="pre">discard_post</span></code> of the acquisition it is given, which is a copy of the one the
+stream delivered:</p>
 <div class="highlight-pycon notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">import</span><span class="w"> </span><span class="nn">ismrmrd</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">acquisition</span> <span class="o">=</span> <span class="n">ismrmrd</span><span class="o">.</span><span class="n">Acquisition</span><span class="p">()</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">acquisition</span><span class="o">.</span><span class="n">resize</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
@@ -763,15 +715,18 @@ given, which is a copy of the one the stream delivered:</p>
 
 </pre></div>
 </div>
+<p>The placement and the image headers are specified in
+<a class="reference internal" href="../developer-guide/internals/reconstruction-proxy.html"><span class="doc">Reconstruction proxy</span></a>.</p>
 </section>
 <section id="non-cartesian-data">
 <h2>Non-Cartesian data<a class="headerlink" href="#non-cartesian-data" title="Link to this heading">#</a></h2>
 <p>A buffer holds the trajectory of its samples beside the k-space, as the
-acquisitions carry it: k along the sequence’s x, y and z axes, in 1/m.
+acquisitions carry it: k along the sequence’s x, y and z gradient axes, in 1/m.
 <a class="reference internal" href="../generated/pulserver.recon.ReconBuffer.grid_trajectory.html#pulserver.recon.ReconBuffer.grid_trajectory" title="pulserver.recon.ReconBuffer.grid_trajectory"><code class="xref py py-meth docutils literal notranslate"><span class="pre">grid_trajectory()</span></code></a> returns it in the grid
 units and layout <code class="docutils literal notranslate"><span class="pre">bartorch.linop.NUFFT</span></code> takes, with the coils of the buffer’s
 <code class="docutils literal notranslate"><span class="pre">kspace</span></code> as a batch axis of the image:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+
 <span class="kn">from</span><span class="w"> </span><span class="nn">bartorch.linop</span><span class="w"> </span><span class="kn">import</span> <span class="n">NUFFT</span>
 
 <span class="n">buffer</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">data</span>
@@ -783,8 +738,8 @@ units and layout <code class="docutils literal notranslate"><span class="pre">ba
 </pre></div>
 </div>
 <p>The partitions of a stack of spokes or spirals are placed by their
-<code class="docutils literal notranslate"><span class="pre">kspace_encode_step_2</span></code> counter and carry no kz: the partition axis is
-transformed with an FFT before the in-plane NUFFT.</p>
+<code class="docutils literal notranslate"><span class="pre">kspace_encode_step_2</span></code> counter and carry no kz: transform the partition axis
+with an FFT before the in-plane NUFFT.</p>
 </section>
 <section id="coil-sensitivities-noise-and-compression">
 <h2>Coil sensitivities, noise and compression<a class="headerlink" href="#coil-sensitivities-noise-and-compression" title="Link to this heading">#</a></h2>
@@ -792,14 +747,16 @@ transformed with an FFT before the in-plane NUFFT.</p>
 a complex torch tensor <code class="docutils literal notranslate"><span class="pre">(coils,</span> <span class="pre">[z,]</span> <span class="pre">y,</span> <span class="pre">x)</span></code> on <code class="docutils literal notranslate"><span class="pre">context.device</span></code>. They are
 estimated by the function the plugin passes, from the unit’s calibration
 k-space <code class="docutils literal notranslate"><span class="pre">data.ref</span></code>, or taken from the maps the stream or the exam holds
-(<a class="reference internal" href="../explanations/calibration.html"><span class="doc">Calibration, noise and coil compression</span></a> states the order and the conditions for
-reuse). <a class="reference internal" href="../generated/pulserver.recon.Prewhiten.html#pulserver.recon.Prewhiten" title="pulserver.recon.Prewhiten"><code class="xref py py-class docutils literal notranslate"><span class="pre">Prewhiten</span></code></a> is a gadget and
-<a class="reference internal" href="../generated/pulserver.recon.CoilCompression.html#pulserver.recon.CoilCompression" title="pulserver.recon.CoilCompression"><code class="xref py py-class docutils literal notranslate"><span class="pre">CoilCompression</span></code></a> a step called from <code class="docutils literal notranslate"><span class="pre">recon</span></code>. All three
-need bartorch, which the <code class="docutils literal notranslate"><span class="pre">coils</span></code> extra installs.</p>
+(<a class="reference internal" href="../developer-guide/internals/calibration.html"><span class="doc">Calibration, noise and coil compression</span></a> states the order and the
+conditions for reuse). <a class="reference internal" href="../generated/pulserver.recon.Prewhiten.html#pulserver.recon.Prewhiten" title="pulserver.recon.Prewhiten"><code class="xref py py-class docutils literal notranslate"><span class="pre">Prewhiten</span></code></a> is a gadget and
+<a class="reference internal" href="../generated/pulserver.recon.CoilCompression.html#pulserver.recon.CoilCompression" title="pulserver.recon.CoilCompression"><code class="xref py py-class docutils literal notranslate"><span class="pre">CoilCompression</span></code></a> a step called from <code class="docutils literal notranslate"><span class="pre">recon</span></code>; all three
+compute with bartorch.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># recon/gre.py</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+
 <span class="kn">from</span><span class="w"> </span><span class="nn">bartorch</span><span class="w"> </span><span class="kn">import</span> <span class="n">apps</span><span class="p">,</span> <span class="n">priors</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pulserver</span><span class="w"> </span><span class="kn">import</span> <span class="n">mrd</span><span class="p">,</span> <span class="n">recon</span>
+
 
 <span class="k">class</span><span class="w"> </span><span class="nc">Pics</span><span class="p">(</span><span class="n">recon</span><span class="o">.</span><span class="n">ReconPlugin</span><span class="p">):</span>
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -822,18 +779,18 @@ need bartorch, which the <code class="docutils literal notranslate"><span class=
         <span class="n">image</span> <span class="o">=</span> <span class="n">apps</span><span class="o">.</span><span class="n">pics</span><span class="p">(</span><span class="n">kspace</span><span class="p">,</span> <span class="n">maps</span><span class="p">,</span> <span class="n">regularizers</span><span class="o">=</span><span class="n">priors</span><span class="o">.</span><span class="n">Wavelet</span><span class="p">((</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">2</span><span class="p">),</span> <span class="mf">0.005</span><span class="p">))</span>
         <span class="k">return</span> <span class="n">recon</span><span class="o">.</span><span class="n">ReconResult</span><span class="p">(</span><span class="n">image</span><span class="o">.</span><span class="n">abs</span><span class="p">()</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">())</span>
 
+
 <span class="n">PLUGIN</span> <span class="o">=</span> <span class="n">Pics</span><span class="p">()</span>
 </pre></div>
 </div>
 <p><code class="docutils literal notranslate"><span class="pre">Prewhiten</span></code> consumes the noise readouts of the stream and whitens every other
-readout with them, or with the noise covariance a noise series left in the exam.
-Without either it passes readouts unchanged and logs a warning once;
+readout with them, or with the noise covariance a noise series left in the
+exam. Without either it passes readouts unchanged and logs a warning once;
 <code class="docutils literal notranslate"><span class="pre">Prewhiten(required=True)</span></code> raises instead. <code class="docutils literal notranslate"><span class="pre">CoilCompression(n)</span></code> keeps <code class="docutils literal notranslate"><span class="pre">n</span></code>
 virtual channels, at most the channels of the first unit, with the basis of
 that unit’s calibration k-space (its imaging k-space where it has none), and
-projects every later unit onto it. A unit is compressed before its maps are
-requested, so that they are estimated in the basis of the data they are used
-with.</p>
+projects every later unit onto it. Compress a unit before requesting its maps,
+so that they are estimated in the basis of the data they are used with.</p>
 <p>A calibration unit, whose <code class="docutils literal notranslate"><span class="pre">data.data</span></code> is <code class="docutils literal notranslate"><span class="pre">None</span></code>, stores its maps for its slice,
 and the imaging units of that slice take them from the stream. A series that is
 only a calibration leaves its maps to the exam by assigning
@@ -843,6 +800,7 @@ only a calibration leaves its maps to the exam by assigning
     <span class="k">def</span><span class="w"> </span><span class="nf">recon</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">,</span> <span class="n">branch</span><span class="p">,</span> <span class="n">data</span><span class="p">):</span>
         <span class="n">recon</span><span class="o">.</span><span class="n">coil_maps</span><span class="p">(</span><span class="n">context</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">estimate</span><span class="o">=</span><span class="n">apps</span><span class="o">.</span><span class="n">nlinv_maps</span><span class="p">)</span>
         <span class="n">context</span><span class="o">.</span><span class="n">coil_sensitivities</span> <span class="o">=</span> <span class="n">context</span><span class="o">.</span><span class="n">coil_maps</span><span class="p">[</span><span class="n">data</span><span class="o">.</span><span class="n">counters</span><span class="p">[</span><span class="s2">"slice"</span><span class="p">]]</span>
+
 
 <span class="k">class</span><span class="w"> </span><span class="nc">Noise</span><span class="p">(</span><span class="n">recon</span><span class="o">.</span><span class="n">ReconPlugin</span><span class="p">):</span>
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -856,48 +814,76 @@ only a calibration leaves its maps to the exam by assigning
 </pre></div>
 </div>
 <p>The exam holds one set of maps. A later series is given them only where the
-coil labels, the whitening, the compression and the geometry equal its own, and
+coil labels, the whitening, the compression and the geometry equal its own;
 otherwise <a class="reference internal" href="../generated/pulserver.recon.MissingCalibration.html#pulserver.recon.MissingCalibration" title="pulserver.recon.MissingCalibration"><code class="xref py py-class docutils literal notranslate"><span class="pre">MissingCalibration</span></code></a> is raised, naming the
-first field that differs with both values. The failure text the client
+first field that differs with both values, and the failure text the client
 receives carries the message. <code class="docutils literal notranslate"><span class="pre">required=False</span></code> returns <code class="docutils literal notranslate"><span class="pre">None</span></code> instead of
 raising.</p>
 </section>
 <section id="dicom-pixel-values">
-<h2>DICOM pixel values<a class="headerlink" href="#dicom-pixel-values" title="Link to this heading">#</a></h2>
-<p>A DICOM dataset stores integer pixels, and the integers are made when a result
-with <code class="docutils literal notranslate"><span class="pre">dicom=True</span></code> is converted, from the image the plugin returned. The
-dataset’s rescale maps them to the values of the image,
-<code class="docutils literal notranslate"><span class="pre">value</span> <span class="pre">=</span> <span class="pre">stored</span> <span class="pre">×</span> <span class="pre">RescaleSlope</span> <span class="pre">+</span> <span class="pre">RescaleIntercept</span></code>, with one mapping for each
-DICOM series, a series being the images that share <code class="docutils literal notranslate"><span class="pre">image_series_index</span></code>.</p>
-<ul class="simple">
+<span id="id2"></span><h2>DICOM pixel values<a class="headerlink" href="#dicom-pixel-values" title="Link to this heading">#</a></h2>
+<p>A DICOM dataset stores integer pixels, made when a result with <code class="docutils literal notranslate"><span class="pre">dicom=True</span></code> is
+converted from the image the plugin returned. The dataset’s rescale maps them
+to the values of the image, <code class="docutils literal notranslate"><span class="pre">value</span> <span class="pre">=</span> <span class="pre">stored</span> <span class="pre">×</span> <span class="pre">RescaleSlope</span> <span class="pre">+</span> <span class="pre">RescaleIntercept</span></code>,
+with one mapping per DICOM series, a series being the images that share
+<code class="docutils literal notranslate"><span class="pre">image_series_index</span></code>.</p>
+<ul>
 <li><p>An integer image is stored as it is. Its dataset carries a rescale only when
 the attributes of the result state one.</p></li>
 <li><p>The first floating-point image of a series fixes the mapping of the series.
 The intercept is 0, so that zero is stored as zero, and the slope stores the
 peak magnitude of the image at half the stored range, which leaves headroom
 for later images of the series up to twice as large. The stored type is
-16-bit, signed when that image has a negative value and unsigned when it has
-none. An image that states <code class="docutils literal notranslate"><span class="pre">ArrayMinimum</span></code> and <code class="docutils literal notranslate"><span class="pre">ArrayMaximum</span></code> is mapped as the
-array of images it belongs to, so the mapping of a series that begins with a
-volume does not depend on which partition arrives first. A complex image is
-stored as its magnitude. An image with no nonzero finite value fixes no
-mapping.</p></li>
+16-bit, signed when that image has a negative value and unsigned otherwise.
+An image that states <code class="docutils literal notranslate"><span class="pre">ArrayMinimum</span></code> and <code class="docutils literal notranslate"><span class="pre">ArrayMaximum</span></code> is mapped as the array
+of images it belongs to, so the mapping of a series that begins with a volume
+does not depend on which partition arrives first. A complex image is stored
+as its magnitude. An image with no nonzero finite value fixes no mapping.</p></li>
 <li><p>Every later image of the series is stored under the mapping of the series, so
 the ratios between the values of its images are the ratios between their
 stored integers.</p></li>
 <li><p>A mapping stated in the attributes of a result, <code class="docutils literal notranslate"><span class="pre">RescaleSlope</span></code> or
 <code class="docutils literal notranslate"><span class="pre">RescaleIntercept</span></code>, is the mapping of that image:
 <code class="docutils literal notranslate"><span class="pre">stored</span> <span class="pre">=</span> <span class="pre">round((value</span> <span class="pre">-</span> <span class="pre">intercept)</span> <span class="pre">/</span> <span class="pre">slope)</span></code>, a slope left out being 1 and an
-intercept left out 0. It is also the mapping of the series when the image is
-the first floating-point image of the series, and the images that follow it
-and state none are stored under it. The slope is nonzero and both are finite.</p></li>
+intercept left out 0. The slope is nonzero and both are finite. When the
+image is the first floating-point image of its series, the stated mapping is
+also that of the series, and later images that state none are stored under
+it:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="k">return</span> <span class="n">recon</span><span class="o">.</span><span class="n">ReconResult</span><span class="p">(</span>
+    <span class="n">image</span><span class="p">,</span>
+    <span class="n">dicom</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">attributes</span><span class="o">=</span><span class="p">{</span><span class="s2">"RescaleSlope"</span><span class="p">:</span> <span class="mf">1e-4</span><span class="p">,</span> <span class="s2">"RescaleIntercept"</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">},</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</li>
 <li><p>A value outside the range of the stored type is clipped to the nearest end of
 the range, never wrapped, and NaN is stored as 0. The clipped pixels are
 counted for each series, and the first clipping of a series is logged with its
 count. An image whose peak exceeds twice the peak its series was mapped from
-clips under the mapping of the series, unless the plugin states a mapping.</p></li>
+is clipped under the mapping of the series, unless the plugin states a
+mapping.</p></li>
 </ul>
 <p><code class="docutils literal notranslate"><span class="pre">RescaleType</span></code> is <code class="docutils literal notranslate"><span class="pre">US</span></code>, unspecified: the units are those of the reconstruction.</p>
+</section>
+<section id="diffusion-tables">
+<h2>Diffusion tables<a class="headerlink" href="#diffusion-tables" title="Link to this heading">#</a></h2>
+<p>The proxy states the diffusion table a design names in the header’s
+<code class="docutils literal notranslate"><span class="pre">diffusion_table</span></code> user parameter string. <a class="reference internal" href="../generated/pulserver.mrd.diffusion_table.html#pulserver.mrd.diffusion_table" title="pulserver.mrd.diffusion_table"><code class="xref py py-func docutils literal notranslate"><span class="pre">pulserver.mrd.diffusion_table()</span></code></a>
+returns it as the b-value of each volume, in s/mm², and its unit direction
+along the logical readout, phase and slice axes, zero where the b-value is
+zero. Row <code class="docutils literal notranslate"><span class="pre">i</span></code> is the volume whose <code class="docutils literal notranslate"><span class="pre">repetition</span></code> counter is <code class="docutils literal notranslate"><span class="pre">i</span></code>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pulserver</span><span class="w"> </span><span class="kn">import</span> <span class="n">mrd</span>
+
+<span class="n">b</span><span class="p">,</span> <span class="n">g</span> <span class="o">=</span> <span class="n">mrd</span><span class="o">.</span><span class="n">diffusion_table</span><span class="p">(</span><span class="n">context</span><span class="o">.</span><span class="n">header</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>A DICOM result of a series with a table states the image’s <code class="docutils literal notranslate"><span class="pre">DiffusionBValue</span></code>,
+its <code class="docutils literal notranslate"><span class="pre">DiffusionGradientOrientation</span></code>, the direction turned into the patient frame
+through the image’s <code class="docutils literal notranslate"><span class="pre">read_dir</span></code>, <code class="docutils literal notranslate"><span class="pre">phase_dir</span></code> and <code class="docutils literal notranslate"><span class="pre">slice_dir</span></code>, and its
+<code class="docutils literal notranslate"><span class="pre">DiffusionDirectionality</span></code>. These are the DICOM standard’s own attributes, from
+which dcm2niix writes the <code class="docutils literal notranslate"><span class="pre">.bval</span></code> and <code class="docutils literal notranslate"><span class="pre">.bvec</span></code> files FSL, DIPY and BIDS read, and
+which MRtrix reads directly.</p>
 </section>
 <section id="logging">
 <h2>Logging<a class="headerlink" href="#logging" title="Link to this heading">#</a></h2>
@@ -906,18 +892,19 @@ clips under the mapping of the series, unless the plugin states a mapping.</p></
 warns is appended to the proxy’s <code class="docutils literal notranslate"><span class="pre">--logfile</span></code>, each record stamped with its time,
 process ID, level and logger name.</p>
 </section>
-<section id="running-a-plugin-offline">
-<h2>Running a plugin offline<a class="headerlink" href="#running-a-plugin-offline" title="Link to this heading">#</a></h2>
+<section id="offline-reconstruction">
+<span id="id3"></span><h2>Offline reconstruction<a class="headerlink" href="#offline-reconstruction" title="Link to this heading">#</a></h2>
 <p><a class="reference internal" href="../generated/pulserver.recon.ReconPlugin.run.html#pulserver.recon.ReconPlugin.run" title="pulserver.recon.ReconPlugin.run"><code class="xref py py-meth docutils literal notranslate"><span class="pre">run()</span></code></a> reconstructs an ISMRMRD HDF5 file in
-the calling process. A file recorded as the scanner sends it, such as
-<code class="docutils literal notranslate"><span class="pre">pulserver</span> <span class="pre">scan</span> <span class="pre">--mrd</span> <span class="pre">raw.h5</span></code> writes, is enriched from its design store first:</p>
+the calling process, through the same hooks. A file recorded as the scanner
+sends it, such as <code class="docutils literal notranslate"><span class="pre">pulserver</span> <span class="pre">scan</span> <span class="pre">--mrd</span> <span class="pre">raw.h5</span></code> or the proxy’s <code class="docutils literal notranslate"><span class="pre">--save-data</span></code>
+writes, is enriched from its design store first:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">images</span> <span class="o">=</span> <span class="n">PLUGIN</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="s2">"raw.h5"</span><span class="p">,</span> <span class="n">store</span><span class="o">=</span><span class="s2">"designs"</span><span class="p">)</span>
 </pre></div>
 </div>
 <p>Calling the plugin on an <a class="reference internal" href="../generated/pulserver.mrd.AcquisitionBucket.html#pulserver.mrd.AcquisitionBucket" title="pulserver.mrd.AcquisitionBucket"><code class="xref py py-class docutils literal notranslate"><span class="pre">AcquisitionBucket</span></code></a> runs
 <code class="docutils literal notranslate"><span class="pre">startup</span></code>, passes every acquisition to <code class="docutils literal notranslate"><span class="pre">receive</span></code>, reconstructs the units still
-open and runs <code class="docutils literal notranslate"><span class="pre">finish</span></code>, and returns the last output. A header only needs to
-describe the encoded space and the receiver channels:</p>
+open, runs <code class="docutils literal notranslate"><span class="pre">finish</span></code>, and returns the last output. A header need only describe
+the encoded space and the receiver channels:</p>
 <div class="highlight-pycon notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="kn">from</span><span class="w"> </span><span class="nn">types</span><span class="w"> </span><span class="kn">import</span> <span class="n">SimpleNamespace</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">matrix</span> <span class="o">=</span> <span class="n">SimpleNamespace</span><span class="p">(</span><span class="n">matrixSize</span><span class="o">=</span><span class="n">SimpleNamespace</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">z</span><span class="o">=</span><span class="mi">1</span><span class="p">))</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">header</span> <span class="o">=</span> <span class="n">SimpleNamespace</span><span class="p">(</span>
@@ -934,10 +921,15 @@ describe the encoded space and the receiver channels:</p>
 
 </pre></div>
 </div>
+</section>
+<section id="shipped-reconstructions">
+<h2>Shipped reconstructions<a class="headerlink" href="#shipped-reconstructions" title="Link to this heading">#</a></h2>
 <p>Six shipped plugins are complete reconstructions, returning the values of their
 transform or solve unscaled. They are searched after every reconstruction
 plugin directory, so a client can name one, such as <code class="docutils literal notranslate"><span class="pre">nufft</span></code>, without a file of
-its own:</p>
+its own, and a file of the same name in a <code class="docutils literal notranslate"><span class="pre">--plugins</span></code> directory replaces it.
+Each whitens its readouts with <a class="reference internal" href="../generated/pulserver.recon.Prewhiten.html#pulserver.recon.Prewhiten" title="pulserver.recon.Prewhiten"><code class="xref py py-class docutils literal notranslate"><span class="pre">Prewhiten</span></code></a>, and sends a
+volume as one image per partition.</p>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
 <tr class="row-odd"><th class="head"><p>Plugin</p></th>
@@ -945,41 +937,37 @@ its own:</p>
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">nufft</span></code></p></td>
-<td><p>The same images as <code class="docutils literal notranslate"><span class="pre">pics</span></code>, for a radial, spiral, PROPELLER or zero-echo-time trajectory or a stack of them, from readouts whitened with the stream’s noise measurement (<code class="docutils literal notranslate"><span class="pre">Prewhiten</span></code>); each solved as <code class="docutils literal notranslate"><span class="pre">bart</span> <span class="pre">pics</span> <span class="pre">-t</span> <span class="pre">-R</span> <span class="pre">W</span></code> over <code class="docutils literal notranslate"><span class="pre">bart</span> <span class="pre">nlinv</span> <span class="pre">-t</span></code> sensitivities of the unit’s samples near the k-space centre. The readouts of every segment of a unit, the blades of a PROPELLER scan or the shells of a zero-echo-time one, enter one solve; a trajectory that encodes the partition direction without a partition axis is solved as one volume. Needs the <code class="docutils literal notranslate"><span class="pre">coils</span></code> extra</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">nufft_train</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">nufft</span></code>’s images from readouts that number their place in a train of excitations (<code class="docutils literal notranslate"><span class="pre">contrast</span></code>, <code class="docutils literal notranslate"><span class="pre">ECO</span></code>), merged so that the readouts of every place fill one image. Needs the <code class="docutils literal notranslate"><span class="pre">coils</span></code> extra</p></td>
-</tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">pics</span></code></p></td>
-<td><p>One image per slice, contrast, cardiac phase, set and repetition, averages summed, from readouts placed by their encoding counters, whitened with the stream’s noise measurement, completed to full echoes and cropped to the reconstruction field of view as they arrive (<code class="docutils literal notranslate"><span class="pre">Prewhiten</span></code>, <code class="docutils literal notranslate"><span class="pre">AsymmetricEcho</span></code>, <code class="docutils literal notranslate"><span class="pre">RemoveReadoutOversampling</span></code>); each image solved as <code class="docutils literal notranslate"><span class="pre">bart</span> <span class="pre">pics</span> <span class="pre">-R</span> <span class="pre">W</span></code> over the coil sensitivities of <a class="reference internal" href="../generated/pulserver.recon.coil_maps.html#pulserver.recon.coil_maps" title="pulserver.recon.coil_maps"><code class="xref py py-func docutils literal notranslate"><span class="pre">coil_maps()</span></code></a> (<code class="docutils literal notranslate"><span class="pre">bart</span> <span class="pre">nlinv</span></code> of the unit’s calibration readouts, else the maps stored for its slice or the exam’s, else a fit to the unit’s own low-resolution centre), then completed by <code class="docutils literal notranslate"><span class="pre">bart</span> <span class="pre">homodyne</span></code> along a partial-Fourier axis. A unit of calibration readouts only makes no image and stores its maps. Needs the <code class="docutils literal notranslate"><span class="pre">coils</span></code> extra</p></td>
+<td><p>One image per slice, contrast, cardiac phase, set and repetition, averages summed, from readouts placed by their encoding counters, whitened, completed to full echoes and cropped to the reconstruction field of view as they arrive (<code class="docutils literal notranslate"><span class="pre">Prewhiten</span></code>, <code class="docutils literal notranslate"><span class="pre">AsymmetricEcho</span></code>, <code class="docutils literal notranslate"><span class="pre">RemoveReadoutOversampling</span></code>). Each image is solved as <code class="docutils literal notranslate"><span class="pre">bart</span> <span class="pre">pics</span> <span class="pre">-R</span> <span class="pre">W</span></code> over the coil sensitivities of <a class="reference internal" href="../generated/pulserver.recon.coil_maps.html#pulserver.recon.coil_maps" title="pulserver.recon.coil_maps"><code class="xref py py-func docutils literal notranslate"><span class="pre">coil_maps()</span></code></a> (<code class="docutils literal notranslate"><span class="pre">bart</span> <span class="pre">nlinv</span></code> of the unit’s calibration readouts, else the maps stored for its slice or the exam’s, else a fit to the unit’s own low-resolution centre), then completed by <code class="docutils literal notranslate"><span class="pre">bart</span> <span class="pre">homodyne</span></code> along a partial-Fourier axis. A unit of calibration readouts only makes no image and stores its maps</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">pics_train</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">pics</span></code>’s images from readouts that number their place in an echo train or an inversion shot (<code class="docutils literal notranslate"><span class="pre">contrast</span></code>, <code class="docutils literal notranslate"><span class="pre">ECO</span></code>), merged so that the readouts of every place fill one image. Needs the <code class="docutils literal notranslate"><span class="pre">coils</span></code> extra</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">pics</span></code>’s images from readouts that number their place in an echo train or an inversion shot (<code class="docutils literal notranslate"><span class="pre">contrast</span></code>, <code class="docutils literal notranslate"><span class="pre">ECO</span></code>), merged so that the readouts of every place fill one image</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">nufft</span></code></p></td>
+<td><p>The images of <code class="docutils literal notranslate"><span class="pre">pics</span></code> for a radial, spiral, PROPELLER or zero-echo-time trajectory or a stack of them, each solved as <code class="docutils literal notranslate"><span class="pre">bart</span> <span class="pre">pics</span> <span class="pre">-t</span> <span class="pre">-R</span> <span class="pre">W</span></code> over <code class="docutils literal notranslate"><span class="pre">bart</span> <span class="pre">nlinv</span> <span class="pre">-t</span></code> sensitivities of the unit’s samples near the k-space centre. The readouts of every segment of a unit, the blades of a PROPELLER scan or the shells of a zero-echo-time one, enter one solve; a trajectory that encodes the partition direction without a partition axis is solved as one volume</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">nufft_train</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">nufft</span></code>’s images from readouts that number their place in a train of excitations (<code class="docutils literal notranslate"><span class="pre">contrast</span></code>, <code class="docutils literal notranslate"><span class="pre">ECO</span></code>), merged so that the readouts of every place fill one image</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">epi</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">pics</span></code>’s images from EPI readouts, each whitened, resampled off its ramps onto the matrix and corrected for its odd/even phase against the shot’s navigator as it arrives (<code class="docutils literal notranslate"><span class="pre">bart</span></code> ramp operator, <code class="docutils literal notranslate"><span class="pre">estimate_epi_phase</span></code>). The phase-encode-reversed reference set is an image of its own, and with PyHySCO installed (GPL-3.0, not a dependency) each later image of its slice is corrected for susceptibility distortion against it. Needs the <code class="docutils literal notranslate"><span class="pre">coils</span></code> extra</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">pics</span></code>’s images from EPI readouts, each whitened, resampled off its ramps onto the matrix and corrected for its odd/even phase against the shot’s navigator as it arrives (<code class="docutils literal notranslate"><span class="pre">bart</span></code> ramp operator, <code class="docutils literal notranslate"><span class="pre">estimate_epi_phase</span></code>). The phase-encode-reversed reference set is an image of its own; with PyHySCO installed (GPL-3.0, not a dependency; the Docker image carries it), each later image of its slice, or volume of a 3D scan, is corrected for susceptibility distortion against it</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">pmc</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">pics_train</span></code>’s images, and a pose from each three-plane navigator (<code class="docutils literal notranslate"><span class="pre">NAV</span></code> or <code class="docutils literal notranslate"><span class="pre">RTFEEDBACK</span></code> readouts): planes gridded with Pipe-Menon density on one thread, coils combined by root sum of squares, registered against the first navigator and filtered by an extended Kalman filter. The pose is published to the scan when its design sets <code class="docutils literal notranslate"><span class="pre">EnablePmc</span></code>. Needs the <code class="docutils literal notranslate"><span class="pre">coils</span></code> extra</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">pics_train</span></code>’s images, and a pose from each three-plane navigator (<code class="docutils literal notranslate"><span class="pre">NAV</span></code> or <code class="docutils literal notranslate"><span class="pre">RTFEEDBACK</span></code> readouts): planes gridded with Pipe-Menon density compensation on one thread, coils combined by root sum of squares, registered against the first navigator and filtered by an extended Kalman filter. The pose is published to the scan when its design sets <code class="docutils literal notranslate"><span class="pre">EnablePmc</span></code></p></td>
 </tr>
 </tbody>
 </table>
 </div>
-<p>Every shipped plugin whitens its readouts with
-<a class="reference internal" href="../generated/pulserver.recon.Prewhiten.html#pulserver.recon.Prewhiten" title="pulserver.recon.Prewhiten"><code class="xref py py-class docutils literal notranslate"><span class="pre">Prewhiten</span></code></a>, which consumes the noise readouts of the
-stream and logs a warning once where the stream has none and the exam stores no
-noise covariance. A volume is sent
-as one image per partition. A plugin file that reexports one under another
-name, <code class="docutils literal notranslate"><span class="pre">from</span> <span class="pre">pulserver.recon.handlers.pics</span> <span class="pre">import</span> <span class="pre">PLUGIN</span></code>, is the same
-reconstruction.</p>
+<p>A plugin file that re-exports one under another name,
+<code class="docutils literal notranslate"><span class="pre">from</span> <span class="pre">pulserver.recon.handlers.pics</span> <span class="pre">import</span> <span class="pre">PLUGIN</span></code>, is the same reconstruction.</p>
 </section>
 <section id="see-also">
 <h2>See also<a class="headerlink" href="#see-also" title="Link to this heading">#</a></h2>
 <ul class="simple">
-<li><p><a class="reference internal" href="../explanations/reconstruction.html"><span class="doc">Raw-data enrichment and routing</span></a> — enrichment, workers and slots.</p></li>
-<li><p><a class="reference internal" href="../api/recon.html"><span class="doc">Reconstruction plugins</span></a> — the plugin interface.</p></li>
-<li><p><a class="reference internal" href="../api/mrd.html"><span class="doc">MRD data</span></a> — acquisitions, flags, counters and images.</p></li>
+<li><p><a class="reference internal" href="../explanations/reconstruction.html"><span class="doc">Reconstruction plugins and calibration context</span></a>: units, images and the calibration context.</p></li>
+<li><p><a class="reference internal" href="../explanations/reconstruction-session.html"><span class="doc">Reconstruction session</span></a>: enrichment, workers and slots.</p></li>
+<li><p><a class="reference internal" href="../api/recon.html"><span class="doc">Reconstruction plugins</span></a>: the plugin interface.</p></li>
+<li><p><a class="reference internal" href="../api/mrd.html"><span class="doc">MRD data</span></a>: acquisitions, flags, counters and images.</p></li>
 </ul>
 </section>
 </section>
@@ -1009,7 +997,7 @@ reconstruction.</p>
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Reconstruction clients</p>
+        <p class="prev-next-title">Reconstruction client</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -1032,13 +1020,15 @@ reconstruction.</p>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reconstruction-units">Reconstruction units</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#hooks">Hooks</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#plugin-hooks">Plugin hooks</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#readout-placement">Readout placement</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#non-cartesian-data">Non-Cartesian data</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coil-sensitivities-noise-and-compression">Coil sensitivities, noise and compression</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#dicom-pixel-values">DICOM pixel values</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#diffusion-tables">Diffusion tables</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#logging">Logging</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#running-a-plugin-offline">Running a plugin offline</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#offline-reconstruction">Offline reconstruction</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#shipped-reconstructions">Shipped reconstructions</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>
 </ul>
   </nav></div>

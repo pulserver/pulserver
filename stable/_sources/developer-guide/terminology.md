@@ -127,7 +127,10 @@ design is not a `.seq` file, and the IR cache is not the design of record.
 
 ## 2. Register
 
-Write dry, declarative technical prose.
+Write direct technical prose for an MR scientist. Address the reader as
+"you" where they act (write a plugin, run a scan), lead with what they get,
+and keep each sentence to one claim. Technical, not cumbersome: a short plain
+sentence in the field's vocabulary is preferred to a long precise-sounding one.
 
 **No personification.** A server does not decide, a design does not know, a
 proxy does not wait for anything it is not blocked on, a plugin does not ask.
@@ -205,15 +208,18 @@ significant digits.
 
 Pulserver runs the timing, gradient, PNS, mechanical-resonance and sound
 pressure checks, which pypulseqpp implements, under the limits the interpreter
-passes, before it writes an IR cache, and refuses a design that fails one. It
-writes each subsequence's sound pressure levels into the cache, and from
-pypulseqpp's SAR check each subsequence's SAR relative to a reference pulse.
-The interpreter computes the SAR and the gradient and RF heating with the
-scanner's own routines. The checks compute estimates; passing them does not
+passes, before it writes an IR cache, and refuses a design that fails one.
+On a scanner every check is mandatory except sound pressure. Pulserver writes
+each subsequence's sound pressure levels into the cache and, for pTx, its SAR
+relative to a reference pulse, computed from the VOPs. SAR, RF coil heating
+and gradient heating are computed by the vendor's routines from the inputs
+the interpreter passes. The checks compute estimates; passing them does not
 establish scanner or patient safety.
 
 - Never write "safe", "validated", "compliant" or "approved" of a sequence, a
   protocol or a design.
+- Of a design a check refuses, write "a sequence raising a safety check
+  violation", not "an unsafe sequence".
 - A valid `VALIDATE` reply means the plugin's evaluation accepted the
   prescription under the scanner limits it was given. State that, not more.
 

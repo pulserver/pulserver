@@ -26,6 +26,7 @@
    :toctree:
    :nosignatures:
 
+   ~SequenceTable.diffusion
    ~SequenceTable.fov_offset_m
    ~SequenceTable.counters
    ~SequenceTable.flags
@@ -34,5 +35,6 @@
    ~SequenceTable.sample_time_us
    ~SequenceTable.encoding_space
    ~SequenceTable.num_samples
+   ~SequenceTable.slice_offset_m
    ~SequenceTable.spaces
    ~SequenceTable.sequence_parameters

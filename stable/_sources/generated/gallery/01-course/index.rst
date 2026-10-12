@@ -23,7 +23,7 @@ Course
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="A scan through pulserver passes four stages: a scanner sequence resolves the protocol the operator edits and designs the sequence, the design is converted into the representation the scanner plays, the scanner plays it, and the raw data are enriched from the sequence and reconstructed. This lesson runs all four in one process, on the virtual scanner, and returns an image.">
+    <div class="sphx-glr-thumbcontainer" tooltip="In this lesson you run a whole scan without writing any plugin. You use a sequence and a reconstruction that ship with pulserver (``gre2d``, a 2D gradient echo, and pics, a compressed-sensing reconstruction with BART), and the virtual scanner plays the sequence on a phantom. You will do what a scanner does: ask for the protocol, edit it, start the scan and get the image back.">
 
 .. only:: html
 
@@ -34,13 +34,13 @@ Course
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">1. From protocol to image</div>
+      <div class="sphx-glr-thumbnail-title">1. Your first scan</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="A scanner sequence binds a pypulseqpp sequence function to the entries of the scanner protocol. The operator edits the entries; pulserver converts their values into the function&#x27;s arguments, evaluates the protocol under the scanner limits, and returns the protocol the design achieves. The previous lesson used the shipped gre2d; this lesson writes one like it.">
+    <div class="sphx-glr-thumbcontainer" tooltip="In lesson 1 the operator edited the protocol of gre2d, and pulserver answered every edit with the TE, the TR and the scan time. Both the protocol and the answers came from a plugin: a short Python class wrapped around a sequence function. In this lesson you write that plugin yourself, one piece at a time, and after each piece you look at what changed for the operator.">
 
 .. only:: html
 
@@ -51,13 +51,13 @@ Course
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">2. A scanner sequence and its protocol</div>
+      <div class="sphx-glr-thumbnail-title">2. Your sequence in the scanner UI</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="A Pulseq file lists every block of a scan. The scanner plays it as an execution stream of segment instances: each virtual segment, an ordered list of base blocks, is prepared once and played many times with new amplitudes and phases. This lesson converts the design of the previous lessons into that representation, reads what it was reduced to, and walks the stream as the scanner&#x27;s playout does. The model is described in /explanations/scanner-representation.">
+    <div class="sphx-glr-thumbcontainer" tooltip="When the operator presses Scan, pulserver does three things before the scanner plays a single block: it designs the whole scan with your sequence function, checks it against the scanner&#x27;s limits, and converts it into the form the scanner plays. In lesson 1 all three were one call, console.design(&quot;generate&quot;, ...). In this lesson you run them one at a time and look at what each one produces.">
 
 .. only:: html
 
@@ -68,13 +68,13 @@ Course
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">3. Scanner representation</div>
+      <div class="sphx-glr-thumbnail-title">3. What the scanner plays</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The raw data a scanner&#x27;s reconstruction client streams carry the samples of each readout and little else: the encoding counters and flags it records describe the interpreter&#x27;s loop, not the sequence. The reconstruction proxy replaces them with what the sequence states, then hands the readouts to a reconstruction plugin grouped into reconstruction units. This lesson acquires a series of the design from the first lesson, enriches it, and reconstructs it with a plugin of its own. The enrichment is described in /explanations/reconstruction.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The scanner sends its raw data back the way Gadgetron expects it: as an ISMRMRD (MRD) stream, a header followed by one acquisition per readout. A scanner knows little about your sequence, so most of what a reconstruction needs is missing from that stream. pulserver fills it in from your sequence before your recon plugin sees a single readout.">
 
 .. only:: html
 
@@ -85,24 +85,41 @@ Course
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">4. A reconstruction plugin</div>
+      <div class="sphx-glr-thumbnail-title">4. What your recon receives</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="This lesson is optional: it extends the course rather than completing it. The virtual scanner stands in for the scanner and nothing else, so a sequence and a reconstruction plugin can be tested before a scanner is involved. Its Fourier engine acquires a phantom&#x27;s tissue under every RF pulse, gradient and receiver phase the cache plays, with relaxation, so a scan shows the contrast and the artefacts of the sequence as well as its encoding. The conversion itself is checked by comparing the gradients a sequence asks for with those its cache plays. The model is described in /explanations/virtual-scanner.">
+    <div class="sphx-glr-thumbcontainer" tooltip="In lesson 4 your plugin received the k-space of a slice and did nothing with it. In this lesson it returns an image: first with a plain Fourier transform, then with a compressed-sensing reconstruction from bartorch, the BART toolbox in Python. Between the two only recon changes; the gadgets, the trigger and the sorting stay the same, as the Gadgetron Online Class swaps reconstruction engines behind one buffer.">
 
 .. only:: html
 
-  .. image:: /generated/gallery/01-course/images/thumb/sphx_glr_05_testing_on_the_virtual_scanner_thumb.png
+  .. image:: /generated/gallery/01-course/images/thumb/sphx_glr_05_recon_plugin_thumb.png
     :alt:
 
-  :doc:`/generated/gallery/01-course/05_testing_on_the_virtual_scanner`
+  :doc:`/generated/gallery/01-course/05_recon_plugin`
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">5. Testing on the virtual scanner</div>
+      <div class="sphx-glr-thumbnail-title">5. Your recon plugin</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="You now have a sequence plugin (lesson 2) and a recon plugin (lesson 5). On a scanner they are two files in two folders, and the operator uses them like any shipped sequence and reconstruction. In this lesson you put them in those files, load them into the virtual scanner as a scanner would, and scan with them. Then you check the images against the physics: if the flip angle, the timing or the reconstruction were wrong, the contrast would show it.">
+
+.. only:: html
+
+  .. image:: /generated/gallery/01-course/images/thumb/sphx_glr_06_testing_on_the_virtual_scanner_thumb.png
+    :alt:
+
+  :doc:`/generated/gallery/01-course/06_testing_on_the_virtual_scanner`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">6. Test your pair on the virtual scanner</div>
     </div>
 
 
@@ -120,5 +137,6 @@ Course
    /generated/gallery/01-course/02_sequence_plugin
    /generated/gallery/01-course/03_scanner_representation
    /generated/gallery/01-course/04_reconstruction_plugin
-   /generated/gallery/01-course/05_testing_on_the_virtual_scanner
+   /generated/gallery/01-course/05_recon_plugin
+   /generated/gallery/01-course/06_testing_on_the_virtual_scanner
 

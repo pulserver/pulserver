@@ -36,7 +36,7 @@
     <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
     <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
     <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
-    <link rel="stylesheet" type="text/css" href="../../../_static/pulserver.css?v=e08ae8f3" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/pulserver.css?v=6854ff42" />
   
   <!-- So that users can add custom icons -->
   <script defer src="../../../_static/scripts/fontawesome.js?digest=90905a2f556bf617f1a9"></script>
@@ -44,7 +44,7 @@
   <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../../../_static/documentation_options.js?v=b196e8ce"></script>
+    <script src="../../../_static/documentation_options.js?v=a6e268a8"></script>
     <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -55,18 +55,19 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.2.1';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.2.2';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+    <script src="../../../_static/capabilities.js?v=421ebb92"></script>
     <link rel="canonical" href="https://pulserver.github.io/pulserver/stable/_modules/pulserver/virtual/_coils.html" />
     <link rel="icon" href="../../../_static/pulserver-mark.svg"/>
     <link rel="index" title="Index" href="../../../genindex.html" />
     <link rel="search" title="Search" href="../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.2.1" />
+  <meta name="docsearch:version" content="v0.2.2" />
   
     
     <script src="../../../_static/searchtools.js"></script>
@@ -113,46 +114,6 @@
 
   
     <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
-<div class="bd-header__inner bd-page-width">
-  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
-    <span class="fa-solid fa-bars"></span>
-  </button>
-  
-  
-  <div class="col-lg-9 navbar-header-items">
-    
-    
-    <div class="navbar-header-items__end">
-      
-        <div class="navbar-item navbar-persistent--container">
-          
-
-<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
- <i class="fa-solid fa-magnifying-glass"></i>
- <span class="search-button__default-text">Search</span>
- <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
-</button>
-        </div>
-      
-      
-    </div>
-    
-  </div>
-  
-  
-    <div class="navbar-persistent--mobile">
-
-<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
- <i class="fa-solid fa-magnifying-glass"></i>
- <span class="search-button__default-text">Search</span>
- <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
-</button>
-    </div>
-  
-
-  
-</div>
-
     </header>
   
 
@@ -236,50 +197,50 @@
         </ul>
         <ul class="nav bd-sidenav">
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../user-guide/index.html">User guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/running.html">Running the services</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/running.html">Services</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../user-guide/scanner-sequences.html">Scanner sequences</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../user-guide/reconstruction-plugins.html">Reconstruction plugins</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/reconstruction-client.html">Reconstruction clients</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/virtual-scanner.html">Scanning a phantom without a scanner</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/reconstruction-client.html">Reconstruction client</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../developer-guide/index.html">Developer guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/prerequisites.html">Development prerequisites</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/installation.html">Editable installation</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/workflow.html">Development workflow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/installation.html">Development setup</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/workflow.html">Contribution workflow</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/style.html">Coding style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/documentation.html">Documentation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/terminology.html">Terminology and conventions</a></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../../../developer-guide/internals/index.html">Internals</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/calibration.html">Calibration, noise and coil compression</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/ir-cache.html">IR cache</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/protocol-wire.html">Protocol text blocks</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/reconstruction-proxy.html">Reconstruction proxy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/sar-ratios.html">SAR ratios against a reference pulse</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/pre-commit.html">Pre-commit</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/pull-requests.html">Pull requests</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/releases.html">Releases</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/code-of-conduct.html">Code of conduct</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../../../explanations/architecture.html">Architecture</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../explanations/protocol.html">Protocol resolution</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../explanations/designs.html">Designs and the design store</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../explanations/scanner-representation.html">Scanner representation (PulSeg)</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../explanations/virtual-scanner.html">The virtual scanner</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../explanations/reconstruction.html">Raw-data enrichment and routing</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../explanations/calibration.html">Calibration, noise and coil compression</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/safety-checks.html">Safety checks</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/scanner-representation.html">PulSeg representation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/raw-data.html">MRD enrichment</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/reconstruction-session.html">Reconstruction session</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/reconstruction.html">Reconstruction plugins and calibration context</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../examples/index.html">Examples</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../../../examples/course.html">Course</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/01_protocol_to_image.html">1. From protocol to image</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/02_sequence_plugin.html">2. A scanner sequence and its protocol</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/03_scanner_representation.html">3. Scanner representation</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/04_reconstruction_plugin.html">4. A reconstruction plugin</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/05_testing_on_the_virtual_scanner.html">5. Testing on the virtual scanner</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/01_protocol_to_image.html">1. Your first scan</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/02_sequence_plugin.html">2. Your sequence in the scanner UI</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/03_scanner_representation.html">3. What the scanner plays</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/04_reconstruction_plugin.html">4. What your recon receives</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/05_recon_plugin.html">5. Your recon plugin</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../generated/gallery/01-course/06_testing_on_the_virtual_scanner.html">6. Test your pair on the virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../../../examples/tours.html">Tours</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -508,7 +469,7 @@
 <a class="viewcode-back" href="../../../generated/pulserver.virtual.Coil.html#pulserver.virtual.Coil">[docs]</a>
 <span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">Coil</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""The RF coils of an exam, fixed in the physical frame: the coil pulses are transmitted on and the coil the signal is received by.</span>
+<span class="w">    </span><span class="sd">"""The transmit and receive RF coils of an exam, fixed in the physical frame.</span>
 
 <span class="sd">    ``name`` is ``transmit/receive``, or one coil's name where it does both.</span>
 <span class="sd">    Each side is BART's coil model (``HEAD_2D_8CH`` or ``HEAD_3D_64CH``) and</span>
@@ -516,7 +477,7 @@
 <span class="sd">    -S`` selects them, or the file of the coil's field maps :func:`coils`</span>
 <span class="sd">    reads; a side without either is one channel of unit sensitivity</span>
 <span class="sd">    everywhere, as a body coil is taken to be. A model is sampled by bartorch</span>
-<span class="sd">    on first use, which the ``coils`` extra installs, over :data:`MODEL_FOV`</span>
+<span class="sd">    on first use, over :data:`MODEL_FOV`</span>
 <span class="sd">    along the physical axes; ``HEAD_2D_8CH`` is constant along z. Either is</span>
 <span class="sd">    interpolated linearly.</span>
 
@@ -556,7 +517,10 @@
 <div class="viewcode-block" id="Coil.transmit">
 <a class="viewcode-back" href="../../../generated/pulserver.virtual.Coil.transmit.html#pulserver.virtual.Coil.transmit">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">transmit</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">points</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Return each channel's transmit sensitivity at ``(n, 3)`` physical points, in m: ``(n, channels)``; None for one uniform channel."""</span>
+<span class="w">        </span><span class="sd">"""Return each channel's transmit sensitivity at ``(n, 3)`` physical points, in m.</span>
+
+<span class="sd">        ``(n, channels)``; None for one uniform channel.</span>
+<span class="sd">        """</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">transmit_model</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">return</span> <span class="kc">None</span>
         <span class="k">return</span> <span class="n">_interpolated</span><span class="p">(</span><span class="n">_transmit</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">transmit_model</span><span class="p">),</span> <span class="n">points</span><span class="p">)</span></div>
@@ -565,7 +529,10 @@
 <div class="viewcode-block" id="Coil.receive">
 <a class="viewcode-back" href="../../../generated/pulserver.virtual.Coil.receive.html#pulserver.virtual.Coil.receive">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">receive</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">points</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Return each coil's receive sensitivity at ``(n, 3)`` physical points, in m: ``(n, coils)``; None for one uniform coil."""</span>
+<span class="w">        </span><span class="sd">"""Return each coil's receive sensitivity at ``(n, 3)`` physical points, in m.</span>
+
+<span class="sd">        ``(n, coils)``; None for one uniform coil.</span>
+<span class="sd">        """</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">receive_model</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">return</span> <span class="kc">None</span>
         <span class="k">return</span> <span class="n">_interpolated</span><span class="p">(</span><span class="n">_receive</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">receive_model</span><span class="p">),</span> <span class="n">points</span><span class="p">)</span></div>
@@ -574,17 +541,21 @@
 <div class="viewcode-block" id="Coil.limits">
 <a class="viewcode-back" href="../../../generated/pulserver.virtual.Coil.limits.html#pulserver.virtual.Coil.limits">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">limits</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">"""Return the VOP entries of the check limits a design is made under in this coil; none unless its transmit maps have VOPs beside them.</span>
+<span class="w">        </span><span class="sd">"""Return the VOP entries of the check limits a design is made under in this coil.</span>
 
-<span class="sd">        ``vop_file`` is ``&lt;coil&gt;_vops.npz`` beside the transmit maps</span>
-<span class="sd">        ``&lt;coil&gt;.npz``; ``vop_drive_per_hz`` the drive of every channel, in</span>
-<span class="sd">        the unit of the maps and the VOPs, per Hz of a pulse's amplitude,</span>
-<span class="sd">        with which the channels' rotating fields, half their ``minus``, add</span>
-<span class="sd">        up to the pulse's nominal amplitude at the isocentre through the</span>
-<span class="sd">        :attr:`default_shim`; ``vop_default_shim`` that shim, a magnitude</span>
-<span class="sd">        and a phase per channel; and ``vop_head_limit`` and</span>
-<span class="sd">        ``vop_local_limit``, :data:`HEAD_SAR_LIMIT` and</span>
-<span class="sd">        :data:`LOCAL_SAR_LIMIT`.</span>
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        dict of str to str</span>
+<span class="sd">            Empty unless the transmit maps ``&lt;coil&gt;.npz`` have</span>
+<span class="sd">            ``&lt;coil&gt;_vops.npz`` beside them. Otherwise: ``vop_file``, the VOP</span>
+<span class="sd">            file; ``vop_drive_per_hz``, the drive of every channel, in the unit</span>
+<span class="sd">            of the maps and the VOPs, per Hz of a pulse's amplitude, with which</span>
+<span class="sd">            the channels' rotating fields, half their ``minus``, add up to the</span>
+<span class="sd">            pulse's nominal amplitude at the isocentre through the</span>
+<span class="sd">            :attr:`default_shim`; ``vop_default_shim``, that shim, a magnitude</span>
+<span class="sd">            and a phase per channel; and ``vop_head_limit`` and</span>
+<span class="sd">            ``vop_local_limit``, :data:`HEAD_SAR_LIMIT` and</span>
+<span class="sd">            :data:`LOCAL_SAR_LIMIT`.</span>
 <span class="sd">        """</span>
         <span class="n">maps</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">transmit_model</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">maps</span><span class="p">,</span> <span class="n">Path</span><span class="p">):</span>
@@ -617,7 +588,9 @@
 <span class="k">def</span><span class="w"> </span><span class="nf">coils</span><span class="p">(</span>
     <span class="n">fields</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">field_t</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Coil</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">"""Return the virtual scanner's coils by name: :data:`COILS`, or the same coils with the field maps in ``fields``.</span>
+<span class="w">    </span><span class="sd">"""Return the virtual scanner's coils by name.</span>
+
+<span class="sd">    :data:`COILS`, or the same coils with the field maps in ``fields``.</span>
 
 <span class="sd">    Each coil of a name has its maps in ``&lt;coil&gt;.npz``, as mariepy's</span>
 <span class="sd">    ``maps.write`` writes them: the circular components ``plus`` and</span>
@@ -710,12 +683,8 @@
 <span class="sd">    Sample ``i`` along an axis lies at ``(i - n // 2) / n`` of the model's</span>
 <span class="sd">    field of view, as BART's ``phantom`` places it.</span>
 <span class="sd">    """</span>
-    <span class="k">try</span><span class="p">:</span>
-        <span class="kn">from</span><span class="w"> </span><span class="nn">bartorch.tools</span><span class="w"> </span><span class="kn">import</span> <span class="n">phantom</span>
-    <span class="k">except</span> <span class="ne">ImportError</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
-            <span class="s2">"BART's coil models are sampled by bartorch: pip install 'pulserver[coils]'"</span>
-        <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">error</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">bartorch.tools</span><span class="w"> </span><span class="kn">import</span> <span class="n">phantom</span>
+
     <span class="n">three</span> <span class="o">=</span> <span class="n">model</span> <span class="o">==</span> <span class="s2">"HEAD_3D_64CH"</span>
     <span class="n">maps</span> <span class="o">=</span> <span class="n">phantom</span><span class="p">((</span><span class="n">_SAMPLES</span><span class="p">,)</span> <span class="o">*</span> <span class="p">(</span><span class="mi">3</span> <span class="k">if</span> <span class="n">three</span> <span class="k">else</span> <span class="mi">2</span><span class="p">),</span> <span class="n">S</span><span class="o">=</span><span class="n">channels</span><span class="p">,</span> <span class="n">coil</span><span class="o">=</span><span class="n">model</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">maps</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">(),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">complex64</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span>
@@ -753,12 +722,12 @@
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_interpolated</span><span class="p">(</span><span class="n">grid</span><span class="p">:</span> <span class="n">_Grid</span><span class="p">,</span> <span class="n">points</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Return ``grid`` interpolated trilinearly at ``(n, 3)`` physical points, as :func:`_trilinear` interpolates it; the edge value beyond it.</span>
+<span class="w">    </span><span class="sd">"""Return ``grid`` interpolated trilinearly at ``(n, 3)`` physical points.</span>
 
-<span class="sd">    The result is complex128,</span>
-<span class="sd">    in a temporary file mapped into memory: its pages belong to the file,</span>
-<span class="sd">    which the operating system writes back rather than holding in the</span>
-<span class="sd">    process's memory. ``TMPDIR`` names where the file is made.</span>
+<span class="sd">    The edge value is taken beyond the grid. The result is complex128, held in</span>
+<span class="sd">    a temporary file mapped into memory, so that the operating system writes</span>
+<span class="sd">    its pages back rather than the process holding them. ``TMPDIR`` names</span>
+<span class="sd">    where the file is made.</span>
 <span class="sd">    """</span>
     <span class="n">points</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">points</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">))</span>
     <span class="n">out</span> <span class="o">=</span> <span class="n">_mapped</span><span class="p">((</span><span class="nb">len</span><span class="p">(</span><span class="n">points</span><span class="p">),</span> <span class="n">grid</span><span class="o">.</span><span class="n">values</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span>

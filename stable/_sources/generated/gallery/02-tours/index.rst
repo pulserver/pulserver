@@ -23,7 +23,7 @@ Tours
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="This Tour resolves prescriptions of a two-dimensional gradient echo the way a design call does for the scanner UI, and shows what the resolved protocol depends on: the receiver bandwidth a readout realizes on the sampling rasters, and the shortest echo time the readout admits.">
+    <div class="sphx-glr-thumbcontainer" tooltip="In this Tour you resolve prescriptions of a 2D gradient echo the way a design call does for the scanner UI. You see two things the resolved protocol depends on: the receiver bandwidth the readout realizes on the sampling rasters, and the shortest echo time the readout admits.">
 
 .. only:: html
 
@@ -40,7 +40,7 @@ Tours
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="This Tour converts shipped pypulseqpp sequences into the scanner representation and reads what the conversion reduces them to: the repetition of each subsequence, the virtual segments it is cut into, and how those counts scale with the length of the scan.">
+    <div class="sphx-glr-thumbcontainer" tooltip="In this Tour you convert shipped pypulseqpp sequences into the scanner representation and read what the conversion reduces them to: the repetition of each subsequence, the virtual segments it is cut into, and how those counts scale with the length of the scan.">
 
 .. only:: html
 
@@ -57,7 +57,7 @@ Tours
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="This Tour moves the field of view of two designs away from the isocentre and shows where the phase of the offset is applied: by the scanner, as the frequency and phase offsets of each readout, and by the reconstruction proxy, for the part those offsets cannot carry when the readout gradient varies during sampling.">
+    <div class="sphx-glr-thumbcontainer" tooltip="In this Tour you move the field of view of two designs away from the isocentre and see where the phase of the offset is applied. The scanner applies it as the frequency and phase offsets of each readout. The reconstruction proxy applies the part those offsets cannot carry when the readout gradient varies during sampling.">
 
 .. only:: html
 

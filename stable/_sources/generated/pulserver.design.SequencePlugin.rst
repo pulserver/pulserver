@@ -28,6 +28,7 @@
    :toctree:
    :nosignatures:
 
+   ~SequencePlugin.options
    ~SequencePlugin.protocol
    ~SequencePlugin.reads_exam
    ~SequencePlugin.app

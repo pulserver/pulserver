@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>3. Scanner representation &#8212; pulserver documentation</title>
+    <title>3. What the scanner plays &#8212; pulserver documentation</title>
   
   
   
@@ -37,7 +37,7 @@
     <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
     <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
     <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
-    <link rel="stylesheet" type="text/css" href="../../../_static/pulserver.css?v=e08ae8f3" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/pulserver.css?v=6854ff42" />
   
   <!-- So that users can add custom icons -->
   <script defer src="../../../_static/scripts/fontawesome.js?digest=90905a2f556bf617f1a9"></script>
@@ -45,7 +45,7 @@
   <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../../../_static/documentation_options.js?v=b196e8ce"></script>
+    <script src="../../../_static/documentation_options.js?v=a6e268a8"></script>
     <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -56,20 +56,21 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.2.1';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.2.2';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+    <script src="../../../_static/capabilities.js?v=421ebb92"></script>
     <link rel="canonical" href="https://pulserver.github.io/pulserver/stable/generated/gallery/01-course/03_scanner_representation.html" />
     <link rel="icon" href="../../../_static/pulserver-mark.svg"/>
     <link rel="index" title="Index" href="../../../genindex.html" />
     <link rel="search" title="Search" href="../../../search.html" />
-    <link rel="next" title="4. A reconstruction plugin" href="04_reconstruction_plugin.html" />
-    <link rel="prev" title="2. A scanner sequence and its protocol" href="02_sequence_plugin.html" />
+    <link rel="next" title="4. What your recon receives" href="04_reconstruction_plugin.html" />
+    <link rel="prev" title="2. Your sequence in the scanner UI" href="02_sequence_plugin.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.2.1" />
+  <meta name="docsearch:version" content="v0.2.2" />
   
     
     <script src="../../../_static/searchtools.js"></script>
@@ -116,50 +117,6 @@
 
   
     <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
-<div class="bd-header__inner bd-page-width">
-  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
-    <span class="fa-solid fa-bars"></span>
-  </button>
-  
-  
-  <div class="col-lg-9 navbar-header-items">
-    
-    
-    <div class="navbar-header-items__end">
-      
-        <div class="navbar-item navbar-persistent--container">
-          
-
-<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
- <i class="fa-solid fa-magnifying-glass"></i>
- <span class="search-button__default-text">Search</span>
- <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
-</button>
-        </div>
-      
-      
-    </div>
-    
-  </div>
-  
-  
-    <div class="navbar-persistent--mobile">
-
-<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
- <i class="fa-solid fa-magnifying-glass"></i>
- <span class="search-button__default-text">Search</span>
- <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
-</button>
-    </div>
-  
-
-  
-    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
-      <span class="fa-solid fa-outdent"></span>
-    </button>
-  
-</div>
-
     </header>
   
 
@@ -241,50 +198,50 @@
         </ul>
         <ul class="current nav bd-sidenav">
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../user-guide/index.html">User guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/running.html">Running the services</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/running.html">Services</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../user-guide/scanner-sequences.html">Scanner sequences</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../user-guide/reconstruction-plugins.html">Reconstruction plugins</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/reconstruction-client.html">Reconstruction clients</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/virtual-scanner.html">Scanning a phantom without a scanner</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/reconstruction-client.html">Reconstruction client</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../developer-guide/index.html">Developer guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/prerequisites.html">Development prerequisites</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/installation.html">Editable installation</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/workflow.html">Development workflow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/installation.html">Development setup</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/workflow.html">Contribution workflow</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/style.html">Coding style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/documentation.html">Documentation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/terminology.html">Terminology and conventions</a></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../../../developer-guide/internals/index.html">Internals</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/calibration.html">Calibration, noise and coil compression</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/ir-cache.html">IR cache</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/protocol-wire.html">Protocol text blocks</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/reconstruction-proxy.html">Reconstruction proxy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/sar-ratios.html">SAR ratios against a reference pulse</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/pre-commit.html">Pre-commit</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/pull-requests.html">Pull requests</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/releases.html">Releases</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/code-of-conduct.html">Code of conduct</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../../../explanations/architecture.html">Architecture</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../explanations/protocol.html">Protocol resolution</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../explanations/designs.html">Designs and the design store</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../explanations/scanner-representation.html">Scanner representation (PulSeg)</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../explanations/virtual-scanner.html">The virtual scanner</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../explanations/reconstruction.html">Raw-data enrichment and routing</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../explanations/calibration.html">Calibration, noise and coil compression</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/safety-checks.html">Safety checks</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/scanner-representation.html">PulSeg representation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/raw-data.html">MRD enrichment</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/reconstruction-session.html">Reconstruction session</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/reconstruction.html">Reconstruction plugins and calibration context</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="../../../examples/index.html">Examples</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
 <li class="toctree-l2 current active has-children"><a class="reference internal" href="../../../examples/course.html">Course</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
-<li class="toctree-l3"><a class="reference internal" href="01_protocol_to_image.html">1. From protocol to image</a></li>
-<li class="toctree-l3"><a class="reference internal" href="02_sequence_plugin.html">2. A scanner sequence and its protocol</a></li>
-<li class="toctree-l3 current active"><a class="current reference internal" href="#">3. Scanner representation</a></li>
-<li class="toctree-l3"><a class="reference internal" href="04_reconstruction_plugin.html">4. A reconstruction plugin</a></li>
-<li class="toctree-l3"><a class="reference internal" href="05_testing_on_the_virtual_scanner.html">5. Testing on the virtual scanner</a></li>
+<li class="toctree-l3"><a class="reference internal" href="01_protocol_to_image.html">1. Your first scan</a></li>
+<li class="toctree-l3"><a class="reference internal" href="02_sequence_plugin.html">2. Your sequence in the scanner UI</a></li>
+<li class="toctree-l3 current active"><a class="current reference internal" href="#">3. What the scanner plays</a></li>
+<li class="toctree-l3"><a class="reference internal" href="04_reconstruction_plugin.html">4. What your recon receives</a></li>
+<li class="toctree-l3"><a class="reference internal" href="05_recon_plugin.html">5. Your recon plugin</a></li>
+<li class="toctree-l3"><a class="reference internal" href="06_testing_on_the_virtual_scanner.html">6. Test your pair on the virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../../../examples/tours.html">Tours</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -519,7 +476,7 @@
               
 
 <div id="jb-print-docs-body" class="onlyprint">
-    <h1>3. Scanner representation</h1>
+    <h1>3. What the scanner plays</h1>
     <!-- Table of contents -->
     <div id="print-main-content">
         <div id="jb-print-toc">
@@ -529,9 +486,12 @@
             </div>
             <nav aria-label="Page">
                 <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#conversion">Conversion</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#the-execution-stream">The execution stream</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#grouping">Grouping</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#the-whole-scan">The whole scan</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#the-checks">The checks</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#designing-under-gentler-limits">Designing under gentler limits</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#what-the-scanner-prepares">What the scanner prepares</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#what-changes-from-one-tr-to-the-next">What changes from one TR to the next</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#as-a-spec">As a spec</a></li>
 </ul>
             </nav>
         </div>
@@ -548,127 +508,175 @@
 <p><a class="reference internal" href="#sphx-glr-download-generated-gallery-01-course-03-scanner-representation-py"><span class="std std-ref">Go to the end</span></a>
 to download the full example code.</p>
 </div>
-<section class="sphx-glr-example-title" id="scanner-representation">
-<span id="sphx-glr-generated-gallery-01-course-03-scanner-representation-py"></span><h1>3. Scanner representation<a class="headerlink" href="#scanner-representation" title="Link to this heading">#</a></h1>
-<p>A Pulseq file lists every block of a scan. The scanner plays it as an
-execution stream of segment instances: each virtual segment, an ordered list
-of base blocks, is prepared once and played many times with new amplitudes and
-phases. This lesson converts the design of the previous lessons into that
-representation, reads what it was reduced to, and walks the stream as the
-scanner’s playout does. The model is described in
-<a class="reference internal" href="../../../explanations/scanner-representation.html"><span class="doc">Scanner representation (PulSeg)</span></a>.</p>
+<section class="sphx-glr-example-title" id="what-the-scanner-plays">
+<span id="sphx-glr-generated-gallery-01-course-03-scanner-representation-py"></span><h1>3. What the scanner plays<a class="headerlink" href="#what-the-scanner-plays" title="Link to this heading">#</a></h1>
+<a class="reference external image-reference" href="https://colab.research.google.com/github/pulserver/pulserver/blob/gh-pages/v0.2.2/_colab/01-course/03_scanner_representation.ipynb"><img alt="Open in Colab" class="colab-badge" src="https://colab.research.google.com/assets/colab-badge.svg" />
+</a>
+<p>When the operator presses <em>Scan</em>, pulserver does three things before the
+scanner plays a single block: it designs the whole scan with your sequence
+function, checks it against the scanner’s limits, and converts it into the
+form the scanner plays. In lesson 1 all three were one call,
+<code class="docutils literal notranslate"><span class="pre">console.design(&quot;generate&quot;,</span> <span class="pre">...)</span></code>. In this lesson you run them one at a
+time and look at what each one produces.</p>
 <p><strong>Learning objectives</strong></p>
 <ul class="simple">
-<li><p>Convert a sequence file into its IR cache with <a class="reference internal" href="../../pulserver.ir.convert.html#pulserver.ir.convert" title="pulserver.ir.convert"><code class="xref py py-func docutils literal notranslate"><span class="pre">convert()</span></code></a>.</p></li>
-<li><p>Read the repetition, the virtual segments and the readouts of a design from
-<a class="reference internal" href="../../pulserver.ir.summary.html#pulserver.ir.summary" title="pulserver.ir.summary"><code class="xref py py-func docutils literal notranslate"><span class="pre">summary()</span></code></a>.</p></li>
-<li><p>Walk the execution stream with <a class="reference internal" href="../../pulserver.ir.play.html#pulserver.ir.play" title="pulserver.ir.play"><code class="xref py py-func docutils literal notranslate"><span class="pre">play()</span></code></a>, and tell what a
-segment instance changes from what its virtual segment fixes.</p></li>
-<li><p>Change where segment boundaries fall with <a class="reference internal" href="../../pulserver.ir.Grouping.html#pulserver.ir.Grouping" title="pulserver.ir.Grouping"><code class="xref py py-class docutils literal notranslate"><span class="pre">Grouping</span></code></a>.</p></li>
+<li><p>See which checks a design must pass, and what the operator reads when one
+fails.</p></li>
+<li><p>Fix a failing design by designing it under gentler limits.</p></li>
+<li><p>See how a scan of hundreds of blocks becomes a couple of segments the
+scanner prepares once, and what changes each time it plays them.</p></li>
 </ul>
-<p>The next lesson reconstructs the raw data a scan of this cache returns.</p>
-<section id="conversion">
-<h2>Conversion<a class="headerlink" href="#conversion" title="Link to this heading">#</a></h2>
-<p>The design is pypulseqpp’s 2D gradient echo at a 64 by 64 matrix, written to
-a file. <a class="reference internal" href="../../pulserver.ir.convert.html#pulserver.ir.convert" title="pulserver.ir.convert"><code class="xref py py-func docutils literal notranslate"><span class="pre">convert()</span></code></a> reads it under the scanner limits and
-writes the IR cache beside it, and <a class="reference internal" href="../../pulserver.ir.summary.html#pulserver.ir.summary" title="pulserver.ir.summary"><code class="xref py py-func docutils literal notranslate"><span class="pre">summary()</span></code></a> reports
-what the conversion reduced it to.</p>
+<p>Previous: <a class="reference internal" href="02_sequence_plugin.html"><span class="doc">2. Your sequence in the scanner UI</span></a>. Next: <a class="reference internal" href="04_reconstruction_plugin.html"><span class="doc">4. What your recon receives</span></a>,
+where you follow the raw data on its way back.</p>
+<section id="the-whole-scan">
+<h2>The whole scan<a class="headerlink" href="#the-whole-scan" title="Link to this heading">#</a></h2>
+<p>The scan is your sequence function called with the final protocol. Here it
+is <code class="docutils literal notranslate"><span class="pre">gre2d</span></code> at a 64 by 64 matrix, the protocol you scanned in lesson 1,
+written to a Pulseq file as pulserver writes it.</p>
 <div class="highlight-Python notranslate"><div class="highlight"><pre><span class="kn">import</span><span class="w"> </span><span class="nn">tempfile</span><span class="w">
 </span><span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <a class="sphx-glr-backref-module-pathlib sphx-glr-backref-type-py-class reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="pathlib.Path"><span class="n">Path</span></a><span class="w">
 </span><span class="w">
+</span><span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib</span><span class="nn">.</span><span class="nn">pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span><span class="w">
 </span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span><span class="w">
 </span><span class="kn">import</span><span class="w"> </span><span class="nn">pypulseqpp</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pp</span><span class="w">
 </span><span class="kn">from</span><span class="w"> </span><span class="nn">pypulseqpp</span><span class="nn">.</span><span class="nn">sequences</span><span class="nn">.</span><span class="nn">sequence</span><span class="nn">.</span><span class="nn">gre2D_sequence</span><span class="w"> </span><span class="kn">import</span> <span class="n">gre2d</span><span class="w">
 </span><span class="w">
+</span><a class="sphx-glr-backref-module-pypulseqpp sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.Opts.html#pypulseqpp.Opts" title="pypulseqpp.Opts"><span class="n">system</span></a> <span class="o">=</span> <a class="sphx-glr-backref-module-pypulseqpp sphx-glr-backref-type-py-class reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.Opts.html#pypulseqpp.Opts" title="pypulseqpp.Opts"><span class="n">pp</span><span class="o">.</span><span class="n">Opts</span></a><span class="p">(</span><span class="n">max_grad</span><span class="o">=</span><span class="mi">40</span><span class="p">,</span> <span class="n">grad_unit</span><span class="o">=</span><span class="s2">&quot;</span><span class="s2">mT/m</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">max_slew</span><span class="o">=</span><span class="mi">150</span><span class="p">,</span> <span class="n">slew_unit</span><span class="o">=</span><span class="s2">&quot;</span><span class="s2">T/m/s</span><span class="s2">&quot;</span><span class="p">)</span><span class="w">
+</span><span class="w">
+</span><a class="sphx-glr-backref-module-pypulseqpp sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.Sequence.html#pypulseqpp.Sequence" title="pypulseqpp.Sequence"><span class="n">seq</span></a> <span class="o">=</span> <span class="n">gre2d</span><span class="p">(</span><a class="sphx-glr-backref-module-pypulseqpp sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.Opts.html#pypulseqpp.Opts" title="pypulseqpp.Opts"><span class="n">system</span></a><span class="p">,</span> <span class="n">n_x</span><span class="o">=</span><span class="mi">64</span><span class="p">,</span> <span class="n">n_y</span><span class="o">=</span><span class="mi">64</span><span class="p">)</span><span class="w">
+</span><a class="sphx-glr-backref-module-pathlib sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.PosixPath" title="pathlib.PosixPath"><span class="n">path</span></a> <span class="o">=</span> <a class="sphx-glr-backref-module-pathlib sphx-glr-backref-type-py-class reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="pathlib.Path"><span class="n">Path</span></a><span class="p">(</span><a class="sphx-glr-backref-module-tempfile sphx-glr-backref-type-py-function reference external" href="https://docs.python.org/3/library/tempfile.html#tempfile.mkdtemp" title="tempfile.mkdtemp"><span class="n">tempfile</span><span class="o">.</span><span class="n">mkdtemp</span></a><span class="p">(</span><span class="p">)</span><span class="p">)</span> <span class="o">/</span> <span class="s2">&quot;</span><span class="s2">gre2d.seq</span><span class="s2">&quot;</span><span class="w">
+</span><a class="sphx-glr-backref-module-pypulseqpp sphx-glr-backref-type-py-method reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.Sequence.write.html#pypulseqpp.Sequence.write" title="pypulseqpp.Sequence.write"><span class="n">seq</span><span class="o">.</span><span class="n">write</span></a><span class="p">(</span><a class="sphx-glr-backref-module-pathlib sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.PosixPath" title="pathlib.PosixPath"><span class="n">path</span></a><span class="p">)</span><span class="w">
+</span><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><a class="sphx-glr-backref-module-pypulseqpp sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.Sequence.html#pypulseqpp.Sequence" title="pypulseqpp.Sequence"><span class="n">seq</span></a><span class="o">.</span><span class="n">num_blocks</span><span class="si">}</span><span class="s2"> blocks, </span><span class="si">{</span><a class="sphx-glr-backref-module-pypulseqpp sphx-glr-backref-type-py-method reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.Sequence.duration.html#pypulseqpp.Sequence.duration" title="pypulseqpp.Sequence.duration"><span class="n">seq</span><span class="o">.</span><span class="n">duration</span></a><span class="p">(</span><span class="p">)</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2"> s</span><span class="s2">&quot;</span><span class="p">)</span><span class="w">
+</span></pre></div></div>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>534 blocks, 22.25 s
+</pre></div>
+</div>
+</section>
+<section id="the-checks">
+<h2>The checks<a class="headerlink" href="#the-checks" title="Link to this heading">#</a></h2>
+<p>A sequence designed under the scanner’s limits can still break them, for
+example on a rotated slice, where two gradient axes add up on one physical
+axis. So pulserver checks the design as the scanner will play it, rotated to
+the prescription, with <a class="reference internal" href="../../pulserver.ir.check.html#pulserver.ir.check" title="pulserver.ir.check"><code class="xref py py-func docutils literal notranslate"><span class="pre">check()</span></code></a>:</p>
+<ul class="simple">
+<li><p>the timing: every block on its raster, dead times respected;</p></li>
+<li><p>the gradient amplitude and the slew rate against <code class="docutils literal notranslate"><span class="pre">system</span></code>;</p></li>
+<li><p>peripheral nerve stimulation (PNS) and mechanical resonances, under the
+models every scanner sends;</p></li>
+<li><p>acoustic noise, when the scanner has a model of it.</p></li>
+</ul>
+<p>The PNS model belongs to the gradient coil, and the scanner sends it with
+its limits. Here is an example rheobase-chronaxie model:</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span class="kn">from</span><span class="w"> </span><span class="nn">pypulseqpp</span><span class="w"> </span><span class="kn">import</span> <span class="n">safety</span><span class="w">
+</span><span class="w">
 </span><span class="kn">from</span><span class="w"> </span><span class="nn">pulserver</span><span class="w"> </span><span class="kn">import</span> <span class="n">ir</span><span class="w">
 </span><span class="w">
-</span><a class="sphx-glr-backref-module-pypulseqpp sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.Opts.html#pypulseqpp.Opts" title="pypulseqpp.Opts"><span class="n">system</span></a> <span class="o">=</span> <a class="sphx-glr-backref-module-pypulseqpp sphx-glr-backref-type-py-class reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.Opts.html#pypulseqpp.Opts" title="pypulseqpp.Opts"><span class="n">pp</span><span class="o">.</span><span class="n">Opts</span></a><span class="p">(</span><span class="n">max_grad</span><span class="o">=</span><span class="mi">40</span><span class="p">,</span> <span class="n">grad_unit</span><span class="o">=</span><span class="s2">&quot;</span><span class="s2">mT/m</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">max_slew</span><span class="o">=</span><span class="mi">150</span><span class="p">,</span> <span class="n">slew_unit</span><span class="o">=</span><span class="s2">&quot;</span><span class="s2">T/m/s</span><span class="s2">&quot;</span><span class="p">)</span><span class="w">
-</span><a class="sphx-glr-backref-module-pathlib sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.PosixPath" title="pathlib.PosixPath"><span class="n">path</span></a> <span class="o">=</span> <a class="sphx-glr-backref-module-pathlib sphx-glr-backref-type-py-class reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="pathlib.Path"><span class="n">Path</span></a><span class="p">(</span><a class="sphx-glr-backref-module-tempfile sphx-glr-backref-type-py-function reference external" href="https://docs.python.org/3/library/tempfile.html#tempfile.mkdtemp" title="tempfile.mkdtemp"><span class="n">tempfile</span><span class="o">.</span><span class="n">mkdtemp</span></a><span class="p">(</span><span class="p">)</span><span class="p">)</span> <span class="o">/</span> <span class="s2">&quot;</span><span class="s2">gre2d.seq</span><span class="s2">&quot;</span><span class="w">
-</span><a class="sphx-glr-backref-module-pypulseqpp sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.Sequence.html#pypulseqpp.Sequence" title="pypulseqpp.Sequence"><span class="n">seq</span></a> <span class="o">=</span> <span class="n">gre2d</span><span class="p">(</span><a class="sphx-glr-backref-module-pypulseqpp sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.Opts.html#pypulseqpp.Opts" title="pypulseqpp.Opts"><span class="n">system</span></a><span class="p">,</span> <span class="n">n_x</span><span class="o">=</span><span class="mi">64</span><span class="p">,</span> <span class="n">n_y</span><span class="o">=</span><span class="mi">64</span><span class="p">)</span><span class="w">
-</span><a class="sphx-glr-backref-module-pypulseqpp sphx-glr-backref-type-py-method reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.Sequence.write.html#pypulseqpp.Sequence.write" title="pypulseqpp.Sequence.write"><span class="n">seq</span><span class="o">.</span><span class="n">write</span></a><span class="p">(</span><a class="sphx-glr-backref-module-pathlib sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.PosixPath" title="pathlib.PosixPath"><span class="n">path</span></a><span class="p">)</span><span class="w">
+</span><a class="sphx-glr-backref-module-pypulseqpp-safety sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.safety.ChronaxieModel.html#pypulseqpp.safety.ChronaxieModel" title="pypulseqpp.safety.ChronaxieModel"><span class="n">coil</span></a> <span class="o">=</span> <a class="sphx-glr-backref-module-pypulseqpp-safety sphx-glr-backref-type-py-class reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.safety.ChronaxieModel.html#pypulseqpp.safety.ChronaxieModel" title="pypulseqpp.safety.ChronaxieModel"><span class="n">safety</span><span class="o">.</span><span class="n">ChronaxieModel</span></a><span class="p">(</span><span class="n">chronaxie</span><span class="o">=</span><span class="mf">360e-6</span><span class="p">,</span> <span class="n">rheobase</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.333</span><span class="p">)</span><span class="w">
+</span><a class="sphx-glr-backref-module-pulserver-ir sphx-glr-backref-type-py-class sphx-glr-backref-instance reference internal" href="../../pulserver.ir.CheckLimits.html#pulserver.ir.CheckLimits" title="pulserver.ir.CheckLimits"><span class="n">limits</span></a> <span class="o">=</span> <a class="sphx-glr-backref-module-pulserver-ir sphx-glr-backref-type-py-class reference internal" href="../../pulserver.ir.CheckLimits.html#pulserver.ir.CheckLimits" title="pulserver.ir.CheckLimits"><span class="n">ir</span><span class="o">.</span><span class="n">CheckLimits</span></a><span class="p">(</span><span class="n">pns</span><span class="o">=</span><a class="sphx-glr-backref-module-pypulseqpp-safety sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.safety.ChronaxieModel.html#pypulseqpp.safety.ChronaxieModel" title="pypulseqpp.safety.ChronaxieModel"><span class="n">coil</span></a><span class="p">)</span><span class="w">
 </span><span class="w">
-</span><span class="nb">print</span><span class="p">(</span><a class="sphx-glr-backref-module-pulserver-ir sphx-glr-backref-type-py-function reference internal" href="../../pulserver.ir.convert.html#pulserver.ir.convert" title="pulserver.ir.convert"><span class="n">ir</span><span class="o">.</span><span class="n">convert</span></a><span class="p">(</span><a class="sphx-glr-backref-module-pathlib sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.PosixPath" title="pathlib.PosixPath"><span class="n">path</span></a><span class="p">,</span> <a class="sphx-glr-backref-module-pypulseqpp sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.Opts.html#pypulseqpp.Opts" title="pypulseqpp.Opts"><span class="n">system</span></a><span class="p">)</span><span class="o">.</span><span class="n">name</span><span class="p">)</span><span class="w">
+</span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#list" title="list"><span class="n">problems</span></a> <span class="o">=</span> <a class="sphx-glr-backref-module-pulserver-ir sphx-glr-backref-type-py-function reference internal" href="../../pulserver.ir.check.html#pulserver.ir.check" title="pulserver.ir.check"><span class="n">ir</span><span class="o">.</span><span class="n">check</span></a><span class="p">(</span><a class="sphx-glr-backref-module-pathlib sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.PosixPath" title="pathlib.PosixPath"><span class="n">path</span></a><span class="p">,</span> <a class="sphx-glr-backref-module-pypulseqpp sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.Opts.html#pypulseqpp.Opts" title="pypulseqpp.Opts"><span class="n">system</span></a><span class="p">,</span> <a class="sphx-glr-backref-module-pulserver-ir sphx-glr-backref-type-py-class sphx-glr-backref-instance reference internal" href="../../pulserver.ir.CheckLimits.html#pulserver.ir.CheckLimits" title="pulserver.ir.CheckLimits"><span class="n">limits</span></a><span class="o">=</span><a class="sphx-glr-backref-module-pulserver-ir sphx-glr-backref-type-py-class sphx-glr-backref-instance reference internal" href="../../pulserver.ir.CheckLimits.html#pulserver.ir.CheckLimits" title="pulserver.ir.CheckLimits"><span class="n">limits</span></a><span class="p">)</span><span class="w">
+</span><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#list" title="list"><span class="n">problems</span></a><span class="p">)</span> <span class="ow">or</span> <span class="s2">&quot;</span><span class="s2">no problems</span><span class="s2">&quot;</span><span class="p">)</span><span class="w">
+</span></pre></div></div>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>PNS of 102% of the chronaxie threshold, largest on z, at 1.0034 s in block 26 reaches 100%
+</pre></div>
+</div>
+<p>The design is refused. On a scanner this message is what the operator reads
+instead of a scan starting, and nothing is played.
+<a class="reference internal" href="../../../explanations/safety-checks.html"><span class="doc">Safety checks</span></a> lists every check and what each one
+needs from the scanner.</p>
+<p>The figure shows why. Over the first 12 ms of a TR, the gradients stay
+within 40 mT/m and the slew rate within 150 T/m/s, but the slice rephaser
+ramps fast enough to drive the nerve response just above its threshold.</p>
+<img src="../../../_images/sphx_glr_03_scanner_representation_001.png" srcset="../../../_images/sphx_glr_03_scanner_representation_001.png" alt="03 scanner representation" class = "sphx-glr-single-img"/></section>
+<section id="designing-under-gentler-limits">
+<h2>Designing under gentler limits<a class="headerlink" href="#designing-under-gentler-limits" title="Link to this heading">#</a></h2>
+<p>The remedy is a change of design, not of the check: design the sequence
+with a lower slew rate, and check it against the same scanner. A scanner can send
+such design limits with its own (<code class="docutils literal notranslate"><span class="pre">design_max_slew</span></code>), and pulserver then
+hands your sequence function the gentler <code class="docutils literal notranslate"><span class="pre">system</span></code>.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><a class="sphx-glr-backref-module-pypulseqpp sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.Opts.html#pypulseqpp.Opts" title="pypulseqpp.Opts"><span class="n">gentle</span></a> <span class="o">=</span> <a class="sphx-glr-backref-module-pypulseqpp sphx-glr-backref-type-py-class reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.Opts.html#pypulseqpp.Opts" title="pypulseqpp.Opts"><span class="n">pp</span><span class="o">.</span><span class="n">Opts</span></a><span class="p">(</span><span class="n">max_grad</span><span class="o">=</span><span class="mi">40</span><span class="p">,</span> <span class="n">grad_unit</span><span class="o">=</span><span class="s2">&quot;</span><span class="s2">mT/m</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">max_slew</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">slew_unit</span><span class="o">=</span><span class="s2">&quot;</span><span class="s2">T/m/s</span><span class="s2">&quot;</span><span class="p">)</span><span class="w">
+</span><span class="w">
+</span><a class="sphx-glr-backref-module-pypulseqpp sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.Sequence.html#pypulseqpp.Sequence" title="pypulseqpp.Sequence"><span class="n">seq</span></a> <span class="o">=</span> <span class="n">gre2d</span><span class="p">(</span><a class="sphx-glr-backref-module-pypulseqpp sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.Opts.html#pypulseqpp.Opts" title="pypulseqpp.Opts"><span class="n">gentle</span></a><span class="p">,</span> <span class="n">n_x</span><span class="o">=</span><span class="mi">64</span><span class="p">,</span> <span class="n">n_y</span><span class="o">=</span><span class="mi">64</span><span class="p">)</span><span class="w">
+</span><a class="sphx-glr-backref-module-pypulseqpp sphx-glr-backref-type-py-method reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.Sequence.write.html#pypulseqpp.Sequence.write" title="pypulseqpp.Sequence.write"><span class="n">seq</span><span class="o">.</span><span class="n">write</span></a><span class="p">(</span><a class="sphx-glr-backref-module-pathlib sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.PosixPath" title="pathlib.PosixPath"><span class="n">path</span></a><span class="p">)</span><span class="w">
+</span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#list" title="list"><span class="n">problems</span></a> <span class="o">=</span> <a class="sphx-glr-backref-module-pulserver-ir sphx-glr-backref-type-py-function reference internal" href="../../pulserver.ir.check.html#pulserver.ir.check" title="pulserver.ir.check"><span class="n">ir</span><span class="o">.</span><span class="n">check</span></a><span class="p">(</span><a class="sphx-glr-backref-module-pathlib sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.PosixPath" title="pathlib.PosixPath"><span class="n">path</span></a><span class="p">,</span> <a class="sphx-glr-backref-module-pypulseqpp sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.Opts.html#pypulseqpp.Opts" title="pypulseqpp.Opts"><span class="n">system</span></a><span class="p">,</span> <a class="sphx-glr-backref-module-pulserver-ir sphx-glr-backref-type-py-class sphx-glr-backref-instance reference internal" href="../../pulserver.ir.CheckLimits.html#pulserver.ir.CheckLimits" title="pulserver.ir.CheckLimits"><span class="n">limits</span></a><span class="o">=</span><a class="sphx-glr-backref-module-pulserver-ir sphx-glr-backref-type-py-class sphx-glr-backref-instance reference internal" href="../../pulserver.ir.CheckLimits.html#pulserver.ir.CheckLimits" title="pulserver.ir.CheckLimits"><span class="n">limits</span></a><span class="p">)</span><span class="w">
+</span><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#list" title="list"><span class="n">problems</span></a><span class="p">)</span> <span class="ow">or</span> <span class="s2">&quot;</span><span class="s2">no problems</span><span class="s2">&quot;</span><span class="p">)</span><span class="w">
+</span></pre></div></div>
+<img src="../../../_images/sphx_glr_03_scanner_representation_002.png" srcset="../../../_images/sphx_glr_03_scanner_representation_002.png" alt="03 scanner representation" class = "sphx-glr-single-img"/><div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>no problems
+</pre></div>
+</div>
+<p>The same TE and TR, with the nerve response under its threshold.</p>
+</section>
+<section id="what-the-scanner-prepares">
+<h2>What the scanner prepares<a class="headerlink" href="#what-the-scanner-prepares" title="Link to this heading">#</a></h2>
+<p>The scanner does not read the Pulseq file block by block while it plays.
+pulserver first finds what repeats: the TR, here 6 blocks played once per
+line and once per dummy TR (64 lines and 25 dummies). It cuts the TR into <strong>segments</strong>, short runs of
+blocks the scanner prepares once, and lists the order to play them in. The
+result is the <strong>cache</strong> the scanner loads, written beside the Pulseq file by
+<a class="reference internal" href="../../pulserver.ir.convert.html#pulserver.ir.convert" title="pulserver.ir.convert"><code class="xref py py-func docutils literal notranslate"><span class="pre">convert()</span></code></a>:</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span class="nb">print</span><span class="p">(</span><a class="sphx-glr-backref-module-pulserver-ir sphx-glr-backref-type-py-function reference internal" href="../../pulserver.ir.convert.html#pulserver.ir.convert" title="pulserver.ir.convert"><span class="n">ir</span><span class="o">.</span><span class="n">convert</span></a><span class="p">(</span><a class="sphx-glr-backref-module-pathlib sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.PosixPath" title="pathlib.PosixPath"><span class="n">path</span></a><span class="p">,</span> <a class="sphx-glr-backref-module-pypulseqpp sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.Opts.html#pypulseqpp.Opts" title="pypulseqpp.Opts"><span class="n">system</span></a><span class="p">)</span><span class="o">.</span><span class="n">name</span><span class="p">)</span><span class="w">
+</span><span class="w">
 </span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="dict"><span class="n">report</span></a> <span class="o">=</span> <a class="sphx-glr-backref-module-pulserver-ir sphx-glr-backref-type-py-function reference internal" href="../../pulserver.ir.summary.html#pulserver.ir.summary" title="pulserver.ir.summary"><span class="n">ir</span><span class="o">.</span><span class="n">summary</span></a><span class="p">(</span><a class="sphx-glr-backref-module-pathlib sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.PosixPath" title="pathlib.PosixPath"><span class="n">path</span></a><span class="p">,</span> <a class="sphx-glr-backref-module-pypulseqpp sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.Opts.html#pypulseqpp.Opts" title="pypulseqpp.Opts"><span class="n">system</span></a><span class="p">,</span> <span class="n">cache_ext</span><span class="o">=</span><span class="s2">&quot;</span><span class="s2">.pseg</span><span class="s2">&quot;</span><span class="p">)</span><span class="w">
+</span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="dict"><span class="n">repetition</span></a> <span class="o">=</span> <a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="dict"><span class="n">report</span></a><span class="p">[</span><span class="s2">&quot;</span><span class="s2">subsequences</span><span class="s2">&quot;</span><span class="p">]</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="w">
+</span><span class="nb">print</span><span class="p">(</span><span class="w">
+</span>    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><a class="sphx-glr-backref-module-pypulseqpp sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.Sequence.html#pypulseqpp.Sequence" title="pypulseqpp.Sequence"><span class="n">seq</span></a><span class="o">.</span><span class="n">num_blocks</span><span class="si">}</span><span class="s2"> blocks = </span><span class="si">{</span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="dict"><span class="n">repetition</span></a><span class="p">[</span><span class="s1">'</span><span class="s1">num_trs</span><span class="s1">'</span><span class="p">]</span><span class="si">}</span><span class="s2"> TRs </span><span class="s2">&quot;</span><span class="w">
+</span>    <span class="sa">f</span><span class="s2">&quot;</span><span class="s2">of </span><span class="si">{</span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="dict"><span class="n">repetition</span></a><span class="p">[</span><span class="s1">'</span><span class="s1">tr_size</span><span class="s1">'</span><span class="p">]</span><span class="si">}</span><span class="s2"> blocks</span><span class="s2">&quot;</span><span class="w">
+</span><span class="p">)</span><span class="w">
+</span><span class="k">for</span> <a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="int"><span class="n">number</span></a><span class="p">,</span> <a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="int"><span class="n">segment</span></a> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="dict"><span class="n">report</span></a><span class="p">[</span><span class="s2">&quot;</span><span class="s2">segments</span><span class="s2">&quot;</span><span class="p">]</span><span class="p">)</span><span class="p">:</span><span class="w">
+</span>    <a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="str"><span class="n">kind</span></a> <span class="o">=</span> <span class="s2">&quot;</span><span class="s2">a pure delay</span><span class="s2">&quot;</span> <span class="k">if</span> <a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="int"><span class="n">segment</span></a><span class="p">[</span><span class="s2">&quot;</span><span class="s2">pure_delay</span><span class="s2">&quot;</span><span class="p">]</span> <span class="k">else</span> <span class="s2">&quot;</span><span class="s2">RF, gradients and ADC</span><span class="s2">&quot;</span><span class="w">
+</span>    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="s2">segment </span><span class="si">{</span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="int"><span class="n">number</span></a><span class="si">}</span><span class="s2">: </span><span class="si">{</span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="int"><span class="n">segment</span></a><span class="p">[</span><span class="s1">'</span><span class="s1">num_blocks</span><span class="s1">'</span><span class="p">]</span><span class="si">}</span><span class="s2"> block(s), </span><span class="si">{</span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="str"><span class="n">kind</span></a><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span><span class="w">
 </span></pre></div></div>
 <div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>gre2d.pseg
+534 blocks = 89 TRs of 6 blocks
+segment 0: 5 block(s), RF, gradients and ADC
+segment 1: 1 block(s), a pure delay
 </pre></div>
 </div>
-<p>The repetition is the period pypulseqpp’s <code class="docutils literal notranslate"><span class="pre">Sequence.repetition</span></code> finds: one
-phase-encoding line, played once per line and once per dummy scan. The
-conversion cuts it into virtual segments at block boundaries where the
-gradients rest. A pure delay is a virtual segment of its own, played with
-each instance’s duration.</p>
-<div class="highlight-Python notranslate"><div class="highlight"><pre><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="dict"><span class="n">repetition</span></a> <span class="o">=</span> <a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="dict"><span class="n">report</span></a><span class="p">[</span><span class="s2">&quot;</span><span class="s2">subsequences</span><span class="s2">&quot;</span><span class="p">]</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="w">
-</span><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><a class="sphx-glr-backref-module-pypulseqpp sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.Sequence.html#pypulseqpp.Sequence" title="pypulseqpp.Sequence"><span class="n">seq</span></a><span class="o">.</span><span class="n">num_blocks</span><span class="si">}</span><span class="s2"> blocks in the file</span><span class="s2">&quot;</span><span class="p">)</span><span class="w">
-</span><span class="nb">print</span><span class="p">(</span><span class="w">
-</span>    <span class="sa">f</span><span class="s2">&quot;</span><span class="s2">repetition: </span><span class="si">{</span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="dict"><span class="n">repetition</span></a><span class="p">[</span><span class="s1">'</span><span class="s1">tr_size</span><span class="s1">'</span><span class="p">]</span><span class="si">}</span><span class="s2"> blocks, </span><span class="s2">&quot;</span><span class="w">
-</span>    <span class="sa">f</span><span class="s2">&quot;</span><span class="s2">TR </span><span class="si">{</span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="dict"><span class="n">repetition</span></a><span class="p">[</span><span class="s1">'</span><span class="s1">tr_duration_us</span><span class="s1">'</span><span class="p">]</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="mf">1e3</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> ms, </span><span class="s2">&quot;</span><span class="w">
-</span>    <span class="sa">f</span><span class="s2">&quot;</span><span class="s2">played </span><span class="si">{</span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="dict"><span class="n">repetition</span></a><span class="p">[</span><span class="s1">'</span><span class="s1">num_trs</span><span class="s1">'</span><span class="p">]</span><span class="si">}</span><span class="s2"> times</span><span class="s2">&quot;</span><span class="w">
-</span><span class="p">)</span><span class="w">
-</span><span class="k">for</span> <a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="int"><span class="n">index</span></a><span class="p">,</span> <a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="dict"><span class="n">segment</span></a> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="dict"><span class="n">report</span></a><span class="p">[</span><span class="s2">&quot;</span><span class="s2">segments</span><span class="s2">&quot;</span><span class="p">]</span><span class="p">)</span><span class="p">:</span><span class="w">
-</span>    <a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="int"><span class="n">first</span></a> <span class="o">=</span> <a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="dict"><span class="n">segment</span></a><span class="p">[</span><span class="s2">&quot;</span><span class="s2">start_block</span><span class="s2">&quot;</span><span class="p">]</span> <span class="o">+</span> <span class="mi">1</span><span class="w">
-</span>    <a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="int"><span class="n">last</span></a> <span class="o">=</span> <a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="dict"><span class="n">segment</span></a><span class="p">[</span><span class="s2">&quot;</span><span class="s2">start_block</span><span class="s2">&quot;</span><span class="p">]</span> <span class="o">+</span> <a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="dict"><span class="n">segment</span></a><span class="p">[</span><span class="s2">&quot;</span><span class="s2">num_blocks</span><span class="s2">&quot;</span><span class="p">]</span><span class="w">
-</span>    <a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="str"><span class="n">kind</span></a> <span class="o">=</span> <span class="s2">&quot;</span><span class="s2">pure delay</span><span class="s2">&quot;</span> <span class="k">if</span> <a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="dict"><span class="n">segment</span></a><span class="p">[</span><span class="s2">&quot;</span><span class="s2">pure_delay</span><span class="s2">&quot;</span><span class="p">]</span> <span class="k">else</span> <span class="s2">&quot;</span><span class="s2">events</span><span class="s2">&quot;</span><span class="w">
-</span>    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="s2">virtual segment </span><span class="si">{</span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="int"><span class="n">index</span></a><span class="si">}</span><span class="s2">: blocks </span><span class="si">{</span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="int"><span class="n">first</span></a><span class="si">}</span><span class="s2">-</span><span class="si">{</span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="int"><span class="n">last</span></a><span class="si">}</span><span class="s2"> of the repetition, </span><span class="si">{</span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="str"><span class="n">kind</span></a><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span><span class="w">
-</span><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="dict"><span class="n">report</span></a><span class="p">[</span><span class="s1">'</span><span class="s1">total_readouts</span><span class="s1">'</span><span class="p">]</span><span class="si">}</span><span class="s2"> readouts</span><span class="s2">&quot;</span><span class="p">)</span><span class="w">
-</span></pre></div></div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>480 blocks in the file
-repetition: 6 blocks, TR 250.0 ms, played 80 times
-virtual segment 0: blocks 1-5 of the repetition, events
-virtual segment 1: blocks 6-6 of the repetition, pure delay
-64 readouts
-</pre></div>
-</div>
-</section>
-<section id="the-execution-stream">
-<h2>The execution stream<a class="headerlink" href="#the-execution-stream" title="Link to this heading">#</a></h2>
-<p><a class="reference internal" href="../../pulserver.ir.play.html#pulserver.ir.play" title="pulserver.ir.play"><code class="xref py py-func docutils literal notranslate"><span class="pre">play()</span></code></a> loads the cache with the C library a scanner
-links and walks the execution stream with its cursor, one entry per played
-block. Each segment instance plays the blocks of its virtual segment, so the
-stream is read instance by instance by stepping over that many blocks.</p>
-<div class="highlight-Python notranslate"><div class="highlight"><pre><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="dict"><span class="n">played</span></a> <span class="o">=</span> <a class="sphx-glr-backref-module-pulserver-ir sphx-glr-backref-type-py-function reference internal" href="../../pulserver.ir.play.html#pulserver.ir.play" title="pulserver.ir.play"><span class="n">ir</span><span class="o">.</span><span class="n">play</span></a><span class="p">(</span><a class="sphx-glr-backref-module-pathlib sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.PosixPath" title="pathlib.PosixPath"><span class="n">path</span></a><span class="p">)</span><span class="w">
-</span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#list" title="list"><span class="n">instances</span></a> <span class="o">=</span> <span class="p">[</span><span class="p">]</span><span class="w">
-</span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="int"><span class="n">block</span></a> <span class="o">=</span> <span class="mi">0</span><span class="w">
-</span><span class="k">while</span> <a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="int"><span class="n">block</span></a> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="dict"><span class="n">played</span></a><span class="p">[</span><span class="s2">&quot;</span><span class="s2">segment</span><span class="s2">&quot;</span><span class="p">]</span><span class="p">)</span><span class="p">:</span><span class="w">
-</span>    <a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#list" title="list"><span class="n">instances</span></a><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="dict"><span class="n">played</span></a><span class="p">[</span><span class="s2">&quot;</span><span class="s2">segment</span><span class="s2">&quot;</span><span class="p">]</span><span class="p">[</span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="int"><span class="n">block</span></a><span class="p">]</span><span class="p">)</span><span class="p">)</span><span class="w">
-</span>    <a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="int"><span class="n">block</span></a> <span class="o">+</span><span class="o">=</span> <a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="dict"><span class="n">report</span></a><span class="p">[</span><span class="s2">&quot;</span><span class="s2">segments</span><span class="s2">&quot;</span><span class="p">]</span><span class="p">[</span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#list" title="list"><span class="n">instances</span></a><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="p">]</span><span class="p">[</span><span class="s2">&quot;</span><span class="s2">num_blocks</span><span class="s2">&quot;</span><span class="p">]</span><span class="w">
-</span><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="int"><span class="n">block</span></a><span class="si">}</span><span class="s2"> blocks played as </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#list" title="list"><span class="n">instances</span></a><span class="p">)</span><span class="si">}</span><span class="s2"> segment instances</span><span class="s2">&quot;</span><span class="p">)</span><span class="w">
-</span><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;</span><span class="s2">virtual segments of the first instances:</span><span class="s2">&quot;</span><span class="p">,</span> <a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#list" title="list"><span class="n">instances</span></a><span class="p">[</span><span class="p">:</span><span class="mi">6</span><span class="p">]</span><span class="p">)</span><span class="w">
-</span></pre></div></div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>480 blocks played as 160 segment instances
-virtual segments of the first instances: [0, 1, 0, 1, 0, 1]
-</pre></div>
-</div>
-<p>Every instance of the first virtual segment plays the same base blocks. What
-changes from one to the next is held by the instance: here the amplitude of
-the phase-encoding gradient and the RF phase offset that spoiling steps.</p>
-<div class="highlight-Python notranslate"><div class="highlight"><pre><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="int"><span class="n">blocks</span></a> <span class="o">=</span> <a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="dict"><span class="n">repetition</span></a><span class="p">[</span><span class="s2">&quot;</span><span class="s2">tr_size</span><span class="s2">&quot;</span><span class="p">]</span><span class="w">
-</span><a class="sphx-glr-backref-module-numpy sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="numpy.ndarray"><span class="n">gy</span></a> <span class="o">=</span> <a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="dict"><span class="n">played</span></a><span class="p">[</span><span class="s2">&quot;</span><span class="s2">gradient_hz_per_m</span><span class="s2">&quot;</span><span class="p">]</span><span class="p">[</span><span class="p">:</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="int"><span class="n">blocks</span></a><span class="p">)</span><span class="w">
-</span><a class="sphx-glr-backref-module-numpy sphx-glr-backref-type-py-attribute reference external" href="https://numpy.org/doc/stable/reference/arrays.scalars.html#numpy.int64" title="numpy.int64"><span class="n">phase_encoding</span></a> <span class="o">=</span> <a class="sphx-glr-backref-module-numpy sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ufunc.html#numpy.ufunc" title="numpy.ufunc"><span class="n">np</span><span class="o">.</span><span class="n">abs</span></a><span class="p">(</span><a class="sphx-glr-backref-module-numpy sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="numpy.ndarray"><span class="n">gy</span></a><span class="p">)</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="p">)</span><span class="w">
+<p>Segment 0 excites, encodes and reads out; segment 1 is the wait until the
+next TR. Every TR plays the two of them in turn, as the scanner will:</p>
+<img src="../../../_images/sphx_glr_03_scanner_representation_003.png" srcset="../../../_images/sphx_glr_03_scanner_representation_003.png" alt="03 scanner representation" class = "sphx-glr-single-img"/></section>
+<section id="what-changes-from-one-tr-to-the-next">
+<h2>What changes from one TR to the next<a class="headerlink" href="#what-changes-from-one-tr-to-the-next" title="Link to this heading">#</a></h2>
+<p>Every TR plays the same segments, and what differs between TRs, such as the
+phase encoding, is carried by the segment instances. The scanner prepares a segment’s timing and waveform shapes once. Each time it
+plays the segment, the <em>instance</em> sets everything else:</p>
+<ul class="simple">
+<li><p>the amplitude of each gradient, and its rotation;</p></li>
+<li><p>another gradient waveform in place of the prepared one, provided its
+timing is the same;</p></li>
+<li><p>the RF amplitude, its phase and frequency offsets, and the shim of each
+transmit channel;</p></li>
+<li><p>the ADC phase and frequency offsets, or no acquisition at all;</p></li>
+<li><p>whether it waits for a trigger, and the digital outputs.</p></li>
+</ul>
+<p><a class="reference internal" href="../../pulserver.ir.play.html#pulserver.ir.play" title="pulserver.ir.play"><code class="xref py py-func docutils literal notranslate"><span class="pre">play()</span></code></a> walks the cache with the same C library the
+scanner links, one entry per block played, so you can read these values:</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><a class="sphx-glr-backref-module-numpy sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="numpy.ndarray"><span class="n">gy</span></a> <span class="o">=</span> <a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="dict"><span class="n">played</span></a><span class="p">[</span><span class="s2">&quot;</span><span class="s2">gradient_hz_per_m</span><span class="s2">&quot;</span><span class="p">]</span><span class="p">[</span><span class="p">:</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="int"><span class="n">blocks</span></a><span class="p">)</span><span class="w">
+</span><a class="sphx-glr-backref-module-numpy sphx-glr-backref-type-py-attribute reference external" href="https://numpy.org/doc/stable/reference/arrays.scalars.html#numpy.int64" title="numpy.int64"><span class="n">phase_encoding</span></a> <span class="o">=</span> <a class="sphx-glr-backref-module-numpy sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ufunc.html#numpy.ufunc" title="numpy.ufunc"><span class="n">np</span><span class="o">.</span><span class="n">abs</span></a><span class="p">(</span><a class="sphx-glr-backref-module-numpy sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="numpy.ndarray"><span class="n">gy</span></a><span class="p">)</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="str"><span class="n">axis</span></a><span class="o">=</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="p">)</span><span class="w">
 </span><a class="sphx-glr-backref-module-numpy sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="numpy.ndarray"><span class="n">rf_phase</span></a> <span class="o">=</span> <a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="dict"><span class="n">played</span></a><span class="p">[</span><span class="s2">&quot;</span><span class="s2">rf_phase_rad</span><span class="s2">&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="int"><span class="n">blocks</span></a><span class="p">)</span><span class="p">[</span><span class="p">:</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span><span class="w">
+</span><a class="sphx-glr-backref-module-numpy sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="numpy.ndarray"><span class="n">acquires</span></a> <span class="o">=</span> <a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="dict"><span class="n">played</span></a><span class="p">[</span><span class="s2">&quot;</span><span class="s2">adc</span><span class="s2">&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="int"><span class="n">blocks</span></a><span class="p">)</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="str"><span class="n">axis</span></a><span class="o">=</span><span class="mi">1</span><span class="p">)</span><span class="w">
 </span></pre></div></div>
-<img src="../../../_images/sphx_glr_03_scanner_representation_001.png" srcset="../../../_images/sphx_glr_03_scanner_representation_001.png" alt="03 scanner representation" class = "sphx-glr-single-img"/><p>The first repetitions are the dummy scans, played without phase encoding; the
-lines follow. The RF phase offset steps by an increment that grows by
-117° from one repetition to the next, the schedule of RF spoiling.
-Both are parameters of segment instances: the virtual segment, and the
-waveforms the scanner prepares for it, are the same in every repetition.</p>
+<img src="../../../_images/sphx_glr_03_scanner_representation_004.png" srcset="../../../_images/sphx_glr_03_scanner_representation_004.png" alt="03 scanner representation" class = "sphx-glr-single-img"/><p>The first TRs are the dummy TRs: the same segment, with no phase encoding
+and the ADC off. Then the phase-encoding amplitude steps through the 64
+lines. The RF phase follows the quadratic schedule of RF spoiling, its
+increment growing by 117° per TR. The scanner prepares segment 0 once and
+only changes these numbers, so its preparation does not grow with the
+length of the scan.</p>
+<p>Where the segment boundaries fall can be tuned to the scanner’s interpreter;
+<a class="reference internal" href="../../../explanations/scanner-representation.html"><span class="doc">PulSeg representation</span></a> explains the model.</p>
 </section>
-<section id="grouping">
-<h2>Grouping<a class="headerlink" href="#grouping" title="Link to this heading">#</a></h2>
-<p>Where boundaries may fall depends on the interpreter: one that inserts
-switching time at every segment boundary needs as few segments as possible.
-<a class="reference internal" href="../../pulserver.ir.Grouping.html#pulserver.ir.Grouping" title="pulserver.ir.Grouping"><code class="xref py py-class docutils literal notranslate"><span class="pre">Grouping</span></code></a> states the rule. Without splitting off the
-delay at the edge of a segment, the repetition is one virtual segment.</p>
-<div class="highlight-Python notranslate"><div class="highlight"><pre><a class="sphx-glr-backref-module-pulserver-ir sphx-glr-backref-type-py-function reference internal" href="../../pulserver.ir.convert.html#pulserver.ir.convert" title="pulserver.ir.convert"><span class="n">ir</span><span class="o">.</span><span class="n">convert</span></a><span class="p">(</span><a class="sphx-glr-backref-module-pathlib sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.PosixPath" title="pathlib.PosixPath"><span class="n">path</span></a><span class="p">,</span> <a class="sphx-glr-backref-module-pypulseqpp sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.Opts.html#pypulseqpp.Opts" title="pypulseqpp.Opts"><span class="n">system</span></a><span class="p">,</span> <span class="n">grouping</span><span class="o">=</span><a class="sphx-glr-backref-module-pulserver-ir sphx-glr-backref-type-py-class reference internal" href="../../pulserver.ir.Grouping.html#pulserver.ir.Grouping" title="pulserver.ir.Grouping"><span class="n">ir</span><span class="o">.</span><span class="n">Grouping</span></a><span class="p">(</span><span class="n">split_edge_delays</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span><span class="p">)</span><span class="w">
-</span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="dict"><span class="n">merged</span></a> <span class="o">=</span> <a class="sphx-glr-backref-module-pulserver-ir sphx-glr-backref-type-py-function reference internal" href="../../pulserver.ir.summary.html#pulserver.ir.summary" title="pulserver.ir.summary"><span class="n">ir</span><span class="o">.</span><span class="n">summary</span></a><span class="p">(</span><a class="sphx-glr-backref-module-pathlib sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.PosixPath" title="pathlib.PosixPath"><span class="n">path</span></a><span class="p">,</span> <a class="sphx-glr-backref-module-pypulseqpp sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.Opts.html#pypulseqpp.Opts" title="pypulseqpp.Opts"><span class="n">system</span></a><span class="p">,</span> <span class="n">cache_ext</span><span class="o">=</span><span class="s2">&quot;</span><span class="s2">.pseg</span><span class="s2">&quot;</span><span class="p">)</span><span class="w">
-</span><span class="nb">print</span><span class="p">(</span><span class="w">
-</span>    <span class="sa">f</span><span class="s2">&quot;</span><span class="s2">virtual segments: </span><span class="si">{</span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="dict"><span class="n">report</span></a><span class="p">[</span><span class="s1">'</span><span class="s1">num_segments</span><span class="s1">'</span><span class="p">]</span><span class="si">}</span><span class="s2"> by default, </span><span class="si">{</span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="dict"><span class="n">merged</span></a><span class="p">[</span><span class="s1">'</span><span class="s1">num_segments</span><span class="s1">'</span><span class="p">]</span><span class="si">}</span><span class="s2"> merged</span><span class="s2">&quot;</span><span class="w">
-</span><span class="p">)</span><span class="w">
-</span></pre></div></div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>virtual segments: 2 by default, 1 merged
+<section id="as-a-spec">
+<h2>As a spec<a class="headerlink" href="#as-a-spec" title="Link to this heading">#</a></h2>
+<p>What this lesson did, stated the way you would ask an agent for it:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Design pypulseqpp's gre2d at 64 x 64 for a 40 mT/m, 150 T/m/s scanner and
+check it with pulserver.ir.check against a chronaxie PNS model
+(chronaxie 360 us, rheobase 20 T/m/s, alpha 0.333). If it is refused,
+redesign it at 100 T/m/s and check again. Convert the accepted design
+with pulserver.ir.convert, report its segments, and plot the
+phase-encoding amplitude and RF phase of every TR from pulserver.ir.play.
 </pre></div>
 </div>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.167 seconds)</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.700 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-generated-gallery-01-course-03-scanner-representation-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../../../_downloads/fa654f562122bb648cecb3c26391d482/03_scanner_representation.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">03_scanner_representation.ipynb</span></code></a></p>
@@ -701,7 +709,7 @@ delay at the edge of a segment, the repetition is one virtual segment.</p>
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">2. A scanner sequence and its protocol</p>
+        <p class="prev-next-title">2. Your sequence in the scanner UI</p>
       </div>
     </a>
     <a class="right-next"
@@ -709,7 +717,7 @@ delay at the edge of a segment, the repetition is one virtual segment.</p>
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">4. A reconstruction plugin</p>
+        <p class="prev-next-title">4. What your recon receives</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>
@@ -731,9 +739,12 @@ delay at the edge of a segment, the repetition is one virtual segment.</p>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#conversion">Conversion</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#the-execution-stream">The execution stream</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#grouping">Grouping</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#the-whole-scan">The whole scan</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#the-checks">The checks</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#designing-under-gentler-limits">Designing under gentler limits</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#what-the-scanner-prepares">What the scanner prepares</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#what-changes-from-one-tr-to-the-next">What changes from one TR to the next</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#as-a-spec">As a spec</a></li>
 </ul>
   </nav></div>
 

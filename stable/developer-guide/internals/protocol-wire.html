@@ -37,7 +37,7 @@
     <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-binder.css?v=f4aeca0c" />
     <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
     <link rel="stylesheet" type="text/css" href="../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
-    <link rel="stylesheet" type="text/css" href="../../_static/pulserver.css?v=e08ae8f3" />
+    <link rel="stylesheet" type="text/css" href="../../_static/pulserver.css?v=6854ff42" />
   
   <!-- So that users can add custom icons -->
   <script defer src="../../_static/scripts/fontawesome.js?digest=90905a2f556bf617f1a9"></script>
@@ -45,7 +45,7 @@
   <link rel="preload" as="script" href="../../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../../_static/documentation_options.js?v=b196e8ce"></script>
+    <script src="../../_static/documentation_options.js?v=a6e268a8"></script>
     <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -56,11 +56,12 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.2.1';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.2.2';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+    <script src="../../_static/capabilities.js?v=421ebb92"></script>
     <link rel="canonical" href="https://pulserver.github.io/pulserver/stable/developer-guide/internals/protocol-wire.html" />
     <link rel="icon" href="../../_static/pulserver-mark.svg"/>
     <link rel="index" title="Index" href="../../genindex.html" />
@@ -69,7 +70,7 @@
     <link rel="prev" title="IR cache" href="ir-cache.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.2.1" />
+  <meta name="docsearch:version" content="v0.2.2" />
   
     
     <script src="../../_static/searchtools.js"></script>
@@ -116,50 +117,6 @@
 
   
     <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
-<div class="bd-header__inner bd-page-width">
-  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
-    <span class="fa-solid fa-bars"></span>
-  </button>
-  
-  
-  <div class="col-lg-9 navbar-header-items">
-    
-    
-    <div class="navbar-header-items__end">
-      
-        <div class="navbar-item navbar-persistent--container">
-          
-
-<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
- <i class="fa-solid fa-magnifying-glass"></i>
- <span class="search-button__default-text">Search</span>
- <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
-</button>
-        </div>
-      
-      
-    </div>
-    
-  </div>
-  
-  
-    <div class="navbar-persistent--mobile">
-
-<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
- <i class="fa-solid fa-magnifying-glass"></i>
- <span class="search-button__default-text">Search</span>
- <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
-</button>
-    </div>
-  
-
-  
-    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
-      <span class="fa-solid fa-outdent"></span>
-    </button>
-  
-</div>
-
     </header>
   
 
@@ -241,50 +198,50 @@
         </ul>
         <ul class="current nav bd-sidenav">
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../user-guide/index.html">User guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../../user-guide/running.html">Running the services</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../user-guide/running.html">Services</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../user-guide/scanner-sequences.html">Scanner sequences</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../user-guide/reconstruction-plugins.html">Reconstruction plugins</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../user-guide/reconstruction-client.html">Reconstruction clients</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../user-guide/virtual-scanner.html">Scanning a phantom without a scanner</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../user-guide/reconstruction-client.html">Reconstruction client</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../user-guide/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 current active has-children"><a class="reference internal" href="../index.html">Developer guide</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
-<li class="toctree-l2"><a class="reference internal" href="../prerequisites.html">Development prerequisites</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../installation.html">Editable installation</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../workflow.html">Development workflow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../installation.html">Development setup</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../workflow.html">Contribution workflow</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../style.html">Coding style</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../documentation.html">Documentation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../terminology.html">Terminology and conventions</a></li>
 <li class="toctree-l2 current active has-children"><a class="reference internal" href="index.html">Internals</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="calibration.html">Calibration, noise and coil compression</a></li>
 <li class="toctree-l3"><a class="reference internal" href="ir-cache.html">IR cache</a></li>
 <li class="toctree-l3 current active"><a class="current reference internal" href="#">Protocol text blocks</a></li>
 <li class="toctree-l3"><a class="reference internal" href="reconstruction-proxy.html">Reconstruction proxy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="sar-ratios.html">SAR ratios against a reference pulse</a></li>
 <li class="toctree-l3"><a class="reference internal" href="virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
-<li class="toctree-l2"><a class="reference internal" href="../pre-commit.html">Pre-commit</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../pull-requests.html">Pull requests</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../releases.html">Releases</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../code-of-conduct.html">Code of conduct</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2"><a class="reference internal" href="../../explanations/architecture.html">Architecture</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../explanations/protocol.html">Protocol resolution</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../explanations/designs.html">Designs and the design store</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../explanations/scanner-representation.html">Scanner representation (PulSeg)</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../explanations/virtual-scanner.html">The virtual scanner</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../explanations/reconstruction.html">Raw-data enrichment and routing</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../explanations/calibration.html">Calibration, noise and coil compression</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../explanations/safety-checks.html">Safety checks</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../explanations/scanner-representation.html">PulSeg representation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../explanations/raw-data.html">MRD enrichment</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../explanations/reconstruction-session.html">Reconstruction session</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../explanations/reconstruction.html">Reconstruction plugins and calibration context</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../explanations/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../examples/index.html">Examples</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../../examples/course.html">Course</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l3"><a class="reference internal" href="../../generated/gallery/01-course/01_protocol_to_image.html">1. From protocol to image</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../../generated/gallery/01-course/02_sequence_plugin.html">2. A scanner sequence and its protocol</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../../generated/gallery/01-course/03_scanner_representation.html">3. Scanner representation</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../../generated/gallery/01-course/04_reconstruction_plugin.html">4. A reconstruction plugin</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../../generated/gallery/01-course/05_testing_on_the_virtual_scanner.html">5. Testing on the virtual scanner</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../generated/gallery/01-course/01_protocol_to_image.html">1. Your first scan</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../generated/gallery/01-course/02_sequence_plugin.html">2. Your sequence in the scanner UI</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../generated/gallery/01-course/03_scanner_representation.html">3. What the scanner plays</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../generated/gallery/01-course/04_reconstruction_plugin.html">4. What your recon receives</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../generated/gallery/01-course/05_recon_plugin.html">5. Your recon plugin</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../generated/gallery/01-course/06_testing_on_the_virtual_scanner.html">6. Test your pair on the virtual scanner</a></li>
 </ul>
 </details></li>
 <li class="toctree-l2 has-children"><a class="reference internal" href="../../examples/tours.html">Tours</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
@@ -529,6 +486,8 @@
             </div>
             <nav aria-label="Page">
                 <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#rf-layout">RF layout</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#keys-and-values">Keys and values</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#listing-and-value-blocks">Listing and value blocks</a></li>
 </ul>
             </nav>
@@ -547,6 +506,69 @@
 protocols and RF descriptions (<a class="reference internal" href="../../explanations/protocol.html"><span class="doc">Protocol resolution</span></a>). The
 grammar is implemented in <code class="xref py py-mod docutils literal notranslate"><span class="pre">pulserver.protocol</span></code> for the host and in
 <code class="docutils literal notranslate"><span class="pre">pulseg_protocol.h</span></code> for the interpreter.</p>
+<section id="rf-layout">
+<span id="id1"></span><h2>RF layout<a class="headerlink" href="#rf-layout" title="Link to this heading">#</a></h2>
+<p>The RF a protocol plays depends on the protocol. An evaluation may state it as
+an <a class="reference internal" href="../../generated/pulserver.design.RfLayout.html#pulserver.design.RfLayout" title="pulserver.design.RfLayout"><code class="xref py py-class docutils literal notranslate"><span class="pre">RfLayout</span></code></a>, from which a scanner estimates the RF of
+a prescription without designing it: the RF definitions of a sequence, the RF
+instances of one TR in play order, and for each instance the protocol entry its
+amplitude follows.</p>
+<p>A definition is one RF pulse: a complex waveform at unit peak magnitude, its
+timing and its use. Instances of a definition differ in amplitude and in
+frequency and phase offset. In the sequence an evaluation builds, the amplitude
+of an instance is relative to the first instance of its definition with a
+nonzero amplitude, so a refocusing train with a flip angle schedule is one
+definition with one instance per pulse, and RF spoiling, which steps the phase
+offset, adds no definition (<a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.Sequence.rf_instances.html#pypulseqpp.Sequence.rf_instances" title="(in pypulseqpp latest)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">pypulseqpp.Sequence.rf_instances()</span></code></a>).</p>
+<p>A control of an instance is the flip angle, or a float user entry, of the
+plugin’s protocol. It states that the amplitude of the instance is proportional
+to the entry: a scanner that plays a protocol with another value of the entry
+multiplies the amplitude by the ratio of that value to the value in the
+evaluated protocol, which is positive. An instance without a control is played
+at the amplitude it was evaluated at.</p>
+<p>A validation states the amplitude of an instance over the <code class="docutils literal notranslate"><span class="pre">peak_hz</span></code> the listing
+states for its definition, not over the first instance of the definition in the
+evaluation of the validation. A protocol that changes a flip angle changes the
+peak of the definition in its own evaluation, and the amplitude stated includes
+that change, so that the product of the amplitude and the listed <code class="docutils literal notranslate"><span class="pre">peak_hz</span></code> is the
+peak RF amplitude the instance plays.</p>
+<p>A layout is one TR: the instances one TR plays, and the TR as its <code class="docutils literal notranslate"><span class="pre">period</span></code>,
+over which a scanner averages their RF. Its size does not depend on the matrix.
+The shipped plugins state the first TR of the repetition they design, its shot
+repeated once per slice of the largest packet, and a balanced steady state the
+TR after its half-angle pulse. A definition is named by its number in the
+sequence the evaluation builds, in the order of first play. The listing carries
+the definitions of the evaluation at the default protocol, and a layout names
+the pulses of the listing only where the protocol does not change which pulses
+are played first: the length of a train, a flip angle schedule and the matrix do
+not, and a protocol that adds a preparation pulse does.</p>
+<p>The layout is an estimate for the prescription. An evaluation that states none
+states no estimate and is valid, and what the scanner checks before the scan is
+the stored design (<a class="reference internal" href="../../explanations/architecture.html"><span class="doc">Architecture</span></a>).</p>
+</section>
+<section id="keys-and-values">
+<h2>Keys and values<a class="headerlink" href="#keys-and-values" title="Link to this heading">#</a></h2>
+<p>The keys of a protocol are members of the key enums of
+<code class="xref py py-mod docutils literal notranslate"><span class="pre">pulserver.protocol</span></code>, of which <a class="reference internal" href="../../generated/pulserver.protocol.ProtocolKey.html#pulserver.protocol.ProtocolKey" title="pulserver.protocol.ProtocolKey"><code class="xref py py-data docutils literal notranslate"><span class="pre">ProtocolKey</span></code></a> is
+the union. A key is a <code class="docutils literal notranslate"><span class="pre">str</span></code> that equals and hashes as its wire name, so a plain
+string indexes a mapping of keys, and a scanner sequence stores a plain string
+in <code class="docutils literal notranslate"><span class="pre">protocol</span></code> as the member it names. A <a class="reference internal" href="../../generated/pulserver.design.Protocol.html#pulserver.design.Protocol" title="pulserver.design.Protocol"><code class="xref py py-class docutils literal notranslate"><span class="pre">Protocol</span></code></a>
+maps each key to its value in the units of the sequence function’s argument: seconds for a
+time, the argument’s unit for a float, a member of the enum for a
+<a class="reference internal" href="../../generated/pulserver.design.ChoiceParam.html#pulserver.design.ChoiceParam" title="pulserver.design.ChoiceParam"><code class="xref py py-class docutils literal notranslate"><span class="pre">ChoiceParam</span></code></a>. The prescription entries bind no
+argument and keep the units of the wire.</p>
+<p>The wire carries the same protocol as integer microseconds, values in the
+entry’s UI unit and, for a choice, the index of the chosen option.
+<a class="reference internal" href="../../generated/pulserver.design.Protocol.from_wire.html#pulserver.design.Protocol.from_wire" title="pulserver.design.Protocol.from_wire"><code class="xref py py-meth docutils literal notranslate"><span class="pre">from_wire()</span></code></a> and
+<a class="reference internal" href="../../generated/pulserver.design.Protocol.to_wire.html#pulserver.design.Protocol.to_wire" title="pulserver.design.Protocol.to_wire"><code class="xref py py-meth docutils literal notranslate"><span class="pre">to_wire()</span></code></a> are the only conversions between
+the two, and the formatting and parsing functions of
+<code class="xref py py-mod docutils literal notranslate"><span class="pre">pulserver.protocol</span></code> are the only conversions between keys and values and
+the text of a block. A value block that names no option of a choice is refused
+when it is parsed, and a request that names none is invalid when it is given
+to <a class="reference internal" href="../../generated/pulserver.design.SequencePlugin.validate.html#pulserver.design.SequencePlugin.validate" title="pulserver.design.SequencePlugin.validate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">validate()</span></code></a> as a mapping.
+<a class="reference internal" href="../../generated/pulserver.design.StringListParam.html#pulserver.design.StringListParam" title="pulserver.design.StringListParam"><code class="xref py py-func docutils literal notranslate"><span class="pre">StringListParam()</span></code></a>, which builds the enum from option
+strings, is deprecated: declare the enum and use <code class="docutils literal notranslate"><span class="pre">ChoiceParam</span></code>.</p>
+</section>
 <section id="listing-and-value-blocks">
 <h2>Listing and value blocks<a class="headerlink" href="#listing-and-value-blocks" title="Link to this heading">#</a></h2>
 <p>Protocols are exchanged as text blocks delimited by <code class="docutils literal notranslate"><span class="pre">[Protocol]</span></code> and
@@ -562,8 +584,7 @@ chosen option and the options:</p>
 </pre></div>
 </div>
 <p>A value block carries <code class="docutils literal notranslate"><span class="pre">name:</span> <span class="pre">value</span></code> lines only, a string list as the index of
-its chosen option. The grammar is implemented in <code class="xref py py-mod docutils literal notranslate"><span class="pre">pulserver.protocol</span></code> for
-the host and in <code class="docutils literal notranslate"><span class="pre">pulseg_protocol.h</span></code> for the interpreter.</p>
+its chosen option.</p>
 <p>The RF blocks follow a reply when the call asks for them, and no block follows
 where the evaluation is invalid or states no layout. They are lists of numbers:
 each number is ASCII decimal with nine significant digits, the numbers of a list
@@ -660,6 +681,8 @@ to, or <code class="docutils literal notranslate"><span class="pre">-</span></co
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#rf-layout">RF layout</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#keys-and-values">Keys and values</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#listing-and-value-blocks">Listing and value blocks</a></li>
 </ul>
   </nav></div>

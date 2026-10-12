@@ -36,18 +36,19 @@ protocol stay members until a wire block formats them.
 | Object | Description |
 | --- | --- |
 | {obj}`~pulserver.protocol.ProtocolKey` | A key of the protocol: a member of any of the key enums below. |
-| {obj}`~pulserver.protocol.UIParam` | Collects the keys of every UI control, and returns the user-entry keys. |
+| {obj}`~pulserver.protocol.UIParam` | Collects the keys of every UI control, and returns the keys of the user entries and of the six explicit saturation bands, `exsat1` to `exsat6`. |
 | {obj}`~pulserver.protocol.FloatKey` | Keys declared as float. |
 | {obj}`~pulserver.protocol.IntKey` | Keys declared as integer. |
 | {obj}`~pulserver.protocol.BoolKey` | Keys declared as boolean. |
 | {obj}`~pulserver.protocol.EnumKey` | Keys declared as string lists. |
 | {obj}`~pulserver.protocol.ConfigKey` | Keys the sequence declares to the interpreter rather than shows. |
-| {obj}`~pulserver.protocol.UserKey` | Keys of the float user entries, `user0_value` to `user18_value`. |
-| {obj}`~pulserver.protocol.UserNameKey` | Keys of the descriptions naming the user entries, `user0_name` to `user18_name`. |
+| {obj}`~pulserver.protocol.UserKey` | Keys of the float user entries, `user0_value` to `user45_value`. |
+| {obj}`~pulserver.protocol.UserNameKey` | Keys of the descriptions naming the user entries, `user0_name` to `user45_name`. |
 | {obj}`~pulserver.protocol.SequenceType` | Options of `sequence_type`. |
 | {obj}`~pulserver.protocol.ImagingMode` | Options of `imaging_mode`. |
 | {obj}`~pulserver.protocol.PreparationType` | Options of `preparation_type`. |
 | {obj}`~pulserver.protocol.TriggerType` | Options of `trigger_type`: Pulseq trigger channel names. |
+| {obj}`~pulserver.protocol.Excitation` | Options of `excitation`: the excitations pypulseqpp's sequences take. |
 
 ## Prescription
 

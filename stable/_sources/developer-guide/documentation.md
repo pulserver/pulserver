@@ -333,6 +333,8 @@ A separate example is justified when it studies something across objects, or goe
 
 The examples landing page carries a **Course** table and a **Tours** table. When examples fall into categories, each category gets a landing page the documentation owns, carrying one or two factual sentences and a table of what is below it. A table is preferred to a wall of thumbnails once a category holds more than a handful of examples, because a reader looking for one sequence or one module reads names rather than pictures.
 
+Every landing table, in every section, has two columns or, on the API landing page, three: the linked page (and its module), then **Contents**. A Contents cell is a short technical noun phrase naming what the page holds (*Single-shot EPI: blurring along the echo train and Nyquist ghosting from gradient delays.*), never a question, an instruction or a narrative sentence.
+
 Global navigation carries the gallery and its categories, to the depth at which a category is still something a reader would look for on its own. Below that depth, an example is reached from the table on its category's page and from cross-references, not from the navigation tree.
 
 Give each category a name that states what its examples have in common. Do not add prose to fill the page.
@@ -349,18 +351,22 @@ This is the appropriate place for material that would be too pedagogical for API
 
 An explanation page has one obvious purpose and, where appropriate, a strong conceptual anchor: a figure, a table, an equation, or a similarly compact device that carries the concept. A figure is never required for its own sake.
 
-An explanation page with more than one `##` section opens with a **TL;DR** block directly under its title: a short list of the page's conclusions, each stated as the page states it, with no claim the page does not support. It lets a reader decide whether the page answers their question. A page of a single section may omit it. Landing pages, API reference pages and gallery examples have none.
+An explanation page with more than one `##` section opens with a **TL;DR** block directly under its title: at most three one-line bullets, each a conclusion the page supports. Landing pages, API reference pages and gallery examples have none.
 
 #### Organization of an explanatory page
 
-An explanatory page is usually clearest in this order:
+An explanation page has these sections, in this order. Every heading, the page title included, names a concept as a textbook would (*Segmentation rules*, not *How we cut segments*):
 
-1. **The concept or problem.** What physical, mathematical, or computational situation is being described, in standard terminology.
-2. **The formal model or criterion.** The equation, definition, or decision rule that makes the concept precise, with its symbols, units, and assumptions stated.
-3. **Consequences and trade-offs.** What the model implies for the quantities a user controls, including limiting cases and what is given up to gain something else.
-4. **The software abstraction.** How the library represents the concept, and which interface corresponds to which part of the model.
+1. **TL;DR.**
+2. **Introduction.** Three to five lines in the second person: the problem, and the Course lesson that shows it.
+3. **Capabilities.** A `:::{container} capabilities` list, one bold line per capability. Under each, a muted line names the code and the tests that hold it (`Code: … Tests: *sentence of the test name* (file)`); the page hides these lines behind one toggle, so the list reads as claims and the evidence stays one click away.
+4. **Division of responsibility.** Two or three one-line bullets for what the scanner, the engines or the reader's plugin do instead.
+5. **Method.** A figure, drawn by `scripts/make_artwork.py` in a light and a dark variant, and at most a few short subsections giving the model or rule. Derivations, rule tables and implementation design go to the developer guide's internals pages and are linked, not repeated.
+6. **Examples.** Links to the gallery, the user guide and the API.
 
-The order matters: a page that opens with the class name and works outward teaches the interface rather than the subject. Sections need not carry these four labels, and a short page may cover several in one section, but a page that never reaches the formal model is under-specified, and one that never reaches the software abstraction belongs somewhere other than this project's documentation.
+A capability is stated as the reader observes it, and every capability names a test; a claim no test holds is not listed.
+
+The concept-named heading rule covers explanation, reference and Tour headings. Two kinds of heading keep the reader's voice: Course lesson titles, and the README's *How it works*, *Learn more* and *How to cite*.
 
 Explanatory documentation may:
 
@@ -541,7 +547,7 @@ Project-specific terminology and conventions should be documented explicitly and
 
 ### Prose
 
-Prefer precise, declarative scientific prose.
+Prefer precise, direct technical prose, addressing the reader as "you" where they act.
 
 Complete sentences are generally preferable to rhetorical fragments. Concision is desirable when it does not remove relevant information.
 
@@ -786,7 +792,7 @@ A successful documentation build establishes that the documentation can be rende
 * Can the learning objective be stated in one sentence that is more specific than "how to use X"?
 * Does the title name the concept demonstrated rather than the interface exercised?
 * Are parameters not under study held fixed across a comparison?
-* Do the categories and cards appear on the landing page, and is the gallery a single entry in global navigation?
+* Does each category have a landing page with a table of its examples, and does global navigation stop at the categories?
 
 ### Explanation
 
@@ -797,7 +803,8 @@ A successful documentation build establishes that the documentation can be rende
 * Does the depth remain relevant to the software?
 * Does the page reach a formal model or criterion, and then the software abstraction?
 * Are mechanisms and trade-offs stated explicitly rather than compressed into a rhetorical sentence?
-* Does the page open with a TL;DR that states only what the page establishes?
+* Does the page open with a TL;DR of at most three one-line bullets that the page supports?
+* Does every listed capability name the code and a test that holds it?
 * Has implementation design been left to the internals pages?
 
 ### Tutorials and how-to guides

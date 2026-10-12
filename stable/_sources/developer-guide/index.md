@@ -1,33 +1,26 @@
 # Developer guide
 
-Repository development, contribution and release procedures.
+Development, contribution and release procedures, the documentation
+conventions, and the implementation design behind the explanations.
 
-| Page | Scope |
+| Page | Contents |
 | --- | --- |
-| {doc}`prerequisites` | Git, Python and the C and C++ toolchain. |
-| {doc}`installation` | Editable installation and development dependencies. |
-| {doc}`workflow` | Fork-based development, branches and pull requests. |
-| {doc}`style` | Ruff, formatting, tests, the KomaMRI simulation, C89 and code conventions. |
+| {doc}`installation` | Prerequisites, the editable installation, pre-commit hooks and the documentation build. |
+| {doc}`workflow` | Forks, branches, pull requests, continuous integration and the code of conduct. |
+| {doc}`style` | Ruff, tests, C89 and code conventions, and the KomaMRI simulation. |
 | {doc}`documentation` | Documentation types and scientific writing. |
 | {doc}`terminology` | Scanner, protocol, Pulseq and MRD terminology, units and layers. |
-| {doc}`internals/index` | The implementation behind the explanations: the IR cache, the protocol text blocks, the reconstruction proxy and the virtual scanner. |
-| {doc}`pre-commit` | Local hooks, deliberate bypasses and CI. |
-| {doc}`pull-requests` | Pull-request contents and validation. |
+| {doc}`internals/index` | The IR cache, the protocol text blocks, the reconstruction proxy, calibration, SAR ratios and the virtual scanner. |
 | {doc}`releases` | Versioning, wheels, PyPI and the published documentation. |
-| {doc}`code-of-conduct` | Project participation policy. |
 
 ```{toctree}
 :hidden:
 
-prerequisites
 installation
 workflow
 style
 documentation
 terminology
 internals/index
-pre-commit
-pull-requests
 releases
-code-of-conduct
 ```

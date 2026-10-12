@@ -20,6 +20,9 @@ from.
    ScannerSequence
    load_plugin
    load_exam
+   option
+   read_options
+   OptionError
    RfLayout
    RfControl
    TimeParam
@@ -28,6 +31,8 @@ from.
    BoolParam
    ChoiceParam
    StringListParam
+   AveragesParam
+   StatedParam
    ConfigParam
    Description
 
@@ -95,6 +100,8 @@ from.
    LOOP_COUNTERS
    user_parameter
    max_stored_value
+   diffusion_table
+   DIFFUSION_TABLE
    coil_combine
    center_crop
    as_numpy
@@ -161,6 +168,7 @@ from.
    ImagingMode
    PreparationType
    TriggerType
+   Excitation
 
 .. currentmodule:: pulserver.proxy
 

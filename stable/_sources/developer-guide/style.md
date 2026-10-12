@@ -1,22 +1,26 @@
 # Coding style
 
-Ruff supplies Python formatting and linting; configuration and the pinned
-version are in `pyproject.toml`. Run:
+## Formatting and tests
+
+Ruff formats and lints the Python sources; its configuration and pinned
+version are in `pyproject.toml`. Before you report a change complete, run:
 
 ```bash
 bash scripts/format_and_lint.sh
 pytest -q
 ```
 
-Use pytest functions and fixtures rather than `unittest.TestCase`. Test names
-state the invariant they protect. Numerical code that can run on CPU and CUDA
-is parametrised over both with the `device` fixture, whose CUDA leg skips
+Tests are pytest functions and fixtures, never `unittest.TestCase`, and a test
+name states the invariant it protects. Numerical code that can run on CPU and
+CUDA is parametrised over both with the `device` fixture, whose CUDA leg skips
 without a device.
+
+## Code conventions
 
 `src/c/` is linked into the scanner interpreter and is ANSI C (C89). It calls
 nothing in `src/cpp/`, whose passes run only on the host. Docstrings are NumPy
-style; comments and docstrings describe the code as it is, not its history.
-`AGENTS.md` states these rules in full.
+style, and comments and docstrings describe the code as it is, not its
+history. `AGENTS.md` states these rules in full.
 
 ## Simulation with KomaMRI
 
@@ -24,9 +28,10 @@ style; comments and docstrings describe the code as it is, not its history.
 ships with KomaMRI, as designed and as {func}`~pulserver.virtual.export`
 writes what its cache plays, and compares the two signals. It runs where
 `PULSERVER_KOMA_PROJECT` names a Julia project holding KomaMRI and `julia` is
-on the path, and skips elsewhere. The KomaMRI workflow runs it every night and
-on a pull request that changes the IR, the export or the requirements. To run
-it locally with Julia 1.10 or later:
+on the path, and skips elsewhere; `PULSERVER_KOMA_CASES` restricts it to a
+comma-separated list of cases. The KomaMRI workflow runs it every night
+against pypulseqpp's latest release, and on demand. To run it locally with
+Julia 1.10 or later:
 
 ```bash
 julia --project=tests/koma -e 'using Pkg; Pkg.instantiate()'
