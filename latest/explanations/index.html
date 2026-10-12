@@ -496,34 +496,34 @@ components, the representations exchanged between them and the conventions the
 rest of the documentation assumes.</p>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
-<tr class="row-odd"><th class="head"><p>Explanation</p></th>
-<th class="head"><p>What it covers</p></th>
+<tr class="row-odd"><th class="head"><p>Page</p></th>
+<th class="head"><p>Contents</p></th>
 </tr>
 </thead>
 <tbody>
 <tr class="row-even"><td><p><a class="reference internal" href="architecture.html"><span class="doc">Architecture</span></a></p></td>
-<td><p>The two services beside the scanner, what each one does, and the design store they share: how a design is identified, stored, pushed and found again.</p></td>
+<td><p>Design calls, reconstruction proxy and the design store.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="protocol.html"><span class="doc">Protocol resolution</span></a></p></td>
-<td><p>How a prescription edited in the scanner UI is resolved into the protocol a sequence plays, and the units and precision it is exchanged in.</p></td>
+<td><p>Prescription, resolved protocol, units and wire precision.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="safety-checks.html"><span class="doc">Safety checks</span></a></p></td>
-<td><p>What pulserver checks before a design is stored, and what it leaves to the scanner’s vendor routines.</p></td>
+<td><p>Checks run before a design is stored, and those computed by the vendor’s routines.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="scanner-representation.html"><span class="doc">PulSeg representation</span></a></p></td>
-<td><p>How pulserver converts a Pulseq chain into the base blocks, virtual segments and segment instances the scanner plays, and what the interpreter does with them.</p></td>
+<td><p>Base blocks, virtual segments, segment instances and the execution stream.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="raw-data.html"><span class="doc">MRD enrichment</span></a></p></td>
-<td><p>What the proxy adds to each MRD series from the sequence that played it: counters, flags, encoding spaces, trajectory and field-of-view phase.</p></td>
+<td><p>Counters, flags, encoding spaces, trajectory and field-of-view phase.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="reconstruction-session.html"><span class="doc">Reconstruction session</span></a></p></td>
-<td><p>How a series reaches your recon plugin: messages, design lookup, workers and slots, forwarding, DICOM.</p></td>
+<td><p>MRD streaming, design lookup, workers and slots, forwarding and DICOM.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="reconstruction.html"><span class="doc">Reconstruction plugins and calibration context</span></a></p></td>
-<td><p>What your recon plugin receives and returns, and the calibration context shared across the series of an exam.</p></td>
+<td><p>Reconstruction units, results and the exam’s calibration context.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="virtual-scanner.html"><span class="doc">Virtual scanner</span></a></p></td>
-<td><p>The stand-ins that replace the scanner in tests: the playout, the Fourier engine’s signal model and the reconstruction client.</p></td>
+<td><p>Virtual interpreter, Fourier engine and reconstruction client.</p></td>
 </tr>
 </tbody>
 </table>
