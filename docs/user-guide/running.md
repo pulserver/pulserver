@@ -269,7 +269,7 @@ pulserver proxy --store DIR --port N --forward HOST:PORT [--forward-config NAME]
 | `--intake-port` | TCP port of the design intake, on the `--host` address; no intake when unset |
 | `--plugins` | Directory of reconstruction plugin files, `<plugin>.py`, repeatable, searched in order before the shipped ones; required unless `--forward` is given |
 | `--queue` | Directory the series waiting for a slot are written to; a temporary directory, removed when the proxy stops, when unset |
-| `--exams` | Directory in which the proxies of this host share the caches of an exam, one directory per exam named by its identity: `exam-<ExamID>` for a header carrying `ExamID`. A location under the system temporary directory when unset |
+| `--exams` | Directory in which the proxies of this host share the caches of an exam, one directory per exam named by its identity: `exam-<ExamID>` for a header carrying `ExamID`. Created readable by the proxy's user alone; one that exists is used with the permissions the site gave it, so design calls running as another user can read the exam's maps. A location under the system temporary directory, private to the proxy's user, when unset |
 | `--slots` | Series reconstructed at once; derived from available memory and the GPUs when unset |
 | `--gpu-slots` | Series reconstructed at once on each GPU when `--slots` is unset; 1 by default |
 | `--spares` | Worker processes started ahead of a series; 1 by default |

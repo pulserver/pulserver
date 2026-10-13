@@ -293,8 +293,9 @@ class ReconProxy(_Listener):
         proxy on this host so a map one series measures reaches a series on
         another;
         :data:`~pulserver.recon._runtime.exam.DEFAULT_EXAM_DIRECTORY` when
-        ``None``. An exam's directory is removed when the last proxy on that
-        exam lets go of it.
+        ``None``. A directory the proxy creates is readable by its owner alone;
+        one that exists is used with the permissions it has. An exam's
+        directory is removed when the last proxy on that exam lets go of it.
     forward : tuple[str, int], default=None
         ``(host, port)`` of the MRD server that reconstructs every series;
         local workers when ``None``.
@@ -443,8 +444,9 @@ class ReconServer(_Listener):
         proxy on this host so a map one series measures reaches a series on
         another;
         :data:`~pulserver.recon._runtime.exam.DEFAULT_EXAM_DIRECTORY` when
-        ``None``. An exam's directory is removed when the last proxy on that
-        exam lets go of it.
+        ``None``. A directory the proxy creates is readable by its owner alone;
+        one that exists is used with the permissions it has. An exam's
+        directory is removed when the last proxy on that exam lets go of it.
     save_to : Path | str, default=None
         Directory each series is kept in, as received; not kept when ``None``.
     idle_timeout : float, default=None
@@ -544,13 +546,17 @@ class _Workers:
         self._exam_root = Path(
             DEFAULT_EXAM_DIRECTORY if exam_directory is None else exam_directory
         )
-        # Readable by the owner alone: an exam's files are unpickled, so a
-        # directory another user can write to is code another user can run in
-        # a reconstruction worker. mkdir sets the mode only where it creates,
-        # and a umask may have narrowed it, so it is also set here -- which
-        # fails loudly on a directory this user does not own.
-        self._exam_root.mkdir(parents=True, exist_ok=True, mode=EXAM_DIRECTORY_MODE)
-        self._exam_root.chmod(EXAM_DIRECTORY_MODE)
+        # Readable by the owner alone when the proxy makes it: an exam's files
+        # are unpickled, so a directory another user can write to is code
+        # another user can run in a reconstruction worker. mkdir sets the mode
+        # only where it creates, and a umask may have narrowed it, so it is
+        # also set here -- which fails loudly on a default root this user does
+        # not own. A root the site names and has made already is used as the
+        # site made it: a scanner shares it with the design calls on the host,
+        # which may run as another user.
+        if exam_directory is None or not self._exam_root.exists():
+            self._exam_root.mkdir(parents=True, exist_ok=True, mode=EXAM_DIRECTORY_MODE)
+            self._exam_root.chmod(EXAM_DIRECTORY_MODE)
         self.exams = ExamCacheManager(directory=self._exam_root)
         self._closing = threading.Event()
         threading.Thread(

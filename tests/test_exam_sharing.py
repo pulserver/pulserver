@@ -87,7 +87,7 @@ def test_a_shared_name_survives_the_crossing(tmp_path, name):
     reader.close()
 
 
-def test_the_shared_root_is_readable_by_its_owner_alone(tmp_path):
+def test_a_shared_root_the_proxy_makes_is_readable_by_its_owner_alone(tmp_path):
     """An exam's files are unpickled, so writing one is running code in a worker."""
     import stat
 
@@ -101,6 +101,26 @@ def test_the_shared_root_is_readable_by_its_owner_alone(tmp_path):
     proxy = ReconProxy(store, plugins, exam_directory=root, spares=0)
     try:
         assert stat.S_IMODE(root.stat().st_mode) == 0o700
+    finally:
+        proxy.close()
+
+
+def test_a_shared_root_the_site_made_keeps_its_permissions(tmp_path):
+    """A scanner shares the root with design calls that may run as another user."""
+    import stat
+
+    from pulserver.proxy import ReconProxy
+
+    root = tmp_path / "exams"
+    root.mkdir()
+    root.chmod(0o777)
+    store = tmp_path / "store"
+    store.mkdir()
+    plugins = tmp_path / "plugins"
+    plugins.mkdir()
+    proxy = ReconProxy(store, plugins, exam_directory=root, spares=0)
+    try:
+        assert stat.S_IMODE(root.stat().st_mode) == 0o777
     finally:
         proxy.close()
 
