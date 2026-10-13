@@ -17,6 +17,7 @@ from pathlib import Path
 import ismrmrd
 import ismrmrd.xsd
 import numpy as np
+import pydicom
 import pytest
 from _host import generate
 
@@ -1413,8 +1414,9 @@ def test_pulserver_replay_writes_dicom_files_under_dicom(bucket, tmp_path):
         ]
     )
 
+    (written,) = output.glob("*.dcm")
     assert status == 0
-    assert len(list(output.glob("*.dcm"))) == 1
+    assert pydicom.dcmread(written).Modality == "MR"
 
 
 def test_what_a_proxy_keeps_is_the_header_the_scanner_sent(
