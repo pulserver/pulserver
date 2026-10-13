@@ -365,11 +365,16 @@ process ID, level and logger name.
 {meth}`~pulserver.recon.ReconPlugin.run` reconstructs an ISMRMRD HDF5 file in
 the calling process, through the same hooks. A file recorded as the scanner
 sends it, such as `pulserver scan --mrd raw.h5` or the proxy's `--save-data`
-writes, is enriched from its design store first:
+writes, is enriched first from the design it was played from, found in a design
+store or given as the design's own directory:
 
 ```python
 images = PLUGIN.run("raw.h5", store="designs")
+images = PLUGIN.run("raw.h5", design="designs/scan/9c74a8aa28527cf231")
 ```
+
+`pulserver replay` does the same from the command line
+({ref}`series-replay`).
 
 Calling the plugin on an {class}`~pulserver.mrd.AcquisitionBucket` runs
 `startup`, passes every acquisition to `receive`, reconstructs the units still

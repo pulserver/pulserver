@@ -912,14 +912,15 @@ class ReconPlugin(ABC):
         exam_id: Hashable | None = None,
         config: Any = None,
         store: str | None = None,
+        design: str | None = None,
     ) -> list[Any]:
         """Reconstruct one ISMRMRD HDF5 file in this process, through the same hooks.
 
         The file's waveforms are delivered before its acquisitions. With
-        ``store``, the file is a series as the scanner sends it, such as
-        :func:`pulserver.virtual.record` writes, and is enriched from the design
-        its header names, in the scan's directory of that store, as the proxy
-        enriches it.
+        ``store`` or ``design``, the file is a series as the scanner sends it,
+        such as :func:`pulserver.virtual.record` or the proxy's ``--save-data``
+        writes, and is enriched from the design it was played from, at the
+        field-of-view offset its header states, as the proxy enriches it.
 
         Parameters
         ----------
@@ -932,7 +933,11 @@ class ReconPlugin(ABC):
         config : str, default=None
             Configuration payload, as a stream would carry it.
         store : str, default=None
-            Design store, one directory per scan, as the design calls write it.
+            Design store, one directory per scan, as the design calls write it;
+            the design is the one the header names.
+        design : str, default=None
+            The design's own directory, ``<store>/<scan>/<id>/`` or a copy of
+            it, in place of ``store``.
 
         Returns
         -------
@@ -943,14 +948,22 @@ class ReconPlugin(ABC):
         Raises
         ------
         FileNotFoundError
-            If there is no such file.
+            If there is no such file, or no such design.
         ValueError
-            If the file has no MRD XML header.
+            If the file has no MRD XML header, if both ``store`` and ``design``
+            are given, if the header names a design other than ``design``, or
+            if the series does not match its design's readouts.
         """
         from ._runtime.offline import reconstruct_file
 
         return reconstruct_file(
-            self, path, group=group, exam_id=exam_id, config=config, store=store
+            self,
+            path,
+            group=group,
+            exam_id=exam_id,
+            config=config,
+            store=store,
+            design=design,
         )
 
     def __call__(self, bucket: AcquisitionBucket, context: ReconContext) -> Any:

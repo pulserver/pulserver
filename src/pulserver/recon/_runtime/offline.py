@@ -5,6 +5,7 @@ from __future__ import annotations
 __all__ = ["reconstruct_file"]
 
 import contextlib
+from pathlib import Path
 from typing import Any
 
 import ismrmrd
@@ -17,9 +18,12 @@ from .application import run_application
 class _FileConnection:
     """Connection reading a dataset and keeping what is sent."""
 
-    def __init__(self, dataset: Any, design: Any = None) -> None:
+    def __init__(
+        self, dataset: Any, design: Any = None, fov_offset_m: Any = None
+    ) -> None:
         self._dataset = dataset
         self._design = design
+        self._fov_offset_m = fov_offset_m
         self.sent: list[Any] = []
 
     def __iter__(self) -> Any:
@@ -27,7 +31,7 @@ class _FileConnection:
             return self._items()
         from ...proxy._proxy import _enriched
 
-        return _enriched(self._items(), self._design)
+        return _enriched(self._items(), self._design, self._fov_offset_m)
 
     def _items(self) -> Any:
         # Waveforms first, so the first unit to close carries all of them.
@@ -48,6 +52,7 @@ def reconstruct_file(
     exam_id: Any = None,
     config: Any = None,
     store: Any = None,
+    design: Any = None,
 ) -> list[Any]:
     """Drive ``plugin`` over one ISMRMRD HDF5 file and return what it emitted.
 
@@ -63,24 +68,48 @@ def reconstruct_file(
                 "header the scanner sends ahead of the data"
             )
         header = ismrmrd.xsd.CreateFromDocument(document)
-        design = None
-        if store is not None:
-            from ...proxy._designs import DesignCache
-            from ...proxy._enrich import enrich_header
+        played = _played(header, store, design)
+        fov_offset_m = None
+        if played is not None:
+            from ...proxy._enrich import enrich_header, header_fov_offset_m
 
-            design = DesignCache(store).resolve(header)
-            enrich_header(header, design.table)
+            enrich_header(header, played.table)
+            fov_offset_m = header_fov_offset_m(header)
         context = ReconContext(
             header=header,
             exam=ExamCache(path if exam_id is None else exam_id),
             config=config,
         )
-        connection = _FileConnection(dataset, design)
+        connection = _FileConnection(dataset, played, fov_offset_m)
         run_application(plugin, connection, context)
         return connection.sent
     finally:
         with contextlib.suppress(Exception):
             dataset.close()
+
+
+def _played(header: Any, store: Any, design: Any) -> Any:
+    """Return the design a series was played from, or None when neither source is given."""
+    if store is None and design is None:
+        return None
+    from ...host._store import MANIFEST
+    from ...mrd._metadata import user_parameter
+    from ...proxy._designs import DESIGN_PARAMETER, DesignCache
+
+    if design is None:
+        return DesignCache(store).resolve(header)
+    if store is not None:
+        raise ValueError("give the design store or the design directory, not both")
+    directory = Path(design)
+    named = user_parameter(header, DESIGN_PARAMETER)
+    if named not in (None, "") and str(named).strip().lower() != directory.name:
+        raise ValueError(
+            f"the series was played from design {str(named).strip()}, "
+            f"not from {directory}"
+        )
+    if not (directory / MANIFEST).is_file():
+        raise FileNotFoundError(f"{directory} holds no design")
+    return DesignCache(directory.parent).read(directory)
 
 
 def _count(number_of: Any) -> int:

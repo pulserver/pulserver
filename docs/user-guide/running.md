@@ -305,10 +305,10 @@ place of a new reconstruction.
 
 With `--save-data`, each series is also written to
 `<save-data>/mrd_<timestamp>.h5` as the scanner sends it, header first and each
-acquisition as it arrives, before it is enriched. A plugin run on that file
-against the store reconstructs it offline exactly as the proxy did
-({ref}`offline-reconstruction`). The queue directory holds a series only until
-it is reconstructed.
+acquisition as it arrives, before it is enriched. `pulserver replay` runs a
+plugin on that file and reconstructs it offline as the proxy did
+({ref}`series-replay`). The queue directory holds a series only until it is
+reconstructed.
 
 ### Proxy lifetime
 
@@ -386,6 +386,24 @@ workers, slots, queue and exam directories; `--save-data` keeps each series as
 the proxy forwarded it, enriched. Its stream is neither authenticated nor
 encrypted, and `--host` names the interface the proxy reaches it on. It stops
 on `SIGINT` or `SIGTERM` and waits for the series it is running.
+
+(series-replay)=
+## Series replay
+
+```bash
+pulserver replay SERIES --plugin FILE (--store DIR | --design DIR) [--config TEXT] [--output DIR]
+```
+
+`pulserver replay` reconstructs one series kept by `--save-data` in the calling
+process, with no proxy running. The series is enriched from the design it was
+played from, at the field-of-view offset its header states, as the proxy
+enriches it, and runs through the plugin's hooks
+({ref}`offline-reconstruction`). The design is the one the header names in the
+store `--store`, or the design directory `--design`, which must be the one the
+header names; a series exported beside a copy of its design replays with no
+store. Images go to `images.h5` in `--output`, and DICOM datasets to the files
+they are named by. An exception raised by the plugin is not caught, so its
+traceback names the line that raised it.
 
 ## Playout validation
 
