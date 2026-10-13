@@ -1264,6 +1264,39 @@ def test_a_replay_refuses_a_design_its_header_does_not_name(bucket, tmp_path):
         )
 
 
+def test_an_imported_chain_replays_from_its_entry_with_every_file_beside_it(
+    tmp_path,
+):
+    """An import links sequence.seq to the chain's first file, which keeps its name."""
+    from _host import FIXTURE_LIMITS
+
+    from pulserver.host import _service
+    from pulserver.host._blocks import format_import
+
+    store = DesignStore(tmp_path / "store", "scan")
+    status, reply = _service.call(
+        "import",
+        limits=FIXTURE_LIMITS,
+        block=format_import(str(FIXTURES / "dedup_gre_pair.seq")),
+        store=store,
+    )
+    assert status == 0, reply
+    design = reply.split()[1]
+    exported = tmp_path / "Series1"
+    shutil.copytree(store.directory(design), exported, symlinks=True)
+    table = SequenceTable.read(exported / "sequence.seq")
+    played = Series("scan", design, table)
+    path = _recorded(tmp_path / "scan.h5", played, flat)
+
+    assert {"dedup_gre_pair.seq", "dedup_gre_pair_b.seq"} <= {
+        entry.name for entry in exported.iterdir()
+    }
+    replayed = load_plugin(RECON_PLUGINS / "gre2d.py").run(
+        path, design=str(exported / "sequence.seq")
+    )
+    assert images(replayed)
+
+
 def test_a_replay_refuses_a_sequence_file_its_design_did_not_write(bucket, tmp_path):
     root, series = bucket
     played = series["gre2d"]

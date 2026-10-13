@@ -121,8 +121,14 @@ def _design_of(header: Any, entry: Path) -> Any:
     if not (directory / MANIFEST).is_file():
         raise FileNotFoundError(f"no design manifest beside {entry}")
     manifest = json.loads((directory / MANIFEST).read_text())
-    digest = hashlib.sha256(entry.read_bytes()).hexdigest()
-    if manifest.get("files", {}).get(entry.name) != digest:
+    # An imported chain's entry links to its first file, which the manifest
+    # records under its own name.
+    played = entry.resolve()
+    digest = hashlib.sha256(played.read_bytes()).hexdigest()
+    if (
+        played.parent != directory.resolve()
+        or manifest.get("files", {}).get(played.name) != digest
+    ):
         raise ValueError(f"{entry} is not a file of design {manifest.get('id')}")
     named = user_parameter(header, DESIGN_PARAMETER)
     if named not in (None, "") and str(named).strip().lower() != manifest.get("id"):
