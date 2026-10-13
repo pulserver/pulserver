@@ -224,7 +224,7 @@ def test_the_design_calls_reply_the_wire_text_the_interpreter_parses(typed, tmp_
         + TYPED_INVALID_VALUES,
     )
 
-    store = DesignStore(tmp_path / "designs")
+    store = DesignStore(tmp_path / "designs", "scan")
     status, reply = call(
         "generate", **asked, **limits, block=value_block(WIRE_REQUEST), store=store
     )

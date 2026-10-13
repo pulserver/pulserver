@@ -579,7 +579,7 @@ def proxy(tmp_path):
 
 def _scan(proxy, tmp_path, rotation, readouts=None):
     """Design a 2D gradient echo prescribed at ``OFFSET`` and ``rotation``, and scan the phantom posed there."""
-    store = DesignStore(tmp_path / "designs")
+    store = DesignStore(tmp_path / "designs", "scan")
     values = {"TE": 5000, "nx": MATRIX, "ny": MATRIX}
     values.update(zip(FOV_OFFSET, 1e3 * OFFSET, strict=True))
     values.update(zip(FOV_ROTATION, rotation.ravel(), strict=True))
@@ -588,6 +588,7 @@ def _scan(proxy, tmp_path, rotation, readouts=None):
     acquired = acquire(seq, posed(rotation), rotation=rotation)
     received = virtual.send(
         ("127.0.0.1", proxy.port),
+        store.scan,
         design,
         acquired if readouts is None else acquired[:readouts],
         position_mm=1e3 * rotation @ OFFSET,
@@ -625,7 +626,7 @@ def test_a_virtual_scan_reconstructs_the_phantom_where_it_is_prescribed(
 def test_a_series_streamed_as_it_is_acquired_is_reconstructed_as_one_sent_whole(
     proxy, tmp_path
 ):
-    store = DesignStore(tmp_path / "designs")
+    store = DesignStore(tmp_path / "designs", "scan")
     design = generate(store, "gre2d", {"TE": 5000, "nx": MATRIX, "ny": MATRIX})
     seq = store.directory(design) / "sequence.seq"
     scan = virtual.Scan(seq, phantom().tissue(2e-3))
@@ -635,6 +636,7 @@ def test_a_series_streamed_as_it_is_acquired_is_reconstructed_as_one_sent_whole(
     for readouts in (streamed, whole):
         received = virtual.send(
             ("127.0.0.1", proxy.port),
+            store.scan,
             design,
             readouts,
             config="gre2d",

@@ -168,7 +168,7 @@ def test_a_listing_is_that_of_the_plugin_loaded_with_its_parameter_set(installed
 def test_a_parameter_set_is_a_design_of_its_own_and_its_options_are_recorded(
     installed, tmp_path
 ):
-    store = DesignStore(tmp_path / "designs")
+    store = DesignStore(tmp_path / "designs", "scan")
     plain = _generated(store, installed)
     six = _generated(store, installed, parameter_set=1)
 
@@ -178,7 +178,7 @@ def test_a_parameter_set_is_a_design_of_its_own_and_its_options_are_recorded(
 
 
 def test_an_edited_parameter_file_is_another_design(installed, tmp_path):
-    store = DesignStore(tmp_path / "designs")
+    store = DesignStore(tmp_path / "designs", "scan")
     first = _generated(store, installed, parameter_set=1)
     file = installed.parent / "parameters" / "repeated" / "01.toml"
     file.write_text('repetitions = 6\nspacing = "long"\n')

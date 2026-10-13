@@ -1,6 +1,6 @@
 """Reconstruction-side orchestration: MRD enrichment and routing to reconstruction workers or servers."""
 
-from ._designs import DESIGN_PARAMETER, Design, DesignCache
+from ._designs import DESIGN_PARAMETER, SCAN_PARAMETER, Design, DesignCache
 from ._enrich import (
     SequenceTable,
     TableSpace,
@@ -13,6 +13,7 @@ from ._proxy import ReconProxy, ReconServer
 
 __all__ = [
     "DESIGN_PARAMETER",
+    "SCAN_PARAMETER",
     "Design",
     "DesignCache",
     "DesignIntake",

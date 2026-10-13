@@ -251,8 +251,8 @@ class ReconProxy(_Listener):
 
     A series whose sequence sets ``EnablePmc`` is corrected for motion while it
     plays: the poses its reconstruction states are published into the pose
-    file the scan reads, ``motion.buf`` in the design's directory, rather than
-    sent to the client. A forwarded series publishes the poses the server
+    file the scan reads, ``motion.buf`` in the scan's directory of the store,
+    rather than sent to the client. A forwarded series publishes the poses the server
     passes back.
 
     What goes back to a client is also written to a directory under the
@@ -265,7 +265,7 @@ class ReconProxy(_Listener):
     Parameters
     ----------
     store : Path | str
-        Directory of designs, as the design calls write it; read only.
+        Design store, one directory per scan, as the design calls write it.
     plugins : PluginPath, default=None
         Directories of reconstruction plugin files, ``<plugin>.py``, in search
         order; required unless the proxy forwards.
@@ -398,7 +398,7 @@ class ReconProxy(_Listener):
                     (design.description,),
                     _enriched(received, design, header_fov_offset_m(header)),
                 ),
-                motion=design.directory / FILENAME
+                motion=design.directory.parent / FILENAME
                 if design.prospective_motion
                 else None,
             )

@@ -1,8 +1,8 @@
 """The design calls of an interpreter host process, and the design store they write."""
 
-from ._store import DesignStore, design_id, design_identity
+from ._store import DesignStore, design_id, design_identity, prune
 
-__all__ = ["DesignStore", "call", "design_id", "design_identity"]
+__all__ = ["DesignStore", "call", "design_id", "design_identity", "prune"]
 
 
 def __getattr__(name: str):

@@ -17,10 +17,12 @@ field-of-view offset in the protocol block, under the limits file `system.txt`
 
 ```bash
 printf '[Protocol]\nTE: 5000\nnx: 64\nny: 64\nfov_offset_x: 20.0\n[Protocol End]\n' \
-  | pulserver design generate --plugins sequences --plugin gre2d --limits system.txt --store designs
+  | pulserver design generate --plugins sequences --plugin gre2d --limits system.txt \
+    --store designs --scan scan1
 ```
 
-The reply is `GENERATED <id>`. Start a reconstruction proxy on the same store
+The reply is `GENERATED <id>`, and the design is stored for the scan `scan1`.
+Start a reconstruction proxy on the same store
 ({doc}`running`):
 
 ```bash
@@ -33,7 +35,7 @@ pulserver proxy --store designs --port 9002 --plugins recon
 from pulserver import virtual
 
 design = "..."  # the identifier the generation replied
-sequence = f"designs/{design}/sequence.seq"
+sequence = f"designs/scan1/{design}/sequence.seq"
 phantom = virtual.Phantom(
     [
         virtual.Ellipse((0.02, 0.0, 0.0), (0.08, 0.06), t1=0.9, t2=0.07),
@@ -44,6 +46,7 @@ phantom = virtual.Phantom(
 readouts = virtual.simulate(sequence, phantom.tissue(1e-3))
 received = virtual.send(
     ("127.0.0.1", 9002),
+    "scan1",
     design,
     readouts,
     position_mm=(20.0, 0.0, 0.0),
@@ -123,7 +126,9 @@ with wave.open("scan.wav", "wb") as audio:
             audio.writeframes(np.round(32767 * chunk.sound.T).astype("<i2").tobytes())
             yield from chunk.readouts
 
-    received = virtual.send(("127.0.0.1", 9002), design, acquired(), config="pics")
+    received = virtual.send(
+        ("127.0.0.1", 9002), "scan1", design, acquired(), config="pics"
+    )
 ```
 
 The scan is simulated in a thread of its own, ahead of the clock. At
@@ -158,6 +163,7 @@ phantom = virtual.Phantom(
 readouts = virtual.simulate(sequence, phantom.tissue(1e-3), rotation=rotation)
 received = virtual.send(
     ("127.0.0.1", 9002),
+    "scan1",
     design,
     readouts,
     position_mm=1e3 * centre,
@@ -192,8 +198,8 @@ line, is written to standard output, and the scan clock to standard error.
 - `--limits` is the `[Limits]` block of {ref}`scanner-limits`; the phantom's
   chemical shifts are resolved at its `B0`. `--protocol` holds a protocol
   block, as `pulserver design generate` reads it on standard input; without
-  it, the plugin's defaults are designed. Without `--store`, the design is
-  stored in a temporary directory.
+  it, the plugin's defaults are designed. The design is stored for a new scan,
+  named after the time; without `--store`, in a temporary directory.
 - `--orientation` names the rotation from logical to physical axes by the
   physical direction of each logical axis:
 

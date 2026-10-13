@@ -13,7 +13,7 @@ import ismrmrd
 import ismrmrd.xsd
 import numpy as np
 
-from ..proxy._designs import DESIGN_PARAMETER
+from ..proxy._designs import DESIGN_PARAMETER, SCAN_PARAMETER
 from ..recon._runtime.connection import Connection
 
 # Placeholders for the schema's required encoding space, which the proxy
@@ -23,6 +23,7 @@ _PLACEHOLDER = 1
 
 def send(
     address: tuple[str, int],
+    scan: str,
     design: str,
     readouts: Iterable[np.ndarray],
     *,
@@ -35,7 +36,8 @@ def send(
 ) -> list[Any]:
     """Send one series to the proxy at ``address``; return what it sends back.
 
-    The header carries the design identifier, the resonance frequency, the
+    The header carries the scan and the design identifier, the resonance
+    frequency, the
     coil count and, with ``exam``, the ``ExamID``; the acquisitions carry the
     samples, scan counters from one, ``LAST_IN_MEASUREMENT`` on the last,
     the field-of-view centre ``position_mm``, in mm along the physical axes,
@@ -52,7 +54,7 @@ def send(
     last carries its flag.
     """
     header, acquisitions = _series(
-        design, readouts, frequency_hz, position_mm, rotation, exam
+        scan, design, readouts, frequency_hz, position_mm, rotation, exam
     )
     stream = socket.create_connection(address, timeout=timeout)
     connection = Connection(stream)
@@ -70,6 +72,7 @@ def send(
 
 def record(
     path: Path | str,
+    scan: str,
     design: str,
     readouts: Iterable[np.ndarray],
     *,
@@ -86,7 +89,7 @@ def record(
     import ismrmrd.hdf5
 
     header, acquisitions = _series(
-        design, readouts, frequency_hz, position_mm, rotation, exam
+        scan, design, readouts, frequency_hz, position_mm, rotation, exam
     )
     dataset = ismrmrd.hdf5.Dataset(str(path), "dataset", create_if_needed=True)
     try:
@@ -101,6 +104,7 @@ def record(
 
 
 def _series(
+    scan: str,
     design: str,
     readouts: Iterable[np.ndarray],
     frequency_hz: float,
@@ -132,10 +136,12 @@ def _series(
             yield acquisition
             samples = following
 
-    return _header(design, coils, frequency_hz, exam), acquisitions()
+    return _header(scan, design, coils, frequency_hz, exam), acquisitions()
 
 
-def _header(design: str, coils: int, frequency_hz: float, exam: str | None) -> str:
+def _header(
+    scan: str, design: str, coils: int, frequency_hz: float, exam: str | None
+) -> str:
     space = ismrmrd.xsd.encodingSpaceType(
         matrixSize=ismrmrd.xsd.matrixSizeType(
             x=_PLACEHOLDER, y=_PLACEHOLDER, z=_PLACEHOLDER
@@ -145,7 +151,8 @@ def _header(design: str, coils: int, frequency_hz: float, exam: str | None) -> s
         ),
     )
     parameters = [
-        ismrmrd.xsd.userParameterStringType(name=DESIGN_PARAMETER, value=design)
+        ismrmrd.xsd.userParameterStringType(name=SCAN_PARAMETER, value=scan),
+        ismrmrd.xsd.userParameterStringType(name=DESIGN_PARAMETER, value=design),
     ]
     if exam is not None:
         parameters.append(

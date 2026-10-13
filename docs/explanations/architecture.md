@@ -36,9 +36,9 @@ both on the virtual scanner.
 - **Writes a design whole or not at all, once, and never modifies it.**
 
   Code: {mod}`pulserver.host`. Tests: *a design being written is invisible until it is whole*; *two processes designing one protocol at once store it once*; *a stored design holds the files its manifest records and no other* (`test_design_service.py`).
-- **Prunes the store least recently used first.**
+- **Keeps one design per scan, and prunes whole scans least recently used first.**
 
-  Code: `pulserver design prune`. Tests: *pruning removes the designs unused for longest first*; *a design found again is used again*; *pruning keeps a design used within the day whatever the limits* (`test_design_service.py`).
+  Code: {class}`~pulserver.host.DesignStore`, {func}`~pulserver.host.prune`. Tests: *a design committed to a scan replaces the scan's previous design*; *pruning removes the scans unused for longest first*; *a scan whose design is found again is used again*; *pruning keeps a scan used within the day whatever the limits* (`test_design_service.py`).
 - **Pushes each design to a proxy on another computer, which stores it only if every file matches the manifest.**
 
   Code: {class}`~pulserver.proxy.DesignIntake`. Tests: *a generation pushes the design it replies*; *the intake refuses a tampered bundle with the reason* (`test_design_push.py`).
@@ -90,15 +90,22 @@ below $2^{24}$ exactly.
 
 ```text
 designs/
-  3f9c0a1b2c3d4e5f60/
-    sequence.seq          first file of the NextSequence chain, binary Pulseq
-    sequence_main.seq     the remaining files, when there are prescans
-    sequence.pseg         IR cache
-    resolved.protocol
-    manifest.json         identity and identifier, limits, package versions,
+  29258/                  one scan, named by whatever plays it
+    3f9c0a1b2c3d4e5f60/   the scan's design
+      sequence.seq        first file of the NextSequence chain, binary Pulseq
+      sequence_main.seq   the remaining files, when there are prescans
+      sequence.pseg       IR cache
+      resolved.protocol
+      manifest.json       identity and identifier, limits, package versions,
                           creation time, plugin and source, scan time,
                           field-of-view offset, SHA-256 of every file
+    motion.buf            the poses of a scan corrected for motion
 ```
+
+A design is reused while its scan holds it; a design call that resolves to
+another design stores it in place of the scan's previous one. The scanner's
+reconstruction client names the scan and the design in the MRD header, and the
+proxy reads the design from `<store>/<scan>/<id>/`.
 
 The proxy reads the Pulseq files, not the cache: the cache is derived for
 playout, and the Pulseq files are the design of record.

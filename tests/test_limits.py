@@ -114,7 +114,7 @@ def test_a_design_under_a_vop_file_carries_its_sar_ratios_in_the_cache(tmp_path)
         seq.add_block(pp.make_delay(9e-3))
     path = tmp_path / "sequence.seq"
     seq.write(path)
-    store = DesignStore(tmp_path / "designs")
+    store = DesignStore(tmp_path / "designs", "scan")
     status, reply = call(
         "import",
         limits={
@@ -181,7 +181,7 @@ def test_a_design_under_an_acoustic_file_carries_its_levels_in_the_prescription_
     response = _acoustic_file(tmp_path / "coil.h5", 0.01)
     path = _lobes(tmp_path)
     acoustic = {"acoustic_file": str(response), "acoustic_interval_us": 30}
-    store = DesignStore(tmp_path / "designs")
+    store = DesignStore(tmp_path / "designs", "scan")
     status, reply = call(
         "import",
         limits={**SCANNER, **acoustic},
@@ -209,7 +209,7 @@ def test_an_import_takes_the_sound_pressure_levels_once(tmp_path, monkeypatch):
         "import",
         limits={**SCANNER, "acoustic_file": str(response), "acoustic_interval_us": 30},
         block=format_import(_lobes(tmp_path), fov_rotation=QUARTER),
-        store=DesignStore(tmp_path / "designs"),
+        store=DesignStore(tmp_path / "designs", "scan"),
     )
     assert status == 0, reply
     assert len(calls) == 1
@@ -217,7 +217,7 @@ def test_an_import_takes_the_sound_pressure_levels_once(tmp_path, monkeypatch):
 
 def test_a_design_too_loud_under_an_acoustic_file_is_refused(tmp_path):
     response = _acoustic_file(tmp_path / "coil.h5", 100.0)
-    store = DesignStore(tmp_path / "designs")
+    store = DesignStore(tmp_path / "designs", "scan")
     status, reply = call(
         "import",
         limits={**SCANNER, "acoustic_file": str(response), "acoustic_interval_us": 30},
@@ -259,7 +259,7 @@ def test_an_imported_design_carries_the_waveform_memory_it_was_converted_for(
     )
     path = tmp_path / "sequence.seq"
     seq.write(path)
-    store = DesignStore(tmp_path / "designs")
+    store = DesignStore(tmp_path / "designs", "scan")
     status, reply = call(
         "import",
         limits={**SCANNER, **WAVE_MEMORY},
@@ -340,7 +340,7 @@ def test_a_call_without_the_field_strength_is_refused_naming_it(tmp_path):
         "import",
         limits=without,
         block=format_import(path),
-        store=DesignStore(tmp_path / "designs"),
+        store=DesignStore(tmp_path / "designs", "scan"),
     )
 
     assert status == 1

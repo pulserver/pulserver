@@ -90,7 +90,11 @@ def server():
 def calls(limits_file, store=None):
     common = ["--plugins", str(PLUGINS), "--plugin", "gre2d"]
     with_limits = [*common, "--limits", str(limits_file)]
-    stored = [*with_limits, "--store", str(store)] if store is not None else None
+    stored = (
+        [*with_limits, "--store", str(store), "--scan", "scan"]
+        if store is not None
+        else None
+    )
     return common, with_limits, stored
 
 

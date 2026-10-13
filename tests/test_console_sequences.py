@@ -12,6 +12,7 @@ from _host import PLUGINS, value_block
 from pulserver._plugins import RECONSTRUCTIONS, SEQUENCES
 from pulserver._zoo import ZOO_PAIRS
 from pulserver.host import DesignStore
+from pulserver.host._store import scans
 from pulserver.protocol import FOV_OFFSET, FOV_ROTATION
 from pulserver.proxy import _local
 from pulserver.virtual._console import Console
@@ -171,7 +172,8 @@ def test_one_design_reconstructs_under_two_reconstructions(tmp_path, monkeypatch
     counted = _images(console, "gre2d", SMALL, recon="exam")
 
     assert loaded == ["gre2d", "exam"]
-    assert len(list(DesignStore(tmp_path / "designs"))) == 1
+    root = tmp_path / "designs"
+    assert len({d for scan in scans(root) for d in DesignStore(root, scan)}) == 1
     assert len(traced) == len(counted) == 1
 
 

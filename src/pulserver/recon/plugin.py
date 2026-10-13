@@ -917,8 +917,9 @@ class ReconPlugin(ABC):
 
         The file's waveforms are delivered before its acquisitions. With
         ``store``, the file is a series as the scanner sends it, such as
-        :func:`pulserver.virtual.record` writes, and is enriched from its design
-        in that store as the proxy enriches it.
+        :func:`pulserver.virtual.record` writes, and is enriched from the design
+        its header names, in the scan's directory of that store, as the proxy
+        enriches it.
 
         Parameters
         ----------
@@ -931,7 +932,7 @@ class ReconPlugin(ABC):
         config : str, default=None
             Configuration payload, as a stream would carry it.
         store : str, default=None
-            Directory of designs, as the design calls write it.
+            Design store, one directory per scan, as the design calls write it.
 
         Returns
         -------

@@ -66,7 +66,7 @@ def _parser() -> argparse.ArgumentParser:
         "--limits", type=Path, required=True, help="file holding the [Limits] block"
     )
     parser.add_argument(
-        "--store", type=Path, help="directory of designs; a temporary one without one"
+        "--store", type=Path, help="directory of scans; a temporary one without one"
     )
     parser.add_argument("--push", help="URL of the design intake to push the design to")
     turned = parser.add_mutually_exclusive_group()
@@ -238,7 +238,7 @@ def reconstruction_plugin(sequence_plugin: str, named: str | None = None) -> str
     )
 
 
-def _design_call(args: argparse.Namespace, store: Path) -> tuple[int, str]:
+def _design_call(args: argparse.Namespace, store: Path, scan: str) -> tuple[int, str]:
     """Import or generate the design, as ``pulserver design`` does; return its status and reply."""
     from ..host._blocks import format_import
     from ..host._server import answer
@@ -254,6 +254,7 @@ def _design_call(args: argparse.Namespace, store: Path) -> tuple[int, str]:
     call: dict[str, Any] = {
         "limits": args.limits.read_text(),
         "store": str(store.absolute()),
+        "scan": scan,
         "push": args.push,
     }
     if args.seq is not None:
@@ -347,17 +348,24 @@ def main(argv: list[str] | None = None) -> int:
             recon_plugin = reconstruction_plugin(args.plugin or "", args.reconstruction)
         except ValueError as error:
             _parser().error(str(error))
+    from ..host._store import new_scan
+
     with tempfile.TemporaryDirectory() as temporary:
         store = args.store or Path(temporary)
-        status, reply = _design_call(args, store)
+        scan = new_scan()
+        status, reply = _design_call(args, store, scan)
         sys.stdout.write(reply)
         if status != 0:
             return status
-        return _scan(args, store, reply.split()[1], recon_plugin)
+        return _scan(args, store, scan, reply.split()[1], recon_plugin)
 
 
 def _scan(
-    args: argparse.Namespace, store: Path, design: str, recon_plugin: str | None
+    args: argparse.Namespace,
+    store: Path,
+    scan_name: str,
+    design: str,
+    recon_plugin: str | None,
 ) -> int:
     """Scan the stored design; return the exit status.
 
@@ -374,7 +382,7 @@ def _scan(
     field = float(parse_limits(args.limits.read_text())["B0"])
     coil = None if args.coil is None else COILS[args.coil]
     phantom = _phantom(args)
-    sequence = DesignStore(store).directory(design) / "sequence.seq"
+    sequence = DesignStore(store, scan_name).directory(design) / "sequence.seq"
     scan = Scan(
         sequence,
         phantom.tissue(1e-3 * args.spacing, field_t=field, coil=coil),
@@ -405,11 +413,13 @@ def _scan(
             sent = _kept(readouts, acquired) if args.mrd is not None else readouts
             config = json.dumps({"parameters": {"config": recon_plugin}})
             status = _received(
-                send((host, int(port)), design, sent, config=config, **series),
+                send(
+                    (host, int(port)), scan_name, design, sent, config=config, **series
+                ),
                 args.output,
             )
     if args.mrd is not None:
-        record(args.mrd, design, acquired, **series)
+        record(args.mrd, scan_name, design, acquired, **series)
     return status
 
 

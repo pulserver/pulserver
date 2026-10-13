@@ -17,6 +17,7 @@ from pulserver import _cli, virtual
 from pulserver._zoo import ZOO_PAIRS
 from pulserver.host import DesignStore
 from pulserver.host._blocks import format_limits
+from pulserver.host._store import find_scan
 from pulserver.protocol import PROTOCOL_BEGIN, PROTOCOL_END
 from pulserver.proxy import ReconProxy
 from pulserver.recon._runtime.readers import deserialize_config
@@ -69,7 +70,10 @@ def test_a_headless_scan_records_the_series_the_virtual_scanner_acquires(
         ]
     )
     assert status == 0
-    sequence = DesignStore(store).directory(_reply(capsys)) / "sequence.seq"
+    design = _reply(capsys)
+    sequence = (
+        DesignStore(store, find_scan(store, design)).directory(design) / "sequence.seq"
+    )
     rotation = ORIENTATIONS["coronal"]
     tissue = default_phantom(4)
     field_t = FIXTURE_LIMITS["B0"]

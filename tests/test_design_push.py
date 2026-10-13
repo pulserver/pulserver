@@ -14,7 +14,7 @@ import threading
 import pytest
 from _host import FIXTURE_LIMITS, FIXTURES, LIMITS, PLUGINS, generate
 
-from pulserver.host import DesignStore, call
+from pulserver.host import DesignStore, call, prune
 from pulserver.host._blocks import format_import
 from pulserver.host._push import push
 from pulserver.proxy import DesignIntake
@@ -22,7 +22,7 @@ from pulserver.proxy import DesignIntake
 
 @pytest.fixture
 def host(tmp_path):
-    return DesignStore(tmp_path / "host")
+    return DesignStore(tmp_path / "host", "scan")
 
 
 @pytest.fixture
@@ -35,6 +35,11 @@ def intake(tmp_path):
 
 def url(intake):
     return f"http://127.0.0.1:{intake.port}"
+
+
+def held(intake, design, scan="scan"):
+    """The directory of a design the intake holds for a scan."""
+    return DesignStore(intake.root, scan).directory(design)
 
 
 def _files(directory):
@@ -70,7 +75,7 @@ def _bundle_of(store, design, **changes):
 
 def test_a_bundle_carries_a_design_to_another_store_unchanged(host, tmp_path):
     design = generate(host, "tiny", {"TE": 8000})
-    other = DesignStore(tmp_path / "other")
+    other = DesignStore(tmp_path / "other", "scan")
     assert other.receive(host.pack(design)) == design
     assert _files(other.directory(design)) == _files(host.directory(design))
 
@@ -84,7 +89,7 @@ def test_an_imported_design_keeps_its_link_through_a_bundle(host, tmp_path):
     )
     assert status == 0, reply
     design = reply.split()[1]
-    other = DesignStore(tmp_path / "other")
+    other = DesignStore(tmp_path / "other", "scan")
     other.receive(host.pack(design))
     link = other.directory(design) / "sequence.seq"
     assert link.readlink().as_posix() == "dedup_gre_pair.seq"
@@ -92,10 +97,10 @@ def test_an_imported_design_keeps_its_link_through_a_bundle(host, tmp_path):
 
 def test_a_bundle_whose_file_differs_from_its_manifest_is_refused(host, tmp_path):
     design = generate(host, "tiny", {"TE": 8000})
-    other = DesignStore(tmp_path / "other")
+    other = DesignStore(tmp_path / "other", "scan")
     with pytest.raises(ValueError, match=r"sequence\.seq differs from the manifest"):
         other.receive(_bundle_of(host, design, **{"sequence.seq": b"altered"}))
-    assert not any(other.root.iterdir())
+    assert not any(other.path.iterdir())
 
 
 @pytest.mark.parametrize(
@@ -110,10 +115,10 @@ def test_a_bundle_whose_file_differs_from_its_manifest_is_refused(host, tmp_path
 def test_a_bundle_holding_anything_but_a_flat_design_is_refused(
     tmp_path, entries, reason
 ):
-    store = DesignStore(tmp_path / "store")
+    store = DesignStore(tmp_path / "store", "scan")
     with pytest.raises(ValueError, match=reason):
         store.receive(_tar(entries))
-    assert not any(store.root.iterdir())
+    assert not any(store.path.iterdir())
 
 
 def test_a_bundle_with_a_file_its_manifest_does_not_record_is_refused(host, tmp_path):
@@ -122,7 +127,9 @@ def test_a_bundle_with_a_file_its_manifest_does_not_record_is_refused(host, tmp_
     with tarfile.open(fileobj=bundle, mode="r:gz") as archive:
         entries = [(m.name, archive.extractfile(m).read()) for m in archive]
     with pytest.raises(ValueError, match="not those its manifest records"):
-        DesignStore(tmp_path / "other").receive(_tar([*entries, ("extra", b"x")]))
+        DesignStore(tmp_path / "other", "scan").receive(
+            _tar([*entries, ("extra", b"x")])
+        )
 
 
 def test_a_bundle_whose_manifest_names_another_identifier_is_refused(host, tmp_path):
@@ -133,7 +140,7 @@ def test_a_bundle_whose_manifest_names_another_identifier_is_refused(host, tmp_p
         host, design, **{"manifest.json": json.dumps(manifest).encode()}
     )
     with pytest.raises(ValueError, match="names no design"):
-        DesignStore(tmp_path / "other").receive(bundle)
+        DesignStore(tmp_path / "other", "scan").receive(bundle)
 
 
 @pytest.mark.parametrize("identity", ["../escaped", "../../escaped", "/escaped"])
@@ -147,24 +154,24 @@ def test_a_manifest_naming_a_path_places_nothing_outside_the_store(tmp_path, ide
     bundle = _tar(
         [("manifest.json", json.dumps(manifest).encode()), ("sequence.seq", content)]
     )
-    store = DesignStore(tmp_path / "a" / "store")
+    store = DesignStore(tmp_path / "a" / "store", "scan")
     with pytest.raises(ValueError, match="names no design"):
         store.receive(bundle)
-    assert not any(store.root.iterdir())
+    assert not any(store.path.iterdir())
     assert not (tmp_path / "a" / "escaped").exists()
     assert not (tmp_path / "escaped").exists()
 
 
 def test_bytes_that_are_not_a_bundle_are_refused(tmp_path):
     with pytest.raises(ValueError, match="cannot be read"):
-        DesignStore(tmp_path / "store").receive(b"not a tar")
+        DesignStore(tmp_path / "store", "scan").receive(b"not a tar")
 
 
 def test_a_pushed_design_is_stored_by_the_intake_once(host, intake):
     design = generate(host, "tiny", {"TE": 8000})
     assert push(host, design, url(intake)) is True
     assert push(host, design, url(intake)) is False
-    assert _files(intake.store.directory(design)) == _files(host.directory(design))
+    assert _files(held(intake, design)) == _files(host.directory(design))
 
 
 def _request(intake, method, path, body=None):
@@ -177,8 +184,8 @@ def _request(intake, method, path, body=None):
         connection.close()
 
 
-def _put(intake, design, bundle):
-    return _request(intake, "PUT", f"/designs/{design}", bundle)
+def _put(intake, design, bundle, scan="scan"):
+    return _request(intake, "PUT", f"/designs/{scan}/{design}", bundle)
 
 
 def test_the_intake_refuses_a_bundle_under_another_design_identifier(host, intake):
@@ -187,7 +194,7 @@ def test_the_intake_refuses_a_bundle_under_another_design_identifier(host, intak
     status, text = _put(intake, other, host.pack(design))
     assert status == 400
     assert f"holds design {design}, not {other}" in text
-    assert not intake.store.directory(design).exists()
+    assert not held(intake, design).exists()
 
 
 def test_the_intake_refuses_a_tampered_bundle_with_the_reason(host, intake):
@@ -197,21 +204,34 @@ def test_the_intake_refuses_a_tampered_bundle_with_the_reason(host, intake):
     )
     assert status == 400
     assert "differs from the manifest" in text
-    assert not intake.store.directory(design).exists()
+    assert not held(intake, design).exists()
 
 
-@pytest.mark.parametrize("path", ["/designs/xyz", "/other"])
+@pytest.mark.parametrize(
+    "path",
+    ["/designs/xyz", "/other", "/designs/scan/xyz", f"/designs/.hidden/{'0' * 18}"],
+)
 def test_the_intake_serves_designs_only(intake, path):
     assert _request(intake, "HEAD", path)[0] == 404
 
 
-def test_asking_the_intake_for_a_design_it_holds_marks_the_design_used(host, intake):
+def test_asking_the_intake_for_a_design_it_holds_marks_its_scan_used(host, intake):
     design = generate(host, "tiny", {"TE": 8000})
     push(host, design, url(intake))
-    manifest = intake.store.directory(design) / "manifest.json"
-    os.utime(manifest, (0, 0))
-    assert _request(intake, "HEAD", f"/designs/{design}")[0] == 200
-    assert intake.store.prune(max_age=86400.0) == []
+    scan = intake.root / "scan"
+    for path in (*scan.rglob("*"), scan):
+        os.utime(path, (0, 0), follow_symlinks=False)
+    assert _request(intake, "HEAD", f"/designs/scan/{design}")[0] == 200
+    assert prune(intake.root, max_age=86400.0) == []
+
+
+def test_a_design_pushed_for_another_scan_is_held_for_that_scan(host, intake, tmp_path):
+    design = generate(host, "tiny", {"TE": 8000})
+    other = DesignStore(tmp_path / "host", "other")
+    other.receive(host.pack(design))
+    push(other, design, url(intake))
+    assert (held(intake, design, "other") / "manifest.json").is_file()
+    assert not held(intake, design).exists()
 
 
 def test_a_generation_pushes_the_design_it_replies(host, intake):
@@ -226,7 +246,7 @@ def test_a_generation_pushes_the_design_it_replies(host, intake):
     )
     assert status == 0, reply
     design = reply.split()[1]
-    assert (intake.store.directory(design) / "manifest.json").is_file()
+    assert (held(intake, design) / "manifest.json").is_file()
 
 
 def _closed_port():
@@ -256,7 +276,7 @@ def test_a_design_that_cannot_be_pushed_is_an_error_and_stays_stored(host, tmp_p
     try:
         status, reply = call("generate", **inputs, push=url(intake))
         assert (status, reply) == (0, f"GENERATED {design}\n")
-        assert (intake.store.directory(design) / "manifest.json").is_file()
+        assert (held(intake, design) / "manifest.json").is_file()
     finally:
         intake.close()
 
@@ -271,6 +291,8 @@ def test_the_push_call_sends_each_design_its_intake_lacks(host, intake):
         "push",
         "--store",
         str(host.root),
+        "--scan",
+        host.scan,
         "--to",
         url(intake),
         design,
@@ -300,7 +322,7 @@ def test_the_intake_hands_each_design_pushed_or_asked_after_to_be_prepared(
         assert done.acquire(timeout=10) and done.acquire(timeout=10)
     finally:
         intake.close()
-    assert prepared == [intake.store.directory(design)] * 2
+    assert prepared == [held(intake, design)] * 2
 
 
 def test_a_design_is_pushed_only_to_an_http_intake(host):
@@ -329,7 +351,7 @@ def test_a_stored_design_is_readable_by_more_than_the_process_that_wrote_it(host
     loaded, or a trajectory that never arrives.
     """
     design = generate(host, "gre2d", {})
-    mode = (host.root / design).stat().st_mode & 0o777
+    mode = host.directory(design).stat().st_mode & 0o777
     expected = 0o777 & ~_process_umask()
     assert mode == expected, (
         f"the design is mode {mode:o}, not the {expected:o} an ordinary mkdir "

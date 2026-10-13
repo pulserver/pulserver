@@ -32,8 +32,9 @@ def answer(request: Mapping[str, Any]) -> tuple[int, str]:
 
     ``request`` carries ``call`` and, as the call takes them, ``plugins``
     (the plugin directories, in search order), ``plugin``, ``limits`` (the
-    text of a ``[Limits]`` block), ``store``, ``push`` and ``input`` (the
-    block the command reads from standard input). ``store`` is passed to
+    text of a ``[Limits]`` block), ``store`` and ``scan`` (the store root
+    and the scan's directory in it), ``push`` and ``input`` (the block the
+    command reads from standard input). ``store`` and ``scan`` are passed to
     ``generate`` and ``import`` only, and ignored by the other calls.
     ``parameter_set`` and ``parameters``, for the calls that take a plugin,
     select the plugin's parameter file and its directory. ``exam``, for
@@ -58,7 +59,7 @@ def answer(request: Mapping[str, Any]) -> tuple[int, str]:
     if request.get("limits") is not None:
         inputs["limits"] = parse_limits(str(request["limits"]))
     if request.get("store") is not None and call in ("generate", "import"):
-        inputs["store"] = DesignStore(request["store"])
+        inputs["store"] = DesignStore(request["store"], str(request.get("scan", "")))
     if call in ("validate", "generate", "import"):
         inputs["block"] = str(request.get("input", ""))
     if request.get("push"):
