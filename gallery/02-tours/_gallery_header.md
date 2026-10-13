@@ -1,1 +1,1 @@
-Applications, advanced branches and specialised workflows, each standalone.
+Standalone examples beyond the Course; each names the lessons it assumes.

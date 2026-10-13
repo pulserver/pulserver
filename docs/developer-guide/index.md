@@ -5,13 +5,13 @@ conventions, and the implementation design behind the explanations.
 
 | Page | Contents |
 | --- | --- |
-| {doc}`installation` | Prerequisites, the editable installation, pre-commit hooks and the documentation build. |
-| {doc}`workflow` | Forks, branches, pull requests, continuous integration and the code of conduct. |
-| {doc}`style` | Ruff, tests, C89 and code conventions, and the KomaMRI simulation. |
-| {doc}`documentation` | Documentation types and scientific writing. |
-| {doc}`terminology` | Scanner, protocol, Pulseq and MRD terminology, units and layers. |
-| {doc}`internals/index` | The IR cache, the protocol text blocks, the reconstruction proxy, calibration, SAR ratios and the virtual scanner. |
-| {doc}`releases` | Versioning, wheels, PyPI and the published documentation. |
+| {doc}`installation` | Prerequisites, the editable installation, pre-commit hooks and the documentation build |
+| {doc}`workflow` | Forks, branches, pull requests, continuous integration and the code of conduct |
+| {doc}`style` | Ruff, tests, C89 and code conventions; KomaMRI simulation |
+| {doc}`documentation` | Documentation types and scientific writing |
+| {doc}`terminology` | Scanner, protocol, Pulseq and MRD terminology, units and layers |
+| {doc}`internals/index` | IR cache, protocol text blocks, reconstruction proxy, calibration, SAR ratios, virtual scanner |
+| {doc}`releases` | Versioning, wheels, PyPI and the published documentation |
 
 ```{toctree}
 :hidden:
