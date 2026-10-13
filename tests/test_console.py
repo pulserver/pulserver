@@ -79,7 +79,8 @@ def test_a_console_lists_and_generates_as_the_design_command_does(tmp_path):
     assert listing["reply"].splitlines()[:2] == ["PROTOCOL", PROTOCOL_BEGIN]
     assert generated["status"] == 0
     assert generated["reply"].startswith("GENERATED ")
-    assert (DesignStore(tmp_path / "designs").directory(generated["design"])).is_dir()
+    stored = DesignStore(tmp_path / "designs", generated["scan"])
+    assert stored.directory(generated["design"]).is_dir()
 
 
 def test_a_console_makes_only_the_design_calls(tmp_path):
@@ -190,15 +191,16 @@ def test_a_design_is_made_under_the_vops_of_the_exams_transmit_coil(
     tmp_path, brainweb, fields
 ):
     console = _console(tmp_path, fields=fields, coil="head8/head32")
-    store = DesignStore(tmp_path / "designs")
     block = _block(TE=5000, nx=32, ny=32)
 
-    head8 = console.design("generate", "gre2d", block)["design"]
+    head8 = console.design("generate", "gre2d", block)
     console.exam("brainweb", "body")
-    body = console.design("generate", "gre2d", block)["design"]
+    body = console.design("generate", "gre2d", block)
 
-    assert head8 != body
-    for design, transmit in ((head8, "head8"), (body, "body")):
+    assert head8["design"] != body["design"]
+    for reply, transmit in ((head8, "head8"), (body, "body")):
+        store = DesignStore(tmp_path / "designs", reply["scan"])
+        design = reply["design"]
         limits = store.manifest(design)["limits"]
         assert limits["vop_file"] == str(fields / f"{transmit}_vops.npz")
         (cached,) = ir.summary(

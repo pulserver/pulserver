@@ -70,7 +70,8 @@ estimate; the design the interpreter plays is the stored one.
 **Storage.** A *design* is one generated or imported chain with its IR cache,
 immutable once written. Its *identity* is the hash of what it depends on; its
 *identifier* is the first 18 hexadecimal digits of the identity. The *design
-store* is the directory holding every design. A *design call* is one `list`,
+store* is the directory holding one directory per *scan*, named by whatever
+plays it, and a scan's directory holds the design the scan plays. A *design call* is one `list`,
 `validate`, `generate` or `import` of an interpreter host process; no call
 keeps state beyond the designs it stores. A design is *pushed* to the *design intake*, the
 proxy's HTTP endpoint writing its store, as a *bundle* of the files of its

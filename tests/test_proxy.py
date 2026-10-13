@@ -57,6 +57,7 @@ HEADER = """<?xml version="1.0"?>
     <trajectory>cartesian</trajectory>
   </encoding>
   <userParameters>
+    <userParameterString><name>pulserver_scan</name><value>{scan}</value></userParameterString>
     <userParameterString><name>pulserver_design</name><value>{design}</value></userParameterString>{exam}
   </userParameters>
 </ismrmrdHeader>
@@ -65,22 +66,24 @@ HEADER = """<?xml version="1.0"?>
 
 @dataclass(frozen=True)
 class Series:
-    """A stored design and the readouts a client of it plays."""
+    """A stored design, the scan it is stored for, and the readouts a client of it plays."""
 
+    scan: str
     design: str
     table: SequenceTable
 
 
 @pytest.fixture(scope="module")
 def bucket(tmp_path_factory):
-    """A store holding the designs of the plugins ``gre2d`` and ``gre2d_raw``."""
-    store = DesignStore(tmp_path_factory.mktemp("proxy") / "designs")
+    """A store holding a scan of each of the plugins ``gre2d`` and ``gre2d_raw``."""
+    root = tmp_path_factory.mktemp("proxy") / "designs"
     series = {}
     for plugin in ("gre2d", "gre2d_raw"):
+        store = DesignStore(root, plugin)
         design = generate(store, plugin, MATRIX)
         table = SequenceTable.read(store.directory(design) / "sequence.seq")
-        series[plugin] = Series(design, table)
-    return store.root, series
+        series[plugin] = Series(plugin, design, table)
+    return root, series
 
 
 @pytest.fixture
@@ -159,8 +162,9 @@ def _texts(connection, _stream):
     connection.send("forwarded")
 
 
-def header_xml(series, exam=None, design=None, measurement=None):
+def header_xml(series, exam=None, design=None, measurement=None, scan=None):
     return HEADER.format(
+        scan=series.scan if scan is None else scan,
         measurement=""
         if measurement is None
         else f"<measurementInformation><measurementID>{measurement}</measurementID>"
@@ -198,6 +202,7 @@ def stream(
     design=None,
     measurement=None,
     leave=False,
+    scan=None,
 ):
     """Play one series' readouts as the scanner client does; return what came back.
 
@@ -208,7 +213,8 @@ def stream(
     default. ``headers`` is how many times the header is sent, ``readouts`` how
     many readouts are, all of them by default, ``last`` the acquisition flagged
     ``LAST_IN_MEASUREMENT``, none by default, ``design`` the header's
-    ``pulserver_design``, the series' by default, and ``measurement`` its
+    ``pulserver_design``, the series' by default, ``scan`` the header's
+    ``pulserver_scan``, the series' by default, and ``measurement`` its
     ``measurementID``, none by default. With ``leave`` the client closes its
     connection once it has sent the series, reading nothing.
     """
@@ -218,7 +224,7 @@ def stream(
     if config is not None:
         connection.send_config(config)
     for _ in range(headers):
-        connection.send_header(header_xml(series, exam, design, measurement))
+        connection.send_header(header_xml(series, exam, design, measurement, scan))
     for index in range(len(series.table) if readouts is None else readouts):
         acquisition = ismrmrd.Acquisition.from_array(data(series.table, index))
         if counters is not None:
@@ -652,7 +658,7 @@ def test_a_motion_corrected_series_publishes_its_poses_to_the_scan(
 
     monkeypatch.setattr(_designs, "_asks_for_motion_correction", lambda _: True)
     root, series = bucket
-    path = Path(root) / series["gre2d_raw"].design / FILENAME
+    path = Path(root) / series["gre2d_raw"].scan / FILENAME
     path.unlink(missing_ok=True)
     if forwarded:
         server = start_server(slots=1)
@@ -673,7 +679,7 @@ def test_a_series_not_corrected_for_motion_writes_no_pose_file(start_proxy, buck
     from pulserver.proxy._motion import FILENAME
 
     root, series = bucket
-    path = Path(root) / series["gre2d"].design / FILENAME
+    path = Path(root) / series["gre2d"].scan / FILENAME
     stream(start_proxy(slots=1).port, series["gre2d"])
     assert not path.exists()
 
@@ -738,7 +744,7 @@ def test_a_client_that_stays_leaves_nothing_held(
 
 
 def test_a_design_pushed_to_the_intake_is_reconstructed_from_its_store(tmp_path):
-    host = DesignStore(tmp_path / "host")
+    host = DesignStore(tmp_path / "host", "scan")
     design = generate(host, "gre2d", MATRIX)
     intake = DesignIntake(tmp_path / "recon")
     intake.start()
@@ -749,7 +755,7 @@ def test_a_design_pushed_to_the_intake_is_reconstructed_from_its_store(tmp_path)
     try:
         assert push(host, design, f"http://127.0.0.1:{intake.port}")
         table = SequenceTable.read(host.directory(design) / "sequence.seq")
-        received = stream(proxy.port, Series(design, table))
+        received = stream(proxy.port, Series("scan", design, table))
         assert len(images(received)) == 1
     finally:
         proxy.close()
@@ -777,19 +783,22 @@ def test_the_least_recently_read_design_is_read_again_when_next_named(
 
 
 @pytest.mark.parametrize(
-    ("design", "reason"),
+    ("scan", "design", "reason"),
     [
-        ("", "carries no pulserver_design"),
-        ("rev-1", "is not a design identifier"),
-        ("0" * 18, "no design 000000000000000000"),
+        ("", None, "carries no pulserver_scan"),
+        ("../gre2d", None, "is not a directory name"),
+        ("gre2d_raw", None, "no design"),
+        (None, "", "carries no pulserver_design"),
+        (None, "rev-1", "is not a design identifier"),
+        (None, "0" * 18, "no design 000000000000000000"),
     ],
 )
 def test_a_series_naming_no_stored_design_is_refused(
-    start_proxy, bucket, design, reason
+    start_proxy, bucket, scan, design, reason
 ):
     _, series = bucket
     proxy = start_proxy(slots=1)
-    received = stream(proxy.port, series["gre2d"], design=design)
+    received = stream(proxy.port, series["gre2d"], design=design, scan=scan)
     assert _refused(received, reason)
 
 
@@ -942,9 +951,9 @@ def test_a_manifest_naming_a_reconstruction_is_read_and_the_name_ignored(
 ):
     """A store written when a design named its reconstruction still reads."""
     root, series = bucket
-    design = series["gre2d"].design
-    shutil.copytree(Path(root) / design, tmp_path / design)
-    manifest = tmp_path / design / "manifest.json"
+    scan, design = series["gre2d"].scan, series["gre2d"].design
+    shutil.copytree(Path(root) / scan / design, tmp_path / scan / design)
+    manifest = tmp_path / scan / design / "manifest.json"
     manifest.write_text(
         json.dumps({**json.loads(manifest.read_text()), "recon": "crash"})
     )

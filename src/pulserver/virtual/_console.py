@@ -29,9 +29,12 @@ DESIGN_CALLS = ("list", "validate", "generate", "import")
 _CALL_INPUTS = {
     "list": ("plugins", "plugin"),
     "validate": ("plugins", "plugin", "limits", "input"),
-    "generate": ("plugins", "plugin", "limits", "input", "store", "push"),
-    "import": ("limits", "input", "store", "push"),
+    "generate": ("plugins", "plugin", "limits", "input", "store", "scan", "push"),
+    "import": ("limits", "input", "store", "scan", "push"),
 }
+
+#: Seconds a scan of the console's store is kept after its last use.
+_KEEP = 86400.0
 
 
 #: The environment variable naming the image a console runs in, as
@@ -106,7 +109,8 @@ class Console:
         Text of the ``[Limits]`` block every design is made under; its ``B0``
         is the virtual magnet's field.
     store : Path | str
-        Design store.
+        Design store, one directory per scan; each design a console generates or
+        imports is stored for a new scan.
     recon : tuple[str, int], default=None
         ``(host, port)`` of the reconstruction proxy.
     recon_plugins : PluginPath, default=None
@@ -195,19 +199,27 @@ class Console:
         self._exams = 0
 
     def design(self, call: str, plugin: str | None = None, block: str = "") -> dict:
-        """Answer a design call; the id of a generated or imported design is ``design``."""
+        """Answer a design call; the id of a generated or imported design is ``design``.
+
+        A generated or imported design is stored as the design of a new scan,
+        named in the reply as ``scan`` and found again by :meth:`scan` from the
+        design, and scans the store has not used for a day are removed.
+        """
         from ..host._server import answer
+        from ..host._store import new_scan, prune
 
         if call not in DESIGN_CALLS:
             raise ValueError(
                 f"a console makes the design calls {DESIGN_CALLS}, not {call!r}"
             )
+        scan = new_scan()
         request = {
             "call": call,
             "plugins": [str(directory) for directory in self.plugins],
             "plugin": plugin,
             "limits": self._limits(),
             "store": str(self.store),
+            "scan": scan,
             "push": self.push,
             "input": block,
         }
@@ -217,6 +229,8 @@ class Console:
         answered: dict[str, Any] = {"status": status, "reply": reply}
         if status == 0 and call in ("generate", "import"):
             answered["design"] = reply.split()[1]
+            answered["scan"] = scan
+            prune(self.store, max_age=_KEEP)
         return answered
 
     def plugin_names(self) -> list[str]:
@@ -321,16 +335,19 @@ class Console:
             not.
         """
         from ..host import DesignStore
+        from ..host._store import find_scan
 
+        scan = find_scan(self.store, design)
         plugin = None
         if self.recon is not None or self.local is not None:
             plugin = reconstruction_plugin(
-                DesignStore(self.store).manifest(design).get("plugin", ""), recon
+                DesignStore(self.store, scan).manifest(design).get("plugin", ""), recon
             )
         if self.speed is not None:
             emit({"preparing": None})
         rotation = np.asarray(rotation, dtype=float).reshape(3, 3)
         return self._scan(
+            scan,
             design,
             self._exam_tissue(),
             rotation,
@@ -413,6 +430,7 @@ class Console:
 
     def _scan(
         self,
+        scan_name: str,
         design: str,
         tissue: Any,
         rotation: np.ndarray,
@@ -427,7 +445,7 @@ class Console:
 
         rotation = np.asarray(rotation, dtype=float).reshape(3, 3)
         scan = Scan(
-            DesignStore(self.store).directory(design) / "sequence.seq",
+            DesignStore(self.store, scan_name).directory(design) / "sequence.seq",
             tissue,
             rotation=rotation,
             centre=1e-3 * np.asarray(centre_mm, dtype=float),
@@ -476,11 +494,12 @@ class Console:
         # Closed however the scan ends, which stops its simulation.
         with contextlib.closing(played()) as readouts:
             return self._acquire(
-                design, readouts, rotation, centre_mm, emit, stopped, plugin
+                scan_name, design, readouts, rotation, centre_mm, emit, stopped, plugin
             )
 
     def _acquire(
         self,
+        scan_name: str,
         design: str,
         readouts: Iterator[np.ndarray],
         rotation: np.ndarray,
@@ -515,7 +534,11 @@ class Console:
             if isinstance(item, ismrmrd.Image):
                 if convert is None:
                     header = _header(
-                        design, self.coil.receive_channels, series["frequency_hz"], None
+                        scan_name,
+                        design,
+                        self.coil.receive_channels,
+                        series["frequency_hz"],
+                        None,
                     )
                     convert = MrdDicomBuilder(ismrmrd.xsd.CreateFromDocument(header))
                 item = convert(item)
@@ -526,10 +549,13 @@ class Console:
                 status = 1 if item.startswith("pulserver:") else status
 
         if self.local is None:
-            for item in send(self.recon, design, readouts, config=config, **series):
+            for item in send(
+                self.recon, scan_name, design, readouts, config=config, **series
+            ):
                 returned(item)
         else:
             header, acquisitions = _series(
+                scan_name,
                 design,
                 readouts,
                 series["frequency_hz"],

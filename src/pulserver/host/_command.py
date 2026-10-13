@@ -66,8 +66,14 @@ def _parser() -> argparse.ArgumentParser:
             )
         if store:
             sub.add_argument(
-                "--store", type=Path, required=True, help="directory of designs"
+                "--store", type=Path, required=True, help="directory of scans"
             )
+            if name != "prune":
+                sub.add_argument(
+                    "--scan",
+                    required=True,
+                    help="name of the scan's directory in the store",
+                )
         if name in ("validate", "generate"):
             sub.add_argument(
                 "--exam",
@@ -131,18 +137,18 @@ def _parser() -> argparse.ArgumentParser:
     )
     prune = call(
         "prune",
-        "Remove designs from the store, least recently used first.",
+        "Remove scans from the store, least recently used first.",
         plugin=False,
         limits=False,
         store=True,
     )
     prune.add_argument(
-        "--max-age-days", type=float, help="remove designs unused for longer"
+        "--max-age-days", type=float, help="remove scans unused for longer"
     )
     prune.add_argument(
         "--max-bytes",
         type=int,
-        help="then remove designs until the store holds at most",
+        help="then remove scans until the store holds at most",
     )
     pushed = call(
         "push",
@@ -194,6 +200,7 @@ def request(args: argparse.Namespace, block: str) -> dict[str, Any]:
         found["limits"] = args.limits.read_text()
     if getattr(args, "store", None) is not None:
         found["store"] = str(args.store.absolute())
+        found["scan"] = args.scan
     if getattr(args, "exam", None) is not None:
         found["exam"] = str(args.exam.absolute())
     if getattr(args, "rf_definitions", False):
@@ -239,11 +246,12 @@ def main(argv: list[str] | None = None) -> int:
 
         return serve(args.plugins, args.socket)
     if args.call == "push":
-        return _push(args.store, args.designs, args.to)
+        return _push(args.store, args.scan, args.designs, args.to)
     if args.call == "prune":
-        from ._store import DesignStore
+        from ._store import prune
 
-        removed = DesignStore(args.store).prune(
+        removed = prune(
+            args.store,
             max_age=None if args.max_age_days is None else args.max_age_days * _DAY,
             max_bytes=args.max_bytes,
         )
@@ -265,11 +273,11 @@ def main(argv: list[str] | None = None) -> int:
     return status
 
 
-def _push(store: Path, designs: list[str], url: str) -> int:
+def _push(store: Path, scan: str, designs: list[str], url: str) -> int:
     from ._push import push
     from ._store import DesignStore
 
-    stored = DesignStore(store)
+    stored = DesignStore(store, scan)
     sent = 0
     for design in designs:
         try:

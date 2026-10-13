@@ -17,7 +17,8 @@ def push(
 ) -> bool:
     """Send a stored design to the intake at ``url``; return whether it was sent.
 
-    A design the intake holds already is not sent again.
+    The design is sent as a design of the store's scan, and a design the
+    intake holds already for that scan is not sent again.
 
     Raises
     ------
@@ -31,7 +32,7 @@ def push(
     scheme = urllib.parse.urlsplit(url).scheme
     if scheme not in ("http", "https"):
         raise ValueError(f"a design intake is an http or https URL, not {url!r}")
-    target = f"{url.rstrip('/')}/designs/{design}"
+    target = f"{url.rstrip('/')}/designs/{store.scan}/{design}"
     try:
         _open(target, timeout, method="HEAD")
         return False

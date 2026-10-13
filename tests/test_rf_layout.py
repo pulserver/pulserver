@@ -746,8 +746,8 @@ def test_a_follows_declaration_warns_and_has_no_effect(tmp_path):
         source.replace(declared, declared + "    follows = (UIParam.FLIP,)\n")
     )
     plain, followed = (
-        DesignStore(tmp_path / "plain"),
-        DesignStore(tmp_path / "followed"),
+        DesignStore(tmp_path / "plain", "scan"),
+        DesignStore(tmp_path / "followed", "scan"),
     )
 
     with pytest.warns(DeprecationWarning, match="follows") as warned:
@@ -760,7 +760,7 @@ def test_a_follows_declaration_warns_and_has_no_effect(tmp_path):
 
 
 def test_a_design_stores_the_sequence_and_its_protocol_only(tmp_path):
-    store = DesignStore(tmp_path / "store")
+    store = DesignStore(tmp_path / "store", "scan")
 
     design = generate(store, "rf_train", {})
 

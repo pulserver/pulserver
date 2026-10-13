@@ -13,10 +13,10 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from ..host._store import BUNDLE_LIMIT, ID_DIGITS, MANIFEST, DesignStore
+from ..host._store import BUNDLE_LIMIT, ID_DIGITS, MANIFEST, DesignStore, _flat
 
 _log = logging.getLogger("pulserver.proxy")
-_PATH = re.compile(rf"/designs/([0-9a-f]{{{ID_DIGITS}}})")
+_PATH = re.compile(rf"/designs/([^/]+)/([0-9a-f]{{{ID_DIGITS}}})")
 # Seconds a connection may stay silent before the intake drops it.
 _TIMEOUT = 60.0
 
@@ -24,9 +24,9 @@ _TIMEOUT = 60.0
 class DesignIntake:
     """Receives stored designs over HTTP into the design store the proxy reads.
 
-    ``HEAD /designs/<id>`` answers 200 when the store holds the design, which
-    marks it as used for :meth:`~pulserver.host.DesignStore.prune`, and 404
-    otherwise; ``PUT /designs/<id>`` stores a bundle of
+    ``HEAD /designs/<scan>/<id>`` answers 200 when the scan holds the design,
+    which marks the scan as used for :func:`~pulserver.host.prune`, and 404
+    otherwise; ``PUT /designs/<scan>/<id>`` stores a bundle of
     :meth:`~pulserver.host.DesignStore.pack` after checking every file against
     its manifest, and answers 201, or 200 for a design already stored. A
     bundle that is not the design its path names is refused with 400 and the
@@ -35,7 +35,7 @@ class DesignIntake:
     Parameters
     ----------
     store : Path | str
-        Directory of designs; created when missing.
+        Directory of scans; created when missing.
     host : str, default='127.0.0.1'
         Address to listen on; the loopback interface by default.
     port : int, default=0
@@ -53,28 +53,31 @@ class DesignIntake:
         port: int = 0,
         received: Callable[[Path], object] | None = None,
     ) -> None:
-        self.store = DesignStore(store)
+        self.root = Path(store)
+        self.root.mkdir(parents=True, exist_ok=True)
         intake = self
 
         class Handler(BaseHTTPRequestHandler):
             timeout = _TIMEOUT
 
             def do_HEAD(self) -> None:
-                design = self._design()
-                if design is None:
+                named = self._design()
+                if named is None:
                     return
+                store, design = named
                 try:
-                    os.utime(intake.store.directory(design) / MANIFEST)
+                    os.utime(store.directory(design) / MANIFEST)
                 except OSError:
                     self._answer(HTTPStatus.NOT_FOUND)
                     return
                 self._answer(HTTPStatus.OK)
-                self._prepare(design)
+                self._prepare(store, design)
 
             def do_PUT(self) -> None:
-                design = self._design()
-                if design is None:
+                named = self._design()
+                if named is None:
                     return
+                store, design = named
                 try:
                     length = int(self.headers.get("Content-Length", ""))
                 except ValueError:
@@ -89,33 +92,33 @@ class DesignIntake:
                     )
                     return
                 bundle = self.rfile.read(length)
-                held = (intake.store.directory(design) / MANIFEST).is_file()
+                held = (store.directory(design) / MANIFEST).is_file()
                 try:
-                    intake.store.receive(bundle, design)
+                    store.receive(bundle, design)
                 except ValueError as error:
                     self._answer(HTTPStatus.BAD_REQUEST, str(error))
                     return
-                _log.info("received design %s", design)
+                _log.info("received design %s of scan %s", design, store.scan)
                 self._answer(HTTPStatus.OK if held else HTTPStatus.CREATED)
-                self._prepare(design)
+                self._prepare(store, design)
 
-            def _prepare(self, design: str) -> None:
+            def _prepare(self, store: DesignStore, design: str) -> None:
                 if received is not None:
                     threading.Thread(
                         target=_prepare,
-                        args=(received, intake.store.directory(design)),
+                        args=(received, store.directory(design)),
                         daemon=True,
                         name=f"prepare-{design}",
                     ).start()
 
-            def _design(self) -> str | None:
+            def _design(self) -> tuple[DesignStore, str] | None:
                 match = _PATH.fullmatch(self.path)
-                if match is None:
+                if match is None or not _flat(match.group(1)):
                     self._answer(
-                        HTTPStatus.NOT_FOUND, "the intake serves /designs/<id>"
+                        HTTPStatus.NOT_FOUND, "the intake serves /designs/<scan>/<id>"
                     )
                     return None
-                return match.group(1)
+                return DesignStore(intake.root, match.group(1)), match.group(2)
 
             def _answer(self, status: HTTPStatus, text: str = "") -> None:
                 body = f"{text}\n".encode() if text else b""

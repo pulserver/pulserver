@@ -19,9 +19,9 @@ store are described in {doc}`../explanations/architecture`.
 ```bash
 pulserver design list     --plugins DIR --plugin NAME [--limits FILE --rf-definitions] [--socket PATH]
 pulserver design validate --plugins DIR --plugin NAME --limits FILE [--rf-layout] [--exam DIR] [--socket PATH] < VALUES
-pulserver design generate --plugins DIR --plugin NAME --limits FILE --store DIR [--exam DIR] [--push URL] [--socket PATH] < VALUES
-pulserver design import   --limits FILE --store DIR [--push URL] [--socket PATH] < IMPORT
-pulserver design push     --store DIR --to URL ID...
+pulserver design generate --plugins DIR --plugin NAME --limits FILE --store DIR --scan NAME [--exam DIR] [--push URL] [--socket PATH] < VALUES
+pulserver design import   --limits FILE --store DIR --scan NAME [--push URL] [--socket PATH] < IMPORT
+pulserver design push     --store DIR --scan NAME --to URL ID...
 pulserver design prune    --store DIR [--max-age-days D] [--max-bytes B]
 ```
 
@@ -31,16 +31,17 @@ arguments. `--plugins` is a directory of scanner-sequence plugin files,
 `<plugin>.py`, and may be repeated: a plugin is the file of the first directory
 that holds it, and the shipped plugins are searched last
 ({ref}`shipped-sequences`). `--store` is the design store, created when
-missing.
+missing, and `--scan` the name of the scan the design is stored for: one
+directory name, not starting with `.`.
 
 | Call | Reply |
 | --- | --- |
 | `list` | `PROTOCOL` and the plugin's listing block; with `--rf-definitions`, the `[RfDefinitions]` block |
 | `validate` | `VALID <seconds>` or `INVALID`, an `INFO` line and the value block of the resolved protocol; with `--rf-layout`, a valid reply ends with the `[RfLayout]` block |
-| `generate` | `GENERATED <id>`, the identifier of the design in the store |
+| `generate` | `GENERATED <id>`, the identifier of the design in the scan's directory |
 | `import` | `IMPORTED <id>` |
 | `push` | `PUSHED <count>`: the designs sent, not counting those the intake already holds |
-| `prune` | `PRUNED <count>` |
+| `prune` | `PRUNED <count>`: the scans removed |
 
 A failed call replies `ERROR <message>` and exits with status 1; a plugin that
 ends its process ends the call without a reply and with a nonzero exit status.
@@ -188,20 +189,24 @@ block = "[Protocol]\nTE: 5000\nnx: 96\n[Protocol End]\n"
 status, reply = call("validate", plugins="sequences", plugin="gre2d",
                      limits=limits, block=block)
 status, reply = call("generate", plugins="sequences", plugin="gre2d",
-                     limits=limits, block=block, store=DesignStore("designs"))
+                     limits=limits, block=block,
+                     store=DesignStore("designs", "scan"))
 ```
 
 A plugin file is imported again when its modification time changes.
 
 ### Design store
 
-The store holds one directory per design, `<store>/<id>/`, laid out as
-{doc}`../explanations/architecture` shows. `prune` removes designs least
-recently used first: those unused for longer than `--max-age-days`, then others
-until the store holds at most `--max-bytes`. A design used within the last day
-is kept whatever the limits, since a series may still be playing it or the
-proxy reading it. A store that receives pushed designs is pruned the same way,
-on the reconstruction computer.
+The store holds one directory per scan, `<store>/<scan>/`, and a scan's
+directory holds its design, `<store>/<scan>/<id>/`, laid out as
+{doc}`../explanations/architecture` shows. A design is reused while its scan
+holds it: a call that resolves to the same design replies with it, and one
+that resolves to another stores the new design in place of the scan's
+previous one. `prune` removes whole scans, least recently used first: those
+unused for longer than `--max-age-days`, then others until the store holds at
+most `--max-bytes`. A scan used within the last day is kept whatever the
+limits, since it may still be playing or reconstructing. A store that receives
+pushed designs is pruned the same way, on the reconstruction computer.
 
 ### Design push
 
@@ -258,13 +263,13 @@ pulserver proxy --store DIR --port N --forward HOST:PORT [--forward-config NAME]
 
 | Option | Meaning |
 | --- | --- |
-| `--store` | The design store the proxy reads: the one the design calls write, or the one the intake writes |
+| `--store` | The design store the proxy reads: the one the design calls write, or the one the intake writes. It also holds each scan's pose file, `<store>/<scan>/motion.buf`, for a scan corrected for motion |
 | `--port` | TCP port the scanner's reconstruction client connects to |
 | `--host` | Address to listen on; the loopback interface when unset, `0.0.0.0` for every interface |
 | `--intake-port` | TCP port of the design intake, on the `--host` address; no intake when unset |
 | `--plugins` | Directory of reconstruction plugin files, `<plugin>.py`, repeatable, searched in order before the shipped ones; required unless `--forward` is given |
 | `--queue` | Directory the series waiting for a slot are written to; a temporary directory, removed when the proxy stops, when unset |
-| `--exams` | Directory in which the proxies of this host share the caches of an exam; a location under the system temporary directory when unset |
+| `--exams` | Directory in which the proxies of this host share the caches of an exam, one directory per exam named by its identity: `exam-<ExamID>` for a header carrying `ExamID`. Created readable by the proxy's user alone; one that exists is used with the permissions the site gave it, so design calls running as another user can read the exam's maps. A location under the system temporary directory, private to the proxy's user, when unset |
 | `--slots` | Series reconstructed at once; derived from available memory and the GPUs when unset |
 | `--gpu-slots` | Series reconstructed at once on each GPU when `--slots` is unset; 1 by default |
 | `--spares` | Worker processes started ahead of a series; 1 by default |
@@ -283,9 +288,9 @@ fields the client sends in {doc}`reconstruction-client`.
 
 ### Series routing
 
-The MRD header of each series names the design it was played from in the
-`pulserver_design` user parameter, and the proxy refuses a series whose header
-names no stored design. The client's config names the reconstruction plugin, as
+The MRD header of each series names the scan in the `pulserver_scan` user
+parameter and the design it was played from in `pulserver_design`, and the
+proxy refuses a series whose header names no design stored for that scan. The client's config names the reconstruction plugin, as
 a bare plugin name or the path of its file, or as either under
 `parameters.config`; the design names none. A series whose config names none
 is refused unless the proxy forwards with `--forward-config`.
@@ -351,11 +356,11 @@ relayed back to the client.
 
 With `--intake-port`, the proxy runs a design intake beside it
 ({class}`~pulserver.proxy.DesignIntake`), an HTTP endpoint that writes the
-designs pushed to it into `--store`. `HEAD /designs/<id>` answers 200 when the
-store holds the design and 404 otherwise; `PUT /designs/<id>` stores a bundle
-and answers 201, 200 for a design already stored, or 400 with the reason for a
-bundle that is not the design its path names. A `HEAD` for a stored design
-marks it as used for `prune`.
+designs pushed to it into `--store`. `HEAD /designs/<scan>/<id>` answers 200
+when the scan holds the design and 404 otherwise; `PUT /designs/<scan>/<id>`
+stores a bundle as the scan's design and answers 201, 200 for a design already
+stored, or 400 with the reason for a bundle that is not the design its path
+names. A `HEAD` for a stored design marks its scan as used for `prune`.
 
 ### Network exposure
 

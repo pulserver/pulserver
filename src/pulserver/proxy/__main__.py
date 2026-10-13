@@ -19,7 +19,7 @@ def main(argv: list[str] | None = None) -> None:
         "--store",
         type=Path,
         required=True,
-        help="directory of designs; the intake writes it, the proxy reads it",
+        help="design store, one directory per scan; the intake writes it, the proxy reads it",
     )
     parser.add_argument("--port", type=int, required=True, help="TCP port to listen on")
     parser.add_argument(

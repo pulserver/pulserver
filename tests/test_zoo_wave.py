@@ -65,12 +65,12 @@ def _reconstructed(directory, wave, device):
     (plugins / "gre3d.py").write_text((_plugins.SEQUENCES / "gre3d.py").read_text())
     (directory / "parameters" / "gre3d").mkdir(parents=True)
     (directory / "parameters" / "gre3d" / "01.toml").write_text("wave = true\n")
-    store = DesignStore(directory / "designs")
+    store = DesignStore(directory / "designs", "scan")
     design = generate(
         store, "gre3d", PROTOCOL, plugins=plugins, parameter_set=1 if wave else 0
     )
     acquired = acquire(store.directory(design) / "sequence.seq", _slab())
-    virtual.record(directory / "raw.h5", design, acquired)
+    virtual.record(directory / "raw.h5", store.scan, design, acquired)
 
     dataset = ismrmrd.Dataset(str(directory / "raw.h5"), "dataset")
     header = ismrmrd.xsd.CreateFromDocument(dataset.read_xml_header())

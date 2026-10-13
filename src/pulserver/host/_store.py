@@ -1,4 +1,4 @@
-"""Content-addressed store of generated and imported designs."""
+"""Store of generated and imported designs: one directory per scan, each design in it addressed by its content."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ import io
 import json
 import os
 import re
+import secrets
 import shutil
 import tarfile
 import tempfile
@@ -26,7 +27,7 @@ BUNDLE_LIMIT = 1 << 31
 _IDENTITY = re.compile(r"[0-9a-f]{64}")
 # A stage older than this is left by a process that ended mid-design.
 _STALE_STAGE = 3600.0
-# A design used more recently than this may be playing or reconstructing.
+# A scan used more recently than this may be playing or reconstructing.
 _IN_USE = 86400.0
 
 
@@ -70,21 +71,42 @@ def _umask() -> int:
 
 
 class DesignStore:
-    """The designs under one directory, each in ``<id>/`` and immutable once written.
+    """The designs of one scan, each in ``<root>/<scan>/<id>/`` and immutable once written.
 
-    A design directory holds the Pulseq files of its chain, its IR cache and
+    A store root holds one directory per scan, named by whatever plays it: a
+    scanner names it after the scan, and the reconstruction finds a series'
+    design from the scan and the identifier its header carries. A design
+    directory holds the Pulseq files of its chain, its IR cache and
     :data:`MANIFEST`. It is written in a stage and renamed into place, so a
     reader sees a design whole or not at all, and two processes writing one
-    design leave one directory.
+    design leave one directory. A scan plays one design, so committing a
+    design removes the scan's others.
+
+    Parameters
+    ----------
+    root : Path | str
+        Directory of scans; created when missing.
+    scan : str
+        Name of the scan's directory: one path component, not starting with
+        ``.``.
+
+    Raises
+    ------
+    ValueError
+        If ``scan`` is not a directory name.
     """
 
-    def __init__(self, root: Path | str) -> None:
+    def __init__(self, root: Path | str, scan: str) -> None:
+        if not _flat(str(scan)):
+            raise ValueError(f"a scan is named by one directory name, not {scan!r}")
         self.root = Path(root)
-        self.root.mkdir(parents=True, exist_ok=True)
+        self.scan = str(scan)
+        self.path = self.root / self.scan
+        self.path.mkdir(parents=True, exist_ok=True)
 
     def directory(self, design: str) -> Path:
         """Return the directory of a design, whether or not it exists."""
-        return self.root / design
+        return self.path / design
 
     def find(self, identity: str) -> str | None:
         """Return the identifier of the stored design with this identity, or ``None``.
@@ -97,7 +119,7 @@ class DesignStore:
             If the directory of the identifier holds a design of another identity.
         """
         design = design_id(identity)
-        manifest = self.root / design / MANIFEST
+        manifest = self.path / design / MANIFEST
         if not manifest.is_file():
             return None
         if json.loads(manifest.read_text()).get("identity") != identity:
@@ -115,21 +137,22 @@ class DesignStore:
         FileNotFoundError
             If the store holds no design with this identifier.
         """
-        path = self.root / design / MANIFEST
+        path = self.path / design / MANIFEST
         if not path.is_file():
-            raise FileNotFoundError(f"no design {design} in {self.root}")
+            raise FileNotFoundError(f"no design {design} in {self.path}")
         return json.loads(path.read_text())
 
     def stage(self) -> Path:
         """Create an empty directory to write a design into."""
-        return Path(tempfile.mkdtemp(prefix=".stage-", dir=self.root))
+        return Path(tempfile.mkdtemp(prefix=".stage-", dir=self.path))
 
     def commit(self, identity: str, staged: Path, manifest: Mapping[str, Any]) -> str:
         """Publish a staged directory as the design of ``identity``; return its identifier.
 
         The manifest is written with the identity, the identifier and the
         SHA-256 of every file of the stage. A design another process committed
-        first is kept and the stage discarded.
+        first is kept and the stage discarded. The scan's other designs are
+        removed.
         """
         design = design_id(identity)
         files = {
@@ -139,7 +162,11 @@ class DesignStore:
         }
         record = {**manifest, "id": design, "identity": identity, "files": files}
         (staged / MANIFEST).write_text(json.dumps(record, indent=2))
-        return self._publish(identity, staged)
+        published = self._publish(identity, staged)
+        for other in self:
+            if other != published:
+                shutil.rmtree(self.path / other, ignore_errors=True)
+        return published
 
     def pack(self, design: str) -> bytes:
         """Return a stored design as a bundle: a gzip-compressed tar of its files.
@@ -155,7 +182,7 @@ class DesignStore:
         self.manifest(design)
         buffer = io.BytesIO()
         with tarfile.open(fileobj=buffer, mode="w:gz", compresslevel=1) as bundle:
-            for path in sorted((self.root / design).iterdir()):
+            for path in sorted((self.path / design).iterdir()):
                 bundle.add(path, arcname=path.name, recursive=False)
         return buffer.getvalue()
 
@@ -222,7 +249,7 @@ class DesignStore:
         # private say so with its umask.
         staged.chmod(0o777 & ~_umask())
         try:
-            staged.replace(self.root / design)
+            staged.replace(self.path / design)
         except OSError:
             self.discard(staged)
             if self.find(identity) is None:
@@ -234,44 +261,91 @@ class DesignStore:
         shutil.rmtree(staged, ignore_errors=True)
 
     def __iter__(self) -> Iterator[str]:
-        """Yield the identifier of every stored design."""
-        for manifest in sorted(self.root.glob(f"*/{MANIFEST}")):
+        """Yield the identifier of every design of the scan."""
+        for manifest in sorted(self.path.glob(f"*/{MANIFEST}")):
             if not manifest.parent.name.startswith("."):
                 yield manifest.parent.name
 
-    def prune(
-        self,
-        *,
-        max_age: float | None = None,
-        max_bytes: int | None = None,
-        now: float | None = None,
-    ) -> list[str]:
-        """Remove designs, least recently used first; return their identifiers.
 
-        A design is used when it is committed or found again. Designs unused
-        for longer than ``max_age`` seconds are removed, then the least
-        recently used until the store holds at most ``max_bytes``. A design
-        used within the last day is kept whatever the limits, since a series
-        may still be playing or reconstructing it. Stages older than an hour,
-        left by a process that ended mid-design, are removed as well.
-        """
-        now = time.time() if now is None else now
-        for stage in self.root.glob(".stage-*"):
-            if now - stage.stat().st_mtime > _STALE_STAGE:
-                self.discard(stage)
-        used = sorted(((self.root / d / MANIFEST).stat().st_mtime, d) for d in self)
-        sizes = {d: _size(self.root / d) for _, d in used}
-        removed = []
-        total = sum(sizes.values())
-        for last, design in used:
-            too_old = max_age is not None and now - last > max_age
-            too_big = max_bytes is not None and total > max_bytes
-            if now - last < _IN_USE or not (too_old or too_big):
-                continue
-            shutil.rmtree(self.root / design, ignore_errors=True)
-            total -= sizes[design]
-            removed.append(design)
-        return removed
+def new_scan(now: float | None = None) -> str:
+    """Return a name for a new scan directory: its time, then a random suffix."""
+    stamp = time.strftime("%Y%m%dT%H%M%S", time.localtime(now))
+    return f"{stamp}-{secrets.token_hex(3)}"
+
+
+def find_scan(root: Path | str, design: str) -> str:
+    """Return the newest scan of a store root that holds a design.
+
+    Raises
+    ------
+    FileNotFoundError
+        If no scan of the root holds the design.
+    """
+    holding = [
+        scan
+        for scan in scans(root)
+        if (Path(root) / scan / design / MANIFEST).is_file()
+    ]
+    if not holding:
+        raise FileNotFoundError(f"no scan of {root} holds design {design}")
+    return max(holding, key=lambda scan: _last_use(Path(root) / scan))
+
+
+def scans(root: Path | str) -> list[str]:
+    """Return the name of every scan directory of a store root."""
+    root = Path(root)
+    if not root.is_dir():
+        return []
+    return sorted(
+        entry.name for entry in root.iterdir() if entry.is_dir() and _flat(entry.name)
+    )
+
+
+def prune(
+    root: Path | str,
+    *,
+    max_age: float | None = None,
+    max_bytes: int | None = None,
+    now: float | None = None,
+) -> list[str]:
+    """Remove scan directories of a store root, least recently used first; return their names.
+
+    A scan is used when anything in its directory, or in a design of it, is
+    written, or a design of it is found again. Scans unused for longer than
+    ``max_age`` seconds are removed, then the least recently used until the
+    root holds at most ``max_bytes``. A scan used within the last day is kept
+    whatever the limits, since it may still be playing or reconstructing.
+    Stages older than an hour, left by a process that ended mid-design, are
+    removed as well.
+    """
+    root = Path(root)
+    now = time.time() if now is None else now
+    for stage in root.glob("*/.stage-*"):
+        if now - stage.stat().st_mtime > _STALE_STAGE:
+            shutil.rmtree(stage, ignore_errors=True)
+    used = sorted((_last_use(root / scan), scan) for scan in scans(root))
+    sizes = {scan: _size(root / scan) for _, scan in used}
+    removed = []
+    total = sum(sizes.values())
+    for last, scan in used:
+        too_old = max_age is not None and now - last > max_age
+        too_big = max_bytes is not None and total > max_bytes
+        if now - last < _IN_USE or not (too_old or too_big):
+            continue
+        shutil.rmtree(root / scan, ignore_errors=True)
+        total -= sizes[scan]
+        removed.append(scan)
+    return removed
+
+
+def _last_use(directory: Path) -> float:
+    """Return when anything in a scan directory, or in a design of it, was last written."""
+    times = [directory.stat().st_mtime]
+    for entry in directory.iterdir():
+        times.append(entry.lstat().st_mtime)
+        if entry.is_dir() and not entry.is_symlink():
+            times.extend(path.lstat().st_mtime for path in entry.iterdir())
+    return max(times)
 
 
 def _read_bundle(bundle: bytes) -> tuple[dict[str, bytes], dict[str, str]]:
@@ -312,6 +386,6 @@ def _flat(name: str) -> bool:
 def _size(directory: Path) -> int:
     return sum(
         path.stat().st_size
-        for path in directory.iterdir()
+        for path in directory.rglob("*")
         if path.is_file() and not path.is_symlink()
     )

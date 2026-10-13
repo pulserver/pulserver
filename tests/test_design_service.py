@@ -16,9 +16,10 @@ import pytest
 from _host import ANY_ORIENTATION, FIXTURE_LIMITS, LIMITS, PLUGINS, VENDOR_IR
 from _virtual import OBLIQUE
 
-from pulserver.host import DesignStore, design_id, design_identity
+from pulserver.host import DesignStore, design_id, design_identity, prune
 from pulserver.host import _service as service
 from pulserver.host._blocks import format_import, format_limits
+from pulserver.host._store import scans
 from pulserver.protocol import (
     FOV_ROTATION,
     PROTOCOL_BEGIN,
@@ -187,7 +188,12 @@ def block(values):
 
 @pytest.fixture
 def store(tmp_path):
-    return DesignStore(tmp_path / "designs")
+    return DesignStore(tmp_path / "designs", "scan")
+
+
+def another_scan(store, name="other"):
+    """Another scan of the store's root, for a design that must not replace the first."""
+    return DesignStore(store.root, name)
 
 
 @pytest.fixture
@@ -246,7 +252,7 @@ def test_one_resolved_protocol_is_one_design(store):
         for value in (TEPreset.MINIMUM, TEPreset.MINIMUM, 2500)
     ]
     assert len(set(designs)) == 1
-    assert generated(generate(store, "tiny", {"TE": 10000})) != designs[0]
+    assert generated(generate(another_scan(store), "tiny", {"TE": 10000})) != designs[0]
     directory = store.directory(designs[0])
     assert sorted(p.name for p in directory.iterdir()) == [
         "manifest.json",
@@ -296,9 +302,10 @@ def test_a_manifest_records_what_the_design_depends_on(store):
 
 def test_a_stored_manifest_names_no_reconstruction(store):
     designed = generated(generate(store, "gre2d", {"nx": 32, "ny": 16, "TE": 5000}))
-    copied = generated(imported(store, FIXTURES / "dedup_gre_pair.seq"))
+    copies = another_scan(store)
+    copied = generated(imported(copies, FIXTURES / "dedup_gre_pair.seq"))
     assert "recon" not in store.manifest(designed)
-    assert "recon" not in store.manifest(copied)
+    assert "recon" not in copies.manifest(copied)
 
 
 def test_a_plugin_declaring_recon_is_warned_and_ignored(tmp_path, store):
@@ -328,12 +335,13 @@ def test_an_edited_plugin_is_another_design_of_the_same_protocol(tmp_path, store
     )
     stat = plugin.stat()
     os.utime(plugin, ns=(stat.st_atime_ns, stat.st_mtime_ns + 10**9))
-    second = generated(generate(store, "tiny", {"TE": 8000}, plugins=plugins))
+    edited = another_scan(store)
+    second = generated(generate(edited, "tiny", {"TE": 8000}, plugins=plugins))
     assert second != first
     written = []
-    for design in (first, second):
+    for scan, design in ((store, first), (edited, second)):
         sequence = pp.Sequence()
-        sequence.read(store.directory(design) / "sequence.seq")
+        sequence.read(scan.directory(design) / "sequence.seq")
         written.append(sequence.num_blocks)
     assert written[1] == 2 * written[0]
 
@@ -343,7 +351,7 @@ def test_an_invalid_protocol_is_an_error_and_stores_nothing(store):
     assert status == 1
     assert text.startswith("ERROR ") and "shorter than" in text
     assert not list(store)
-    assert not any(store.root.iterdir())
+    assert not any(store.path.iterdir())
 
 
 @pytest.mark.parametrize(
@@ -401,14 +409,14 @@ def test_a_valid_reply_carries_the_duration_and_note_of_the_evaluation(
 
 
 def test_a_function_app_is_designed_into_a_stored_design(function_plugins, store):
-    def designed(nx):
+    def designed(nx, scan=store):
         return generated(
-            generate(store, "evaluating", {"nx": nx}, plugins=function_plugins)
+            generate(scan, "evaluating", {"nx": nx}, plugins=function_plugins)
         )
 
     design = designed(8)
     assert designed(8) == design
-    assert designed(9) != design
+    assert designed(9, another_scan(store)) != design
     written = store.directory(design) / "sequence.seq"
     assert b"[BLOCKS]" not in written.read_bytes()
     assert pp.io.read(written).duration()[0] == pytest.approx(8e-3)
@@ -442,12 +450,13 @@ def test_a_partial_app_is_covered_by_the_source_file_of_its_function(tmp_path, s
     helper.write_text(HELPER.replace("1e-3", "0.002"))
     stat = plugin.stat()
     os.utime(plugin, ns=(stat.st_atime_ns, stat.st_mtime_ns + 10**9))
-    second = generated(generate(store, "partial", {}, plugins=plugins))
+    edited = another_scan(store)
+    second = generated(generate(edited, "partial", {}, plugins=plugins))
 
     assert second != first
     durations = [
-        pp.io.read(store.directory(design) / "sequence.seq").duration()[0]
-        for design in (first, second)
+        pp.io.read(scan.directory(design) / "sequence.seq").duration()[0]
+        for scan, design in ((store, first), (edited, second))
     ]
     assert durations == [pytest.approx(4e-3), pytest.approx(8e-3)]
 
@@ -473,10 +482,11 @@ def test_a_design_is_written_in_the_binary_form(store):
 
 def test_a_prescribed_offset_is_a_design_of_its_own(store):
     designed = generated(generate(store, "gre2d", GRE))
-    moved = generated(generate(store, "gre2d", {**GRE, "fov_offset_y": 20.0}))
+    shifted = another_scan(store)
+    moved = generated(generate(shifted, "gre2d", {**GRE, "fov_offset_y": 20.0}))
     assert moved != designed
     assert generated(generate(store, "gre2d", {**GRE, "fov_offset_y": 0.0})) == designed
-    one, other = (store.directory(d) for d in (designed, moved))
+    one, other = store.directory(designed), shifted.directory(moved)
     assert (one / "sequence.seq").read_bytes() == (other / "sequence.seq").read_bytes()
     assert (one / "sequence.pseg").read_bytes() != (
         other / "sequence.pseg"
@@ -490,7 +500,7 @@ def test_a_design_beyond_the_scanner_limits_is_refused_and_stores_nothing(store)
     status, text = generate(store, "strong", {})
     assert status == 1
     assert "gradient amplitude of 60.0 mT/m on x" in text
-    assert not any(store.root.iterdir())
+    assert not any(store.path.iterdir())
 
 
 def test_an_oblique_design_is_held_under_the_design_limits_and_checked_against_the_scanners(
@@ -587,11 +597,12 @@ def test_a_design_is_converted_under_the_vendor_file_its_limits_name(tmp_path, s
     )
     limits = {**LIMITS, "ir_vendor_file": str(vendor)}
     first = generated(generate(store, "gre2d", GRE, limits=limits))
-    plain = generated(generate(store, "gre2d", GRE))
+    plains = another_scan(store)
+    plain = generated(generate(plains, "gre2d", GRE))
     assert first != plain
     cache = store.directory(first) / "sequence.pseg"
     seq = tmp_path / "sequence.seq"
-    shutil.copy(store.directory(plain) / "sequence.seq", seq)
+    shutil.copy(plains.directory(plain) / "sequence.seq", seq)
     system = pp.Opts(**LIMITS)
     expected = service.ir.convert(
         seq, system, grouping=service.ir.Grouping(split_edge_delays=False)
@@ -629,24 +640,28 @@ def test_importing_the_same_files_at_the_same_prescription_is_one_design(store):
     path = FIXTURES / "dedup_gre_pair.seq"
     first = generated(imported(store, path))
     assert generated(imported(store, path)) == first
-    moved = generated(imported(store, path, (0.0, 0.0, 5.0)))
+    shifted, rotated = another_scan(store, "shifted"), another_scan(store, "rotated")
+    moved = generated(imported(shifted, path, (0.0, 0.0, 5.0)))
     quarter = [[0.0, -1.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]]
-    turned = generated(imported(store, path, rotation=quarter))
+    turned = generated(imported(rotated, path, rotation=quarter))
     assert len({first, moved, turned}) == 3
-    assert store.manifest(moved)["fov_offset_mm"] == [0.0, 0.0, 5.0]
+    assert shifted.manifest(moved)["fov_offset_mm"] == [0.0, 0.0, 5.0]
     np.testing.assert_allclose(
-        np.reshape(store.manifest(turned)["fov_rotation"], (3, 3)), quarter, atol=1e-12
+        np.reshape(rotated.manifest(turned)["fov_rotation"], (3, 3)),
+        quarter,
+        atol=1e-12,
     )
 
 
 def test_an_import_plays_its_main_sequence_as_many_times_as_its_averages(store):
     path = FIXTURES / "dedup_gre_pair.seq"
+    averaged = another_scan(store)
     once = generated(imported(store, path))
-    twice = generated(imported(store, path, averages=2))
+    twice = generated(imported(averaged, path, averages=2))
     chain = ["dedup_gre_pair.seq", "dedup_gre_pair_b.seq"]
 
     single = [pp.io.read(store.directory(once) / name) for name in chain]
-    double = [pp.io.read(store.directory(twice) / name) for name in chain]
+    double = [pp.io.read(averaged.directory(twice) / name) for name in chain]
 
     assert twice != once
     assert len(double[0].libraries().block_durations) == len(
@@ -671,7 +686,7 @@ def test_an_import_beyond_the_scanner_limits_is_refused(store):
     status, text = imported(store, FIXTURES / "dedup_gre_pair.seq", limits=limits)
     assert status == 1
     assert "gradient amplitude" in text
-    assert not any(store.root.iterdir())
+    assert not any(store.path.iterdir())
 
 
 def test_a_design_identifier_is_three_integers_a_float32_holds_exactly():
@@ -698,7 +713,15 @@ def test_a_design_committed_twice_is_stored_once(store):
         (stage / "sequence.seq").write_bytes(b"designed")
     designs = [store.commit(identity, stage, {}) for stage in stages]
     assert designs[0] == designs[1] == design_id(identity)
-    assert [p.name for p in store.root.iterdir()] == [designs[0]]
+    assert [p.name for p in store.path.iterdir()] == [designs[0]]
+
+
+def test_a_design_committed_to_a_scan_replaces_the_scans_previous_design(store):
+    first = generated(generate(store, "tiny", {"TE": 8000}))
+    second = generated(generate(store, "tiny", {"TE": 10000}))
+    assert second != first
+    assert list(store) == [second]
+    assert generated(generate(store, "tiny", {"TE": 10000})) == second
 
 
 def _stored(store, values):
@@ -708,54 +731,66 @@ def _stored(store, values):
     return store.commit(identity, staged, {}), identity
 
 
-def test_pruning_removes_the_designs_unused_for_longest_first(store):
-    old, _ = _stored(store, {"TE": 8000})
-    new, _ = _stored(store, {"TE": 9000})
-    now = time.time()
-    os.utime(store.directory(old) / "manifest.json", (now - 10 * 86400,) * 2)
-    assert store.prune(max_age=86400, now=now) == [old]
-    assert list(store) == [new]
+def _aged(scan, seconds, now):
+    """Make a scan's directory and everything in it last written ``seconds`` before ``now``."""
+    for path in (*scan.path.rglob("*"), scan.path):
+        os.utime(path, (now - seconds,) * 2, follow_symlinks=False)
 
 
-def test_a_design_found_again_is_used_again(store):
-    design, identity = _stored(store, {"TE": 8000})
-    other, _ = _stored(store, {"TE": 9000})
+def test_pruning_removes_the_scans_unused_for_longest_first(store):
+    old, new = another_scan(store, "old"), another_scan(store, "new")
+    _stored(old, {"TE": 8000})
+    _stored(new, {"TE": 9000})
     now = time.time()
-    for name in (design, other):
-        os.utime(store.directory(name) / "manifest.json", (now - 10 * 86400,) * 2)
-    assert store.find(identity) == design
-    assert store.prune(max_age=86400) == [other]
+    _aged(old, 10 * 86400, now)
+    assert prune(store.root, max_age=86400, now=now) == ["old"]
+    assert scans(store.root) == ["new", "scan"]
+
+
+def test_a_scan_whose_design_is_found_again_is_used_again(store):
+    found, other = another_scan(store, "found"), another_scan(store, "other")
+    _, identity = _stored(found, {"TE": 8000})
+    _stored(other, {"TE": 9000})
+    now = time.time()
+    for scan in (found, other, store):
+        _aged(scan, 10 * 86400, now)
+    assert found.find(identity) is not None
+    assert prune(store.root, max_age=86400) == ["other", "scan"]
 
 
 def test_pruning_to_a_size_keeps_the_most_recently_used(store):
-    designs = [_stored(store, {"TE": te})[0] for te in (8000, 9000, 10000)]
+    names = ["first", "second", "third"]
+    held = [another_scan(store, name) for name in names]
+    for scan, te in zip(held, (8000, 9000, 10000), strict=True):
+        _stored(scan, {"TE": te})
     now = time.time()
-    for age, design in zip((4, 3, 2), designs, strict=True):
-        os.utime(store.directory(design) / "manifest.json", (now - age * 86400,) * 2)
-    budget = sum(p.stat().st_size for p in store.directory(designs[2]).iterdir())
-    assert store.prune(max_bytes=budget, now=now) == designs[:2]
-    assert list(store) == [designs[2]]
+    _aged(store, 5 * 86400, now)
+    for age, scan in zip((4, 3, 2), held, strict=True):
+        _aged(scan, age * 86400, now)
+    budget = sum(p.stat().st_size for p in held[2].path.rglob("*") if p.is_file())
+    assert prune(store.root, max_bytes=budget, now=now) == ["scan", "first", "second"]
+    assert scans(store.root) == ["third"]
 
 
 def test_pruning_removes_a_stage_a_process_left(store):
     stage = store.stage()
     now = time.time()
     os.utime(stage, (now - 7200,) * 2)
-    store.prune(now=now)
+    prune(store.root, now=now)
     assert not stage.exists()
 
 
 def test_pruning_keeps_a_stage_younger_than_an_hour(store):
     """A stage expires by its age, so no reused process id keeps or removes one."""
     stage = store.stage()
-    store.prune(now=time.time() + 600)
+    prune(store.root, now=time.time() + 600)
     assert stage.is_dir()
 
 
-def test_pruning_keeps_a_design_used_within_the_day_whatever_the_limits(store):
-    """A cleaner cannot remove a design a scan may be playing or reconstructing."""
+def test_pruning_keeps_a_scan_used_within_the_day_whatever_the_limits(store):
+    """A cleaner cannot remove a scan that may still be playing or reconstructing."""
     design, _ = _stored(store, {"TE": 8000})
-    assert store.prune(max_age=0, max_bytes=0) == []
+    assert prune(store.root, max_age=0, max_bytes=0) == []
     assert list(store) == [design]
 
 
@@ -789,6 +824,8 @@ def test_two_processes_designing_one_protocol_at_once_store_it_once(
         str(limits_file),
         "--store",
         str(tmp_path / "designs"),
+        "--scan",
+        "scan",
     ]
     command = [sys.executable, "-m", "pulserver._cli", "design", "generate", *args]
     running = [
@@ -805,7 +842,7 @@ def test_two_processes_designing_one_protocol_at_once_store_it_once(
     assert [p.returncode for p in running] == [0, 0], replies
     assert replies[0][0] == replies[1][0]
     design = replies[0][0].split()[1]
-    assert [p.name for p in (tmp_path / "designs").iterdir()] == [design]
+    assert [p.name for p in (tmp_path / "designs" / "scan").iterdir()] == [design]
 
 
 def _command(*args, stdin=""):
@@ -840,10 +877,11 @@ def test_the_command_replies_on_standard_output_with_its_exit_status(
     assert valid.returncode == 0
     assert valid.stdout.startswith("VALID ")
     store = ["--store", str(tmp_path / "designs")]
-    created = _command("generate", *common, *store, stdin=block({"TE": 2500}))
+    scan = ["--scan", "scan"]
+    created = _command("generate", *common, *store, *scan, stdin=block({"TE": 2500}))
     assert created.returncode == 0
     assert created.stdout.startswith("GENERATED ")
-    refused = _command("generate", *common, *store, stdin=block({"TE": 1000}))
+    refused = _command("generate", *common, *store, *scan, stdin=block({"TE": 1000}))
     assert refused.returncode == 1
     assert refused.stdout.startswith("ERROR ")
     pruned = _command("prune", *store, "--max-bytes", "0")

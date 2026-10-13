@@ -217,15 +217,16 @@ def generate(
 ) -> str:
     """Reply ``GENERATED <id>`` for the design a request resolves to.
 
-    A design already stored for the resolved protocol, the plugin's options,
-    the plugin source, the package versions and the limits is returned
-    without designing again.
+    A design the scan of ``store`` already holds for the resolved protocol,
+    the plugin's options, the plugin source, the package versions and the
+    limits is returned without designing again.
     Otherwise the sequence is designed once, under the scanner limits
     capped by the design limits ``design_max_grad`` and ``design_max_slew``,
     written in the logical frame, checked in the physical frame of the
     prescription rotation against the scanner limits with
     :func:`pulserver.ir.check`, converted to the IR cache at the prescribed
-    field-of-view offset, and stored. A request that resolves to other values
+    field-of-view offset, and stored in place of the scan's previous design.
+    A request that resolves to other values
     is designed from the resolved values, so a design is a function of its
     identifier. With ``push``, the URL of a design intake, the design is sent
     there unless the intake holds it already. ``exam`` is passed as
@@ -310,11 +311,12 @@ def import_chain(
     """Reply ``IMPORTED <id>`` for a sequence file, its chain and their IR cache.
 
     The files are identified by their names and contents and the
-    prescription and averages of the import block. A chain already stored is
-    returned; otherwise it is copied, its main sequence, the last file, is
+    prescription and averages of the import block. A chain the scan of
+    ``store`` already holds is returned; otherwise it is copied, its main sequence, the last file, is
     played as many times as the block's ``nex`` line asks, written into its
     block table as binary Pulseq, and the chain is checked and converted as
-    :func:`generate` does, and pushed as :func:`generate` pushes. The first
+    :func:`generate` does, stored and pushed as :func:`generate` stores and
+    pushes it. The first
     file is also reachable as ``sequence.seq``.
 
     Raises

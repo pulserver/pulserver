@@ -1,10 +1,10 @@
-"""Designs of a design store, found from the header of an incoming stream."""
+"""Designs of a design store, found from the scan and the design the header of an incoming stream names."""
 
 from __future__ import annotations
 
 import json
 
-__all__ = ["DESIGN_PARAMETER", "Design", "DesignCache"]
+__all__ = ["DESIGN_PARAMETER", "SCAN_PARAMETER", "Design", "DesignCache"]
 
 import re
 import threading
@@ -14,7 +14,7 @@ from functools import cached_property
 from pathlib import Path
 from typing import Any
 
-from ..host._store import ID_DIGITS, MANIFEST
+from ..host._store import ID_DIGITS, MANIFEST, _flat
 from ..mrd._metadata import user_parameter
 from ..mrd._sequence import read_chain
 from ._enrich import SequenceTable
@@ -23,6 +23,10 @@ from ._seqdesc import describe, message
 #: Header user parameter naming the design a stream was played from: its
 #: identifier, as returned by ``GENERATED`` or ``IMPORTED``.
 DESIGN_PARAMETER = "pulserver_design"
+
+#: Header user parameter naming the scan a stream was played in: the
+#: directory of the store that holds the scan's design.
+SCAN_PARAMETER = "pulserver_scan"
 
 _ENTRY = "sequence.seq"
 _IDENTIFIER = re.compile(rf"[0-9a-f]{{{ID_DIGITS}}}")
@@ -38,7 +42,7 @@ class Design:
     Attributes
     ----------
     directory
-        ``<store>/<id>/``.
+        ``<store>/<scan>/<id>/``.
     table
         The readouts of the design's sequence chain, in play order.
     prospective_motion
@@ -67,7 +71,7 @@ class Design:
 
 
 class DesignCache:
-    """The designs of a store, the most recently read kept tabulated.
+    """The designs of a store's scans, the most recently read kept tabulated.
 
     Reading a design tabulates its sequence chain, which is the expensive
     part of accepting a series; concurrent streams of one design wait for the
@@ -85,17 +89,25 @@ class DesignCache:
     def locate(self, header: Any) -> Path:
         """Return the directory of the design a header names.
 
-        The design is named by :data:`DESIGN_PARAMETER`, a
-        ``userParameterString`` holding the identifier.
+        The scan is named by :data:`SCAN_PARAMETER` and the design by
+        :data:`DESIGN_PARAMETER`, each a ``userParameterString``: the design is
+        ``<store>/<scan>/<id>/``.
 
         Raises
         ------
         ValueError
-            If the header names no design, or names it by something that is
-            not an identifier.
+            If the header names no scan or no design, names a scan by
+            something that is not a directory name, or a design by something
+            that is not an identifier.
         FileNotFoundError
-            If the store holds no such design.
+            If the scan holds no such design.
         """
+        scan = user_parameter(header, SCAN_PARAMETER)
+        if scan in (None, ""):
+            raise ValueError(f"the header carries no {SCAN_PARAMETER}")
+        scan = str(scan).strip()
+        if not _flat(scan):
+            raise ValueError(f"{SCAN_PARAMETER}={scan!r} is not a directory name")
         named = user_parameter(header, DESIGN_PARAMETER)
         if named in (None, ""):
             raise ValueError(f"the header carries no {DESIGN_PARAMETER}")
@@ -105,9 +117,11 @@ class DesignCache:
                 f"{DESIGN_PARAMETER}={named!r} is not a design identifier: "
                 f"{ID_DIGITS} hexadecimal digits"
             )
-        directory = self.store / design
+        directory = self.store / scan / design
         if not (directory / MANIFEST).is_file():
-            raise FileNotFoundError(f"no design {design} in {self.store}")
+            raise FileNotFoundError(
+                f"no design {design} in scan {scan} of {self.store}"
+            )
         return directory
 
     def read(self, directory: Path) -> Design:

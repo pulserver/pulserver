@@ -42,6 +42,7 @@ connection, so the client can finish sending and read the reason.
 
 | Element | Requirement | Use |
 | --- | --- | --- |
+| `pulserver_scan`, a `userParameterString` | Required | The scan the design is stored for: the `--scan` of the design call, one directory name of the design store |
 | `pulserver_design`, a `userParameterString` | Required | The identifier of the design the interpreter plays, from the `GENERATED` or `IMPORTED` reply: 18 hexadecimal digits, which are three 24-bit integers of six digits each |
 | `experimentalConditions.H1resonanceFrequency_Hz` | Required by the MRD schema | DICOM `ImagingFrequency` |
 | `acquisitionSystemInformation.receiverChannels` | Optional | The coil count of a reconstruction buffer laid out before its first acquisition |
@@ -52,8 +53,8 @@ connection, so the client can finish sending and read the reason.
 | `encoding` | Optional | Replaced by one encoding space per subsequence, and one more for the navigator readouts of a subsequence that has them. The reconstruction space is the sequence's matrix size and field of view, one slice deep for a stack of 2D slices; the encoded space of a Cartesian space has the readout widened to the full echo, oversampling included, and its field of view in proportion. The encoding limits are the extremes of the counters the readouts reach, centred on the k-space centre line and partition the sequence defines. A matrix size or field of view the sequence does not define is kept from the client's encoding at the same index |
 | `sequenceParameters` | Optional | TR, TE, TI and flip angles replaced by those the sequence defines; TR and TE it does not define are measured by pypulseqpp's `test_report_dict`, flip angles it does not define are the distinct values of `rf_flip_angles` |
 
-A header that the ISMRMRD schema does not accept, or that names no design of
-the store, is refused before any acquisition is read.
+A header that the ISMRMRD schema does not accept, or that names no design the
+store holds for its scan, is refused before any acquisition is read.
 
 ## Acquisitions
 
