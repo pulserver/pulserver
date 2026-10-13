@@ -947,8 +947,8 @@ def _placed(builder, position, read, phase, series=0):
     return builder(image).dset
 
 
-#: The product coronal localizer of a GE scan, posterior of isocentre: it states
-#: SliceLocation -35, image location -35 and the letter P.
+#: A coronal plane 35 mm posterior of isocentre: in the radiological convention
+#: its location is -35 mm, on the posterior side.
 CORONAL = {
     "position": (0.0, 35.0, 0.0),
     "read": (1.0, 0.0, 0.0),
@@ -970,25 +970,25 @@ def test_the_slice_location_is_the_centre_along_the_plane_normal(parsed_mrd_head
     assert float(dataset.SliceLocation) == pytest.approx(35.0)
 
 
-def test_the_location_and_its_letter_are_those_a_ge_product_image_states(
+def test_a_coronal_plane_behind_isocentre_is_located_negative_and_posterior(
     minimal_mrd_header,
 ):
     header = _explicit(
         minimal_mrd_header,
         [
             ("SliceLocation", "{location}"),
-            ("(0027,0010)LO", "GEMS_IMAG_01"),
-            ("(0027,1040)SH", "{location_letter}"),
-            ("(0027,1041)FL", "{location}"),
+            ("(0011,0010)LO", "EXAMPLE_01"),
+            ("(0011,1010)SH", "{location_letter}"),
+            ("(0011,1011)FL", "{location}"),
         ],
     )
 
     dataset = _placed(MrdDicomBuilder(header), **CORONAL)
 
     assert float(dataset.SliceLocation) == pytest.approx(-35.0)
-    assert dataset[0x0027, 0x0010].value == "GEMS_IMAG_01"
-    assert dataset[0x0027, 0x1040].value == "P"
-    assert dataset[0x0027, 0x1041].value == pytest.approx(-35.0)
+    assert dataset[0x0011, 0x0010].value == "EXAMPLE_01"
+    assert dataset[0x0011, 0x1010].value == "P"
+    assert dataset[0x0011, 0x1011].value == pytest.approx(-35.0)
 
 
 @pytest.mark.parametrize(
@@ -1004,17 +1004,17 @@ def test_an_axis_aligned_plane_is_located_along_its_axis_positive_right_anterior
 ):
     header = _explicit(
         minimal_mrd_header,
-        [("(0027,1040)SH", "{location_letter}"), ("(0027,1041)FL", "{location}")],
+        [("(0011,1010)SH", "{location_letter}"), ("(0011,1011)FL", "{location}")],
     )
 
     dataset = _placed(MrdDicomBuilder(header), position, read, phase)
 
-    assert dataset[0x0027, 0x1040].value == letter
-    assert dataset[0x0027, 0x1041].value == pytest.approx(location)
+    assert dataset[0x0011, 0x1010].value == letter
+    assert dataset[0x0011, 0x1011].value == pytest.approx(location)
 
 
 def test_an_oblique_plane_is_located_along_its_normal_and_signed(minimal_mrd_header):
-    header = _explicit(minimal_mrd_header, [("(0027,1040)SH", "{location_letter}")])
+    header = _explicit(minimal_mrd_header, [("(0011,1010)SH", "{location_letter}")])
     tilt = np.array([0.0, np.sin(0.3), np.cos(0.3)])
 
     above = _placed(
@@ -1024,7 +1024,7 @@ def test_an_oblique_plane_is_located_along_its_normal_and_signed(minimal_mrd_hea
         MrdDicomBuilder(header), -10 * tilt, (1.0, 0.0, 0.0), np.cross(tilt, (1, 0, 0))
     )
 
-    assert {above[0x0027, 0x1040].value, below[0x0027, 0x1040].value} == {"+", "-"}
+    assert {above[0x0011, 0x1010].value, below[0x0011, 0x1010].value} == {"+", "-"}
 
 
 def test_a_private_keyword_resolves_through_the_dictionary_the_header_names(
@@ -1032,25 +1032,25 @@ def test_a_private_keyword_resolves_through_the_dictionary_the_header_names(
 ):
     dictionary = tmp_path / "dict.txt"
     dictionary.write_text(
-        "# vendor dictionary\n(0019,109E)\tLO\tInternalPulseSeqName\t1\n"
+        "# vendor dictionary\n(0013,1020)\tLO\tPulseSequenceLabel\t1\n"
     )
     header = _stating(
-        minimal_mrd_header, dictionary=str(dictionary), InternalPulseSeqName="pulserver"
+        minimal_mrd_header, dictionary=str(dictionary), PulseSequenceLabel="pulserver"
     )
 
     dataset = _placed(MrdDicomBuilder(header), **CORONAL)
 
-    assert dataset[0x0019, 0x109E].value == "pulserver"
+    assert dataset[0x0013, 0x1020].value == "pulserver"
 
 
 def test_a_keyword_in_no_dictionary_is_logged_and_left_out(minimal_mrd_header, caplog):
-    header = _stating(minimal_mrd_header, InternalPulseSeqName="pulserver")
+    header = _stating(minimal_mrd_header, PulseSequenceLabel="pulserver")
 
     with caplog.at_level(logging.WARNING):
         dataset = _placed(MrdDicomBuilder(header), **CORONAL)
 
-    assert (0x0019, 0x109E) not in dataset
-    assert "InternalPulseSeqName" in caplog.text
+    assert (0x0013, 0x1020) not in dataset
+    assert "PulseSequenceLabel" in caplog.text
 
 
 def test_a_named_dictionary_replaces_the_one_the_header_names(
@@ -1059,15 +1059,15 @@ def test_a_named_dictionary_replaces_the_one_the_header_names(
     from pulserver.recon._runtime.mrd2dicom import name_dictionary
 
     dictionary = tmp_path / "dict.txt"
-    dictionary.write_text("(0019,109E)\tLO\tInternalPulseSeqName\t1\n")
+    dictionary.write_text("(0013,1020)\tLO\tPulseSequenceLabel\t1\n")
     header = _stating(
-        minimal_mrd_header, dictionary="/absent", InternalPulseSeqName="pulserver"
+        minimal_mrd_header, dictionary="/absent", PulseSequenceLabel="pulserver"
     )
 
     name_dictionary(header, dictionary)
 
     assert (
-        _placed(MrdDicomBuilder(header), **CORONAL)[0x0019, 0x109E].value == "pulserver"
+        _placed(MrdDicomBuilder(header), **CORONAL)[0x0013, 0x1020].value == "pulserver"
     )
 
 
@@ -1128,10 +1128,10 @@ def test_stated_private_attributes_survive_writing_and_reading_back(minimal_mrd_
         minimal_mrd_header,
         [
             ("ImagedNucleus", "1H"),
-            ("(0027,0010)LO", "GEMS_IMAG_01"),
-            ("(0027,1041)FL", "{location}"),
-            ("(0019,0010)LO", "GEMS_ACQU_01"),
-            ("(0019,109E)LO", "pulserver"),
+            ("(0011,0010)LO", "EXAMPLE_01"),
+            ("(0011,1011)FL", "{location}"),
+            ("(0013,0010)LO", "EXAMPLE_02"),
+            ("(0013,1020)LO", "pulserver"),
         ],
     )
     dataset = _placed(MrdDicomBuilder(header), **CORONAL)
@@ -1141,8 +1141,8 @@ def test_stated_private_attributes_survive_writing_and_reading_back(minimal_mrd_
     read = pydicom.dcmread(io.BytesIO(buffer.getvalue()))
 
     assert read.ImagedNucleus == "1H"
-    assert read[0x0027, 0x1041].value == pytest.approx(-35.0)
-    assert read[0x0019, 0x109E].value == "pulserver"
+    assert read[0x0011, 0x1011].value == pytest.approx(-35.0)
+    assert read[0x0013, 0x1020].value == "pulserver"
 
 
 def test_a_stated_attribute_without_a_quantity_is_part_of_the_series_template(
@@ -1150,7 +1150,7 @@ def test_a_stated_attribute_without_a_quantity_is_part_of_the_series_template(
 ):
     header = _explicit(
         minimal_mrd_header,
-        [("ImagedNucleus", "31P"), ("(0027,1041)FL", "{location}")],
+        [("ImagedNucleus", "31P"), ("(0011,1011)FL", "{location}")],
     )
 
     builder = MrdDicomBuilder(header)
@@ -1158,8 +1158,8 @@ def test_a_stated_attribute_without_a_quantity_is_part_of_the_series_template(
     below = _placed(builder, (0.0, 0.0, -10.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0))
 
     assert builder.dicomDset.ImagedNucleus == "31P"
-    assert (0x0027, 0x1041) not in builder.dicomDset
-    assert (above[0x0027, 0x1041].value, below[0x0027, 0x1041].value) == (10.0, -10.0)
+    assert (0x0011, 0x1011) not in builder.dicomDset
+    assert (above[0x0011, 0x1011].value, below[0x0011, 0x1011].value) == (10.0, -10.0)
 
 
 # ---------------------------------------------------------------------------

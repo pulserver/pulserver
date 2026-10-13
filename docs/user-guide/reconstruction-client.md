@@ -70,8 +70,8 @@ precedence over both. `<attribute>` is one of:
 | Form | Example | Resolved by |
 | --- | --- | --- |
 | A keyword of the DICOM standard | `dicom:ImagedNucleus` = `23Na` | pydicom's dictionary |
-| An explicit tag and value representation | `dicom:(0027,1041)FL` = `{location}` | Itself; a private group's creator is one more entry, `dicom:(0027,0010)LO` |
-| A keyword of a private dictionary | `dicom:InternalPulseSeqName` = `pulserver` | The file `dicom:dictionary` names, in MATLAB's format, one `(gggg,eeee) VR Keyword VM` line per attribute |
+| An explicit tag and value representation | `dicom:(0011,1011)FL` = `{location}` | Itself; a private group's creator is one more entry, `dicom:(0011,0010)LO` |
+| A keyword of a private dictionary | `dicom:PulseSequenceLabel` = `pulserver` | The file `dicom:dictionary` names, in MATLAB's format, one `(gggg,eeee) VR Keyword VM` line per attribute |
 
 A value separates multiple values with `\` and may name, in braces, a quantity
 of the image it is written into; `{{` and `}}` are literal braces:
