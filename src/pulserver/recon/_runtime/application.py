@@ -157,6 +157,13 @@ def _make_images(
 ) -> tuple[list[ismrmrd.Image], int]:
     data = as_numpy(result.data)
     unit = _unit_header(result, bucket, context.header)
+    if result.image_type.lower() == "rgb":
+        if data.ndim != 3 or data.shape[-1] != 3:
+            raise ValueError(f"an RGB result is (y, x, 3), not {data.shape}")
+        planes = np.clip(np.moveaxis(data, -1, 0), 0, 255).astype(np.uint16)
+        rgb = dataclasses.replace(result, data=planes[:, None])
+        image, next_image_index = _make_image(rgb, unit, next_image_index, app_name)
+        return [image], next_image_index
     if data.ndim != 3 or data.shape[0] == 1:
         image, next_image_index = _make_image(result, unit, next_image_index, app_name)
         return [image], next_image_index
@@ -297,6 +304,7 @@ def _image_type(name: str) -> int:
         "real": ismrmrd.IMTYPE_REAL,
         "imaginary": ismrmrd.IMTYPE_IMAG,
         "complex": ismrmrd.IMTYPE_COMPLEX,
+        "rgb": ismrmrd.IMTYPE_RGB,
     }
     try:
         return types[name.lower()]

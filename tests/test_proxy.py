@@ -1361,6 +1361,62 @@ def test_pulserver_replay_writes_the_image_the_plugin_returns(bucket, tmp_path):
         written.close()
 
 
+def test_a_replay_writes_dicom_that_states_what_the_header_asks_for(bucket, tmp_path):
+    root, series = bucket
+    played = series["gre2d"]
+    dictionary = tmp_path / "dict.txt"
+    dictionary.write_text("(0019,109E)\tLO\tInternalPulseSeqName\t1\n")
+    path = tmp_path / "scan.h5"
+    header = ismrmrd.xsd.CreateFromDocument(header_xml(played))
+    header.userParameters.userParameterString += [
+        ismrmrd.xsd.userParameterStringType(name="dicom:ImagedNucleus", value="1H"),
+        ismrmrd.xsd.userParameterStringType(
+            name="dicom:InternalPulseSeqName", value="pulserver"
+        ),
+    ]
+    dataset = ismrmrd.Dataset(str(path), "dataset", create_if_needed=True)
+    dataset.write_xml_header(ismrmrd.xsd.ToXML(header))
+    for index in range(len(played.table)):
+        dataset.append_acquisition(
+            ismrmrd.Acquisition.from_array(flat(played.table, index))
+        )
+    dataset.close()
+
+    emitted = load_plugin(RECON_PLUGINS / "gre2d.py").run(
+        str(path), store=root, dicom=True, dicom_dictionary=str(dictionary)
+    )
+
+    (dicom,) = [item.dset for item in emitted if isinstance(item, DicomWithName)]
+    assert dicom.ImagedNucleus == "1H"
+    assert dicom[0x0019, 0x109E].value == "pulserver"
+
+
+def test_pulserver_replay_writes_dicom_files_under_dicom(bucket, tmp_path):
+    from pulserver import _cli
+
+    root, series = bucket
+    played = series["gre2d"]
+    path = _recorded(tmp_path / "scan.h5", played, flat)
+    output = tmp_path / "out"
+
+    status = _cli.main(
+        [
+            "replay",
+            path,
+            "--plugin",
+            str(RECON_PLUGINS / "gre2d.py"),
+            "--store",
+            str(root),
+            "--dicom",
+            "--output",
+            str(output),
+        ]
+    )
+
+    assert status == 0
+    assert len(list(output.glob("*.dcm"))) == 1
+
+
 def test_what_a_proxy_keeps_is_the_header_the_scanner_sent(
     start_proxy, bucket, tmp_path
 ):
