@@ -331,6 +331,13 @@ with one mapping per DICOM series, a series being the images that share
 
 `RescaleType` is `US`, unspecified: the units are those of the reconstruction.
 
+A DICOM image is written in the radiological display orientation of the plane
+it lies closest to: an axial image with the patient's right on the left and
+anterior at the top, a coronal one with the right on the left and superior at
+the top, a sagittal one with anterior on the left and superior at the top. Its
+pixels are flipped and transposed to that orientation, never resampled; the MRD
+image keeps the orientation the reconstruction returned.
+
 Each `series_index` is a DICOM series of its own. The first to arrive takes the
 series identity the header states; each later one a series UID derived from it
 and, on a GE system, the series number `100 × measurementID + k` for the

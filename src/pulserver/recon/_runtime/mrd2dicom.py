@@ -454,15 +454,20 @@ class MrdDicomBuilder:
 
         The default window spans the 5th to 95th percentile of the values. Image
         meta attributes override the series description, image comment, image
-        type, orientation, window, TE and TI. When the manufacturer names GE, the
-        series number is the header's ``measurementID`` and the image type is
-        written to a private tag.
+        type, window, TE and TI. When the manufacturer names GE, the image type
+        is written to a private tag.
 
-        ``PixelSpacing`` is the row spacing, along ``phase_dir``, then the column
-        spacing, along ``read_dir``. MRD's ``position`` is the centre of pixel
-        ``n // 2`` along each in-plane axis, where an FFT places the
-        field-of-view centre; ``ImagePositionPatient`` is the centre of the
-        first pixel.
+        The image's rows run along ``read_dir`` and its columns along
+        ``phase_dir``, or along the meta attributes ``ImageRowDir`` and
+        ``ImageColumnDir`` when it states them; MRD's ``position`` is the
+        centre of pixel ``n // 2`` along each, where an FFT places the
+        field-of-view centre. The pixels are then flipped and transposed, never
+        resampled, into the radiological display orientation of the plane the
+        image lies closest to: an axial image with rows towards the patient's
+        left and columns towards posterior, a coronal one towards left and
+        inferior, a sagittal one towards posterior and inferior.
+        ``ImagePositionPatient`` is the centre of the first pixel of the
+        displayed image.
 
         Raises
         ------
@@ -535,14 +540,26 @@ class MrdDicomBuilder:
             )
 
         # ----- Update DICOM header from MRD Image Data -----
-        dicomDset.Rows = mrdImg.data.shape[2]
-        dicomDset.Columns = mrdImg.data.shape[3]
-
         meta = ismrmrd.Meta.deserialize(mrdImg.attribute_string)
-        values = np.squeeze(mrdImg.data)
+        values = np.squeeze(mrdImg.data, axis=(0, 1))
         image_type = mrdImg.image_type
         if np.iscomplexobj(values):
             values, image_type = np.abs(values), ismrmrd.IMTYPE_MAGNITUDE
+        read, phase = _in_plane(mrdImg, meta)
+        rows, columns = values.shape
+        row_spacing = float(mrdImg.field_of_view[1]) / rows
+        column_spacing = float(mrdImg.field_of_view[0]) / columns
+        centre = np.asarray(mrdImg.position, dtype=float)
+        first_pixel = (
+            centre
+            - (columns // 2) * column_spacing * read
+            - (rows // 2) * row_spacing * phase
+        )
+        if np.any(read) and np.any(phase):
+            values, read, phase, row_spacing, column_spacing, first_pixel = _displayed(
+                values, read, phase, row_spacing, column_spacing, first_pixel
+            )
+        dicomDset.Rows, dicomDset.Columns = values.shape
         pixels, rescale, real = self._store(mrdImg.image_series_index, values, meta)
         if rescale is not None:
             dicomDset.RescaleSlope, dicomDset.RescaleIntercept = rescale
@@ -579,29 +596,13 @@ class MrdDicomBuilder:
             dicomDset.ImageType[2] = str(IMTYPE_MAPS[image_type][vendor])
 
         self._identify(dicomDset, mrdImg.image_series_index)
-        rows, columns = mrdImg.data.shape[2], mrdImg.data.shape[3]
-        row_spacing = float(mrdImg.field_of_view[1]) / rows
-        column_spacing = float(mrdImg.field_of_view[0]) / columns
         dicomDset.PixelSpacing = [round(row_spacing, 6), round(column_spacing, 6)]
         dicomDset.SliceThickness = round(mrdImg.field_of_view[2], 6)
-        first_pixel = (
-            np.asarray(mrdImg.position, dtype=float)
-            - (columns // 2) * column_spacing * np.asarray(mrdImg.read_dir, float)
-            - (rows // 2) * row_spacing * np.asarray(mrdImg.phase_dir, float)
-        )
         dicomDset.ImagePositionPatient = [round(float(v), 6) for v in first_pixel]
         dicomDset.ImageOrientationPatient = [
-            round(mrdImg.read_dir[0], 6),
-            round(mrdImg.read_dir[1], 6),
-            round(mrdImg.read_dir[2], 6),
-            round(mrdImg.phase_dir[0], 6),
-            round(mrdImg.phase_dir[1], 6),
-            round(mrdImg.phase_dir[2], 6),
+            round(float(v), 6) for v in (*read, *phase)
         ]
-        normal = np.cross(
-            np.asarray(mrdImg.read_dir, float), np.asarray(mrdImg.phase_dir, float)
-        )
-        centre = np.asarray(mrdImg.position, dtype=float)
+        normal = np.cross(read, phase)
         dicomDset.SliceLocation = round(float(centre @ normal), 6)
         self._set_diffusion(dicomDset, mrdImg)
 
@@ -634,18 +635,6 @@ class MrdDicomBuilder:
 
         if meta.get("ImageType") is not None:
             dicomDset.ImageType = meta["ImageType"]
-
-        if (meta.get("ImageRowDir") is not None) and (
-            meta.get("ImageColumnDir") is not None
-        ):
-            dicomDset.ImageOrientationPatient = [
-                float(meta["ImageRowDir"][0]),
-                float(meta["ImageRowDir"][1]),
-                float(meta["ImageRowDir"][2]),
-                float(meta["ImageColumnDir"][0]),
-                float(meta["ImageColumnDir"][1]),
-                float(meta["ImageColumnDir"][2]),
-            ]
 
         if meta.get("WindowCenter") is not None:
             dicomDset.WindowCenter = meta["WindowCenter"]
@@ -915,6 +904,66 @@ def name_dictionary(header: Any, path: Any) -> None:
     strings[:] = [entry for entry in strings if entry.name != DICOM_DICTIONARY]
     strings.append(
         ismrmrd.xsd.userParameterStringType(name=DICOM_DICTIONARY, value=str(path))
+    )
+
+
+#: The display directions of rows and columns, in DICOM's patient frame, of a
+#: plane whose normal lies closest to x (sagittal), y (coronal) or z (axial).
+_DISPLAY = (
+    (np.array([0.0, 1.0, 0.0]), np.array([0.0, 0.0, -1.0])),
+    (np.array([1.0, 0.0, 0.0]), np.array([0.0, 0.0, -1.0])),
+    (np.array([1.0, 0.0, 0.0]), np.array([0.0, 1.0, 0.0])),
+)
+
+
+def _in_plane(image: ismrmrd.Image, meta: Any) -> tuple[np.ndarray, np.ndarray]:
+    """Return the unit directions an image's rows and columns run along; zero for an image that states none."""
+    row, column = meta.get("ImageRowDir"), meta.get("ImageColumnDir")
+    if row is None or column is None:
+        row, column = image.read_dir, image.phase_dir
+    row = np.asarray([float(v) for v in row])
+    column = np.asarray([float(v) for v in column])
+    if not (np.any(row) and np.any(column)):
+        return row, column
+    return row / np.linalg.norm(row), column / np.linalg.norm(column)
+
+
+def _displayed(
+    values: np.ndarray,
+    read: np.ndarray,
+    phase: np.ndarray,
+    row_spacing: float,
+    column_spacing: float,
+    first: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, float, float, np.ndarray]:
+    """Return an image flipped and transposed into its plane's display orientation.
+
+    ``read`` and ``phase`` are the unit directions in the patient frame along a
+    row and down a column, the spacings the distances between columns and
+    between rows (mm), and ``first`` the centre of the first pixel. Returns the
+    same quantities for the displayed image.
+    """
+    row_dir, column_dir = _DISPLAY[int(np.argmax(np.abs(np.cross(read, phase))))]
+    # Index 0 steps down a column, index 1 along a row.
+    axes = [[phase, row_spacing], [read, column_spacing]]
+    if abs(phase @ row_dir) + abs(read @ column_dir) > abs(read @ row_dir) + abs(
+        phase @ column_dir
+    ):
+        values = values.T
+        axes.reverse()
+    for axis, target in ((1, row_dir), (0, column_dir)):
+        direction, spacing = axes[axis]
+        if direction @ target < 0:
+            first = first + (values.shape[axis] - 1) * spacing * direction
+            axes[axis][0] = -direction
+            values = np.flip(values, axis)
+    return (
+        np.ascontiguousarray(values),
+        axes[1][0],
+        axes[0][0],
+        axes[0][1],
+        axes[1][1],
+        first,
     )
 
 

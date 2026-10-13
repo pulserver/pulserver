@@ -795,14 +795,14 @@ def test_pixel_spacing_is_the_row_spacing_then_the_column_spacing(parsed_mrd_hea
 def test_the_image_position_is_the_centre_of_the_first_pixel(parsed_mrd_header):
     """MRD places pixel n // 2, where an FFT puts the centre; DICOM places the first transmitted pixel."""
     image = _placed_image(
-        (10.0, 20.0, 30.0), (0.0, 1.0, 0.0), (-1.0, 0.0, 0.0), (240.0, 120.0, 5.0)
+        (10.0, 20.0, 30.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (240.0, 120.0, 5.0)
     )
     dicom = MrdDicomBuilder(parsed_mrd_header)(image).dset
     column, row = 240.0 / 8, 120.0 / 6
     expected = (
         np.array([10.0, 20.0, 30.0])
-        - 4 * column * np.array([0.0, 1.0, 0.0])
-        - 3 * row * np.array([-1.0, 0.0, 0.0])
+        - 4 * column * np.array([1.0, 0.0, 0.0])
+        - 3 * row * np.array([0.0, 1.0, 0.0])
     )
     np.testing.assert_allclose([float(v) for v in dicom.ImagePositionPatient], expected)
 
@@ -1160,3 +1160,87 @@ def test_a_stated_attribute_without_a_quantity_is_part_of_the_series_template(
     assert builder.dicomDset.ImagedNucleus == "31P"
     assert (0x0027, 0x1041) not in builder.dicomDset
     assert (above[0x0027, 0x1041].value, below[0x0027, 0x1041].value) == (10.0, -10.0)
+
+
+# ---------------------------------------------------------------------------
+# Display orientation
+# ---------------------------------------------------------------------------
+
+#: Row and column directions of the display orientation of each plane, in
+#: DICOM's patient frame: x towards left, y towards posterior, z towards superior.
+DISPLAY = {
+    "axial": ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0)),
+    "coronal": ((1.0, 0.0, 0.0), (0.0, 0.0, -1.0)),
+    "sagittal": ((0.0, 1.0, 0.0), (0.0, 0.0, -1.0)),
+}
+
+
+def _arrangements(row, column):
+    """The eight ways a plane's rows and columns can run, flipped and swapped."""
+    row, column = np.asarray(row), np.asarray(column)
+    for read, phase in ((row, column), (column, row)):
+        for sign_read in (1.0, -1.0):
+            for sign_phase in (1.0, -1.0):
+                yield sign_read * read, sign_phase * phase
+
+
+def _positions(dataset):
+    """The patient position of every pixel of a DICOM image, (rows, columns, 3)."""
+    origin = np.array([float(v) for v in dataset.ImagePositionPatient])
+    orientation = np.array([float(v) for v in dataset.ImageOrientationPatient])
+    row_spacing, column_spacing = (float(v) for v in dataset.PixelSpacing)
+    i = np.arange(dataset.Rows)[:, None, None]
+    j = np.arange(dataset.Columns)[None, :, None]
+    return (
+        origin
+        + j * column_spacing * orientation[:3]
+        + i * row_spacing * orientation[3:]
+    )
+
+
+@pytest.mark.parametrize("plane", sorted(DISPLAY))
+def test_every_image_is_written_in_its_planes_display_orientation_with_its_pixels_in_place(
+    parsed_mrd_header, plane
+):
+    rng = np.random.default_rng(0)
+    for read, phase in _arrangements(*DISPLAY[plane]):
+        values = rng.integers(1, 1000, (6, 8)).astype(np.uint16)
+        image = ismrmrd.Image.from_array(values, transpose=False)
+        image.position = (5.0, -7.0, 11.0)
+        image.read_dir = tuple(read)
+        image.phase_dir = tuple(phase)
+        image.slice_dir = tuple(np.cross(read, phase))
+        image.field_of_view = (8.0 * 3.0, 6.0 * 2.0, 4.0)
+
+        dataset = MrdDicomBuilder(parsed_mrd_header)(image).dset
+
+        np.testing.assert_allclose(
+            [float(v) for v in dataset.ImageOrientationPatient],
+            [*DISPLAY[plane][0], *DISPLAY[plane][1]],
+            atol=1e-9,
+        )
+        start = np.array(image.position) - 4 * 3.0 * read - 3 * 2.0 * phase
+        placed = {
+            tuple(np.round(start + j * 3.0 * read + i * 2.0 * phase, 6)): values[i, j]
+            for i in range(6)
+            for j in range(8)
+        }
+        written = _positions(dataset)
+        for i in range(dataset.Rows):
+            for j in range(dataset.Columns):
+                assert (
+                    placed[tuple(np.round(written[i, j], 6))]
+                    == dataset.pixel_array[i, j]
+                )
+
+
+def test_an_image_already_in_display_orientation_is_written_as_it_is(parsed_mrd_header):
+    values = np.arange(48, dtype=np.uint16).reshape(6, 8)
+    image = ismrmrd.Image.from_array(values, transpose=False)
+    image.read_dir, image.phase_dir = DISPLAY["axial"]
+    image.slice_dir = (0.0, 0.0, 1.0)
+    image.field_of_view = (8.0, 6.0, 1.0)
+
+    np.testing.assert_array_equal(
+        MrdDicomBuilder(parsed_mrd_header)(image).dset.pixel_array, values
+    )
