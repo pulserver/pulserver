@@ -846,7 +846,7 @@ typedef struct pulseg_block_info
     int rf_num_samples;    /**< samples per channel, -1 if absent */
     int rf_duration_us;    /**< RF shape duration (us), -1 if absent */
     int rf_is_complex;     /**< 1 if phase shape exists           */
-    int rf_uniform_raster; /**< 1 if time shape present           */
+    int rf_uniform_raster; /**< 1 if samples sit on the RF raster  */
 
     /* ADC */
     int has_adc;      /**< 1 if ADC acquisition active       */

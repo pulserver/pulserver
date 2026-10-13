@@ -240,3 +240,41 @@ def test_the_definitions_a_design_states_are_the_ones_a_scanner_reads(
             definition == named and angle == pytest.approx(stated_angle, rel=1e-3)
             for named, stated_angle in stated
         ), f"the scanner reads ({definition}, {angle}) which no design states"
+
+
+@pytest.mark.parametrize(
+    ("dwell_rasters", "uniform"), [(1, 1), (2, 0)], ids=["on-raster", "twice-raster"]
+)
+def test_a_ptx_pulse_reads_as_uniform_only_when_its_samples_sit_on_the_rf_raster(
+    dwell_rasters, uniform, tmp_path, scanner_build
+):
+    """A scanner plays a uniform RF as one waveform and any other as ramps between samples.
+
+    A pTx pulse states its sample times, centres of the RF raster periods when
+    its dwell is the raster. Read as non-uniform, a pulse of many samples
+    would be played as one ramp per raster period.
+    """
+    dwell = dwell_rasters * SYSTEM.rf_raster_time
+    samples = np.hanning(100) * 200.0
+    signal = np.stack([samples, 0.5 * samples * np.exp(0.3j)])
+    pulse = pp.make_ptx_pulse(signal, dwell=dwell, system=SYSTEM, use="excitation")
+    sinc, _, _ = _pulses()
+    path = _written(tmp_path, [pulse, sinc])
+    cache = convert(
+        path, SYSTEM, vendor=VENDOR, label_column_map=LABELS, cache_ext=".cache"
+    )
+    reader = scanner_build(tmp_path, "read_rf_timing.c", "read_rf_timing")
+
+    printed = subprocess.run(
+        [str(reader), str(cache), str(path.stat().st_size)],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    read = {
+        int(parts[4]): int(parts[3])
+        for parts in (line.split() for line in printed.splitlines())
+        if parts[0] == "rf"
+    }
+
+    assert read == {100: uniform, len(sinc.signal): 1}

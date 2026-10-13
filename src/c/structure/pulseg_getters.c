@@ -1301,13 +1301,19 @@ static int block_has_rf(const pulseg_collection *coll, int seg_idx, int blk_idx)
     return (bdef->rf_id != -1) ? 1 : 0;
 }
 
+static int get_rf_num_samples(const pulseg_collection *coll, int seg_idx, int blk_idx);
+
+/* 1 when the RF samples sit at the centres of consecutive RF raster periods:
+ * no time shape, or one that places them there, as a writer may state the
+ * default explicitly. */
 static int block_rf_has_uniform_raster(const pulseg_collection *coll, int seg_idx, int blk_idx)
 {
     const pulseg_sequence_descriptor *desc;
     const pulseg_virtual_segment *seg;
-    int local_blk;
+    int local_blk, i, n, uniform;
     const pulseg_base_block *bdef;
     const pulseg_rf_definition *rdef;
+    float *t, r;
 
     if (!resolve_block(coll, &desc, &seg, &local_blk, seg_idx, blk_idx))
         return -1;
@@ -1317,7 +1323,19 @@ static int block_rf_has_uniform_raster(const pulseg_collection *coll, int seg_id
         return -1;
 
     rdef = &desc->rf_definitions[bdef->rf_id];
-    return (rdef->time_shape_id == 0) ? 1 : 0;
+    if (rdef->time_shape_id == 0)
+        return 1;
+
+    t = pulseg_get_rf_time_us(coll, seg_idx, blk_idx);
+    if (!t)
+        return 0;
+    n = get_rf_num_samples(coll, seg_idx, blk_idx);
+    r = desc->rf_raster_us;
+    uniform = (n > 0 && r > 0.0f);
+    for (i = 0; uniform && i < n; ++i)
+        uniform = fabs((double)t[i] - (i + 0.5) * r) <= 1e-3 * r;
+    PULSEG_FREE(t);
+    return uniform;
 }
 
 static float *alloc_uniform_time_us(int num_samples, float raster_us)
