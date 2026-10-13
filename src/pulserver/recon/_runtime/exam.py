@@ -7,6 +7,7 @@ __all__ = [
     "EXAM_DIRECTORY_MODE",
     "EXAM_IDLE",
     "ExamCacheManager",
+    "exam_directory_name",
     "resolve_exam_id",
 ]
 
@@ -15,6 +16,7 @@ import fcntl
 import hashlib
 import itertools
 import os
+import re
 import shutil
 import tempfile
 import time
@@ -45,6 +47,9 @@ EXAM_DIRECTORY_MODE = 0o700
 #: ends it. No message says an exam is over, and this is longer than the gap
 #: between two series of one exam.
 EXAM_IDLE = 2 * 3600.0
+
+# A value that names an exam directory as it is: no separator, no leading dot.
+_PLAIN_NAME = re.compile(r"[A-Za-z0-9_][A-Za-z0-9._-]{0,127}")
 
 
 @dataclass
@@ -199,7 +204,7 @@ class ExamCacheManager:
     def _exam_directory(self, exam_id: Hashable) -> Path | None:
         if self._directory is None:
             return None
-        return self._directory / hashlib.sha256(repr(exam_id).encode()).hexdigest()
+        return self._directory / exam_directory_name(exam_id)
 
     def _hold(self, exam_id: Hashable) -> int:
         """Take the shared lock stating that this process is on this exam.
@@ -266,6 +271,25 @@ def _remove_unheld(directory: Path) -> None:
 def _lock_path(directory: Path) -> Path:
     """Return the lock beside an exam's directory, so removing one leaves the other."""
     return directory.with_name(directory.name + ".lock")
+
+
+def exam_directory_name(exam_id: Hashable) -> str:
+    """Return the name of an exam's directory under the exam root.
+
+    An identity :func:`resolve_exam_id` returns is named ``<source>-<value>``,
+    ``exam-5084`` for the ``ExamID`` 5084, so a design call can name the
+    directory of the exam it is made in from the exam's number. Any other
+    identity, and a value that is not a plain file name, is named by the
+    SHA-256 of its ``repr``.
+    """
+    if (
+        isinstance(exam_id, tuple)
+        and len(exam_id) == 2
+        and all(isinstance(part, str) for part in exam_id)
+        and _PLAIN_NAME.fullmatch(exam_id[1])
+    ):
+        return f"{exam_id[0]}-{exam_id[1]}"
+    return hashlib.sha256(repr(exam_id).encode()).hexdigest()
 
 
 def resolve_exam_id(header: Any) -> Hashable | None:
