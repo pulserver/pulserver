@@ -344,8 +344,10 @@ def test_an_exam_samples_its_tissue_once_and_each_scan_plays_from_equilibrium(
     third = scanned()
 
     assert len(sampled) == 2
-    np.testing.assert_array_equal(second, first)
-    np.testing.assert_array_equal(third, first)
+    # The images' spectra are spread across threads in no fixed order of
+    # floating-point sums, which can move a stored value by one count.
+    np.testing.assert_allclose(second, first, rtol=0, atol=1)
+    np.testing.assert_allclose(third, first, rtol=0, atol=1)
 
 
 def _scanned(console, design, rotation):
