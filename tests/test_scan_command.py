@@ -180,7 +180,7 @@ def test_a_headless_scan_without_a_reconstruction_uses_the_shipped_pair_of_its_p
     monkeypatch.setattr(
         virtual,
         "send",
-        lambda address, design, readouts, config=None, **series: (
+        lambda address, scan, design, readouts, config=None, **series: (
             named.append(config) or []
         ),
     )
