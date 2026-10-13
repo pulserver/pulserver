@@ -167,7 +167,7 @@ gradient heating from it.
 | `vop_file` | `.mat` or `.npz` file of VOPs and the head SAR matrix of each body model, at a path the design calls can read; its `safety_factor` multiplies local SAR |
 | `vop_head_limit`, `vop_local_limit` | The scanner's head and local SAR limits in W/kg in its current operating mode |
 | `vop_drive_per_hz` | Channel drive per Hz of RF amplitude, one value or one per channel separated by spaces; a scale common to every channel cancels. Equal drives when left out |
-| `vop_default_shim` | Magnitude and phase in rad of each channel's weight for a pulse played without an RF shim, separated by spaces; equal weights when left out |
+| `vop_default_shim` | Magnitude and phase in rad of each channel's weight for a pulse played without an RF shim, separated by spaces; equal weights whose squares sum to 1 when left out |
 | `vop_coil` | Transmit configuration the scanner reports; the VOP file's `transmit` metadata must name the same one |
 | `acoustic_file` | HDF5 file of the gradient coil's acoustic transfer function, at a path the design calls can read; the peak and A-weighted average sound pressure levels are held to the limits of IEC 60601-2-33 and written into the cache |
 | `acoustic_interval_us` | Sampling interval in µs that the bins of `acoustic_file` refer to; given with it |

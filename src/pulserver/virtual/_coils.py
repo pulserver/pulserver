@@ -56,7 +56,10 @@ class Coil:
 
     Receive sensitivities are scaled to a root sum of squares of 1 at the
     isocentre, and transmit sensitivities so that the :attr:`default_shim`
-    plays a pulse at its nominal amplitude at the isocentre. A model's
+    plays a pulse at its nominal amplitude at the isocentre. Its weights have a
+    root sum of squares of 1, so the channels driven by it carry together the
+    power of one channel at that amplitude, as an RF shim of the same
+    normalisation does. A model's
     transmit sensitivities are the complex conjugates of its receive
     sensitivities, the quasi-static limit of reciprocity.
     """
@@ -77,7 +80,7 @@ class Coil:
 
     @property
     def default_shim(self) -> np.ndarray | None:
-        """Unit channel weights that bring every transmit channel into phase at the isocentre; None for one channel.
+        """Channel weights of magnitude 1/sqrt(channels) that bring every transmit channel into phase at the isocentre; None for one channel.
 
         A single-channel pulse played without an RF shim is played on every
         channel with these weights. They are an RF shim's weights, which scale
@@ -85,7 +88,8 @@ class Coil:
         """
         if self.transmit_model is None:
             return None
-        return np.exp(1j * np.angle(_isocentre(_transmit(self.transmit_model))))
+        phases = np.angle(_isocentre(_transmit(self.transmit_model)))
+        return np.exp(1j * phases) / np.sqrt(phases.size)
 
     def transmit(self, points: np.ndarray) -> np.ndarray | None:
         """Return each channel's transmit sensitivity at ``(n, 3)`` physical points, in m.
@@ -128,11 +132,13 @@ class Coil:
         vops = maps.with_name(f"{maps.stem}_vops.npz")
         if not vops.is_file():
             return {}
-        phases = np.angle(self.default_shim).tolist()
+        shim = self.default_shim
         return {
             "vop_file": str(vops),
             "vop_drive_per_hz": repr(_drive_per_hz(maps)),
-            "vop_default_shim": " ".join(f"1.0 {phase!r}" for phase in phases),
+            "vop_default_shim": " ".join(
+                f"{abs(w)!r} {float(np.angle(w))!r}" for w in shim.tolist()
+            ),
             "vop_head_limit": repr(HEAD_SAR_LIMIT),
             "vop_local_limit": repr(LOCAL_SAR_LIMIT),
         }
@@ -219,15 +225,16 @@ def _transmit(side: tuple[str, int] | Path) -> _Grid:
         grid = grid._replace(values=np.conj(grid.values))
     else:
         grid = _map(side, "minus")
-    return _scaled(grid, np.sum(np.abs(_isocentre(grid))))
+    magnitudes = np.abs(_isocentre(grid))
+    return _scaled(grid, np.sum(magnitudes) / np.sqrt(magnitudes.size))
 
 
 @functools.cache
 def _drive_per_hz(maps: Path) -> float:
     import pypulseqpp as pp
 
-    minus = np.sum(np.abs(_isocentre(_map(maps, "minus"))))
-    return 2.0 / (pp.Opts().gamma * float(minus))
+    minus = np.abs(_isocentre(_map(maps, "minus")))
+    return 2.0 * float(np.sqrt(minus.size)) / (pp.Opts().gamma * float(np.sum(minus)))
 
 
 def _scaled(grid: _Grid, norm: float) -> _Grid:

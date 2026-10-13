@@ -227,9 +227,14 @@ the models show none of the dielectric effects of a wavelength comparable to
 the head.
 
 A pulse plays on every transmit channel, weighted by the coil's default shim,
-the unit weights that bring the channels into phase at the isocentre, where the
-pulse then has its nominal amplitude: each cube sees the transmit field
-$b^+(\mathbf{r}) = \sum_c w_c\,s^+_c(\mathbf{r})$, for the weights $w_c$.
+the weights of magnitude $1/\sqrt{N}$ for $N$ channels that bring the channels
+into phase at the isocentre, where the pulse then has its nominal amplitude:
+each cube sees the transmit field
+$b^+(\mathbf{r}) = \sum_c w_c\,s^+_c(\mathbf{r})$, for the weights $w_c$. The
+squares of the weights sum to 1, so the channels together carry the power of
+one channel at the pulse's amplitude, and an RF shim is written in the same
+normalisation: a circularly polarised shim of $N$ channels has weights of
+magnitude $1/\sqrt{N}$.
 
 A console given field maps takes the coils, and the subject's field, from
 electromagnetic and susceptibility models of BrainWeb's head instead
@@ -506,8 +511,8 @@ The maps' transmit coils come with the VOPs mariepy compresses from the same
 fields, and every design is made under those of the exam's transmit coil: its
 limits name the VOP file, the default shim, the drive of every channel per
 hertz of a pulse's amplitude with which the channels' fields reach that
-amplitude at the isocentre, $2 / (\gamma \sum_c |B^-_c(\mathbf{0})|)$ in the
-maps' unit of drive, and the head and local SAR limits of IEC 60601-2-33's
+amplitude at the isocentre through the default shim,
+$2\sqrt{N} / (\gamma \sum_c |B^-_c(\mathbf{0})|)$ in the maps' unit of drive, and the head and local SAR limits of IEC 60601-2-33's
 normal operating mode. The IR cache then reports each subsequence's SAR against
 the reference pulse in that coil ({doc}`../../explanations/safety-checks`).
 

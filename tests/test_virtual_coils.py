@@ -61,6 +61,18 @@ def test_receive_sensitivities_have_a_root_sum_of_squares_of_one_at_the_isocentr
     assert np.sqrt(np.sum(np.abs(received) ** 2)) == pytest.approx(1.0, rel=1e-6)
 
 
+def test_the_default_shim_carries_one_channels_power_and_plays_the_nominal_amplitude(
+    modelled,
+):
+    head8 = virtual.COILS["head8/head32"]
+    shim = head8.default_shim
+
+    assert np.sqrt(np.sum(np.abs(shim) ** 2)) == pytest.approx(1.0, rel=1e-6)
+    np.testing.assert_allclose(np.abs(shim), 1.0 / np.sqrt(8.0), rtol=1e-6)
+    field = head8.transmit(ISOCENTRE) @ np.conj(shim)
+    assert field[0] == pytest.approx(1.0, rel=1e-5)
+
+
 def test_transmit_sensitivities_are_the_conjugates_of_the_receive_ones_of_their_model(
     modelled,
 ):
@@ -254,7 +266,9 @@ def test_a_mapped_coils_vop_drive_plays_a_pulse_at_its_amplitude_at_the_isocentr
         [float(value) for value in limits["vop_default_shim"].split()], (-1, 2)
     ).T
     drive = float(limits["vop_drive_per_hz"]) * magnitudes * np.exp(1j * phases)
-    np.testing.assert_allclose(drive / abs(drive), coil.default_shim, rtol=1e-6)
+    shim = coil.default_shim
+    np.testing.assert_allclose(drive / abs(drive), shim / abs(shim), rtol=1e-6)
+    np.testing.assert_allclose(magnitudes, abs(shim), rtol=1e-6)
     # A channel's clockwise field, in T per unit drive, is half its minus.
     field = np.sum(drive * minus[(slice(None), *FIELD_ISOCENTRE)]) / 2.0
     assert abs(field) == pytest.approx(1.0 / SYSTEM.gamma, rel=1e-5)
