@@ -1,10 +1,10 @@
 # Miscellaneous
 
-| Page | Scope |
+| Page | Contents |
 | --- | --- |
-| {doc}`license` | MIT licence, the notices of adapted code and of the BrainWeb data the image carries, and the artwork notice. |
-| {doc}`related` | Projects with a direct technical relationship to pulserver. |
-| {doc}`contributors` | Maintainers, contributors and contribution links. |
+| {doc}`license` | MIT licence; notices for adapted code, BrainWeb data and artwork |
+| {doc}`related` | Related projects |
+| {doc}`contributors` | Maintainers and contributors |
 
 ```{toctree}
 :hidden:
