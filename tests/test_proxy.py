@@ -1183,6 +1183,184 @@ def test_a_kept_series_runs_offline_and_gives_the_image_the_proxy_returned(
     np.testing.assert_array_equal(images(offline)[0].data, images(received)[0].data)
 
 
+def _recorded(path, series, data, fov_offset_mm=None):
+    """Write a series as the scanner sends it; return its path."""
+    header = ismrmrd.xsd.CreateFromDocument(header_xml(series))
+    if fov_offset_mm is not None:
+        header.userParameters.userParameterString.append(
+            ismrmrd.xsd.userParameterStringType(
+                name="fov_offset_mm", value=" ".join(map(str, fov_offset_mm))
+            )
+        )
+    dataset = ismrmrd.Dataset(str(path), "dataset", create_if_needed=True)
+    dataset.write_xml_header(ismrmrd.xsd.ToXML(header))
+    for index in range(len(series.table)):
+        dataset.append_acquisition(
+            ismrmrd.Acquisition.from_array(data(series.table, index))
+        )
+    dataset.close()
+    return str(path)
+
+
+def test_a_kept_series_replays_from_a_directory_holding_it_beside_its_design(
+    start_proxy, bucket, tmp_path
+):
+    """A series exported beside its design's files replays with no store around it."""
+    root, series = bucket
+    played = series["gre2d"]
+
+    def kspace(table, index):
+        return point(table, index, (0.004, -0.002, 0.0))
+
+    kept = tmp_path / "kept"
+    proxy = start_proxy(slots=1, save_to=kept)
+    received = stream(proxy.port, played, data=kspace)
+    exported = tmp_path / "Exam1" / "Series1"
+    shutil.copytree(root / played.scan / played.design, exported)
+    (written,) = kept.glob("*.h5")
+    shutil.move(written, exported / written.name)
+
+    offline = load_plugin(RECON_PLUGINS / "gre2d.py").run(
+        str(exported / written.name), design=str(exported / "sequence.seq")
+    )
+
+    np.testing.assert_array_equal(images(offline)[0].data, images(received)[0].data)
+
+
+def test_a_series_replayed_offline_is_centred_at_the_offset_its_header_states(
+    bucket, tmp_path
+):
+    root, series = bucket
+    played = series["gre2d"]
+    position_m = (0.004, -0.002, 0.0)
+    shifted = _recorded(
+        tmp_path / "shifted.h5",
+        played,
+        lambda table, index: point(table, index, position_m),
+        fov_offset_mm=[1e3 * value for value in position_m],
+    )
+    centred = _recorded(
+        tmp_path / "centred.h5",
+        played,
+        lambda table, index: point(table, index, (0.0, 0.0, 0.0)),
+    )
+    plugin = load_plugin(RECON_PLUGINS / "gre2d.py")
+
+    np.testing.assert_allclose(
+        images(plugin.run(shifted, store=root))[0].data,
+        images(plugin.run(centred, store=root))[0].data,
+        atol=1e-4,
+    )
+
+
+def test_a_replay_refuses_a_design_its_header_does_not_name(bucket, tmp_path):
+    root, series = bucket
+    path = _recorded(tmp_path / "scan.h5", series["gre2d"], flat)
+    other = series["gre2d_raw"]
+
+    with pytest.raises(ValueError, match="played from design"):
+        load_plugin(RECON_PLUGINS / "gre2d.py").run(
+            path, design=str(root / other.scan / other.design / "sequence.seq")
+        )
+
+
+def test_an_imported_chain_replays_from_its_entry_with_every_file_beside_it(
+    tmp_path,
+):
+    """An import links sequence.seq to the chain's first file, which keeps its name."""
+    from _host import FIXTURE_LIMITS
+
+    from pulserver.host import _service
+    from pulserver.host._blocks import format_import
+
+    store = DesignStore(tmp_path / "store", "scan")
+    status, reply = _service.call(
+        "import",
+        limits=FIXTURE_LIMITS,
+        block=format_import(str(FIXTURES / "dedup_gre_pair.seq")),
+        store=store,
+    )
+    assert status == 0, reply
+    design = reply.split()[1]
+    exported = tmp_path / "Series1"
+    shutil.copytree(store.directory(design), exported, symlinks=True)
+    table = SequenceTable.read(exported / "sequence.seq")
+    played = Series("scan", design, table)
+    path = _recorded(tmp_path / "scan.h5", played, flat)
+
+    assert {"dedup_gre_pair.seq", "dedup_gre_pair_b.seq"} <= {
+        entry.name for entry in exported.iterdir()
+    }
+    replayed = load_plugin(RECON_PLUGINS / "gre2d.py").run(
+        path, design=str(exported / "sequence.seq")
+    )
+    assert images(replayed)
+
+
+def test_a_replay_refuses_a_sequence_file_its_design_did_not_write(bucket, tmp_path):
+    root, series = bucket
+    played = series["gre2d"]
+    path = _recorded(tmp_path / "scan.h5", played, flat)
+    copied = tmp_path / "design"
+    shutil.copytree(root / played.scan / played.design, copied)
+    with (copied / "sequence.seq").open("a") as edited:
+        edited.write("\n")
+
+    with pytest.raises(ValueError, match="is not a file of design"):
+        load_plugin(RECON_PLUGINS / "gre2d.py").run(
+            path, design=str(copied / "sequence.seq")
+        )
+
+
+def test_a_replay_takes_a_store_or_a_design_not_both(bucket, tmp_path):
+    root, series = bucket
+    played = series["gre2d"]
+    path = _recorded(tmp_path / "scan.h5", played, flat)
+
+    with pytest.raises(ValueError, match="not both"):
+        load_plugin(RECON_PLUGINS / "gre2d.py").run(
+            path,
+            store=root,
+            design=str(root / played.scan / played.design / "sequence.seq"),
+        )
+
+
+def test_pulserver_replay_writes_the_image_the_plugin_returns(bucket, tmp_path):
+    from pulserver import _cli
+
+    root, series = bucket
+    played = series["gre2d"]
+
+    def kspace(table, index):
+        return point(table, index, (0.004, -0.002, 0.0))
+
+    path = _recorded(tmp_path / "scan.h5", played, kspace)
+    expected = load_plugin(RECON_PLUGINS / "gre2d.py").run(path, store=root)
+    output = tmp_path / "out"
+
+    status = _cli.main(
+        [
+            "replay",
+            path,
+            "--plugin",
+            str(RECON_PLUGINS / "gre2d.py"),
+            "--design",
+            str(root / played.scan / played.design / "sequence.seq"),
+            "--output",
+            str(output),
+        ]
+    )
+
+    written = ismrmrd.Dataset(str(output / "images.h5"), "dataset", False)
+    try:
+        assert status == 0
+        np.testing.assert_array_equal(
+            written.read_image("images", 0).data, images(expected)[0].data
+        )
+    finally:
+        written.close()
+
+
 def test_what_a_proxy_keeps_is_the_header_the_scanner_sent(
     start_proxy, bucket, tmp_path
 ):

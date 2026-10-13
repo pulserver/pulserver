@@ -11,6 +11,7 @@ _USAGE = (
     "       pulserver validate SEQ [--vendor NAME] [--played FILE] ...\n"
     "       pulserver proxy --store DIR --port N (--plugins DIR | --forward HOST:PORT) ...\n"
     "       pulserver recon --plugins DIR --port N ...\n"
+    "       pulserver replay SERIES --plugin FILE (--store DIR | --design SEQ) ...\n"
 )
 
 
@@ -38,6 +39,10 @@ def main(argv: list[str] | None = None) -> int:
 
         recon(argv[1:])
         return 0
+    if argv and argv[0] == "replay":
+        from .recon._replay import main as replay
+
+        return replay(argv[1:])
     if argv and argv[0] == "validate":
         from .validate._command import main as check
 
