@@ -366,11 +366,11 @@ process ID, level and logger name.
 the calling process, through the same hooks. A file recorded as the scanner
 sends it, such as `pulserver scan --mrd raw.h5` or the proxy's `--save-data`
 writes, is enriched first from the design it was played from, found in a design
-store or given as the design's own directory:
+store or given as its sequence file, with its manifest beside it:
 
 ```python
 images = PLUGIN.run("raw.h5", store="designs")
-images = PLUGIN.run("raw.h5", design="designs/scan/9c74a8aa28527cf231")
+images = PLUGIN.run("raw.h5", design="designs/scan/9c74a8aa28527cf231/sequence.seq")
 ```
 
 `pulserver replay` does the same from the command line

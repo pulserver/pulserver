@@ -25,7 +25,10 @@ def _parser() -> argparse.ArgumentParser:
         "--store", type=Path, help="design store holding the design the header names"
     )
     played.add_argument(
-        "--design", type=Path, help="the design's own directory, <store>/<scan>/<id>/"
+        "--design",
+        type=Path,
+        help="the design's sequence file, the first of its chain, with its "
+        "manifest beside it",
     )
     parser.add_argument(
         "--config", help="configuration payload, as the scanner's stream carries it"

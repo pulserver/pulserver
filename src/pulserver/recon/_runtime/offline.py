@@ -5,6 +5,8 @@ from __future__ import annotations
 __all__ = ["reconstruct_file"]
 
 import contextlib
+import hashlib
+import json
 from pathlib import Path
 from typing import Any
 
@@ -92,24 +94,47 @@ def _played(header: Any, store: Any, design: Any) -> Any:
     """Return the design a series was played from, or None when neither source is given."""
     if store is None and design is None:
         return None
-    from ...host._store import MANIFEST
-    from ...mrd._metadata import user_parameter
-    from ...proxy._designs import DESIGN_PARAMETER, DesignCache
+    from ...proxy._designs import DesignCache
 
     if design is None:
         return DesignCache(store).resolve(header)
     if store is not None:
-        raise ValueError("give the design store or the design directory, not both")
-    directory = Path(design)
+        raise ValueError("give the design store or the sequence file, not both")
+    return _design_of(header, Path(design))
+
+
+def _design_of(header: Any, entry: Path) -> Any:
+    """Return the design whose chain starts at ``entry``, checked against its manifest and the header."""
+    from ...host._store import MANIFEST
+    from ...mrd._metadata import user_parameter
+    from ...proxy._designs import (
+        DESIGN_PARAMETER,
+        Design,
+        SequenceTable,
+        _asks_for_motion_correction,
+        _fov_offset_m,
+    )
+
+    directory = entry.parent
+    if not entry.is_file():
+        raise FileNotFoundError(f"no sequence file {entry}")
+    if not (directory / MANIFEST).is_file():
+        raise FileNotFoundError(f"no design manifest beside {entry}")
+    manifest = json.loads((directory / MANIFEST).read_text())
+    digest = hashlib.sha256(entry.read_bytes()).hexdigest()
+    if manifest.get("files", {}).get(entry.name) != digest:
+        raise ValueError(f"{entry} is not a file of design {manifest.get('id')}")
     named = user_parameter(header, DESIGN_PARAMETER)
-    if named not in (None, "") and str(named).strip().lower() != directory.name:
+    if named not in (None, "") and str(named).strip().lower() != manifest.get("id"):
         raise ValueError(
             f"the series was played from design {str(named).strip()}, "
-            f"not from {directory}"
+            f"not from design {manifest.get('id')}"
         )
-    if not (directory / MANIFEST).is_file():
-        raise FileNotFoundError(f"{directory} holds no design")
-    return DesignCache(directory.parent).read(directory)
+    return Design(
+        directory=directory,
+        table=SequenceTable.read(entry, fov_offset_m=_fov_offset_m(directory)),
+        prospective_motion=_asks_for_motion_correction(entry),
+    )
 
 
 def _count(number_of: Any) -> int:

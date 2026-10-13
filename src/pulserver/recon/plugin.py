@@ -936,8 +936,9 @@ class ReconPlugin(ABC):
             Design store, one directory per scan, as the design calls write it;
             the design is the one the header names.
         design : str, default=None
-            The design's own directory, ``<store>/<scan>/<id>/`` or a copy of
-            it, in place of ``store``.
+            The design's sequence file, the first of its chain, in place of
+            ``store``: ``<store>/<scan>/<id>/sequence.seq`` or a copy of it,
+            with the design's manifest beside it.
 
         Returns
         -------
@@ -948,11 +949,13 @@ class ReconPlugin(ABC):
         Raises
         ------
         FileNotFoundError
-            If there is no such file, or no such design.
+            If there is no such file, no such design, or no manifest beside
+            ``design``.
         ValueError
             If the file has no MRD XML header, if both ``store`` and ``design``
-            are given, if the header names a design other than ``design``, or
-            if the series does not match its design's readouts.
+            are given, if ``design`` is not a file its manifest records, if the
+            header names another design, or if the series does not match its
+            design's readouts.
         """
         from ._runtime.offline import reconstruct_file
 

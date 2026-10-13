@@ -11,7 +11,7 @@ _USAGE = (
     "       pulserver validate SEQ [--vendor NAME] [--played FILE] ...\n"
     "       pulserver proxy --store DIR --port N (--plugins DIR | --forward HOST:PORT) ...\n"
     "       pulserver recon --plugins DIR --port N ...\n"
-    "       pulserver replay SERIES --plugin FILE (--store DIR | --design DIR) ...\n"
+    "       pulserver replay SERIES --plugin FILE (--store DIR | --design SEQ) ...\n"
 )
 
 

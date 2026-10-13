@@ -1202,10 +1202,10 @@ def _recorded(path, series, data, fov_offset_mm=None):
     return str(path)
 
 
-def test_a_kept_series_replays_from_a_copy_of_its_design_directory(
+def test_a_kept_series_replays_from_a_directory_holding_it_beside_its_design(
     start_proxy, bucket, tmp_path
 ):
-    """A series exported beside its design replays with no store around it."""
+    """A series exported beside its design's files replays with no store around it."""
     root, series = bucket
     played = series["gre2d"]
 
@@ -1216,11 +1216,12 @@ def test_a_kept_series_replays_from_a_copy_of_its_design_directory(
     proxy = start_proxy(slots=1, save_to=kept)
     received = stream(proxy.port, played, data=kspace)
     exported = tmp_path / "Exam1" / "Series1"
-    shutil.copytree(root / played.scan / played.design, exported / played.design)
+    shutil.copytree(root / played.scan / played.design, exported)
     (written,) = kept.glob("*.h5")
+    shutil.move(written, exported / written.name)
 
     offline = load_plugin(RECON_PLUGINS / "gre2d.py").run(
-        str(written), design=str(exported / played.design)
+        str(exported / written.name), design=str(exported / "sequence.seq")
     )
 
     np.testing.assert_array_equal(images(offline)[0].data, images(received)[0].data)
@@ -1259,7 +1260,22 @@ def test_a_replay_refuses_a_design_its_header_does_not_name(bucket, tmp_path):
 
     with pytest.raises(ValueError, match="played from design"):
         load_plugin(RECON_PLUGINS / "gre2d.py").run(
-            path, design=str(root / other.scan / other.design)
+            path, design=str(root / other.scan / other.design / "sequence.seq")
+        )
+
+
+def test_a_replay_refuses_a_sequence_file_its_design_did_not_write(bucket, tmp_path):
+    root, series = bucket
+    played = series["gre2d"]
+    path = _recorded(tmp_path / "scan.h5", played, flat)
+    copied = tmp_path / "design"
+    shutil.copytree(root / played.scan / played.design, copied)
+    with (copied / "sequence.seq").open("a") as edited:
+        edited.write("\n")
+
+    with pytest.raises(ValueError, match="is not a file of design"):
+        load_plugin(RECON_PLUGINS / "gre2d.py").run(
+            path, design=str(copied / "sequence.seq")
         )
 
 
@@ -1270,7 +1286,9 @@ def test_a_replay_takes_a_store_or_a_design_not_both(bucket, tmp_path):
 
     with pytest.raises(ValueError, match="not both"):
         load_plugin(RECON_PLUGINS / "gre2d.py").run(
-            path, store=root, design=str(root / played.scan / played.design)
+            path,
+            store=root,
+            design=str(root / played.scan / played.design / "sequence.seq"),
         )
 
 
@@ -1294,7 +1312,7 @@ def test_pulserver_replay_writes_the_image_the_plugin_returns(bucket, tmp_path):
             "--plugin",
             str(RECON_PLUGINS / "gre2d.py"),
             "--design",
-            str(root / played.scan / played.design),
+            str(root / played.scan / played.design / "sequence.seq"),
             "--output",
             str(output),
         ]
