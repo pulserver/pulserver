@@ -6,11 +6,11 @@ interfaces, units and defaults in {doc}`../api/index`.
 
 | Page | Contents |
 | --- | --- |
-| {doc}`running` | Design calls, design server, reconstruction proxy and server, playout validation. |
-| {doc}`scanner-sequences` | Sequence plugins, protocol entries and evaluation. |
-| {doc}`reconstruction-plugins` | Reconstruction plugins and offline reconstruction. |
-| {doc}`reconstruction-client` | Messages and header of a reconstruction client. |
-| {doc}`virtual-scanner` | Phantom scans through a stored design, the proxy and a plugin. |
+| {doc}`running` | Design calls, design server, reconstruction proxy and server, playout validation |
+| {doc}`scanner-sequences` | Sequence plugins, protocol entries and evaluation |
+| {doc}`reconstruction-plugins` | Reconstruction plugins and offline reconstruction |
+| {doc}`reconstruction-client` | Messages and header of a reconstruction client |
+| {doc}`virtual-scanner` | Phantom scans through a stored design, the proxy and a plugin |
 
 ```{toctree}
 :hidden:
