@@ -485,12 +485,12 @@ def test_the_volume_of_spokes_that_stop_short_of_the_matrix_edge_is_on_the_matri
 def test_the_maps_of_one_coil_over_a_volume_are_unity_on_its_matrix():
     torch = pytest.importorskip("torch")
     pytest.importorskip("bartorch")
-    from pulserver.recon.handlers.nufft import _volume_maps
+    from pulserver.recon.handlers.pics import nlinv_estimate
 
     points = torch.from_numpy(spokes(2, 6).reshape(-1, SAMPLES, 3))
     samples = torch.from_numpy(noise(1, 12, SAMPLES))
 
-    maps = _volume_maps(samples, points, (MATRIX,) * 3)
+    maps = nlinv_estimate(samples, points, (MATRIX,) * 3)
 
     assert maps.shape == (1, MATRIX, MATRIX, MATRIX)
     assert torch.equal(maps, torch.ones_like(maps))

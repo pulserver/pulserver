@@ -212,25 +212,33 @@ class PicsRecon(ReconPlugin):
 PLUGIN = PicsRecon()
 
 
-def nlinv_estimate(kspace: Any, traj: Any = None) -> Any:
+def nlinv_estimate(
+    kspace: Any, traj: Any = None, shape: tuple[int, ...] | None = None
+) -> Any:
     """Return the coil maps :func:`bartorch.apps.nlinv_maps` fits to ``kspace``, with phase-pole correction.
 
-    ``bart nlinv -m 1 --phase-pole 0`` on the central ``CALIBRATION_LINES``
-    lines of every axis: after every Gauss-Newton step the phase poles the
-    maps share are moved into the image, where they would otherwise drive
-    every coil's sensitivity towards zero and leave a dark spot in the image.
-    BART refuses the detection on a grid with an axis no longer than a
-    twentieth of its longest, rounded up; a volume whose calibration grid has
-    such an axis, a slab of fewer than 3 partitions, is fitted without it.
+    ``bart nlinv -m 1 --phase-pole 0`` on a calibration grid of
+    ``CALIBRATION_LINES`` points an axis, capped at the axis: the central
+    lines of Cartesian k-space, or the samples of a trajectory within half
+    that of the centre, the maps of which are on ``shape``. After every
+    Gauss-Newton step the phase poles the maps share are moved into the
+    image, where they would otherwise drive every coil's sensitivity towards
+    zero and leave a dark spot in the image. BART refuses the detection on a
+    grid with an axis no longer than a twentieth of its longest, rounded up;
+    k-space whose calibration grid has such an axis, a slab of fewer than 3
+    partitions, is fitted without it.
     """
     from bartorch import apps
 
-    grid = [min(CALIBRATION_LINES, n) for n in kspace.shape[1:] if n > 1]
-    detectable = traj is not None or min(grid) > math.ceil(max(grid) / 20)
+    image = kspace.shape[1:] if traj is None else (shape or ())
+    grid = [min(CALIBRATION_LINES, n) for n in image if n > 1]
+    detectable = not grid or min(grid) > math.ceil(max(grid) / 20)
     return apps.nlinv_maps(
         kspace,
         traj,
         size=CALIBRATION_LINES,
+        radius=CALIBRATION_LINES / 2,
+        shape=shape,
         phase_pole=0 if detectable else None,
     )
 

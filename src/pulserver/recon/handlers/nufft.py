@@ -4,8 +4,6 @@ from __future__ import annotations
 
 __all__ = ["PLUGIN", "NufftRecon"]
 
-from typing import Any
-
 import numpy as np
 
 from ...mrd._acquisitions import AcquisitionFlag
@@ -24,7 +22,7 @@ class NufftRecon(ReconPlugin):
     (:class:`~pulserver.recon.Prewhiten`); noise readouts are consumed by the
     whitening and phase-correction readouts are rejected. The coil
     sensitivities are fitted by nonlinear inversion to the samples of the unit
-    near the k-space centre
+    near the k-space centre, on a grid of those samples
     (:func:`~pulserver.recon.handlers.pics.nlinv_estimate`,
     ``bart nlinv -m 1 --phase-pole 0 -t``), whatever calibration the stream
     or the exam holds: :func:`~pulserver.recon.coil_maps` estimates from
@@ -49,10 +47,8 @@ class NufftRecon(ReconPlugin):
     PROPELLER blade are: the solve is on the matrix's own grid. A stack of
     blades, spokes or spirals is Fourier transformed along its partitions first
     and fitted partition by partition. A trajectory that encodes kz, with no
-    partitions, is one three-dimensional solve, its maps fitted as
-    ``bart nlinv -m 1 -t`` fits them over three spatial axes, without the
-    phase-pole correction: that fit is on the grid of the whole volume, where
-    the detection is several times the cost of the fit.
+    partitions, is one three-dimensional solve, its maps fitted over three
+    spatial axes.
 
     A unit closes as that of
     :class:`~pulserver.recon.handlers.pics.PicsRecon` does, and also once the
@@ -179,11 +175,7 @@ class NufftRecon(ReconPlugin):
         ).to(device)
         points = torch.from_numpy(np.ascontiguousarray(points)).to(device)
         axes = 2 if volume is None else 3
-        maps = (
-            nlinv_estimate(samples, points)
-            if volume is None
-            else _volume_maps(samples, points, volume)
-        )
+        maps = nlinv_estimate(samples, points, volume)
         grid = tuple(maps.shape[-axes:])
         encoded = wavelet_axes(grid, tuple(range(-1, -axes - 1, -1)))
         density = bartorch.estimate_density(
@@ -217,34 +209,6 @@ def _within(
     if inside.all():
         return samples, points
     return samples[:, inside][:, None], points[inside][None]
-
-
-def _volume_maps(
-    samples: Any, points: Any, shape: tuple[int, ...], radius: float = 12.0
-) -> Any:
-    """Return the coil maps ``(coils, z, y, x)`` on the grid ``shape`` of ``(coils, shots, samples)`` k-space along a three-dimensional trajectory.
-
-    As :func:`bartorch.apps.nlinv_maps` fits them for a plane: ``bart nlinv
-    -m 1`` over the samples within ``radius`` grid units of the k-space
-    centre, normalised to unit root sum of squares over the coils, and unit
-    for one coil.
-    """
-    import torch
-    from bartorch import tools
-
-    coils = samples.shape[0]
-    if coils == 1:
-        return torch.ones((1, *shape), dtype=samples.dtype, device=samples.device)
-    centre = points.square().sum(dim=-1).sqrt() <= radius
-    _, maps = tools.nlinv(
-        (samples * centre)[..., None],
-        traj=points,
-        maps=1,
-        return_sensitivities=True,
-        x=tuple(reversed(shape)),
-    )
-    maps = maps.reshape(coils, *shape)
-    return maps / maps.abs().square().sum(dim=0, keepdim=True).sqrt().clamp_min(1e-12)
 
 
 def _by_shots(
