@@ -45,7 +45,7 @@
   <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../_static/documentation_options.js?v=a6e268a8"></script>
+    <script src="../_static/documentation_options.js?v=d6d95e65"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -56,7 +56,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.2.2';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.1';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -68,7 +68,7 @@
     <link rel="search" title="Search" href="../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.2.2" />
+  <meta name="docsearch:version" content="v0.4.1" />
   
     
     <script src="../_static/searchtools.js"></script>
@@ -503,9 +503,9 @@
 <span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pulserver.proxy.</span></span><span class="sig-name descname"><span class="pre">DesignIntake</span></span><a class="reference internal" href="../_modules/pulserver/proxy/_intake.html#DesignIntake"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.proxy.DesignIntake" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/builtins/functions.html#object" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
 <p>Receives stored designs over HTTP into the design store the proxy reads.</p>
-<p><code class="docutils literal notranslate"><span class="pre">HEAD</span> <span class="pre">/designs/&lt;id&gt;</span></code> answers 200 when the store holds the design, which
-marks it as used for <a class="reference internal" href="pulserver.host.DesignStore.prune.html#pulserver.host.DesignStore.prune" title="pulserver.host.DesignStore.prune"><code class="xref py py-meth docutils literal notranslate"><span class="pre">prune()</span></code></a>, and 404
-otherwise; <code class="docutils literal notranslate"><span class="pre">PUT</span> <span class="pre">/designs/&lt;id&gt;</span></code> stores a bundle of
+<p><code class="docutils literal notranslate"><span class="pre">HEAD</span> <span class="pre">/designs/&lt;scan&gt;/&lt;id&gt;</span></code> answers 200 when the scan holds the design,
+which marks the scan as used for <a class="reference internal" href="pulserver.host.prune.html#pulserver.host.prune" title="pulserver.host.prune"><code class="xref py py-func docutils literal notranslate"><span class="pre">prune()</span></code></a>, and 404
+otherwise; <code class="docutils literal notranslate"><span class="pre">PUT</span> <span class="pre">/designs/&lt;scan&gt;/&lt;id&gt;</span></code> stores a bundle of
 <a class="reference internal" href="pulserver.host.DesignStore.pack.html#pulserver.host.DesignStore.pack" title="pulserver.host.DesignStore.pack"><code class="xref py py-meth docutils literal notranslate"><span class="pre">pack()</span></code></a> after checking every file against
 its manifest, and answers 201, or 200 for a design already stored. A
 bundle that is not the design its path names is refused with 400 and the
@@ -513,7 +513,7 @@ reason. The endpoint is neither authenticated nor encrypted.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>store</strong> (<em>Path</em><em> | </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a>) – Directory of designs; created when missing.</p></li>
+<li><p><strong>store</strong> (<em>Path</em><em> | </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a>) – Directory of scans; created when missing.</p></li>
 <li><p><strong>host</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em>, </em><em>default='127.0.0.1'</em>) – Address to listen on; the loopback interface by default.</p></li>
 <li><p><strong>port</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>, </em><em>default=0</em>) – TCP port; 0 takes a free one.</p></li>
 <li><p><strong>received</strong> (<em>Callable</em><em>[</em><em>[</em><em>Path</em><em>]</em><em>, </em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#object" title="(in Python v3.15)"><em>object</em></a><em>]</em><em>, </em><em>default=None</em>) – Called with the directory of each design stored or found stored, in

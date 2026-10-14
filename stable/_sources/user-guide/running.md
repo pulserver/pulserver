@@ -19,9 +19,9 @@ store are described in {doc}`../explanations/architecture`.
 ```bash
 pulserver design list     --plugins DIR --plugin NAME [--limits FILE --rf-definitions] [--socket PATH]
 pulserver design validate --plugins DIR --plugin NAME --limits FILE [--rf-layout] [--exam DIR] [--socket PATH] < VALUES
-pulserver design generate --plugins DIR --plugin NAME --limits FILE --store DIR [--exam DIR] [--push URL] [--socket PATH] < VALUES
-pulserver design import   --limits FILE --store DIR [--push URL] [--socket PATH] < IMPORT
-pulserver design push     --store DIR --to URL ID...
+pulserver design generate --plugins DIR --plugin NAME --limits FILE --store DIR --scan NAME [--exam DIR] [--push URL] [--socket PATH] < VALUES
+pulserver design import   --limits FILE --store DIR --scan NAME [--push URL] [--socket PATH] < IMPORT
+pulserver design push     --store DIR --scan NAME --to URL ID...
 pulserver design prune    --store DIR [--max-age-days D] [--max-bytes B]
 ```
 
@@ -31,16 +31,17 @@ arguments. `--plugins` is a directory of scanner-sequence plugin files,
 `<plugin>.py`, and may be repeated: a plugin is the file of the first directory
 that holds it, and the shipped plugins are searched last
 ({ref}`shipped-sequences`). `--store` is the design store, created when
-missing.
+missing, and `--scan` the name of the scan the design is stored for: one
+directory name, not starting with `.`.
 
 | Call | Reply |
 | --- | --- |
 | `list` | `PROTOCOL` and the plugin's listing block; with `--rf-definitions`, the `[RfDefinitions]` block |
 | `validate` | `VALID <seconds>` or `INVALID`, an `INFO` line and the value block of the resolved protocol; with `--rf-layout`, a valid reply ends with the `[RfLayout]` block |
-| `generate` | `GENERATED <id>`, the identifier of the design in the store |
+| `generate` | `GENERATED <id>`, the identifier of the design in the scan's directory |
 | `import` | `IMPORTED <id>` |
 | `push` | `PUSHED <count>`: the designs sent, not counting those the intake already holds |
-| `prune` | `PRUNED <count>` |
+| `prune` | `PRUNED <count>`: the scans removed |
 
 A failed call replies `ERROR <message>` and exits with status 1; a plugin that
 ends its process ends the call without a reply and with a nonzero exit status.
@@ -166,7 +167,7 @@ gradient heating from it.
 | `vop_file` | `.mat` or `.npz` file of VOPs and the head SAR matrix of each body model, at a path the design calls can read; its `safety_factor` multiplies local SAR |
 | `vop_head_limit`, `vop_local_limit` | The scanner's head and local SAR limits in W/kg in its current operating mode |
 | `vop_drive_per_hz` | Channel drive per Hz of RF amplitude, one value or one per channel separated by spaces; a scale common to every channel cancels. Equal drives when left out |
-| `vop_default_shim` | Magnitude and phase in rad of each channel's weight for a pulse played without an RF shim, separated by spaces; equal weights when left out |
+| `vop_default_shim` | Magnitude and phase in rad of each channel's weight for a pulse played without an RF shim, separated by spaces; equal weights whose squares sum to 1 when left out |
 | `vop_coil` | Transmit configuration the scanner reports; the VOP file's `transmit` metadata must name the same one |
 | `acoustic_file` | HDF5 file of the gradient coil's acoustic transfer function, at a path the design calls can read; the peak and A-weighted average sound pressure levels are held to the limits of IEC 60601-2-33 and written into the cache |
 | `acoustic_interval_us` | Sampling interval in µs that the bins of `acoustic_file` refer to; given with it |
@@ -188,20 +189,24 @@ block = "[Protocol]\nTE: 5000\nnx: 96\n[Protocol End]\n"
 status, reply = call("validate", plugins="sequences", plugin="gre2d",
                      limits=limits, block=block)
 status, reply = call("generate", plugins="sequences", plugin="gre2d",
-                     limits=limits, block=block, store=DesignStore("designs"))
+                     limits=limits, block=block,
+                     store=DesignStore("designs", "scan"))
 ```
 
 A plugin file is imported again when its modification time changes.
 
 ### Design store
 
-The store holds one directory per design, `<store>/<id>/`, laid out as
-{doc}`../explanations/architecture` shows. `prune` removes designs least
-recently used first: those unused for longer than `--max-age-days`, then others
-until the store holds at most `--max-bytes`. A design used within the last day
-is kept whatever the limits, since a series may still be playing it or the
-proxy reading it. A store that receives pushed designs is pruned the same way,
-on the reconstruction computer.
+The store holds one directory per scan, `<store>/<scan>/`, and a scan's
+directory holds its design, `<store>/<scan>/<id>/`, laid out as
+{doc}`../explanations/architecture` shows. A design is reused while its scan
+holds it: a call that resolves to the same design replies with it, and one
+that resolves to another stores the new design in place of the scan's
+previous one. `prune` removes whole scans, least recently used first: those
+unused for longer than `--max-age-days`, then others until the store holds at
+most `--max-bytes`. A scan used within the last day is kept whatever the
+limits, since it may still be playing or reconstructing. A store that receives
+pushed designs is pruned the same way, on the reconstruction computer.
 
 ### Design push
 
@@ -258,13 +263,13 @@ pulserver proxy --store DIR --port N --forward HOST:PORT [--forward-config NAME]
 
 | Option | Meaning |
 | --- | --- |
-| `--store` | The design store the proxy reads: the one the design calls write, or the one the intake writes |
+| `--store` | The design store the proxy reads: the one the design calls write, or the one the intake writes. It also holds each scan's pose file, `<store>/<scan>/motion.buf`, for a scan corrected for motion |
 | `--port` | TCP port the scanner's reconstruction client connects to |
 | `--host` | Address to listen on; the loopback interface when unset, `0.0.0.0` for every interface |
 | `--intake-port` | TCP port of the design intake, on the `--host` address; no intake when unset |
 | `--plugins` | Directory of reconstruction plugin files, `<plugin>.py`, repeatable, searched in order before the shipped ones; required unless `--forward` is given |
 | `--queue` | Directory the series waiting for a slot are written to; a temporary directory, removed when the proxy stops, when unset |
-| `--exams` | Directory in which the proxies of this host share the caches of an exam; a location under the system temporary directory when unset |
+| `--exams` | Directory in which the proxies of this host share the caches of an exam, one directory per exam named by its identity: `exam-<ExamID>` for a header carrying `ExamID`. Created readable by the proxy's user alone; one that exists is used with the permissions the site gave it, so design calls running as another user can read the exam's maps. A location under the system temporary directory, private to the proxy's user, when unset |
 | `--slots` | Series reconstructed at once; derived from available memory and the GPUs when unset |
 | `--gpu-slots` | Series reconstructed at once on each GPU when `--slots` is unset; 1 by default |
 | `--spares` | Worker processes started ahead of a series; 1 by default |
@@ -283,9 +288,9 @@ fields the client sends in {doc}`reconstruction-client`.
 
 ### Series routing
 
-The MRD header of each series names the design it was played from in the
-`pulserver_design` user parameter, and the proxy refuses a series whose header
-names no stored design. The client's config names the reconstruction plugin, as
+The MRD header of each series names the scan in the `pulserver_scan` user
+parameter and the design it was played from in `pulserver_design`, and the
+proxy refuses a series whose header names no design stored for that scan. The client's config names the reconstruction plugin, as
 a bare plugin name or the path of its file, or as either under
 `parameters.config`; the design names none. A series whose config names none
 is refused unless the proxy forwards with `--forward-config`.
@@ -300,10 +305,10 @@ place of a new reconstruction.
 
 With `--save-data`, each series is also written to
 `<save-data>/mrd_<timestamp>.h5` as the scanner sends it, header first and each
-acquisition as it arrives, before it is enriched. A plugin run on that file
-against the store reconstructs it offline exactly as the proxy did
-({ref}`offline-reconstruction`). The queue directory holds a series only until
-it is reconstructed.
+acquisition as it arrives, before it is enriched. `pulserver replay` runs a
+plugin on that file and reconstructs it offline as the proxy did
+({ref}`series-replay`). The queue directory holds a series only until it is
+reconstructed.
 
 ### Proxy lifetime
 
@@ -351,11 +356,11 @@ relayed back to the client.
 
 With `--intake-port`, the proxy runs a design intake beside it
 ({class}`~pulserver.proxy.DesignIntake`), an HTTP endpoint that writes the
-designs pushed to it into `--store`. `HEAD /designs/<id>` answers 200 when the
-store holds the design and 404 otherwise; `PUT /designs/<id>` stores a bundle
-and answers 201, 200 for a design already stored, or 400 with the reason for a
-bundle that is not the design its path names. A `HEAD` for a stored design
-marks it as used for `prune`.
+designs pushed to it into `--store`. `HEAD /designs/<scan>/<id>` answers 200
+when the scan holds the design and 404 otherwise; `PUT /designs/<scan>/<id>`
+stores a bundle as the scan's design and answers 201, 200 for a design already
+stored, or 400 with the reason for a bundle that is not the design its path
+names. A `HEAD` for a stored design marks its scan as used for `prune`.
 
 ### Network exposure
 
@@ -381,6 +386,27 @@ workers, slots, queue and exam directories; `--save-data` keeps each series as
 the proxy forwarded it, enriched. Its stream is neither authenticated nor
 encrypted, and `--host` names the interface the proxy reaches it on. It stops
 on `SIGINT` or `SIGTERM` and waits for the series it is running.
+
+(series-replay)=
+## Series replay
+
+```bash
+pulserver replay SERIES --plugin FILE (--store DIR | --design SEQ) [--config TEXT] [--dicom] [--dicom-dictionary FILE] [--output DIR]
+```
+
+`pulserver replay` reconstructs one series kept by `--save-data` in the calling
+process, with no proxy running. The series is enriched from the design it was
+played from, at the field-of-view offset its header states, as the proxy
+enriches it, and runs through the plugin's hooks
+({ref}`offline-reconstruction`). The design is the one the header names in the
+store `--store`, or the one whose sequence file, the first of its chain, is
+`--design`. That file must be one the manifest beside it records, and the
+manifest must name the design the header names. A series exported beside a
+copy of its design's files replays with no store. Images go to `images.h5` in `--output`, and DICOM datasets to the files
+they are named by; with `--dicom` every image is written as DICOM, as the
+proxy's `--dicom` writes it, and `--dicom-dictionary` names the private
+dictionary of the header's DICOM attributes ({ref}`dicom-attributes`). An exception raised by the plugin is not caught, so its
+traceback names the line that raised it.
 
 ## Playout validation
 

@@ -45,7 +45,7 @@
   <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../_static/documentation_options.js?v=a6e268a8"></script>
+    <script src="../_static/documentation_options.js?v=d6d95e65"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -56,7 +56,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.2.2';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.1';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -70,7 +70,7 @@
     <link rel="prev" title="Reconstruction plugins" href="reconstruction-plugins.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.2.2" />
+  <meta name="docsearch:version" content="v0.4.1" />
   
     
     <script src="../_static/searchtools.js"></script>
@@ -487,7 +487,10 @@
             <nav aria-label="Page">
                 <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#messages">Messages</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#header">Header</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#header">Header</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#dicom-attributes">DICOM attributes</a></li>
+</ul>
+</li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#acquisitions">Acquisitions</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>
 </ul>
@@ -570,33 +573,41 @@ connection, so the client can finish sending and read the reason.</p>
 </tr>
 </thead>
 <tbody>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">pulserver_design</span></code>, a <code class="docutils literal notranslate"><span class="pre">userParameterString</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">pulserver_scan</span></code>, a <code class="docutils literal notranslate"><span class="pre">userParameterString</span></code></p></td>
+<td><p>Required</p></td>
+<td><p>The scan the design is stored for: the <code class="docutils literal notranslate"><span class="pre">--scan</span></code> of the design call, one directory name of the design store</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">pulserver_design</span></code>, a <code class="docutils literal notranslate"><span class="pre">userParameterString</span></code></p></td>
 <td><p>Required</p></td>
 <td><p>The identifier of the design the interpreter plays, from the <code class="docutils literal notranslate"><span class="pre">GENERATED</span></code> or <code class="docutils literal notranslate"><span class="pre">IMPORTED</span></code> reply: 18 hexadecimal digits, which are three 24-bit integers of six digits each</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">experimentalConditions.H1resonanceFrequency_Hz</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">experimentalConditions.H1resonanceFrequency_Hz</span></code></p></td>
 <td><p>Required by the MRD schema</p></td>
 <td><p>DICOM <code class="docutils literal notranslate"><span class="pre">ImagingFrequency</span></code></p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">acquisitionSystemInformation.receiverChannels</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">acquisitionSystemInformation.receiverChannels</span></code></p></td>
 <td><p>Optional</p></td>
 <td><p>The coil count of a reconstruction buffer laid out before its first acquisition</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">ExamID</span></code>, a <code class="docutils literal notranslate"><span class="pre">userParameterString</span></code>, or else <code class="docutils literal notranslate"><span class="pre">studyInformation.studyInstanceUID</span></code>, or else <code class="docutils literal notranslate"><span class="pre">studyInformation.studyID</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">ExamID</span></code>, a <code class="docutils literal notranslate"><span class="pre">userParameterString</span></code>, or else <code class="docutils literal notranslate"><span class="pre">studyInformation.studyInstanceUID</span></code>, or else <code class="docutils literal notranslate"><span class="pre">studyInformation.studyID</span></code></p></td>
 <td><p>Optional</p></td>
 <td><p>The exam; the series of one exam share its exam cache, and a series without one is an exam of its own</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">fov_offset_mm</span></code>, a <code class="docutils literal notranslate"><span class="pre">userParameterString</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">fov_offset_mm</span></code>, a <code class="docutils literal notranslate"><span class="pre">userParameterString</span></code></p></td>
 <td><p>Optional</p></td>
 <td><p>The position of the field-of-view centre, three millimetres along the logical readout, phase and slice axes separated by spaces; a difference from the offset the design was converted at is applied to the samples as a receive phase. Without it, the converted offset</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">subjectInformation</span></code>, <code class="docutils literal notranslate"><span class="pre">studyInformation</span></code>, <code class="docutils literal notranslate"><span class="pre">measurementInformation</span></code>, <code class="docutils literal notranslate"><span class="pre">acquisitionSystemInformation</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">subjectInformation</span></code>, <code class="docutils literal notranslate"><span class="pre">studyInformation</span></code>, <code class="docutils literal notranslate"><span class="pre">measurementInformation</span></code>, <code class="docutils literal notranslate"><span class="pre">acquisitionSystemInformation</span></code></p></td>
 <td><p>Optional</p></td>
 <td><p>Copied into the DICOM datasets; <code class="docutils literal notranslate"><span class="pre">relativeTablePosition</span></code> is not</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">measurementInformation.measurementID</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">measurementInformation.measurementID</span></code></p></td>
 <td><p>A non-negative integer when <code class="docutils literal notranslate"><span class="pre">systemVendor</span></code> names GE</p></td>
-<td><p>The DICOM series number on a GE system</p></td>
+<td><p>The DICOM series number on a GE system: of the first series the reconstruction returns, and <code class="docutils literal notranslate"><span class="pre">100</span> <span class="pre">×</span> <span class="pre">measurementID</span> <span class="pre">+</span> <span class="pre">k</span></code> of the <code class="docutils literal notranslate"><span class="pre">k</span></code>-th after it</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">dicom:&lt;attribute&gt;</span></code>, a <code class="docutils literal notranslate"><span class="pre">userParameterString</span></code></p></td>
+<td><p>Optional</p></td>
+<td><p>A DICOM attribute of every image (<a class="reference internal" href="#dicom-attributes"><span class="std std-ref">DICOM attributes</span></a>)</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">encoding</span></code></p></td>
 <td><p>Optional</p></td>
@@ -609,8 +620,67 @@ connection, so the client can finish sending and read the reason.</p>
 </tbody>
 </table>
 </div>
-<p>A header that the ISMRMRD schema does not accept, or that names no design of
-the store, is refused before any acquisition is read.</p>
+<p>A header that the ISMRMRD schema does not accept, or that names no design the
+store holds for its scan, is refused before any acquisition is read.</p>
+<section id="dicom-attributes">
+<span id="id1"></span><h3>DICOM attributes<a class="headerlink" href="#dicom-attributes" title="Link to this heading">#</a></h3>
+<p>A client states the DICOM attributes the MRD header has no element for as
+<code class="docutils literal notranslate"><span class="pre">userParameterString</span></code> entries named <code class="docutils literal notranslate"><span class="pre">dicom:&lt;attribute&gt;</span></code>. The DICOM builder
+reads them once, with the rest of the header, into the attributes every image
+of the series starts from; an entry whose value names a quantity of the image
+is filled in for each image instead. An image’s own meta attributes take
+precedence over both. <code class="docutils literal notranslate"><span class="pre">&lt;attribute&gt;</span></code> is one of:</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Form</p></th>
+<th class="head"><p>Example</p></th>
+<th class="head"><p>Resolved by</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>A keyword of the DICOM standard</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">dicom:ImagedNucleus</span></code> = <code class="docutils literal notranslate"><span class="pre">23Na</span></code></p></td>
+<td><p>pydicom’s dictionary</p></td>
+</tr>
+<tr class="row-odd"><td><p>An explicit tag and value representation</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">dicom:(0011,1011)FL</span></code> = <code class="docutils literal notranslate"><span class="pre">{location}</span></code></p></td>
+<td><p>Itself; a private group’s creator is one more entry, <code class="docutils literal notranslate"><span class="pre">dicom:(0011,0010)LO</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>A keyword of a private dictionary</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">dicom:PulseSequenceLabel</span></code> = <code class="docutils literal notranslate"><span class="pre">pulserver</span></code></p></td>
+<td><p>The file <code class="docutils literal notranslate"><span class="pre">dicom:dictionary</span></code> names, in MATLAB’s format, one <code class="docutils literal notranslate"><span class="pre">(gggg,eeee)</span> <span class="pre">VR</span> <span class="pre">Keyword</span> <span class="pre">VM</span></code> line per attribute</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>A value separates multiple values with <code class="docutils literal notranslate"><span class="pre">\</span></code> and may name, in braces, a quantity
+of the image it is written into; <code class="docutils literal notranslate"><span class="pre">{{</span></code> and <code class="docutils literal notranslate"><span class="pre">}}</span></code> are literal braces:</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Name</p></th>
+<th class="head"><p>Value</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">slice_location</span></code></p></td>
+<td><p>The image centre along the plane normal, in mm: the <code class="docutils literal notranslate"><span class="pre">SliceLocation</span></code> written by default</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">location</span></code></p></td>
+<td><p>The image centre along the patient axis the normal lies closest to, in mm, positive towards right, anterior or superior; for an oblique plane, along the normal turned towards those</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">location_letter</span></code></p></td>
+<td><p>The side <code class="docutils literal notranslate"><span class="pre">location</span></code> lies on: <code class="docutils literal notranslate"><span class="pre">R</span></code> or <code class="docutils literal notranslate"><span class="pre">L</span></code>, <code class="docutils literal notranslate"><span class="pre">A</span></code> or <code class="docutils literal notranslate"><span class="pre">P</span></code>, <code class="docutils literal notranslate"><span class="pre">S</span></code> or <code class="docutils literal notranslate"><span class="pre">I</span></code>, and <code class="docutils literal notranslate"><span class="pre">+</span></code> or <code class="docutils literal notranslate"><span class="pre">-</span></code> for an oblique plane</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">instance_number</span></code>, <code class="docutils literal notranslate"><span class="pre">series_number</span></code></p></td>
+<td><p>The image’s <code class="docutils literal notranslate"><span class="pre">InstanceNumber</span></code> and <code class="docutils literal notranslate"><span class="pre">SeriesNumber</span></code></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>An attribute that resolves to no tag, for want of the dictionary, is logged and
+left out. <code class="docutils literal notranslate"><span class="pre">pulserver</span> <span class="pre">replay</span> <span class="pre">--dicom-dictionary</span></code> names another dictionary for a
+series replayed where the header’s is not.</p>
+</section>
 </section>
 <section id="acquisitions">
 <h2>Acquisitions<a class="headerlink" href="#acquisitions" title="Link to this heading">#</a></h2>
@@ -729,7 +799,10 @@ when the stream carries more or fewer acquisitions than the chain plays.</p>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#messages">Messages</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#header">Header</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#header">Header</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#dicom-attributes">DICOM attributes</a></li>
+</ul>
+</li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#acquisitions">Acquisitions</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>
 </ul>

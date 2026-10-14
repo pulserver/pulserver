@@ -45,7 +45,7 @@
   <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../_static/documentation_options.js?v=a6e268a8"></script>
+    <script src="../_static/documentation_options.js?v=d6d95e65"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -56,7 +56,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.2.2';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.1';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -68,7 +68,7 @@
     <link rel="search" title="Search" href="../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.2.2" />
+  <meta name="docsearch:version" content="v0.4.1" />
   
     
     <script src="../_static/searchtools.js"></script>
@@ -518,7 +518,8 @@ is reconstructed with the shipped reconstruction paired with it.</p>
 is the plugin of the first directory holding <code class="docutils literal notranslate"><span class="pre">&lt;name&gt;.py</span></code>.</p></li>
 <li><p><strong>limits</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a>) – Text of the <code class="docutils literal notranslate"><span class="pre">[Limits]</span></code> block every design is made under; its <code class="docutils literal notranslate"><span class="pre">B0</span></code>
 is the virtual magnet’s field.</p></li>
-<li><p><strong>store</strong> (<em>Path</em><em> | </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a>) – Design store.</p></li>
+<li><p><strong>store</strong> (<em>Path</em><em> | </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a>) – Design store, one directory per scan; each design a console generates or
+imports is stored for a new scan.</p></li>
 <li><p><strong>recon</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.15)"><em>tuple</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>]</em><em>, </em><em>default=None</em>) – <code class="docutils literal notranslate"><span class="pre">(host,</span> <span class="pre">port)</span></code> of the reconstruction proxy.</p></li>
 <li><p><strong>recon_plugins</strong> (<em>PluginPath</em><em>, </em><em>default=None</em>) – Directories of reconstruction plugin files, <code class="docutils literal notranslate"><span class="pre">&lt;plugin&gt;.py</span></code>, in search
 order, which reconstruct each scan in this process

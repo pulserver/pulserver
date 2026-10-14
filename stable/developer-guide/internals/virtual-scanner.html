@@ -45,7 +45,7 @@
   <link rel="preload" as="script" href="../../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../../_static/documentation_options.js?v=a6e268a8"></script>
+    <script src="../../_static/documentation_options.js?v=d6d95e65"></script>
     <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -58,7 +58,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.2.2';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.1';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -72,7 +72,7 @@
     <link rel="prev" title="SAR ratios against a reference pulse" href="sar-ratios.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.2.2" />
+  <meta name="docsearch:version" content="v0.4.1" />
   
     
     <script src="../../_static/searchtools.js"></script>
@@ -742,9 +742,14 @@ isocentre. The transmit sensitivities <span class="math notranslate nohighlight"
 the models show none of the dielectric effects of a wavelength comparable to
 the head.</p>
 <p>A pulse plays on every transmit channel, weighted by the coil’s default shim,
-the unit weights that bring the channels into phase at the isocentre, where the
-pulse then has its nominal amplitude: each cube sees the transmit field
-<span class="math notranslate nohighlight">\(b^+(\mathbf{r}) = \sum_c w_c\,s^+_c(\mathbf{r})\)</span>, for the weights <span class="math notranslate nohighlight">\(w_c\)</span>.</p>
+the weights of magnitude <span class="math notranslate nohighlight">\(1/\sqrt{N}\)</span> for <span class="math notranslate nohighlight">\(N\)</span> channels that bring the channels
+into phase at the isocentre, where the pulse then has its nominal amplitude:
+each cube sees the transmit field
+<span class="math notranslate nohighlight">\(b^+(\mathbf{r}) = \sum_c w_c\,s^+_c(\mathbf{r})\)</span>, for the weights <span class="math notranslate nohighlight">\(w_c\)</span>. The
+squares of the weights sum to 1, so the channels together carry the power of
+one channel at the pulse’s amplitude, and an RF shim is written in the same
+normalisation: a circularly polarised shim of <span class="math notranslate nohighlight">\(N\)</span> channels has weights of
+magnitude <span class="math notranslate nohighlight">\(1/\sqrt{N}\)</span>.</p>
 <p>A console given field maps takes the coils, and the subject’s field, from
 electromagnetic and susceptibility models of BrainWeb’s head instead
 (<a class="reference internal" href="#vs-coils-from-field-maps"><span class="std std-ref">Coils from field maps</span></a>).</p>
@@ -1012,8 +1017,8 @@ BrainWeb whatever the subject is called.</p>
 fields, and every design is made under those of the exam’s transmit coil: its
 limits name the VOP file, the default shim, the drive of every channel per
 hertz of a pulse’s amplitude with which the channels’ fields reach that
-amplitude at the isocentre, <span class="math notranslate nohighlight">\(2 / (\gamma \sum_c |B^-_c(\mathbf{0})|)\)</span> in the
-maps’ unit of drive, and the head and local SAR limits of IEC 60601-2-33’s
+amplitude at the isocentre through the default shim,
+<span class="math notranslate nohighlight">\(2\sqrt{N} / (\gamma \sum_c |B^-_c(\mathbf{0})|)\)</span> in the maps’ unit of drive, and the head and local SAR limits of IEC 60601-2-33’s
 normal operating mode. The IR cache then reports each subsequence’s SAR against
 the reference pulse in that coil (<a class="reference internal" href="../../explanations/safety-checks.html"><span class="doc">Safety checks</span></a>).</p>
 <p><a class="reference internal" href="../../generated/pulserver.virtual.BrainWeb.html#pulserver.virtual.BrainWeb" title="pulserver.virtual.BrainWeb"><code class="xref py py-class docutils literal notranslate"><span class="pre">BrainWeb</span></code></a> carries the field its own susceptibility

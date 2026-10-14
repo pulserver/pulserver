@@ -44,7 +44,7 @@
   <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../../../_static/documentation_options.js?v=a6e268a8"></script>
+    <script src="../../../_static/documentation_options.js?v=d6d95e65"></script>
     <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -55,7 +55,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.2.2';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.1';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -67,7 +67,7 @@
     <link rel="search" title="Search" href="../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.2.2" />
+  <meta name="docsearch:version" content="v0.4.1" />
   
     
     <script src="../../../_static/searchtools.js"></script>
@@ -642,15 +642,16 @@
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Reply ``GENERATED &lt;id&gt;`` for the design a request resolves to.</span>
 
-<span class="sd">    A design already stored for the resolved protocol, the plugin's options,</span>
-<span class="sd">    the plugin source, the package versions and the limits is returned</span>
-<span class="sd">    without designing again.</span>
+<span class="sd">    A design the scan of ``store`` already holds for the resolved protocol,</span>
+<span class="sd">    the plugin's options, the plugin source, the package versions and the</span>
+<span class="sd">    limits is returned without designing again.</span>
 <span class="sd">    Otherwise the sequence is designed once, under the scanner limits</span>
 <span class="sd">    capped by the design limits ``design_max_grad`` and ``design_max_slew``,</span>
 <span class="sd">    written in the logical frame, checked in the physical frame of the</span>
 <span class="sd">    prescription rotation against the scanner limits with</span>
 <span class="sd">    :func:`pulserver.ir.check`, converted to the IR cache at the prescribed</span>
-<span class="sd">    field-of-view offset, and stored. A request that resolves to other values</span>
+<span class="sd">    field-of-view offset, and stored in place of the scan's previous design.</span>
+<span class="sd">    A request that resolves to other values</span>
 <span class="sd">    is designed from the resolved values, so a design is a function of its</span>
 <span class="sd">    identifier. With ``push``, the URL of a design intake, the design is sent</span>
 <span class="sd">    there unless the intake holds it already. ``exam`` is passed as</span>
@@ -735,11 +736,12 @@
 <span class="w">    </span><span class="sd">"""Reply ``IMPORTED &lt;id&gt;`` for a sequence file, its chain and their IR cache.</span>
 
 <span class="sd">    The files are identified by their names and contents and the</span>
-<span class="sd">    prescription and averages of the import block. A chain already stored is</span>
-<span class="sd">    returned; otherwise it is copied, its main sequence, the last file, is</span>
+<span class="sd">    prescription and averages of the import block. A chain the scan of</span>
+<span class="sd">    ``store`` already holds is returned; otherwise it is copied, its main sequence, the last file, is</span>
 <span class="sd">    played as many times as the block's ``nex`` line asks, written into its</span>
 <span class="sd">    block table as binary Pulseq, and the chain is checked and converted as</span>
-<span class="sd">    :func:`generate` does, and pushed as :func:`generate` pushes. The first</span>
+<span class="sd">    :func:`generate` does, stored and pushed as :func:`generate` stores and</span>
+<span class="sd">    pushes it. The first</span>
 <span class="sd">    file is also reachable as ``sequence.seq``.</span>
 
 <span class="sd">    Raises</span>

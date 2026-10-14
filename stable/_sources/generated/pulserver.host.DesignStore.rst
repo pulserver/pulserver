@@ -20,7 +20,6 @@
    ~DesignStore.find
    ~DesignStore.manifest
    ~DesignStore.pack
-   ~DesignStore.prune
    ~DesignStore.receive
    ~DesignStore.stage
 

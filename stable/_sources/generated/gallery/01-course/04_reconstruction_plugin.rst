@@ -64,7 +64,7 @@ ellipses seen by four coils, and :func:`~pulserver.virtual.record` writes
 what the scanner would send: an MRD file whose header names the design, and
 the samples of each readout.
 
-.. GENERATED FROM PYTHON SOURCE LINES 48-87
+.. GENERATED FROM PYTHON SOURCE LINES 48-88
 
 .. code-block:: Python
 
@@ -91,8 +91,9 @@ the samples of each readout.
     entries = parse_listing(listing[listing.index("[Protocol]") :])
     values = {key: entry.value for key, entry in entries.items()}
     values.update({UIParam.NX: 64, UIParam.NY: 64})
-    design = console.design("generate", "gre2d", format_values(values, entries))["design"]
-    sequence = store / design / "sequence.seq"
+    generated = console.design("generate", "gre2d", format_values(values, entries))
+    scan, design = generated["scan"], generated["design"]
+    sequence = store / scan / design / "sequence.seq"
 
     phantom = virtual.Phantom(
         [
@@ -105,7 +106,7 @@ the samples of each readout.
     )
     series = store / "series.h5"
     readouts = virtual.simulate(sequence, phantom.tissue(2e-3))
-    print(virtual.record(series, design, readouts), "readouts")
+    print(virtual.record(series, scan, design, readouts), "readouts")
 
 
 
@@ -120,7 +121,7 @@ the samples of each readout.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 88-93
+.. GENERATED FROM PYTHON SOURCE LINES 89-94
 
 As the scanner sends it
 -----------------------
@@ -128,7 +129,7 @@ As the scanner sends it
 Open the file with the ``ismrmrd`` package, as a Gadgetron gadget would see
 the stream:
 
-.. GENERATED FROM PYTHON SOURCE LINES 93-123
+.. GENERATED FROM PYTHON SOURCE LINES 94-124
 
 .. code-block:: Python
 
@@ -161,7 +162,7 @@ the stream:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 124-138
+.. GENERATED FROM PYTHON SOURCE LINES 125-139
 
 The header does not know the matrix, and every readout claims to be line 0
 of slice 0, with no flags but the one that ends the measurement. Sorting these readouts into k-space is
@@ -178,7 +179,7 @@ pulserver's reconstruction proxy finds the design the header names and
 copies all of this into the stream. You do not call it yourself; here you
 run the same functions to see the result:
 
-.. GENERATED FROM PYTHON SOURCE LINES 138-150
+.. GENERATED FROM PYTHON SOURCE LINES 139-151
 
 .. code-block:: Python
 
@@ -209,7 +210,7 @@ run the same functions to see the result:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 151-157
+.. GENERATED FROM PYTHON SOURCE LINES 152-158
 
 Now the header holds the matrix, 128 samples by 64 lines (the readout is
 oversampled twice), and every readout its line. The echo sample says where
@@ -218,7 +219,7 @@ and the last one is what tells a reconstruction that the slice is complete.
 
 Here is the order the lines arrive in, before and after:
 
-.. GENERATED FROM PYTHON SOURCE LINES 157-183
+.. GENERATED FROM PYTHON SOURCE LINES 158-184
 
 
 
@@ -232,7 +233,7 @@ Here is the order the lines arrive in, before and after:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 184-207
+.. GENERATED FROM PYTHON SOURCE LINES 185-208
 
 ``gre2d`` acquires its lines in order, from the bottom of k-space to the
 top. A sequence with another order, or with interleaved slices, is sorted
@@ -258,7 +259,7 @@ that prints what it receives and returns nothing. pulserver runs every
 stream on a fresh copy of the plugin, so anything you want to keep after the
 run goes somewhere outside it, here the list ``kept``:
 
-.. GENERATED FROM PYTHON SOURCE LINES 207-238
+.. GENERATED FROM PYTHON SOURCE LINES 208-239
 
 .. code-block:: Python
 
@@ -300,13 +301,13 @@ run goes somewhere outside it, here the list ``kept``:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 239-242
+.. GENERATED FROM PYTHON SOURCE LINES 240-243
 
 :meth:`~pulserver.recon.ReconPlugin.run` sends a recorded series through a
 plugin in this process. Given the ``store`` of designs, it fills in the
 stream from the design first, exactly as the proxy does on a scanner:
 
-.. GENERATED FROM PYTHON SOURCE LINES 242-245
+.. GENERATED FROM PYTHON SOURCE LINES 243-246
 
 .. code-block:: Python
 
@@ -328,14 +329,14 @@ stream from the design first, exactly as the proxy does on a scanner:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 246-250
+.. GENERATED FROM PYTHON SOURCE LINES 247-251
 
 ``recon`` was called once, when the 64th readout closed the slice. It
 received the k-space of the slice with the coils first, then the lines, then
 the readout samples; and the matrix of the image it should return, 64 by 64.
 This is the k-space it received, one panel per coil:
 
-.. GENERATED FROM PYTHON SOURCE LINES 250-260
+.. GENERATED FROM PYTHON SOURCE LINES 251-261
 
 
 
@@ -349,7 +350,7 @@ This is the k-space it received, one panel per coil:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 261-305
+.. GENERATED FROM PYTHON SOURCE LINES 262-306
 
 If you know Gadgetron
 ---------------------
@@ -399,7 +400,7 @@ What this lesson did, stated the way you would ask an agent for it:
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 1.069 seconds)
+   **Total running time of the script:** (0 minutes 1.045 seconds)
 
 
 .. _sphx_glr_download_generated_gallery_01-course_04_reconstruction_plugin.py:

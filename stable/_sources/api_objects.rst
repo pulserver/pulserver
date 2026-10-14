@@ -44,6 +44,7 @@ from.
 
    call
    DesignStore
+   prune
    design_identity
    design_id
 
@@ -181,6 +182,7 @@ from.
    LocalReconstruction
    DesignCache
    Design
+   SCAN_PARAMETER
    DESIGN_PARAMETER
    DesignIntake
    SequenceTable
@@ -216,6 +218,7 @@ from.
    ReconData
    ReconBuffer
    ReconResult
+   figure_rgb
 
 .. currentmodule:: pulserver.validate
 

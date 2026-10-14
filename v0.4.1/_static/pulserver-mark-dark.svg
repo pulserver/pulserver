@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 116" role="img" aria-labelledby="t d">
+<title id="t">pulserver</title><desc id="d">A stack of three server rack units whose panel lines are trapezoidal gradient lobes</desc>
+<style>
+.box{fill:#13293a;stroke:#5b9bd0;stroke-width:2}
+.core{fill:#2b76ad;stroke:#8fc3e8;stroke-width:2}
+.a{fill:#2a2415;stroke:#ffbe2e;stroke-width:2}
+.txt{font:22px Arial,sans-serif;fill:#dce7f0}
+.white{font:23px Arial,sans-serif;fill:#ffffff;font-weight:bold}
+.small{font:18px Arial,sans-serif;fill:#dce7f0}
+.label{font:16px Arial,sans-serif;fill:#93a7b5}
+.arrow{stroke:#93a7b5;stroke-width:3;marker-end:url(#m)}
+.head{fill:#93a7b5}
+.ink{fill:none;stroke:#e8eef3;stroke-width:5;stroke-linejoin:miter;stroke-linecap:butt}
+.blue{fill:#5b9bd0}
+.amber{fill:#ffbe2e}
+.word{fill:#79bba4}
+.orange{fill:#ffa00f}
+.unit{stroke:#e6ece9;stroke-width:4}
+.trace{fill:none;stroke:#e6ece9;stroke-width:4;stroke-linejoin:round;stroke-linecap:round}
+.title{font:bold 20px Arial,sans-serif;fill:#dce7f0}
+.wave{fill:none;stroke:#5b9bd0;stroke-width:3;stroke-linejoin:round}
+.rf{fill:none;stroke:#ffbe2e;stroke-width:3;stroke-linejoin:round}
+.adc{fill:#ffbe2e}
+.base{fill:none;stroke:#93a7b5;stroke-width:1.5}
+.bracket{fill:none;stroke:#93a7b5;stroke-width:2}
+</style>
+<g transform="translate(5 5)">
+<rect class="unit" x="0" y="0" width="150" height="30" rx="7" fill="#79bba4"/>
+<path class="trace" d="M14 15H30L38 8H62L70 15H100"/>
+<circle class="unit orange" cx="126" cy="15" r="7" stroke-width="3"/>
+<rect class="unit" x="0" y="38" width="150" height="30" rx="7" fill="#356a57"/>
+<path class="trace" d="M14 53H30L38 60H62L70 53H100"/>
+<circle class="unit orange" cx="126" cy="53" r="7" stroke-width="3"/>
+<rect class="unit" x="0" y="76" width="150" height="30" rx="7" fill="#79bba4"/>
+<path class="trace" d="M14 91H30L38 84H62L70 91H100"/>
+<circle class="unit orange" cx="126" cy="91" r="7" stroke-width="3"/>
+</g>
+</svg>

@@ -45,7 +45,7 @@
   <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../_static/documentation_options.js?v=a6e268a8"></script>
+    <script src="../_static/documentation_options.js?v=d6d95e65"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -56,7 +56,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.2.2';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.1';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -68,7 +68,7 @@
     <link rel="search" title="Search" href="../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.2.2" />
+  <meta name="docsearch:version" content="v0.4.1" />
   
     
     <script src="../_static/searchtools.js"></script>
@@ -520,7 +520,7 @@ is refused on SAR.</p></li>
 value, or one per channel. A scale common to every channel cancels in
 the ratios.</p></li>
 <li><p><strong>default_shim</strong> (<em>tuple[complex, …] | None</em>) – Complex channel weights of a pulse played without an RF shim, and of
-the reference pulse; equal weights when None.</p></li>
+the reference pulse; equal weights whose squares sum to 1 when None.</p></li>
 <li><p><strong>vop_coil</strong> (<em>str | None</em>) – The transmit configuration the scanner reports. When given, the VOP
 file’s <code class="docutils literal notranslate"><span class="pre">metadata[&quot;transmit&quot;]</span></code> must name the same one.</p></li>
 <li><p><strong>vop_head_limit, vop_local_limit</strong> – The scanner’s head and local SAR limits, W/kg, in its current

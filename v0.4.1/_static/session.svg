@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 340" role="img" aria-labelledby="t d">
+<title id="t">A reconstruction session</title><desc id="d">The scanner's client streams MRD to the proxy, which refuses or enriches the series from its design; a worker runs the recon plugin when a slot is free, a queue on disk holds the series otherwise, or the proxy forwards it to a reconstruction server; images return to the client</desc>
+<style>
+.box{fill:#eef4fa;stroke:#2b76ad;stroke-width:2}
+.core{fill:#2b76ad;stroke:#174b70;stroke-width:2}
+.a{fill:#fdf6e6;stroke:#ffb91f;stroke-width:2}
+.txt{font:22px Arial,sans-serif;fill:#173042}
+.white{font:23px Arial,sans-serif;fill:#ffffff;font-weight:bold}
+.small{font:18px Arial,sans-serif;fill:#173042}
+.label{font:16px Arial,sans-serif;fill:#657786}
+.arrow{stroke:#657786;stroke-width:3;marker-end:url(#m)}
+.head{fill:#657786}
+.ink{fill:none;stroke:#12212b;stroke-width:5;stroke-linejoin:miter;stroke-linecap:butt}
+.blue{fill:#3a77a8}
+.amber{fill:#ffbe2e}
+.word{fill:#356a57}
+.orange{fill:#ffa00f}
+.unit{stroke:#2a2a2a;stroke-width:4}
+.trace{fill:none;stroke:#2a2a2a;stroke-width:4;stroke-linejoin:round;stroke-linecap:round}
+.title{font:bold 20px Arial,sans-serif;fill:#173042}
+.wave{fill:none;stroke:#3a77a8;stroke-width:3;stroke-linejoin:round}
+.rf{fill:none;stroke:#ffbe2e;stroke-width:3;stroke-linejoin:round}
+.adc{fill:#ffbe2e}
+.base{fill:none;stroke:#657786;stroke-width:1.5}
+.bracket{fill:none;stroke:#657786;stroke-width:2}
+</style>
+<defs><marker id="m" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path class="head" d="M0,0 L0,6 L9,3 z"/></marker></defs>
+<rect class="box" x="40" y="20" rx="12" width="280" height="70"/><text class="txt" x="180" y="49.5" text-anchor="middle">Reconstruction client</text><text class="txt" x="180" y="74.5" text-anchor="middle">streams MRD</text>
+<line class="arrow" x1="320" y1="55" x2="377" y2="55"/>
+<rect class="core" x="380" y="20" rx="12" width="580" height="70"/><text class="white" x="670" y="49.5" text-anchor="middle">Proxy: refuse or enrich</text><text class="white" x="670" y="74.5" text-anchor="middle">from the design the header names</text>
+<line class="arrow" x1="500" y1="90" x2="500" y2="137"/><text class="label" x="510" y="118.5">a free slot</text>
+<line class="arrow" x1="840" y1="90" x2="840" y2="137"/><text class="label" x="850" y="118.5">--forward</text>
+<rect class="box" x="40" y="140" rx="12" width="300" height="70"/><text class="txt" x="190" y="169.5" text-anchor="middle">Queue on disk</text><text class="txt" x="190" y="194.5" text-anchor="middle">while every slot is busy</text>
+<line class="arrow" x1="340" y1="175" x2="377" y2="175"/>
+<rect class="a" x="380" y="140" rx="12" width="300" height="70"/><text class="small" x="530" y="169.5" text-anchor="middle">Worker process</text><text class="small" x="530" y="194.5" text-anchor="middle">runs your recon plugin</text>
+<rect class="a" x="720" y="140" rx="12" width="240" height="70"/><text class="small" x="840" y="169.5" text-anchor="middle">Reconstruction</text><text class="small" x="840" y="194.5" text-anchor="middle">server</text>
+<line class="arrow" x1="530" y1="210" x2="530" y2="257"/><text class="label" x="540" y="238.5">images, DICOM, text</text>
+<line class="arrow" x1="840" y1="210" x2="840" y2="257"/>
+<rect class="box" x="380" y="260" rx="12" width="580" height="60"/><text class="txt" x="670" y="297" text-anchor="middle">Relayed to the client as they are produced</text>
+</svg>

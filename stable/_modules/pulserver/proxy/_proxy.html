@@ -44,7 +44,7 @@
   <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../../../_static/documentation_options.js?v=a6e268a8"></script>
+    <script src="../../../_static/documentation_options.js?v=d6d95e65"></script>
     <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -55,7 +55,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.2.2';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.1';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -67,7 +67,7 @@
     <link rel="search" title="Search" href="../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.2.2" />
+  <meta name="docsearch:version" content="v0.4.1" />
   
     
     <script src="../../../_static/searchtools.js"></script>
@@ -678,8 +678,8 @@
 
 <span class="sd">    A series whose sequence sets ``EnablePmc`` is corrected for motion while it</span>
 <span class="sd">    plays: the poses its reconstruction states are published into the pose</span>
-<span class="sd">    file the scan reads, ``motion.buf`` in the design's directory, rather than</span>
-<span class="sd">    sent to the client. A forwarded series publishes the poses the server</span>
+<span class="sd">    file the scan reads, ``motion.buf`` in the scan's directory of the store,</span>
+<span class="sd">    rather than sent to the client. A forwarded series publishes the poses the server</span>
 <span class="sd">    passes back.</span>
 
 <span class="sd">    What goes back to a client is also written to a directory under the</span>
@@ -692,7 +692,7 @@
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
 <span class="sd">    store : Path | str</span>
-<span class="sd">        Directory of designs, as the design calls write it; read only.</span>
+<span class="sd">        Design store, one directory per scan, as the design calls write it.</span>
 <span class="sd">    plugins : PluginPath, default=None</span>
 <span class="sd">        Directories of reconstruction plugin files, ``&lt;plugin&gt;.py``, in search</span>
 <span class="sd">        order; required unless the proxy forwards.</span>
@@ -720,8 +720,9 @@
 <span class="sd">        proxy on this host so a map one series measures reaches a series on</span>
 <span class="sd">        another;</span>
 <span class="sd">        :data:`~pulserver.recon._runtime.exam.DEFAULT_EXAM_DIRECTORY` when</span>
-<span class="sd">        ``None``. An exam's directory is removed when the last proxy on that</span>
-<span class="sd">        exam lets go of it.</span>
+<span class="sd">        ``None``. A directory the proxy creates is readable by its owner alone;</span>
+<span class="sd">        one that exists is used with the permissions it has. An exam's</span>
+<span class="sd">        directory is removed when the last proxy on that exam lets go of it.</span>
 <span class="sd">    forward : tuple[str, int], default=None</span>
 <span class="sd">        ``(host, port)`` of the MRD server that reconstructs every series;</span>
 <span class="sd">        local workers when ``None``.</span>
@@ -828,7 +829,7 @@
                     <span class="p">(</span><span class="n">design</span><span class="o">.</span><span class="n">description</span><span class="p">,),</span>
                     <span class="n">_enriched</span><span class="p">(</span><span class="n">received</span><span class="p">,</span> <span class="n">design</span><span class="p">,</span> <span class="n">header_fov_offset_m</span><span class="p">(</span><span class="n">header</span><span class="p">)),</span>
                 <span class="p">),</span>
-                <span class="n">motion</span><span class="o">=</span><span class="n">design</span><span class="o">.</span><span class="n">directory</span> <span class="o">/</span> <span class="n">FILENAME</span>
+                <span class="n">motion</span><span class="o">=</span><span class="n">design</span><span class="o">.</span><span class="n">directory</span><span class="o">.</span><span class="n">parent</span> <span class="o">/</span> <span class="n">FILENAME</span>
                 <span class="k">if</span> <span class="n">design</span><span class="o">.</span><span class="n">prospective_motion</span>
                 <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
             <span class="p">)</span></div>
@@ -876,8 +877,9 @@
 <span class="sd">        proxy on this host so a map one series measures reaches a series on</span>
 <span class="sd">        another;</span>
 <span class="sd">        :data:`~pulserver.recon._runtime.exam.DEFAULT_EXAM_DIRECTORY` when</span>
-<span class="sd">        ``None``. An exam's directory is removed when the last proxy on that</span>
-<span class="sd">        exam lets go of it.</span>
+<span class="sd">        ``None``. A directory the proxy creates is readable by its owner alone;</span>
+<span class="sd">        one that exists is used with the permissions it has. An exam's</span>
+<span class="sd">        directory is removed when the last proxy on that exam lets go of it.</span>
 <span class="sd">    save_to : Path | str, default=None</span>
 <span class="sd">        Directory each series is kept in, as received; not kept when ``None``.</span>
 <span class="sd">    idle_timeout : float, default=None</span>
@@ -981,13 +983,17 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_exam_root</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span>
             <span class="n">DEFAULT_EXAM_DIRECTORY</span> <span class="k">if</span> <span class="n">exam_directory</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">exam_directory</span>
         <span class="p">)</span>
-        <span class="c1"># Readable by the owner alone: an exam's files are unpickled, so a</span>
-        <span class="c1"># directory another user can write to is code another user can run in</span>
-        <span class="c1"># a reconstruction worker. mkdir sets the mode only where it creates,</span>
-        <span class="c1"># and a umask may have narrowed it, so it is also set here -- which</span>
-        <span class="c1"># fails loudly on a directory this user does not own.</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_exam_root</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">parents</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="n">EXAM_DIRECTORY_MODE</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_exam_root</span><span class="o">.</span><span class="n">chmod</span><span class="p">(</span><span class="n">EXAM_DIRECTORY_MODE</span><span class="p">)</span>
+        <span class="c1"># Readable by the owner alone when the proxy makes it: an exam's files</span>
+        <span class="c1"># are unpickled, so a directory another user can write to is code</span>
+        <span class="c1"># another user can run in a reconstruction worker. mkdir sets the mode</span>
+        <span class="c1"># only where it creates, and a umask may have narrowed it, so it is</span>
+        <span class="c1"># also set here -- which fails loudly on a default root this user does</span>
+        <span class="c1"># not own. A root the site names and has made already is used as the</span>
+        <span class="c1"># site made it: a scanner shares it with the design calls on the host,</span>
+        <span class="c1"># which may run as another user.</span>
+        <span class="k">if</span> <span class="n">exam_directory</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_exam_root</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_exam_root</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">parents</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="n">EXAM_DIRECTORY_MODE</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_exam_root</span><span class="o">.</span><span class="n">chmod</span><span class="p">(</span><span class="n">EXAM_DIRECTORY_MODE</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">exams</span> <span class="o">=</span> <span class="n">ExamCacheManager</span><span class="p">(</span><span class="n">directory</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_exam_root</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_closing</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Event</span><span class="p">()</span>
         <span class="n">threading</span><span class="o">.</span><span class="n">Thread</span><span class="p">(</span>

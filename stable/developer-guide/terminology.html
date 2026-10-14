@@ -45,7 +45,7 @@
   <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../_static/documentation_options.js?v=a6e268a8"></script>
+    <script src="../_static/documentation_options.js?v=d6d95e65"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -56,7 +56,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.2.2';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.1';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -70,7 +70,7 @@
     <link rel="prev" title="Documentation" href="documentation.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.2.2" />
+  <meta name="docsearch:version" content="v0.4.1" />
   
     
     <script src="../_static/searchtools.js"></script>
@@ -617,7 +617,8 @@ estimate; the design the interpreter plays is the stored one.</p>
 <p><strong>Storage.</strong> A <em>design</em> is one generated or imported chain with its IR cache,
 immutable once written. Its <em>identity</em> is the hash of what it depends on; its
 <em>identifier</em> is the first 18 hexadecimal digits of the identity. The <em>design
-store</em> is the directory holding every design. A <em>design call</em> is one <code class="docutils literal notranslate"><span class="pre">list</span></code>,
+store</em> is the directory holding one directory per <em>scan</em>, named by whatever
+plays it, and a scan’s directory holds the design the scan plays. A <em>design call</em> is one <code class="docutils literal notranslate"><span class="pre">list</span></code>,
 <code class="docutils literal notranslate"><span class="pre">validate</span></code>, <code class="docutils literal notranslate"><span class="pre">generate</span></code> or <code class="docutils literal notranslate"><span class="pre">import</span></code> of an interpreter host process; no call
 keeps state beyond the designs it stores. A design is <em>pushed</em> to the <em>design intake</em>, the
 proxy’s HTTP endpoint writing its store, as a <em>bundle</em> of the files of its

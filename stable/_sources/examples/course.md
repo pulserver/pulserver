@@ -10,12 +10,12 @@ everything you see is computed by the code on the page.
 
 | Lesson | Contents |
 | --- | --- |
-| {doc}`1. Your first scan </generated/gallery/01-course/01_protocol_to_image>` | An acquisition on the virtual scanner, from protocol to image. |
-| {doc}`2. Your sequence in the scanner UI </generated/gallery/01-course/02_sequence_plugin>` | Sequence plugin, protocol entries and `evaluate`. |
-| {doc}`3. What the scanner plays </generated/gallery/01-course/03_scanner_representation>` | Safety checks, repetition, virtual segments and segment instances. |
-| {doc}`4. What your recon receives </generated/gallery/01-course/04_reconstruction_plugin>` | MRD enrichment: counters, flags, encoding spaces and trajectory. |
-| {doc}`5. Your recon plugin </generated/gallery/01-course/05_recon_plugin>` | Reconstruction units, inverse FFT and `pics`. |
-| {doc}`6. Test your pair on the virtual scanner </generated/gallery/01-course/06_testing_on_the_virtual_scanner>` | Flip-angle series against the closed-form signal. |
+| {doc}`1. Your first scan </generated/gallery/01-course/01_protocol_to_image>` | Acquisition on the virtual scanner, from protocol to image |
+| {doc}`2. Your sequence in the scanner UI </generated/gallery/01-course/02_sequence_plugin>` | Sequence plugin, protocol entries and `evaluate` |
+| {doc}`3. What the scanner plays </generated/gallery/01-course/03_scanner_representation>` | Safety checks, repetition, virtual segments and segment instances |
+| {doc}`4. What your recon receives </generated/gallery/01-course/04_reconstruction_plugin>` | MRD enrichment: counters, flags, encoding spaces and trajectory |
+| {doc}`5. Your recon plugin </generated/gallery/01-course/05_recon_plugin>` | Reconstruction units, inverse FFT and `pics` |
+| {doc}`6. Test your pair on the virtual scanner </generated/gallery/01-course/06_testing_on_the_virtual_scanner>` | Flip-angle series against the closed-form signal |
 
 By the end you have two files, a sequence plugin and a recon plugin, that run
 unchanged on a real scanner through its interpreter

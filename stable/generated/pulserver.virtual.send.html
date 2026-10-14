@@ -45,7 +45,7 @@
   <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../_static/documentation_options.js?v=a6e268a8"></script>
+    <script src="../_static/documentation_options.js?v=d6d95e65"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -56,7 +56,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.2.2';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.1';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -68,7 +68,7 @@
     <link rel="search" title="Search" href="../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.2.2" />
+  <meta name="docsearch:version" content="v0.4.1" />
   
     
     <script src="../_static/searchtools.js"></script>
@@ -502,7 +502,8 @@
 <dt class="sig sig-object py" id="pulserver.virtual.send">
 <span class="sig-prename descclassname"><span class="pre">pulserver.virtual.</span></span><span class="sig-name descname"><span class="pre">send</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pulserver/virtual/_client.html#send"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.virtual.send" title="Link to this definition">#</a></dt>
 <dd><p>Send one series to the proxy at <code class="docutils literal notranslate"><span class="pre">address</span></code>; return what it sends back.</p>
-<p>The header carries the design identifier, the resonance frequency, the
+<p>The header carries the scan and the design identifier, the resonance
+frequency, the
 coil count and, with <code class="docutils literal notranslate"><span class="pre">exam</span></code>, the <code class="docutils literal notranslate"><span class="pre">ExamID</span></code>; the acquisitions carry the
 samples, scan counters from one, <code class="docutils literal notranslate"><span class="pre">LAST_IN_MEASUREMENT</span></code> on the last,
 the field-of-view centre <code class="docutils literal notranslate"><span class="pre">position_mm</span></code>, in mm along the physical axes,

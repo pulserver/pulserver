@@ -44,7 +44,7 @@
   <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../../../_static/documentation_options.js?v=a6e268a8"></script>
+    <script src="../../../_static/documentation_options.js?v=d6d95e65"></script>
     <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -55,7 +55,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.2.2';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.1';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -67,7 +67,7 @@
     <link rel="search" title="Search" href="../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.2.2" />
+  <meta name="docsearch:version" content="v0.4.1" />
   
     
     <script src="../../../_static/searchtools.js"></script>
@@ -438,7 +438,7 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">ismrmrd.xsd</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">..proxy._designs</span><span class="w"> </span><span class="kn">import</span> <span class="n">DESIGN_PARAMETER</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..proxy._designs</span><span class="w"> </span><span class="kn">import</span> <span class="n">DESIGN_PARAMETER</span><span class="p">,</span> <span class="n">SCAN_PARAMETER</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..recon._runtime.connection</span><span class="w"> </span><span class="kn">import</span> <span class="n">Connection</span>
 
 <span class="c1"># Placeholders for the schema's required encoding space, which the proxy</span>
@@ -450,6 +450,7 @@
 <a class="viewcode-back" href="../../../generated/pulserver.virtual.send.html#pulserver.virtual.send">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">send</span><span class="p">(</span>
     <span class="n">address</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">],</span>
+    <span class="n">scan</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
     <span class="n">design</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
     <span class="n">readouts</span><span class="p">:</span> <span class="n">Iterable</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">],</span>
     <span class="o">*</span><span class="p">,</span>
@@ -462,7 +463,8 @@
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">Any</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">"""Send one series to the proxy at ``address``; return what it sends back.</span>
 
-<span class="sd">    The header carries the design identifier, the resonance frequency, the</span>
+<span class="sd">    The header carries the scan and the design identifier, the resonance</span>
+<span class="sd">    frequency, the</span>
 <span class="sd">    coil count and, with ``exam``, the ``ExamID``; the acquisitions carry the</span>
 <span class="sd">    samples, scan counters from one, ``LAST_IN_MEASUREMENT`` on the last,</span>
 <span class="sd">    the field-of-view centre ``position_mm``, in mm along the physical axes,</span>
@@ -479,7 +481,7 @@
 <span class="sd">    last carries its flag.</span>
 <span class="sd">    """</span>
     <span class="n">header</span><span class="p">,</span> <span class="n">acquisitions</span> <span class="o">=</span> <span class="n">_series</span><span class="p">(</span>
-        <span class="n">design</span><span class="p">,</span> <span class="n">readouts</span><span class="p">,</span> <span class="n">frequency_hz</span><span class="p">,</span> <span class="n">position_mm</span><span class="p">,</span> <span class="n">rotation</span><span class="p">,</span> <span class="n">exam</span>
+        <span class="n">scan</span><span class="p">,</span> <span class="n">design</span><span class="p">,</span> <span class="n">readouts</span><span class="p">,</span> <span class="n">frequency_hz</span><span class="p">,</span> <span class="n">position_mm</span><span class="p">,</span> <span class="n">rotation</span><span class="p">,</span> <span class="n">exam</span>
     <span class="p">)</span>
     <span class="n">stream</span> <span class="o">=</span> <span class="n">socket</span><span class="o">.</span><span class="n">create_connection</span><span class="p">(</span><span class="n">address</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">)</span>
     <span class="n">connection</span> <span class="o">=</span> <span class="n">Connection</span><span class="p">(</span><span class="n">stream</span><span class="p">)</span>
@@ -500,6 +502,7 @@
 <a class="viewcode-back" href="../../../generated/pulserver.virtual.record.html#pulserver.virtual.record">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">record</span><span class="p">(</span>
     <span class="n">path</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">scan</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
     <span class="n">design</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
     <span class="n">readouts</span><span class="p">:</span> <span class="n">Iterable</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">],</span>
     <span class="o">*</span><span class="p">,</span>
@@ -516,7 +519,7 @@
     <span class="kn">import</span><span class="w"> </span><span class="nn">ismrmrd.hdf5</span>
 
     <span class="n">header</span><span class="p">,</span> <span class="n">acquisitions</span> <span class="o">=</span> <span class="n">_series</span><span class="p">(</span>
-        <span class="n">design</span><span class="p">,</span> <span class="n">readouts</span><span class="p">,</span> <span class="n">frequency_hz</span><span class="p">,</span> <span class="n">position_mm</span><span class="p">,</span> <span class="n">rotation</span><span class="p">,</span> <span class="n">exam</span>
+        <span class="n">scan</span><span class="p">,</span> <span class="n">design</span><span class="p">,</span> <span class="n">readouts</span><span class="p">,</span> <span class="n">frequency_hz</span><span class="p">,</span> <span class="n">position_mm</span><span class="p">,</span> <span class="n">rotation</span><span class="p">,</span> <span class="n">exam</span>
     <span class="p">)</span>
     <span class="n">dataset</span> <span class="o">=</span> <span class="n">ismrmrd</span><span class="o">.</span><span class="n">hdf5</span><span class="o">.</span><span class="n">Dataset</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">path</span><span class="p">),</span> <span class="s2">"dataset"</span><span class="p">,</span> <span class="n">create_if_needed</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
     <span class="k">try</span><span class="p">:</span>
@@ -532,6 +535,7 @@
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_series</span><span class="p">(</span>
+    <span class="n">scan</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
     <span class="n">design</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
     <span class="n">readouts</span><span class="p">:</span> <span class="n">Iterable</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">],</span>
     <span class="n">frequency_hz</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
@@ -563,10 +567,12 @@
             <span class="k">yield</span> <span class="n">acquisition</span>
             <span class="n">samples</span> <span class="o">=</span> <span class="n">following</span>
 
-    <span class="k">return</span> <span class="n">_header</span><span class="p">(</span><span class="n">design</span><span class="p">,</span> <span class="n">coils</span><span class="p">,</span> <span class="n">frequency_hz</span><span class="p">,</span> <span class="n">exam</span><span class="p">),</span> <span class="n">acquisitions</span><span class="p">()</span>
+    <span class="k">return</span> <span class="n">_header</span><span class="p">(</span><span class="n">scan</span><span class="p">,</span> <span class="n">design</span><span class="p">,</span> <span class="n">coils</span><span class="p">,</span> <span class="n">frequency_hz</span><span class="p">,</span> <span class="n">exam</span><span class="p">),</span> <span class="n">acquisitions</span><span class="p">()</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_header</span><span class="p">(</span><span class="n">design</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">coils</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">frequency_hz</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">exam</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_header</span><span class="p">(</span>
+    <span class="n">scan</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">design</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">coils</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">frequency_hz</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">exam</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
     <span class="n">space</span> <span class="o">=</span> <span class="n">ismrmrd</span><span class="o">.</span><span class="n">xsd</span><span class="o">.</span><span class="n">encodingSpaceType</span><span class="p">(</span>
         <span class="n">matrixSize</span><span class="o">=</span><span class="n">ismrmrd</span><span class="o">.</span><span class="n">xsd</span><span class="o">.</span><span class="n">matrixSizeType</span><span class="p">(</span>
             <span class="n">x</span><span class="o">=</span><span class="n">_PLACEHOLDER</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="n">_PLACEHOLDER</span><span class="p">,</span> <span class="n">z</span><span class="o">=</span><span class="n">_PLACEHOLDER</span>
@@ -576,7 +582,8 @@
         <span class="p">),</span>
     <span class="p">)</span>
     <span class="n">parameters</span> <span class="o">=</span> <span class="p">[</span>
-        <span class="n">ismrmrd</span><span class="o">.</span><span class="n">xsd</span><span class="o">.</span><span class="n">userParameterStringType</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="n">DESIGN_PARAMETER</span><span class="p">,</span> <span class="n">value</span><span class="o">=</span><span class="n">design</span><span class="p">)</span>
+        <span class="n">ismrmrd</span><span class="o">.</span><span class="n">xsd</span><span class="o">.</span><span class="n">userParameterStringType</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="n">SCAN_PARAMETER</span><span class="p">,</span> <span class="n">value</span><span class="o">=</span><span class="n">scan</span><span class="p">),</span>
+        <span class="n">ismrmrd</span><span class="o">.</span><span class="n">xsd</span><span class="o">.</span><span class="n">userParameterStringType</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="n">DESIGN_PARAMETER</span><span class="p">,</span> <span class="n">value</span><span class="o">=</span><span class="n">design</span><span class="p">),</span>
     <span class="p">]</span>
     <span class="k">if</span> <span class="n">exam</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">parameters</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>

@@ -44,7 +44,7 @@
   <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../../../_static/documentation_options.js?v=a6e268a8"></script>
+    <script src="../../../_static/documentation_options.js?v=d6d95e65"></script>
     <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -55,7 +55,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.2.2';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.1';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -67,7 +67,7 @@
     <link rel="search" title="Search" href="../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.2.2" />
+  <meta name="docsearch:version" content="v0.4.1" />
   
     
     <script src="../../../_static/searchtools.js"></script>
@@ -537,8 +537,10 @@
 <span class="sd">    image_index</span>
 <span class="sd">        MRD ``image_index``; ``None`` numbers images consecutively.</span>
 <span class="sd">    image_type</span>
-<span class="sd">        ``"magnitude"``, ``"phase"``, ``"real"``, ``"imaginary"`` or</span>
-<span class="sd">        ``"complex"``.</span>
+<span class="sd">        ``"magnitude"``, ``"phase"``, ``"real"``, ``"imaginary"``,</span>
+<span class="sd">        ``"complex"`` or ``"rgb"``. An RGB result is a ``(y, x, 3)`` array of</span>
+<span class="sd">        values from 0 to 255, such as :func:`figure_rgb` draws, and becomes a</span>
+<span class="sd">        DICOM secondary capture.</span>
 <span class="sd">    attributes</span>
 <span class="sd">        MRD meta attributes, merged over the runtime's defaults. In a DICOM</span>
 <span class="sd">        image ``RescaleSlope`` and ``RescaleIntercept`` state the mapping</span>
@@ -1401,13 +1403,17 @@
         <span class="n">exam_id</span><span class="p">:</span> <span class="n">Hashable</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">config</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">store</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">design</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">dicom</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">dicom_dictionary</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">Any</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">"""Reconstruct one ISMRMRD HDF5 file in this process, through the same hooks.</span>
 
 <span class="sd">        The file's waveforms are delivered before its acquisitions. With</span>
-<span class="sd">        ``store``, the file is a series as the scanner sends it, such as</span>
-<span class="sd">        :func:`pulserver.virtual.record` writes, and is enriched from its design</span>
-<span class="sd">        in that store as the proxy enriches it.</span>
+<span class="sd">        ``store`` or ``design``, the file is a series as the scanner sends it,</span>
+<span class="sd">        such as :func:`pulserver.virtual.record` or the proxy's ``--save-data``</span>
+<span class="sd">        writes, and is enriched from the design it was played from, at the</span>
+<span class="sd">        field-of-view offset its header states, as the proxy enriches it.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
@@ -1420,25 +1426,50 @@
 <span class="sd">        config : str, default=None</span>
 <span class="sd">            Configuration payload, as a stream would carry it.</span>
 <span class="sd">        store : str, default=None</span>
-<span class="sd">            Directory of designs, as the design calls write it.</span>
+<span class="sd">            Design store, one directory per scan, as the design calls write it;</span>
+<span class="sd">            the design is the one the header names.</span>
+<span class="sd">        design : str, default=None</span>
+<span class="sd">            The design's sequence file, the first of its chain, in place of</span>
+<span class="sd">            ``store``: ``&lt;store&gt;/&lt;scan&gt;/&lt;id&gt;/sequence.seq`` or a copy of it,</span>
+<span class="sd">            with the design's manifest beside it.</span>
+<span class="sd">        dicom : bool, default=False</span>
+<span class="sd">            Convert every MRD image emitted to DICOM, as the proxy's</span>
+<span class="sd">            ``--dicom`` does.</span>
+<span class="sd">        dicom_dictionary : str, default=None</span>
+<span class="sd">            Private DICOM dictionary the header's ``dicom:`` attributes are</span>
+<span class="sd">            resolved against, in place of the one the header names</span>
+<span class="sd">            (:ref:`dicom-attributes`).</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
 <span class="sd">        list</span>
 <span class="sd">            Everything emitted, in order: MRD images, named DICOM datasets for</span>
-<span class="sd">            results with ``dicom=True``, and any other output the plugin returned.</span>
+<span class="sd">            results with ``dicom=True`` and, under ``dicom``, for every image,</span>
+<span class="sd">            and any other output the plugin returned.</span>
 
 <span class="sd">        Raises</span>
 <span class="sd">        ------</span>
 <span class="sd">        FileNotFoundError</span>
-<span class="sd">            If there is no such file.</span>
+<span class="sd">            If there is no such file, no such design, or no manifest beside</span>
+<span class="sd">            ``design``.</span>
 <span class="sd">        ValueError</span>
-<span class="sd">            If the file has no MRD XML header.</span>
+<span class="sd">            If the file has no MRD XML header, if both ``store`` and ``design``</span>
+<span class="sd">            are given, if ``design`` is not a file its manifest records, if the</span>
+<span class="sd">            header names another design, or if the series does not match its</span>
+<span class="sd">            design's readouts.</span>
 <span class="sd">        """</span>
         <span class="kn">from</span><span class="w"> </span><span class="nn">._runtime.offline</span><span class="w"> </span><span class="kn">import</span> <span class="n">reconstruct_file</span>
 
         <span class="k">return</span> <span class="n">reconstruct_file</span><span class="p">(</span>
-            <span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">,</span> <span class="n">group</span><span class="o">=</span><span class="n">group</span><span class="p">,</span> <span class="n">exam_id</span><span class="o">=</span><span class="n">exam_id</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">,</span> <span class="n">store</span><span class="o">=</span><span class="n">store</span>
+            <span class="bp">self</span><span class="p">,</span>
+            <span class="n">path</span><span class="p">,</span>
+            <span class="n">group</span><span class="o">=</span><span class="n">group</span><span class="p">,</span>
+            <span class="n">exam_id</span><span class="o">=</span><span class="n">exam_id</span><span class="p">,</span>
+            <span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">,</span>
+            <span class="n">store</span><span class="o">=</span><span class="n">store</span><span class="p">,</span>
+            <span class="n">design</span><span class="o">=</span><span class="n">design</span><span class="p">,</span>
+            <span class="n">dicom</span><span class="o">=</span><span class="n">dicom</span><span class="p">,</span>
+            <span class="n">dicom_dictionary</span><span class="o">=</span><span class="n">dicom_dictionary</span><span class="p">,</span>
         <span class="p">)</span></div>
 
 

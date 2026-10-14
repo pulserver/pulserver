@@ -44,7 +44,7 @@
   <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../../../_static/documentation_options.js?v=a6e268a8"></script>
+    <script src="../../../_static/documentation_options.js?v=d6d95e65"></script>
     <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -55,7 +55,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.2.2';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.1';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -67,7 +67,7 @@
     <link rel="search" title="Search" href="../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.2.2" />
+  <meta name="docsearch:version" content="v0.4.1" />
   
     
     <script src="../../../_static/searchtools.js"></script>
@@ -438,10 +438,10 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">http.server</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseHTTPRequestHandler</span><span class="p">,</span> <span class="n">ThreadingHTTPServer</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">..host._store</span><span class="w"> </span><span class="kn">import</span> <span class="n">BUNDLE_LIMIT</span><span class="p">,</span> <span class="n">ID_DIGITS</span><span class="p">,</span> <span class="n">MANIFEST</span><span class="p">,</span> <span class="n">DesignStore</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..host._store</span><span class="w"> </span><span class="kn">import</span> <span class="n">BUNDLE_LIMIT</span><span class="p">,</span> <span class="n">ID_DIGITS</span><span class="p">,</span> <span class="n">MANIFEST</span><span class="p">,</span> <span class="n">DesignStore</span><span class="p">,</span> <span class="n">_flat</span>
 
 <span class="n">_log</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="s2">"pulserver.proxy"</span><span class="p">)</span>
-<span class="n">_PATH</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="sa">rf</span><span class="s2">"/designs/([0-9a-f]</span><span class="se">{{</span><span class="si">{</span><span class="n">ID_DIGITS</span><span class="si">}</span><span class="se">}}</span><span class="s2">)"</span><span class="p">)</span>
+<span class="n">_PATH</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="sa">rf</span><span class="s2">"/designs/([^/]+)/([0-9a-f]</span><span class="se">{{</span><span class="si">{</span><span class="n">ID_DIGITS</span><span class="si">}</span><span class="se">}}</span><span class="s2">)"</span><span class="p">)</span>
 <span class="c1"># Seconds a connection may stay silent before the intake drops it.</span>
 <span class="n">_TIMEOUT</span> <span class="o">=</span> <span class="mf">60.0</span>
 
@@ -451,9 +451,9 @@
 <span class="k">class</span><span class="w"> </span><span class="nc">DesignIntake</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Receives stored designs over HTTP into the design store the proxy reads.</span>
 
-<span class="sd">    ``HEAD /designs/&lt;id&gt;`` answers 200 when the store holds the design, which</span>
-<span class="sd">    marks it as used for :meth:`~pulserver.host.DesignStore.prune`, and 404</span>
-<span class="sd">    otherwise; ``PUT /designs/&lt;id&gt;`` stores a bundle of</span>
+<span class="sd">    ``HEAD /designs/&lt;scan&gt;/&lt;id&gt;`` answers 200 when the scan holds the design,</span>
+<span class="sd">    which marks the scan as used for :func:`~pulserver.host.prune`, and 404</span>
+<span class="sd">    otherwise; ``PUT /designs/&lt;scan&gt;/&lt;id&gt;`` stores a bundle of</span>
 <span class="sd">    :meth:`~pulserver.host.DesignStore.pack` after checking every file against</span>
 <span class="sd">    its manifest, and answers 201, or 200 for a design already stored. A</span>
 <span class="sd">    bundle that is not the design its path names is refused with 400 and the</span>
@@ -462,7 +462,7 @@
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
 <span class="sd">    store : Path | str</span>
-<span class="sd">        Directory of designs; created when missing.</span>
+<span class="sd">        Directory of scans; created when missing.</span>
 <span class="sd">    host : str, default='127.0.0.1'</span>
 <span class="sd">        Address to listen on; the loopback interface by default.</span>
 <span class="sd">    port : int, default=0</span>
@@ -480,28 +480,31 @@
         <span class="n">port</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
         <span class="n">received</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Path</span><span class="p">],</span> <span class="nb">object</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">store</span> <span class="o">=</span> <span class="n">DesignStore</span><span class="p">(</span><span class="n">store</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">root</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">store</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">root</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">parents</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
         <span class="n">intake</span> <span class="o">=</span> <span class="bp">self</span>
 
         <span class="k">class</span><span class="w"> </span><span class="nc">Handler</span><span class="p">(</span><span class="n">BaseHTTPRequestHandler</span><span class="p">):</span>
             <span class="n">timeout</span> <span class="o">=</span> <span class="n">_TIMEOUT</span>
 
             <span class="k">def</span><span class="w"> </span><span class="nf">do_HEAD</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="n">design</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_design</span><span class="p">()</span>
-                <span class="k">if</span> <span class="n">design</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">named</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_design</span><span class="p">()</span>
+                <span class="k">if</span> <span class="n">named</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                     <span class="k">return</span>
+                <span class="n">store</span><span class="p">,</span> <span class="n">design</span> <span class="o">=</span> <span class="n">named</span>
                 <span class="k">try</span><span class="p">:</span>
-                    <span class="n">os</span><span class="o">.</span><span class="n">utime</span><span class="p">(</span><span class="n">intake</span><span class="o">.</span><span class="n">store</span><span class="o">.</span><span class="n">directory</span><span class="p">(</span><span class="n">design</span><span class="p">)</span> <span class="o">/</span> <span class="n">MANIFEST</span><span class="p">)</span>
+                    <span class="n">os</span><span class="o">.</span><span class="n">utime</span><span class="p">(</span><span class="n">store</span><span class="o">.</span><span class="n">directory</span><span class="p">(</span><span class="n">design</span><span class="p">)</span> <span class="o">/</span> <span class="n">MANIFEST</span><span class="p">)</span>
                 <span class="k">except</span> <span class="ne">OSError</span><span class="p">:</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">_answer</span><span class="p">(</span><span class="n">HTTPStatus</span><span class="o">.</span><span class="n">NOT_FOUND</span><span class="p">)</span>
                     <span class="k">return</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_answer</span><span class="p">(</span><span class="n">HTTPStatus</span><span class="o">.</span><span class="n">OK</span><span class="p">)</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_prepare</span><span class="p">(</span><span class="n">design</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_prepare</span><span class="p">(</span><span class="n">store</span><span class="p">,</span> <span class="n">design</span><span class="p">)</span>
 
             <span class="k">def</span><span class="w"> </span><span class="nf">do_PUT</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="n">design</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_design</span><span class="p">()</span>
-                <span class="k">if</span> <span class="n">design</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">named</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_design</span><span class="p">()</span>
+                <span class="k">if</span> <span class="n">named</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                     <span class="k">return</span>
+                <span class="n">store</span><span class="p">,</span> <span class="n">design</span> <span class="o">=</span> <span class="n">named</span>
                 <span class="k">try</span><span class="p">:</span>
                     <span class="n">length</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">headers</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"Content-Length"</span><span class="p">,</span> <span class="s2">""</span><span class="p">))</span>
                 <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
@@ -516,33 +519,33 @@
                     <span class="p">)</span>
                     <span class="k">return</span>
                 <span class="n">bundle</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">rfile</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">length</span><span class="p">)</span>
-                <span class="n">held</span> <span class="o">=</span> <span class="p">(</span><span class="n">intake</span><span class="o">.</span><span class="n">store</span><span class="o">.</span><span class="n">directory</span><span class="p">(</span><span class="n">design</span><span class="p">)</span> <span class="o">/</span> <span class="n">MANIFEST</span><span class="p">)</span><span class="o">.</span><span class="n">is_file</span><span class="p">()</span>
+                <span class="n">held</span> <span class="o">=</span> <span class="p">(</span><span class="n">store</span><span class="o">.</span><span class="n">directory</span><span class="p">(</span><span class="n">design</span><span class="p">)</span> <span class="o">/</span> <span class="n">MANIFEST</span><span class="p">)</span><span class="o">.</span><span class="n">is_file</span><span class="p">()</span>
                 <span class="k">try</span><span class="p">:</span>
-                    <span class="n">intake</span><span class="o">.</span><span class="n">store</span><span class="o">.</span><span class="n">receive</span><span class="p">(</span><span class="n">bundle</span><span class="p">,</span> <span class="n">design</span><span class="p">)</span>
+                    <span class="n">store</span><span class="o">.</span><span class="n">receive</span><span class="p">(</span><span class="n">bundle</span><span class="p">,</span> <span class="n">design</span><span class="p">)</span>
                 <span class="k">except</span> <span class="ne">ValueError</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">_answer</span><span class="p">(</span><span class="n">HTTPStatus</span><span class="o">.</span><span class="n">BAD_REQUEST</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">error</span><span class="p">))</span>
                     <span class="k">return</span>
-                <span class="n">_log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">"received design </span><span class="si">%s</span><span class="s2">"</span><span class="p">,</span> <span class="n">design</span><span class="p">)</span>
+                <span class="n">_log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">"received design </span><span class="si">%s</span><span class="s2"> of scan </span><span class="si">%s</span><span class="s2">"</span><span class="p">,</span> <span class="n">design</span><span class="p">,</span> <span class="n">store</span><span class="o">.</span><span class="n">scan</span><span class="p">)</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_answer</span><span class="p">(</span><span class="n">HTTPStatus</span><span class="o">.</span><span class="n">OK</span> <span class="k">if</span> <span class="n">held</span> <span class="k">else</span> <span class="n">HTTPStatus</span><span class="o">.</span><span class="n">CREATED</span><span class="p">)</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_prepare</span><span class="p">(</span><span class="n">design</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_prepare</span><span class="p">(</span><span class="n">store</span><span class="p">,</span> <span class="n">design</span><span class="p">)</span>
 
-            <span class="k">def</span><span class="w"> </span><span class="nf">_prepare</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">design</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">def</span><span class="w"> </span><span class="nf">_prepare</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">store</span><span class="p">:</span> <span class="n">DesignStore</span><span class="p">,</span> <span class="n">design</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="k">if</span> <span class="n">received</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                     <span class="n">threading</span><span class="o">.</span><span class="n">Thread</span><span class="p">(</span>
                         <span class="n">target</span><span class="o">=</span><span class="n">_prepare</span><span class="p">,</span>
-                        <span class="n">args</span><span class="o">=</span><span class="p">(</span><span class="n">received</span><span class="p">,</span> <span class="n">intake</span><span class="o">.</span><span class="n">store</span><span class="o">.</span><span class="n">directory</span><span class="p">(</span><span class="n">design</span><span class="p">)),</span>
+                        <span class="n">args</span><span class="o">=</span><span class="p">(</span><span class="n">received</span><span class="p">,</span> <span class="n">store</span><span class="o">.</span><span class="n">directory</span><span class="p">(</span><span class="n">design</span><span class="p">)),</span>
                         <span class="n">daemon</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
                         <span class="n">name</span><span class="o">=</span><span class="sa">f</span><span class="s2">"prepare-</span><span class="si">{</span><span class="n">design</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span>
                     <span class="p">)</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
 
-            <span class="k">def</span><span class="w"> </span><span class="nf">_design</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">def</span><span class="w"> </span><span class="nf">_design</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">DesignStore</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="n">match</span> <span class="o">=</span> <span class="n">_PATH</span><span class="o">.</span><span class="n">fullmatch</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">path</span><span class="p">)</span>
-                <span class="k">if</span> <span class="n">match</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">match</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">_flat</span><span class="p">(</span><span class="n">match</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="mi">1</span><span class="p">)):</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">_answer</span><span class="p">(</span>
-                        <span class="n">HTTPStatus</span><span class="o">.</span><span class="n">NOT_FOUND</span><span class="p">,</span> <span class="s2">"the intake serves /designs/&lt;id&gt;"</span>
+                        <span class="n">HTTPStatus</span><span class="o">.</span><span class="n">NOT_FOUND</span><span class="p">,</span> <span class="s2">"the intake serves /designs/&lt;scan&gt;/&lt;id&gt;"</span>
                     <span class="p">)</span>
                     <span class="k">return</span> <span class="kc">None</span>
-                <span class="k">return</span> <span class="n">match</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+                <span class="k">return</span> <span class="n">DesignStore</span><span class="p">(</span><span class="n">intake</span><span class="o">.</span><span class="n">root</span><span class="p">,</span> <span class="n">match</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="mi">1</span><span class="p">)),</span> <span class="n">match</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
 
             <span class="k">def</span><span class="w"> </span><span class="nf">_answer</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">status</span><span class="p">:</span> <span class="n">HTTPStatus</span><span class="p">,</span> <span class="n">text</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">""</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="n">body</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">text</span><span class="si">}</span><span class="se">\n</span><span class="s2">"</span><span class="o">.</span><span class="n">encode</span><span class="p">()</span> <span class="k">if</span> <span class="n">text</span> <span class="k">else</span> <span class="sa">b</span><span class="s2">""</span>

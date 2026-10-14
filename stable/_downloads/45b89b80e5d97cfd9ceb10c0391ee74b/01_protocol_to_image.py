@@ -105,11 +105,11 @@ for key, value in validation.values.items():
 #
 # The operator presses *Scan*. pulserver designs the whole sequence, checks it
 # against the limits, converts it into the cache the scanner plays and keeps
-# both in the store under one identifier.
+# both in the store, under the scan that plays them.
 generated = console.design("generate", "gre2d", request)
-design = generated["design"]
+scan, design = generated["scan"], generated["design"]
 print(generated["reply"])
-print(sorted(path.name for path in (store / design).iterdir()))
+print(sorted(path.name for path in (store / scan / design).iterdir()))
 
 # %%
 # Steps 4 to 6: scan and reconstruct

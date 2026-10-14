@@ -45,7 +45,7 @@
   <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../_static/documentation_options.js?v=a6e268a8"></script>
+    <script src="../_static/documentation_options.js?v=d6d95e65"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -56,7 +56,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.2.2';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.1';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -70,7 +70,7 @@
     <link rel="prev" title="Scanner sequences" href="design.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.2.2" />
+  <meta name="docsearch:version" content="v0.4.1" />
   
     
     <script src="../_static/searchtools.js"></script>
@@ -534,12 +534,15 @@ described in <a class="reference internal" href="../user-guide/running.html"><sp
 </thead>
 <tbody>
 <tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.host.DesignStore.html#pulserver.host.DesignStore" title="pulserver.host.DesignStore"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DesignStore</span></code></a></p></td>
-<td><p>The designs under one directory, each in <code class="docutils literal notranslate"><span class="pre">&lt;id&gt;/</span></code> and immutable once written.</p></td>
+<td><p>The designs of one scan, each in <code class="docutils literal notranslate"><span class="pre">&lt;root&gt;/&lt;scan&gt;/&lt;id&gt;/</span></code> and immutable once written.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.host.design_identity.html#pulserver.host.design_identity" title="pulserver.host.design_identity"><code class="xref py py-obj docutils literal notranslate"><span class="pre">design_identity</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.host.prune.html#pulserver.host.prune" title="pulserver.host.prune"><code class="xref py py-obj docutils literal notranslate"><span class="pre">prune</span></code></a></p></td>
+<td><p>Remove scan directories of a store root, least recently used first.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.host.design_identity.html#pulserver.host.design_identity" title="pulserver.host.design_identity"><code class="xref py py-obj docutils literal notranslate"><span class="pre">design_identity</span></code></a></p></td>
 <td><p>SHA-256 of what a design depends on: plugin, limits, resolved protocol and source.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.host.design_id.html#pulserver.host.design_id" title="pulserver.host.design_id"><code class="xref py py-obj docutils literal notranslate"><span class="pre">design_id</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.host.design_id.html#pulserver.host.design_id" title="pulserver.host.design_id"><code class="xref py py-obj docutils literal notranslate"><span class="pre">design_id</span></code></a></p></td>
 <td><p>Identifier of a design: the first 18 hexadecimal digits of its identity.</p></td>
 </tr>
 </tbody>

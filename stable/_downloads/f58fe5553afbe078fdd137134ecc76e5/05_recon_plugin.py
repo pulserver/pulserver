@@ -78,10 +78,13 @@ def record(ry):
     values = {key: entry.value for key, entry in entries.items()}
     values.update({UIParam.NX: 64, UIParam.NY: 64, UIParam.RY: ry})
     request = format_values(values, entries)
-    design = console.design("generate", "gre2d", request)["design"]
-    readouts = virtual.simulate(store / design / "sequence.seq", phantom.tissue(2e-3))
+    generated = console.design("generate", "gre2d", request)
+    scan, design = generated["scan"], generated["design"]
+    readouts = virtual.simulate(
+        store / scan / design / "sequence.seq", phantom.tissue(2e-3)
+    )
     series = store / f"series_ry{ry}.h5"
-    virtual.record(series, design, readouts)
+    virtual.record(series, scan, design, readouts)
     return series
 
 

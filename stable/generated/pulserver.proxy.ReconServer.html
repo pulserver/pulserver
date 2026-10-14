@@ -45,7 +45,7 @@
   <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../_static/documentation_options.js?v=a6e268a8"></script>
+    <script src="../_static/documentation_options.js?v=d6d95e65"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -56,7 +56,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.2.2';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.1';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -68,7 +68,7 @@
     <link rel="search" title="Search" href="../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.2.2" />
+  <meta name="docsearch:version" content="v0.4.1" />
   
     
     <script src="../_static/searchtools.js"></script>
@@ -531,8 +531,9 @@ when <code class="docutils literal notranslate"><span class="pre">None</span></c
 proxy on this host so a map one series measures reaches a series on
 another;
 <code class="xref py py-data docutils literal notranslate"><span class="pre">DEFAULT_EXAM_DIRECTORY</span></code> when
-<code class="docutils literal notranslate"><span class="pre">None</span></code>. An exam’s directory is removed when the last proxy on that
-exam lets go of it.</p></li>
+<code class="docutils literal notranslate"><span class="pre">None</span></code>. A directory the proxy creates is readable by its owner alone;
+one that exists is used with the permissions it has. An exam’s
+directory is removed when the last proxy on that exam lets go of it.</p></li>
 <li><p><strong>save_to</strong> (<em>Path</em><em> | </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em>, </em><em>default=None</em>) – Directory each series is kept in, as received; not kept when <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
 <li><p><strong>idle_timeout</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><em>float</em></a><em>, </em><em>default=None</em>) – Seconds without a client after which <a class="reference internal" href="pulserver.proxy.ReconServer.serve.html#pulserver.proxy.ReconServer.serve" title="pulserver.proxy.ReconServer.serve"><code class="xref py py-meth docutils literal notranslate"><span class="pre">serve()</span></code></a> returns; never when
 <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>

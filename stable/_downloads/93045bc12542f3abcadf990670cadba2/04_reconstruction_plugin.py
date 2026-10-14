@@ -68,8 +68,9 @@ listing = console.design("list", "gre2d")["reply"]
 entries = parse_listing(listing[listing.index("[Protocol]") :])
 values = {key: entry.value for key, entry in entries.items()}
 values.update({UIParam.NX: 64, UIParam.NY: 64})
-design = console.design("generate", "gre2d", format_values(values, entries))["design"]
-sequence = store / design / "sequence.seq"
+generated = console.design("generate", "gre2d", format_values(values, entries))
+scan, design = generated["scan"], generated["design"]
+sequence = store / scan / design / "sequence.seq"
 
 phantom = virtual.Phantom(
     [
@@ -82,7 +83,7 @@ phantom = virtual.Phantom(
 )
 series = store / "series.h5"
 readouts = virtual.simulate(sequence, phantom.tissue(2e-3))
-print(virtual.record(series, design, readouts), "readouts")
+print(virtual.record(series, scan, design, readouts), "readouts")
 
 # %%
 # As the scanner sends it
