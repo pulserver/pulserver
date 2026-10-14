@@ -173,6 +173,59 @@ def test_a_unit_of_calibration_readouts_makes_no_image_and_its_maps_serve_the_ne
     assert relative_difference(image, calibrated_by_its_readouts) < 1e-4
 
 
+def test_maps_of_a_plane_from_calibration_readouts_and_from_the_units_own_centre_are_fitted_with_phase_pole_correction(
+    device, monkeypatch
+):
+    from bartorch import apps
+
+    kspace = vials()
+    lines = acquired(range(0, MATRIX, 2))
+    nlinv_maps = apps.nlinv_maps
+    options = []
+
+    def recorded(*args, **kwargs):
+        options.append(kwargs)
+        return nlinv_maps(*args, **kwargs)
+
+    monkeypatch.setattr(apps, "nlinv_maps", recorded)
+    reconstruct(
+        readouts(kspace, CALIBRATION, lines=CENTRE, last=LAST)
+        + readouts(kspace, lines=lines, last=LAST),
+        device=device,
+    )
+    reconstruct(stream(kspace, lines), device=device)
+
+    assert options == [{"phase_pole": 0}, {"phase_pole": 0}]
+
+
+@pytest.mark.parametrize(
+    ("shape", "trajectory", "phase_pole"),
+    [
+        ((COILS, MATRIX, MATRIX), False, 0),
+        ((COILS, 1, MATRIX, MATRIX), False, 0),
+        ((COILS, 2, MATRIX, MATRIX), False, None),
+        ((COILS, 8, MATRIX), True, 0),
+    ],
+    ids=["plane", "one partition", "volume", "trajectory"],
+)
+def test_phase_pole_correction_is_asked_for_a_plane_and_not_for_a_volume(
+    shape, trajectory, phase_pole, monkeypatch
+):
+    import torch
+    from bartorch import apps
+
+    from pulserver.recon.handlers.pics import nlinv_estimate
+
+    asked = []
+    monkeypatch.setattr(
+        apps, "nlinv_maps", lambda *args, **kwargs: asked.append(kwargs)
+    )
+    traj = torch.zeros(shape[1], shape[2], 3) if trajectory else None
+    nlinv_estimate(torch.zeros(shape, dtype=torch.complex64), traj)
+
+    assert asked == [{"phase_pole": phase_pole}]
+
+
 def test_noise_readouts_whiten_the_imaging_readouts_and_are_not_placed(device):
     kspace = vials()
     lines = acquired(range(0, MATRIX, 2))

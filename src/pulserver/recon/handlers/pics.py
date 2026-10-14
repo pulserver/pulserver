@@ -4,6 +4,8 @@ from __future__ import annotations
 
 __all__ = ["PLUGIN", "PicsRecon"]
 
+from typing import Any
+
 import numpy as np
 
 from ...mrd._acquisitions import AcquisitionFlag
@@ -39,15 +41,16 @@ class PicsRecon(ReconPlugin):
     phase-correction readouts are rejected.
 
     The coil sensitivities are those of :func:`~pulserver.recon.coil_maps`
-    with :func:`bartorch.apps.nlinv_maps` as the estimate: from the unit's
-    calibration readouts, else the maps stored for its slice, else the exam's.
-    A unit for which none of these has maps takes them from the
-    low-resolution centre of its own k-space (``bart nlinv -m 1``), with unit
-    sensitivity for one coil. A unit that holds calibration readouts and no
-    imaging readouts makes no image; its maps are stored for the later units
-    of its slice. The image minimises ``|P F S x - y|^2 + lambda |W x|_1``
-    over the maps (``bart pics -R W``), ``W`` the wavelet transform over the
-    encoded axes of at least ``WAVELET_MIN_POINTS`` points. An encoded axis is
+    with :func:`nlinv_estimate` as the estimate: from the unit's calibration
+    readouts, else the maps stored for its slice, else the exam's. A unit for
+    which none of these has maps takes them from the low-resolution centre of
+    its own k-space (``bart nlinv -m 1``, with ``--phase-pole 0`` for a
+    plane), with unit sensitivity for one coil. A unit that holds calibration
+    readouts and no imaging readouts makes no image; its maps are stored for
+    the later units of its slice. The image minimises
+    ``|P F S x - y|^2 + lambda |W x|_1`` over the maps (``bart pics -R W``),
+    ``W`` the wavelet transform over the encoded axes of at least
+    ``WAVELET_MIN_POINTS`` points. An encoded axis is
     partial Fourier where the lines missing at one end outnumber the widest gap
     between sampled lines, and
     :func:`bartorch.apps.partial_fourier` completes the image along it
@@ -82,9 +85,7 @@ class PicsRecon(ReconPlugin):
     ) -> ReconResult | None:
         del branch
         if data.data is None and data.ref is not None:
-            from bartorch import apps
-
-            coil_maps(context, data, estimate=apps.nlinv_maps)
+            coil_maps(context, data, estimate=nlinv_estimate)
         buffer = data.data
         if buffer is None:
             return None
@@ -113,8 +114,8 @@ class PicsRecon(ReconPlugin):
         volume = torch.from_numpy(np.ascontiguousarray(volume)).to(
             device=context.device, dtype=torch.complex64
         )
-        maps = coil_maps(context, data, estimate=apps.nlinv_maps, required=False)
-        maps = apps.nlinv_maps(volume) if maps is None else maps.reshape(volume.shape)
+        maps = coil_maps(context, data, estimate=nlinv_estimate, required=False)
+        maps = nlinv_estimate(volume) if maps is None else maps.reshape(volume.shape)
         encoded = wavelet_axes(volume.shape[1:], (-1, -2, -3))
         image = apps.pics(
             volume,
@@ -146,8 +147,8 @@ class PicsRecon(ReconPlugin):
         (:func:`bartorch.linop.wave_psf`), and the image minimises
         ``|P F_yz Psi F_x S x - y|^2 + lambda |W x|_1``, ``Psi`` the
         point-spread function (:func:`bartorch.linop.WaveSense`), over the maps
-        :func:`bartorch.apps.nlinv_maps` estimates from the calibration
-        region, cropped to the readout field of view.
+        :func:`nlinv_estimate` estimates from the calibration region, cropped
+        to the readout field of view.
 
         Raises
         ------
@@ -156,7 +157,7 @@ class PicsRecon(ReconPlugin):
             readouts, or no line was acquired both with and without the wave.
         """
         import torch
-        from bartorch import apps, linop, optim, priors
+        from bartorch import linop, optim, priors
 
         buffer, ref = data.data, data.ref
         volume = ("coil", "partition", "phase_encode", "readout")
@@ -184,7 +185,7 @@ class PicsRecon(ReconPlugin):
                 device=context.device, dtype=torch.complex64
             )
 
-        maps = center_crop(apps.nlinv_maps(tensor(reference)), shape[-1:])
+        maps = center_crop(nlinv_estimate(tensor(reference)), shape[-1:])
         encoding = linop.WaveSense(
             maps.contiguous(),
             shape,
@@ -204,6 +205,23 @@ class PicsRecon(ReconPlugin):
 
 
 PLUGIN = PicsRecon()
+
+
+def nlinv_estimate(kspace: Any, traj: Any = None) -> Any:
+    """Return the coil maps :func:`bartorch.apps.nlinv_maps` fits to ``kspace``, with phase-pole correction for a plane.
+
+    A plane, ``(coils, [1,] y, x)`` or samples along a trajectory, is fitted
+    as ``bart nlinv -m 1 --phase-pole 0``: after every Gauss-Newton step the
+    phase poles the maps share are moved into the image, where they would
+    otherwise drive every coil's sensitivity towards zero and leave a dark
+    spot in the image. A volume, ``(coils, z, y, x)``, is fitted without:
+    BART's detection refuses a volume with an axis no longer than a twentieth
+    of its longest, rounded up, as a slab of a few partitions is.
+    """
+    from bartorch import apps
+
+    plane = traj is not None or kspace.ndim == 3 or kspace.shape[1] == 1
+    return apps.nlinv_maps(kspace, traj, phase_pole=0 if plane else None)
 
 
 def wavelet_axes(shape: tuple[int, ...], axes: tuple[int, ...]) -> tuple[int, ...]:

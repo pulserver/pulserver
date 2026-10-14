@@ -14,7 +14,7 @@ from .._buffers import ReconBuffer, ReconData
 from .._correct import gradient_unwarped, states_gradient_coefficients
 from ..gadgets import Prewhiten
 from ..plugin import ReconContext, ReconPlugin, ReconResult
-from .pics import averaged, wavelet_axes
+from .pics import averaged, nlinv_estimate, wavelet_axes
 
 
 class NufftRecon(ReconPlugin):
@@ -24,10 +24,11 @@ class NufftRecon(ReconPlugin):
     (:class:`~pulserver.recon.Prewhiten`); noise readouts are consumed by the
     whitening and phase-correction readouts are rejected. The coil
     sensitivities are fitted by nonlinear inversion to the samples of the unit
-    near the k-space centre (:func:`bartorch.apps.nlinv_maps`,
-    ``bart nlinv -m 1 -t``), whatever calibration the stream or the exam
-    holds: :func:`~pulserver.recon.coil_maps` estimates from Cartesian
-    calibration k-space only.
+    near the k-space centre
+    (:func:`~pulserver.recon.handlers.pics.nlinv_estimate`,
+    ``bart nlinv -m 1 --phase-pole 0 -t``), whatever calibration the stream
+    or the exam holds: :func:`~pulserver.recon.coil_maps` estimates from
+    Cartesian calibration k-space only.
 
     The image minimises ``|D (F S x - y)|^2 + lambda |W x|_1`` over ``x``
     (``bart pics -t -p D -R W``), ``F`` being bartorch's NUFFT, ``S`` the coil
@@ -49,7 +50,8 @@ class NufftRecon(ReconPlugin):
     blades, spokes or spirals is Fourier transformed along its partitions first
     and fitted partition by partition. A trajectory that encodes kz, with no
     partitions, is one three-dimensional solve, its maps fitted as
-    ``bart nlinv -m 1 -t`` fits them over three spatial axes.
+    ``bart nlinv -m 1 -t`` fits them over three spatial axes, without the
+    phase-pole correction.
 
     A unit closes as that of
     :class:`~pulserver.recon.handlers.pics.PicsRecon` does, and also once the
@@ -177,7 +179,7 @@ class NufftRecon(ReconPlugin):
         points = torch.from_numpy(np.ascontiguousarray(points)).to(device)
         axes = 2 if volume is None else 3
         maps = (
-            apps.nlinv_maps(samples, traj=points)
+            nlinv_estimate(samples, points)
             if volume is None
             else _volume_maps(samples, points, volume)
         )
