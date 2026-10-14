@@ -34,6 +34,17 @@ def _parser() -> argparse.ArgumentParser:
         "--config", help="configuration payload, as the scanner's stream carries it"
     )
     parser.add_argument(
+        "--dicom",
+        action="store_true",
+        help="write every image as DICOM, as the proxy's --dicom does",
+    )
+    parser.add_argument(
+        "--dicom-dictionary",
+        type=Path,
+        help="private DICOM dictionary for the header's dicom: attributes, in "
+        "place of the one the header names",
+    )
+    parser.add_argument(
         "--output",
         type=Path,
         default=Path(),
@@ -58,5 +69,7 @@ def main(argv: list[str] | None = None) -> int:
         config=args.config,
         store=None if args.store is None else str(args.store),
         design=None if args.design is None else str(args.design),
+        dicom=args.dicom,
+        dicom_dictionary=args.dicom_dictionary,
     )
     return _received(emitted, args.output)

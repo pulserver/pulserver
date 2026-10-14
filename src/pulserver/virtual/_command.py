@@ -328,7 +328,7 @@ def _received(items: Sequence[Any], output: Path) -> int:
                     stack.callback(images.close)
                 images.append_image("images", item)
             elif isinstance(item, DicomWithName) and item.dset is not None:
-                item.dset.save_as(output / item.filename)
+                item.dset.save_as(output / item.filename, enforce_file_format=True)
             elif isinstance(item, str):
                 sys.stdout.write(item.rstrip("\n") + "\n")
                 status = 1 if item.startswith("pulserver:") else status

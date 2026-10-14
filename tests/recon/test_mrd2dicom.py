@@ -795,14 +795,14 @@ def test_pixel_spacing_is_the_row_spacing_then_the_column_spacing(parsed_mrd_hea
 def test_the_image_position_is_the_centre_of_the_first_pixel(parsed_mrd_header):
     """MRD places pixel n // 2, where an FFT puts the centre; DICOM places the first transmitted pixel."""
     image = _placed_image(
-        (10.0, 20.0, 30.0), (0.0, 1.0, 0.0), (-1.0, 0.0, 0.0), (240.0, 120.0, 5.0)
+        (10.0, 20.0, 30.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (240.0, 120.0, 5.0)
     )
     dicom = MrdDicomBuilder(parsed_mrd_header)(image).dset
     column, row = 240.0 / 8, 120.0 / 6
     expected = (
         np.array([10.0, 20.0, 30.0])
-        - 4 * column * np.array([0.0, 1.0, 0.0])
-        - 3 * row * np.array([-1.0, 0.0, 0.0])
+        - 4 * column * np.array([1.0, 0.0, 0.0])
+        - 3 * row * np.array([0.0, 1.0, 0.0])
     )
     np.testing.assert_allclose([float(v) for v in dicom.ImagePositionPatient], expected)
 
@@ -905,3 +905,342 @@ def test_a_diffusion_image_states_its_table_row_in_the_patient_frame(
 def test_an_image_without_a_diffusion_table_states_no_diffusion(parsed_mrd_header):
     dicom = MrdDicomBuilder(parsed_mrd_header)(_diffusion_image(1)).dset
     assert "DiffusionBValue" not in dicom
+
+
+# ---------------------------------------------------------------------------
+# Attributes the header states, and the per-image quantities they may name
+# ---------------------------------------------------------------------------
+
+
+def _stating(header, **entries):
+    """``header`` with a ``dicom:<name>`` user parameter per entry; ``_`` in a name is a space."""
+    header.userParameters = ismrmrd.xsd.userParametersType()
+    for name, value in entries.items():
+        header.userParameters.userParameterString.append(
+            ismrmrd.xsd.userParameterStringType(name=f"dicom:{name}", value=value)
+        )
+    return ismrmrd.xsd.CreateFromDocument(header.toXML())
+
+
+def _explicit(header, entries):
+    """``header`` with ``dicom:`` user parameters whose names are not identifiers."""
+    header.userParameters = ismrmrd.xsd.userParametersType()
+    for name, value in entries:
+        header.userParameters.userParameterString.append(
+            ismrmrd.xsd.userParameterStringType(name=f"dicom:{name}", value=value)
+        )
+    return ismrmrd.xsd.CreateFromDocument(header.toXML())
+
+
+def _placed(builder, position, read, phase, series=0):
+    """The dataset of an 8x8 image centred at ``position`` (mm, patient frame) with rows along ``read``."""
+    image = ismrmrd.Image.from_array(
+        np.ones((8, 8), dtype=np.float32),
+        transpose=False,
+        image_series_index=series,
+    )
+    image.position = tuple(position)
+    image.read_dir = tuple(read)
+    image.phase_dir = tuple(phase)
+    image.slice_dir = tuple(np.cross(read, phase))
+    image.field_of_view = (160.0, 160.0, 5.0)
+    return builder(image).dset
+
+
+#: A coronal plane 35 mm posterior of isocentre: in the radiological convention
+#: its location is -35 mm, on the posterior side.
+CORONAL = {
+    "position": (0.0, 35.0, 0.0),
+    "read": (1.0, 0.0, 0.0),
+    "phase": (0.0, 0.0, -1.0),
+}
+
+
+def test_a_header_attribute_named_by_keyword_is_written(minimal_mrd_header):
+    header = _stating(minimal_mrd_header, ImagedNucleus="23Na")
+
+    dataset = _placed(MrdDicomBuilder(header), **CORONAL)
+
+    assert dataset.ImagedNucleus == "23Na"
+
+
+def test_the_slice_location_is_the_centre_along_the_plane_normal(parsed_mrd_header):
+    dataset = _placed(MrdDicomBuilder(parsed_mrd_header), **CORONAL)
+
+    assert float(dataset.SliceLocation) == pytest.approx(35.0)
+
+
+def test_a_coronal_plane_behind_isocentre_is_located_negative_and_posterior(
+    minimal_mrd_header,
+):
+    header = _explicit(
+        minimal_mrd_header,
+        [
+            ("SliceLocation", "{location}"),
+            ("(0011,0010)LO", "EXAMPLE_01"),
+            ("(0011,1010)SH", "{location_letter}"),
+            ("(0011,1011)FL", "{location}"),
+        ],
+    )
+
+    dataset = _placed(MrdDicomBuilder(header), **CORONAL)
+
+    assert float(dataset.SliceLocation) == pytest.approx(-35.0)
+    assert dataset[0x0011, 0x0010].value == "EXAMPLE_01"
+    assert dataset[0x0011, 0x1010].value == "P"
+    assert dataset[0x0011, 0x1011].value == pytest.approx(-35.0)
+
+
+@pytest.mark.parametrize(
+    ("position", "read", "phase", "letter", "location"),
+    [
+        ((0.0, 0.0, 20.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0), "S", 20.0),
+        ((0.0, 0.0, -20.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0), "I", -20.0),
+        ((12.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, -1.0), "L", -12.0),
+    ],
+)
+def test_an_axis_aligned_plane_is_located_along_its_axis_positive_right_anterior_superior(
+    minimal_mrd_header, position, read, phase, letter, location
+):
+    header = _explicit(
+        minimal_mrd_header,
+        [("(0011,1010)SH", "{location_letter}"), ("(0011,1011)FL", "{location}")],
+    )
+
+    dataset = _placed(MrdDicomBuilder(header), position, read, phase)
+
+    assert dataset[0x0011, 0x1010].value == letter
+    assert dataset[0x0011, 0x1011].value == pytest.approx(location)
+
+
+def test_an_oblique_plane_is_located_along_its_normal_and_signed(minimal_mrd_header):
+    header = _explicit(minimal_mrd_header, [("(0011,1010)SH", "{location_letter}")])
+    tilt = np.array([0.0, np.sin(0.3), np.cos(0.3)])
+
+    above = _placed(
+        MrdDicomBuilder(header), 10 * tilt, (1.0, 0.0, 0.0), np.cross(tilt, (1, 0, 0))
+    )
+    below = _placed(
+        MrdDicomBuilder(header), -10 * tilt, (1.0, 0.0, 0.0), np.cross(tilt, (1, 0, 0))
+    )
+
+    assert {above[0x0011, 0x1010].value, below[0x0011, 0x1010].value} == {"+", "-"}
+
+
+def test_a_private_keyword_resolves_through_the_dictionary_the_header_names(
+    minimal_mrd_header, tmp_path
+):
+    dictionary = tmp_path / "dict.txt"
+    dictionary.write_text(
+        "# vendor dictionary\n(0013,1020)\tLO\tPulseSequenceLabel\t1\n"
+    )
+    header = _stating(
+        minimal_mrd_header, dictionary=str(dictionary), PulseSequenceLabel="pulserver"
+    )
+
+    dataset = _placed(MrdDicomBuilder(header), **CORONAL)
+
+    assert dataset[0x0013, 0x1020].value == "pulserver"
+
+
+def test_a_keyword_in_no_dictionary_is_logged_and_left_out(minimal_mrd_header, caplog):
+    header = _stating(minimal_mrd_header, PulseSequenceLabel="pulserver")
+
+    with caplog.at_level(logging.WARNING):
+        dataset = _placed(MrdDicomBuilder(header), **CORONAL)
+
+    assert (0x0013, 0x1020) not in dataset
+    assert "PulseSequenceLabel" in caplog.text
+
+
+def test_a_named_dictionary_replaces_the_one_the_header_names(
+    minimal_mrd_header, tmp_path
+):
+    from pulserver.recon._runtime.mrd2dicom import name_dictionary
+
+    dictionary = tmp_path / "dict.txt"
+    dictionary.write_text("(0013,1020)\tLO\tPulseSequenceLabel\t1\n")
+    header = _stating(
+        minimal_mrd_header, dictionary="/absent", PulseSequenceLabel="pulserver"
+    )
+
+    name_dictionary(header, dictionary)
+
+    assert (
+        _placed(MrdDicomBuilder(header), **CORONAL)[0x0013, 0x1020].value == "pulserver"
+    )
+
+
+def test_an_images_own_meta_attribute_wins_over_the_header(minimal_mrd_header):
+    header = _stating(minimal_mrd_header, SeriesDescription="from the header")
+    image = ismrmrd.Image.from_array(np.ones((4, 4), dtype=np.float32), transpose=False)
+    image.attribute_string = ismrmrd.Meta(
+        {"SeriesDescription": "from the image"}
+    ).serialize()
+
+    assert MrdDicomBuilder(header)(image).dset.SeriesDescription == "from the image"
+
+
+def test_each_series_index_is_its_own_series_the_first_keeping_the_headers(
+    minimal_mrd_header,
+):
+    minimal_mrd_header.measurementInformation = ismrmrd.xsd.measurementInformationType(
+        measurementID="16",
+        seriesInstanceUIDRoot="1.2.840.113619.2.540.16",
+        patientPosition=ismrmrd.xsd.patientPositionType.HFS,
+    )
+    builder = MrdDicomBuilder(
+        ismrmrd.xsd.CreateFromDocument(minimal_mrd_header.toXML())
+    )
+
+    first, again, other, third = (
+        _placed(builder, **CORONAL, series=index) for index in (0, 0, 3, 7)
+    )
+
+    assert (
+        first.SeriesInstanceUID == again.SeriesInstanceUID == "1.2.840.113619.2.540.16"
+    )
+    assert (
+        len({first.SeriesInstanceUID, other.SeriesInstanceUID, third.SeriesInstanceUID})
+        == 3
+    )
+    assert [int(d.SeriesNumber) for d in (first, again, other, third)] == [
+        16,
+        16,
+        1601,
+        1602,
+    ]
+
+
+def test_the_acquisition_type_follows_the_encoded_depth(minimal_mrd_header):
+    two = MrdDicomBuilder(ismrmrd.xsd.CreateFromDocument(minimal_mrd_header.toXML()))
+    minimal_mrd_header.encoding[0].encodedSpace.matrixSize.z = 32
+    three = MrdDicomBuilder(ismrmrd.xsd.CreateFromDocument(minimal_mrd_header.toXML()))
+
+    assert (two.dicomDset.MRAcquisitionType, three.dicomDset.MRAcquisitionType) == (
+        "2D",
+        "3D",
+    )
+
+
+def test_stated_private_attributes_survive_writing_and_reading_back(minimal_mrd_header):
+    header = _explicit(
+        minimal_mrd_header,
+        [
+            ("ImagedNucleus", "1H"),
+            ("(0011,0010)LO", "EXAMPLE_01"),
+            ("(0011,1011)FL", "{location}"),
+            ("(0013,0010)LO", "EXAMPLE_02"),
+            ("(0013,1020)LO", "pulserver"),
+        ],
+    )
+    dataset = _placed(MrdDicomBuilder(header), **CORONAL)
+
+    buffer = io.BytesIO()
+    dataset.save_as(buffer, enforce_file_format=True)
+    read = pydicom.dcmread(io.BytesIO(buffer.getvalue()))
+
+    assert read.ImagedNucleus == "1H"
+    assert read[0x0011, 0x1011].value == pytest.approx(-35.0)
+    assert read[0x0013, 0x1020].value == "pulserver"
+
+
+def test_a_stated_attribute_without_a_quantity_is_part_of_the_series_template(
+    minimal_mrd_header,
+):
+    header = _explicit(
+        minimal_mrd_header,
+        [("ImagedNucleus", "31P"), ("(0011,1011)FL", "{location}")],
+    )
+
+    builder = MrdDicomBuilder(header)
+    above = _placed(builder, (0.0, 0.0, 10.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0))
+    below = _placed(builder, (0.0, 0.0, -10.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0))
+
+    assert builder.dicomDset.ImagedNucleus == "31P"
+    assert (0x0011, 0x1011) not in builder.dicomDset
+    assert (above[0x0011, 0x1011].value, below[0x0011, 0x1011].value) == (10.0, -10.0)
+
+
+# ---------------------------------------------------------------------------
+# Display orientation
+# ---------------------------------------------------------------------------
+
+#: Row and column directions of the display orientation of each plane, in
+#: DICOM's patient frame: x towards left, y towards posterior, z towards superior.
+DISPLAY = {
+    "axial": ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0)),
+    "coronal": ((1.0, 0.0, 0.0), (0.0, 0.0, -1.0)),
+    "sagittal": ((0.0, 1.0, 0.0), (0.0, 0.0, -1.0)),
+}
+
+
+def _arrangements(row, column):
+    """The eight ways a plane's rows and columns can run, flipped and swapped."""
+    row, column = np.asarray(row), np.asarray(column)
+    for read, phase in ((row, column), (column, row)):
+        for sign_read in (1.0, -1.0):
+            for sign_phase in (1.0, -1.0):
+                yield sign_read * read, sign_phase * phase
+
+
+def _positions(dataset):
+    """The patient position of every pixel of a DICOM image, (rows, columns, 3)."""
+    origin = np.array([float(v) for v in dataset.ImagePositionPatient])
+    orientation = np.array([float(v) for v in dataset.ImageOrientationPatient])
+    row_spacing, column_spacing = (float(v) for v in dataset.PixelSpacing)
+    i = np.arange(dataset.Rows)[:, None, None]
+    j = np.arange(dataset.Columns)[None, :, None]
+    return (
+        origin
+        + j * column_spacing * orientation[:3]
+        + i * row_spacing * orientation[3:]
+    )
+
+
+@pytest.mark.parametrize("plane", sorted(DISPLAY))
+def test_every_image_is_written_in_its_planes_display_orientation_with_its_pixels_in_place(
+    parsed_mrd_header, plane
+):
+    rng = np.random.default_rng(0)
+    for read, phase in _arrangements(*DISPLAY[plane]):
+        values = rng.integers(1, 1000, (6, 8)).astype(np.uint16)
+        image = ismrmrd.Image.from_array(values, transpose=False)
+        image.position = (5.0, -7.0, 11.0)
+        image.read_dir = tuple(read)
+        image.phase_dir = tuple(phase)
+        image.slice_dir = tuple(np.cross(read, phase))
+        image.field_of_view = (8.0 * 3.0, 6.0 * 2.0, 4.0)
+
+        dataset = MrdDicomBuilder(parsed_mrd_header)(image).dset
+
+        np.testing.assert_allclose(
+            [float(v) for v in dataset.ImageOrientationPatient],
+            [*DISPLAY[plane][0], *DISPLAY[plane][1]],
+            atol=1e-9,
+        )
+        start = np.array(image.position) - 4 * 3.0 * read - 3 * 2.0 * phase
+        placed = {
+            tuple(np.round(start + j * 3.0 * read + i * 2.0 * phase, 6)): values[i, j]
+            for i in range(6)
+            for j in range(8)
+        }
+        written = _positions(dataset)
+        for i in range(dataset.Rows):
+            for j in range(dataset.Columns):
+                assert (
+                    placed[tuple(np.round(written[i, j], 6))]
+                    == dataset.pixel_array[i, j]
+                )
+
+
+def test_an_image_already_in_display_orientation_is_written_as_it_is(parsed_mrd_header):
+    values = np.arange(48, dtype=np.uint16).reshape(6, 8)
+    image = ismrmrd.Image.from_array(values, transpose=False)
+    image.read_dir, image.phase_dir = DISPLAY["axial"]
+    image.slice_dir = (0.0, 0.0, 1.0)
+    image.field_of_view = (8.0, 6.0, 1.0)
+
+    np.testing.assert_array_equal(
+        MrdDicomBuilder(parsed_mrd_header)(image).dset.pixel_array, values
+    )

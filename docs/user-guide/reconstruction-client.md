@@ -49,12 +49,43 @@ connection, so the client can finish sending and read the reason.
 | `ExamID`, a `userParameterString`, or else `studyInformation.studyInstanceUID`, or else `studyInformation.studyID` | Optional | The exam; the series of one exam share its exam cache, and a series without one is an exam of its own |
 | `fov_offset_mm`, a `userParameterString` | Optional | The position of the field-of-view centre, three millimetres along the logical readout, phase and slice axes separated by spaces; a difference from the offset the design was converted at is applied to the samples as a receive phase. Without it, the converted offset |
 | `subjectInformation`, `studyInformation`, `measurementInformation`, `acquisitionSystemInformation` | Optional | Copied into the DICOM datasets; `relativeTablePosition` is not |
-| `measurementInformation.measurementID` | A non-negative integer when `systemVendor` names GE | The DICOM series number on a GE system |
+| `measurementInformation.measurementID` | A non-negative integer when `systemVendor` names GE | The DICOM series number on a GE system: of the first series the reconstruction returns, and `100 × measurementID + k` of the `k`-th after it |
+| `dicom:<attribute>`, a `userParameterString` | Optional | A DICOM attribute of every image ({ref}`dicom-attributes`) |
 | `encoding` | Optional | Replaced by one encoding space per subsequence, and one more for the navigator readouts of a subsequence that has them. The reconstruction space is the sequence's matrix size and field of view, one slice deep for a stack of 2D slices; the encoded space of a Cartesian space has the readout widened to the full echo, oversampling included, and its field of view in proportion. The encoding limits are the extremes of the counters the readouts reach, centred on the k-space centre line and partition the sequence defines. A matrix size or field of view the sequence does not define is kept from the client's encoding at the same index |
 | `sequenceParameters` | Optional | TR, TE, TI and flip angles replaced by those the sequence defines; TR and TE it does not define are measured by pypulseqpp's `test_report_dict`, flip angles it does not define are the distinct values of `rf_flip_angles` |
 
 A header that the ISMRMRD schema does not accept, or that names no design the
 store holds for its scan, is refused before any acquisition is read.
+
+(dicom-attributes)=
+### DICOM attributes
+
+A client states the DICOM attributes the MRD header has no element for as
+`userParameterString` entries named `dicom:<attribute>`. The DICOM builder
+reads them once, with the rest of the header, into the attributes every image
+of the series starts from; an entry whose value names a quantity of the image
+is filled in for each image instead. An image's own meta attributes take
+precedence over both. `<attribute>` is one of:
+
+| Form | Example | Resolved by |
+| --- | --- | --- |
+| A keyword of the DICOM standard | `dicom:ImagedNucleus` = `23Na` | pydicom's dictionary |
+| An explicit tag and value representation | `dicom:(0011,1011)FL` = `{location}` | Itself; a private group's creator is one more entry, `dicom:(0011,0010)LO` |
+| A keyword of a private dictionary | `dicom:PulseSequenceLabel` = `pulserver` | The file `dicom:dictionary` names, in MATLAB's format, one `(gggg,eeee) VR Keyword VM` line per attribute |
+
+A value separates multiple values with `\` and may name, in braces, a quantity
+of the image it is written into; `{{` and `}}` are literal braces:
+
+| Name | Value |
+| --- | --- |
+| `slice_location` | The image centre along the plane normal, in mm: the `SliceLocation` written by default |
+| `location` | The image centre along the patient axis the normal lies closest to, in mm, positive towards right, anterior or superior; for an oblique plane, along the normal turned towards those |
+| `location_letter` | The side `location` lies on: `R` or `L`, `A` or `P`, `S` or `I`, and `+` or `-` for an oblique plane |
+| `instance_number`, `series_number` | The image's `InstanceNumber` and `SeriesNumber` |
+
+An attribute that resolves to no tag, for want of the dictionary, is logged and
+left out. `pulserver replay --dicom-dictionary` names another dictionary for a
+series replayed where the header's is not.
 
 ## Acquisitions
 

@@ -4,16 +4,19 @@ Adapted from the converter of
 python-ismrmrd-server (Copyright (c) 2024 Kelvin Chow; MIT, see ``LICENSES/python-ismrmrd-server-MIT.txt``).
 """
 
-__all__ = ["DicomWithName", "MrdDicomBuilder"]
+__all__ = ["DICOM_PARAMETER", "DicomWithName", "MrdDicomBuilder", "name_dictionary"]
 
 import collections
 import copy
 import dataclasses
 import logging
 import math
+import re
+from pathlib import Path
 from typing import Any
 
 import ismrmrd
+import ismrmrd.xsd
 import numpy as np
 import pydicom
 
@@ -69,6 +72,25 @@ STRING_VRS = {
 #: this many times larger before it clips.
 _HEADROOM = 2.0
 
+#: Prefix of the MRD ``userParameterString`` entries that state DICOM attributes.
+DICOM_PARAMETER = "dicom:"
+
+#: The entry naming a private dictionary, ``dicom:dictionary``.
+DICOM_DICTIONARY = DICOM_PARAMETER + "dictionary"
+
+#: Value representations stored as integers or floats rather than strings.
+_INTEGER_VRS = {"US", "SS", "UL", "SL", "UV", "SV"}
+_FLOAT_VRS = {"FL", "FD"}
+
+_EXPLICIT = re.compile(r"\(([0-9A-Fa-f]{4}),([0-9A-Fa-f]{4})\)([A-Z]{2})")
+_DICTIONARY_LINE = re.compile(
+    r"\(([0-9A-Fa-f]{4}),([0-9A-Fa-f]{4})\)\s+([A-Z]{2})\s+(\w+)"
+)
+
+#: A plane whose normal is this many times longer along one patient axis than
+#: along either other is named by that axis.
+_AXIAL_DOMINANCE = 1000.0
+
 
 def to_dicom_date(value: Any) -> str:
     """Return an ISMRMRD ``XmlDate`` as DICOM DA (``YYYYMMDD``), any other value as ``str``."""
@@ -112,7 +134,7 @@ def convert_string_vrs(ds: pydicom.Dataset) -> pydicom.Dataset:
 
 
 class MrdDicomBuilder:
-    """Converts MRD images to DICOM, numbering instances from 1.
+    r"""Converts MRD images to DICOM, numbering instances from 1.
 
     Patient, study, series, system and imaging-frequency fields are read from the
     MRD header once. Header sections that fail to convert are logged and skipped.
@@ -120,8 +142,31 @@ class MrdDicomBuilder:
     for it.
 
     One builder serves a whole connection. Its series, told apart by
-    ``image_series_index``, each have their own rescale mapping and their own
-    clipping count; the instance numbers run across them.
+    ``image_series_index``, each have their own rescale mapping, clipping
+    count, ``SeriesInstanceUID`` and ``SeriesNumber``; the instance numbers run
+    across them. The first series to arrive takes the header's series UID and
+    number; each later one a UID derived from them and, on a GE system, the
+    number ``100 * measurementID + k`` for the ``k``-th series after the first.
+
+    MRD ``userParameterString`` entries named ``dicom:<attribute>`` state DICOM
+    attributes the MRD header has no field for. One whose value names no image
+    quantity is written once into :attr:`dicomDset`, over what the header's
+    sections give and under what each image sets; one that names an image
+    quantity is written for each image, over what the builder derives and under
+    the image's own meta attributes. ``<attribute>`` is a
+    keyword of the DICOM standard, a keyword of the private dictionary, or an
+    explicit tag and VR, ``(gggg,eeee)VR``. A value holds ``\`` between
+    multiple values and may name, in braces, a quantity of the image it is
+    written to: ``slice_location``, the image centre along the plane normal
+    (mm); ``location``, the centre along the patient axis the normal lies
+    closest to, positive towards right, anterior or superior (mm);
+    ``location_letter``, the side that location lies on (``R``/``L``,
+    ``A``/``P``, ``S``/``I``, or ``+``/``-`` for an oblique plane);
+    ``instance_number`` and ``series_number``; ``{{`` and ``}}`` are literal
+    braces. The private dictionary is the
+    file the header's ``dicom:dictionary`` entry names, in MATLAB's format, a
+    ``(gggg,eeee) VR Keyword VM`` line per attribute. An attribute that cannot
+    be resolved is logged and left out.
 
     Parameters
     ----------
@@ -151,6 +196,7 @@ class MrdDicomBuilder:
 
     def __init__(self, mrdHead: ismrmrd.xsd.ismrmrdHeader) -> None:
         dicomDset = pydicom.dataset.Dataset()
+        dicomDset.SpecificCharacterSet = "ISO_IR 192"
 
         # Enforce explicit little endian for written DICOM files
         dicomDset.file_meta = pydicom.dataset.FileMetaDataset()
@@ -355,8 +401,20 @@ class MrdDicomBuilder:
                 f"system, and {measurement_id!r} is not a non-negative integer"
             )
 
+        try:
+            depth = mrdHead.encoding[0].encodedSpace.matrixSize.z
+            dicomDset.MRAcquisitionType = "3D" if depth > 1 else "2D"
+        except (AttributeError, IndexError, TypeError):
+            pass
+
         self.dicomDset = dicomDset
         self.mrdHead = mrdHead
+        stated = _stated_attributes(mrdHead)
+        self._per_image = [entry for entry in stated if "{" in entry[2]]
+        for tag, vr, value in stated:
+            if "{" not in value:
+                _write(dicomDset, tag, vr, value)
+        self._series: dict[int, tuple[str, Any]] = {}
         self.diffusion = diffusion_table(mrdHead)
         # Image numbers start at 1: a scanner's image database can reject a
         # C-STORE with image number 0 (A700 OutOfResources).
@@ -396,15 +454,20 @@ class MrdDicomBuilder:
 
         The default window spans the 5th to 95th percentile of the values. Image
         meta attributes override the series description, image comment, image
-        type, orientation, window, TE and TI. When the manufacturer names GE, the
-        series number is the header's ``measurementID`` and the image type is
-        written to a private tag.
+        type, window, TE and TI. When the manufacturer names GE, the image type
+        is written to a private tag.
 
-        ``PixelSpacing`` is the row spacing, along ``phase_dir``, then the column
-        spacing, along ``read_dir``. MRD's ``position`` is the centre of pixel
-        ``n // 2`` along each in-plane axis, where an FFT places the
-        field-of-view centre; ``ImagePositionPatient`` is the centre of the
-        first pixel.
+        The image's rows run along ``read_dir`` and its columns along
+        ``phase_dir``, or along the meta attributes ``ImageRowDir`` and
+        ``ImageColumnDir`` when it states them; MRD's ``position`` is the
+        centre of pixel ``n // 2`` along each, where an FFT places the
+        field-of-view centre. The pixels are then flipped and transposed, never
+        resampled, into the radiological display orientation of the plane the
+        image lies closest to: an axial image with rows towards the patient's
+        left and columns towards posterior, a coronal one towards left and
+        inferior, a sagittal one towards posterior and inferior.
+        ``ImagePositionPatient`` is the centre of the first pixel of the
+        displayed image.
 
         Raises
         ------
@@ -415,18 +478,14 @@ class MrdDicomBuilder:
         dicomDset = copy.deepcopy(self.dicomDset)
         mrdHead = self.mrdHead
 
-        if (mrdImg.data.shape[0] == 3) and (mrdImg.getHead().image_type == 6):
-            # RGB images
-            logging.info("RGB data not yet supported")
+        if mrdImg.data.shape[1] != 1:
+            logging.info("Multi-slice data not yet supported - skipping")
             return DicomWithName(dset=None, filename="")
-        else:
-            if mrdImg.data.shape[1] != 1:
-                logging.info("Multi-slice data not yet supported - skipping")
-                return DicomWithName(dset=None, filename="")
-
-            if mrdImg.data.shape[0] != 1:
-                logging.info("Multi-channel data not yet supported - skipping")
-                return DicomWithName(dset=None, filename="")
+        if mrdImg.image_type == ismrmrd.IMTYPE_RGB and mrdImg.data.shape[0] == 3:
+            return self._capture(dicomDset, mrdImg)
+        if mrdImg.data.shape[0] != 1:
+            logging.info("Multi-channel data not yet supported - skipping")
+            return DicomWithName(dset=None, filename="")
 
         # Fill Sequence Parameters from DICOM
         try:
@@ -481,14 +540,26 @@ class MrdDicomBuilder:
             )
 
         # ----- Update DICOM header from MRD Image Data -----
-        dicomDset.Rows = mrdImg.data.shape[2]
-        dicomDset.Columns = mrdImg.data.shape[3]
-
         meta = ismrmrd.Meta.deserialize(mrdImg.attribute_string)
-        values = np.squeeze(mrdImg.data)
+        values = np.squeeze(mrdImg.data, axis=(0, 1))
         image_type = mrdImg.image_type
         if np.iscomplexobj(values):
             values, image_type = np.abs(values), ismrmrd.IMTYPE_MAGNITUDE
+        read, phase = _in_plane(mrdImg, meta)
+        rows, columns = values.shape
+        row_spacing = float(mrdImg.field_of_view[1]) / rows
+        column_spacing = float(mrdImg.field_of_view[0]) / columns
+        centre = np.asarray(mrdImg.position, dtype=float)
+        first_pixel = (
+            centre
+            - (columns // 2) * column_spacing * read
+            - (rows // 2) * row_spacing * phase
+        )
+        if np.any(read) and np.any(phase):
+            values, read, phase, row_spacing, column_spacing, first_pixel = _displayed(
+                values, read, phase, row_spacing, column_spacing, first_pixel
+            )
+        dicomDset.Rows, dicomDset.Columns = values.shape
         pixels, rescale, real = self._store(mrdImg.image_series_index, values, meta)
         if rescale is not None:
             dicomDset.RescaleSlope, dicomDset.RescaleIntercept = rescale
@@ -524,32 +595,15 @@ class MrdDicomBuilder:
         else:
             dicomDset.ImageType[2] = str(IMTYPE_MAPS[image_type][vendor])
 
-        measurement = getattr(mrdHead, "measurementInformation", None)
-        measurement_id = getattr(measurement, "measurementID", None)
-        if "GE" in vendor.upper() and measurement_id is not None:
-            dicomDset.SeriesNumber = measurement_id
-        else:
-            dicomDset.SeriesNumber = mrdImg.image_series_index
-        dicomDset.InstanceNumber = self.instanceNumber
-        rows, columns = mrdImg.data.shape[2], mrdImg.data.shape[3]
-        row_spacing = float(mrdImg.field_of_view[1]) / rows
-        column_spacing = float(mrdImg.field_of_view[0]) / columns
+        self._identify(dicomDset, mrdImg.image_series_index)
         dicomDset.PixelSpacing = [round(row_spacing, 6), round(column_spacing, 6)]
         dicomDset.SliceThickness = round(mrdImg.field_of_view[2], 6)
-        first_pixel = (
-            np.asarray(mrdImg.position, dtype=float)
-            - (columns // 2) * column_spacing * np.asarray(mrdImg.read_dir, float)
-            - (rows // 2) * row_spacing * np.asarray(mrdImg.phase_dir, float)
-        )
         dicomDset.ImagePositionPatient = [round(float(v), 6) for v in first_pixel]
         dicomDset.ImageOrientationPatient = [
-            round(mrdImg.read_dir[0], 6),
-            round(mrdImg.read_dir[1], 6),
-            round(mrdImg.read_dir[2], 6),
-            round(mrdImg.phase_dir[0], 6),
-            round(mrdImg.phase_dir[1], 6),
-            round(mrdImg.phase_dir[2], 6),
+            round(float(v), 6) for v in (*read, *phase)
         ]
+        normal = np.cross(read, phase)
+        dicomDset.SliceLocation = round(float(centre @ normal), 6)
         self._set_diffusion(dicomDset, mrdImg)
 
         if vendor != "GE":
@@ -564,6 +618,8 @@ class MrdDicomBuilder:
             )
             dicomDset.AcquisitionTime = f"{hour:02.0f}{minutes:02.0f}{sec:09.6f}"
         dicomDset.TriggerTime = mrdImg.physiology_time_stamp[0] / 2.5
+
+        self._state(dicomDset, _image_quantities(dicomDset, centre, normal))
 
         # ----- Update DICOM header from MRD Image MetaAttributes -----
         if meta.get("SeriesDescription") is not None:
@@ -580,18 +636,6 @@ class MrdDicomBuilder:
         if meta.get("ImageType") is not None:
             dicomDset.ImageType = meta["ImageType"]
 
-        if (meta.get("ImageRowDir") is not None) and (
-            meta.get("ImageColumnDir") is not None
-        ):
-            dicomDset.ImageOrientationPatient = [
-                float(meta["ImageRowDir"][0]),
-                float(meta["ImageRowDir"][1]),
-                float(meta["ImageRowDir"][2]),
-                float(meta["ImageColumnDir"][0]),
-                float(meta["ImageColumnDir"][1]),
-                float(meta["ImageColumnDir"][2]),
-            ]
-
         if meta.get("WindowCenter") is not None:
             dicomDset.WindowCenter = meta["WindowCenter"]
 
@@ -607,9 +651,11 @@ class MrdDicomBuilder:
         # ----- Set DICOM image from MRD Image Data -----
         # mrdImg.data is [cha z y x]; squeezed to [y x] for [row col].
         dicomDset.PixelData = pixels.tobytes()
+        return self._finish(dicomDset, pydicom.uid.MRImageStorage)
 
-        # UID
-        dicomDset.SOPClassUID = pydicom.uid.MRImageStorage
+    def _finish(self, dicomDset: pydicom.Dataset, sop_class: str) -> DicomWithName:
+        """Give the image its instance UID and file name, and count it."""
+        dicomDset.SOPClassUID = sop_class
         dicomDset.SOPInstanceUID = pydicom.uid.generate_uid()
         dicomDset.file_meta.MediaStorageSOPClassUID = dicomDset.SOPClassUID
         dicomDset.file_meta.MediaStorageSOPInstanceUID = dicomDset.SOPInstanceUID
@@ -627,10 +673,71 @@ class MrdDicomBuilder:
             f"EX{study}_{float(series):02.0f}_{description}_{float(instance):03.0f}.dcm"
         )
 
-        # Update instance Number
         self.instanceNumber += 1
-
         return DicomWithName(dset=dicomDset, filename=fileName)
+
+    def _identify(self, dicomDset: pydicom.Dataset, index: int) -> None:
+        """Set the series UID and number of series ``index``, and the instance number."""
+        if index not in self._series:
+            rank = len(self._series)
+            root = str(self.dicomDset.SeriesInstanceUID)
+            uid = (
+                root
+                if rank == 0
+                else pydicom.uid.generate_uid(entropy_srcs=[root, str(index)])
+            )
+            vendor = str(self.dicomDset.get("Manufacturer", ""))
+            measurement = getattr(self.mrdHead, "measurementInformation", None)
+            measurement_id = getattr(measurement, "measurementID", None)
+            if "GE" in vendor.upper() and measurement_id is not None:
+                number = int(str(measurement_id).strip())
+                number = number if rank == 0 else 100 * number + rank
+            else:
+                number = index
+            self._series[index] = (uid, number)
+        dicomDset.SeriesInstanceUID, dicomDset.SeriesNumber = self._series[index]
+        dicomDset.InstanceNumber = self.instanceNumber
+
+    def _state(self, dicomDset: pydicom.Dataset, quantities: dict[str, Any]) -> None:
+        """Write the header's ``dicom:`` attributes that name a quantity of the image."""
+        quantities = {
+            **quantities,
+            "instance_number": dicomDset.InstanceNumber,
+            "series_number": dicomDset.SeriesNumber,
+        }
+        for tag, vr, value in self._per_image:
+            try:
+                text = value.format_map(quantities)
+            except (KeyError, ValueError, IndexError) as error:
+                logging.debug("DICOM attribute %s left out: %s", tag, error)
+                continue
+            _write(dicomDset, tag, vr, text)
+
+    def _capture(
+        self, dicomDset: pydicom.Dataset, mrdImg: ismrmrd.Image
+    ) -> DicomWithName:
+        """Store an RGB image as a secondary capture, in its own series."""
+        planes = np.asarray(mrdImg.data[:, 0])
+        pixels = np.clip(np.moveaxis(planes, 0, -1), 0, 255).astype(np.uint8)
+        dicomDset.Rows, dicomDset.Columns = pixels.shape[:2]
+        dicomDset.SamplesPerPixel = 3
+        dicomDset.PhotometricInterpretation = "RGB"
+        dicomDset.PlanarConfiguration = 0
+        dicomDset.BitsAllocated = 8
+        dicomDset.BitsStored = 8
+        dicomDset.HighBit = 7
+        dicomDset.PixelRepresentation = 0
+        dicomDset.ConversionType = "WSD"
+        dicomDset.ImageType = ["DERIVED", "SECONDARY"]
+        self._identify(dicomDset, mrdImg.image_series_index)
+        self._state(dicomDset, {})
+        meta = ismrmrd.Meta.deserialize(mrdImg.attribute_string)
+        if meta.get("SeriesDescription") is not None:
+            dicomDset.SeriesDescription = meta["SeriesDescription"]
+        if meta.get("ImageComment") is not None:
+            dicomDset.ImageComment = "_".join(meta["ImageComment"])
+        dicomDset.PixelData = pixels.tobytes()
+        return self._finish(dicomDset, pydicom.uid.SecondaryCaptureImageStorage)
 
     def _set_diffusion(self, dicomDset: pydicom.Dataset, mrdImg: ismrmrd.Image) -> None:
         """State the image's b-value and direction, the table row its ``repetition`` indexes.
@@ -787,3 +894,169 @@ def _quantize(values: np.ndarray, scale: _Scale) -> tuple[np.ndarray, int]:
     outside = (stored < limits.min) | (stored > limits.max)
     clipped = np.clip(stored, limits.min, limits.max).astype(scale.dtype)
     return clipped, int(outside.sum())
+
+
+def name_dictionary(header: Any, path: Any) -> None:
+    """State ``path`` as the header's private DICOM dictionary, in place."""
+    if header.userParameters is None:
+        header.userParameters = ismrmrd.xsd.userParametersType()
+    strings = header.userParameters.userParameterString
+    strings[:] = [entry for entry in strings if entry.name != DICOM_DICTIONARY]
+    strings.append(
+        ismrmrd.xsd.userParameterStringType(name=DICOM_DICTIONARY, value=str(path))
+    )
+
+
+#: The display directions of rows and columns, in DICOM's patient frame, of a
+#: plane whose normal lies closest to x (sagittal), y (coronal) or z (axial).
+_DISPLAY = (
+    (np.array([0.0, 1.0, 0.0]), np.array([0.0, 0.0, -1.0])),
+    (np.array([1.0, 0.0, 0.0]), np.array([0.0, 0.0, -1.0])),
+    (np.array([1.0, 0.0, 0.0]), np.array([0.0, 1.0, 0.0])),
+)
+
+
+def _in_plane(image: ismrmrd.Image, meta: Any) -> tuple[np.ndarray, np.ndarray]:
+    """Return the unit directions an image's rows and columns run along; zero for an image that states none."""
+    row, column = meta.get("ImageRowDir"), meta.get("ImageColumnDir")
+    if row is None or column is None:
+        row, column = image.read_dir, image.phase_dir
+    row = np.asarray([float(v) for v in row])
+    column = np.asarray([float(v) for v in column])
+    if not (np.any(row) and np.any(column)):
+        return row, column
+    return row / np.linalg.norm(row), column / np.linalg.norm(column)
+
+
+def _displayed(
+    values: np.ndarray,
+    read: np.ndarray,
+    phase: np.ndarray,
+    row_spacing: float,
+    column_spacing: float,
+    first: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, float, float, np.ndarray]:
+    """Return an image flipped and transposed into its plane's display orientation.
+
+    ``read`` and ``phase`` are the unit directions in the patient frame along a
+    row and down a column, the spacings the distances between columns and
+    between rows (mm), and ``first`` the centre of the first pixel. Returns the
+    same quantities for the displayed image.
+    """
+    row_dir, column_dir = _DISPLAY[int(np.argmax(np.abs(np.cross(read, phase))))]
+    # Index 0 steps down a column, index 1 along a row.
+    axes = [[phase, row_spacing], [read, column_spacing]]
+    if abs(phase @ row_dir) + abs(read @ column_dir) > abs(read @ row_dir) + abs(
+        phase @ column_dir
+    ):
+        values = values.T
+        axes.reverse()
+    for axis, target in ((1, row_dir), (0, column_dir)):
+        direction, spacing = axes[axis]
+        if direction @ target < 0:
+            first = first + (values.shape[axis] - 1) * spacing * direction
+            axes[axis][0] = -direction
+            values = np.flip(values, axis)
+    return (
+        np.ascontiguousarray(values),
+        axes[1][0],
+        axes[0][0],
+        axes[0][1],
+        axes[1][1],
+        first,
+    )
+
+
+def _stated_attributes(header: Any) -> list[tuple[Any, str, str]]:
+    """Return the ``(tag, VR, value)`` of every ``dicom:`` entry of ``header`` that resolves."""
+    entries = []
+    parameters = getattr(header, "userParameters", None)
+    for entry in getattr(parameters, "userParameterString", None) or []:
+        if entry.name and entry.name.startswith(DICOM_PARAMETER):
+            entries.append((entry.name[len(DICOM_PARAMETER) :], str(entry.value)))
+    private = _read_dictionary(dict(entries).get("dictionary"))
+    resolved = []
+    for name, value in entries:
+        if name == "dictionary":
+            continue
+        found = _resolve(name, private)
+        if found is None:
+            logging.warning("DICOM attribute %r is in no dictionary; left out", name)
+            continue
+        resolved.append((*found, value))
+    return resolved
+
+
+def _resolve(name: str, private: dict[str, tuple[Any, str]]) -> tuple[Any, str] | None:
+    """Return the tag and VR ``name`` stands for: an explicit ``(gggg,eeee)VR``, or a keyword."""
+    explicit = _EXPLICIT.fullmatch(name)
+    if explicit:
+        group, element, vr = explicit.groups()
+        return pydicom.tag.Tag(int(group, 16), int(element, 16)), vr
+    tag = pydicom.datadict.tag_for_keyword(name)
+    if tag is not None:
+        return pydicom.tag.Tag(tag), pydicom.datadict.dictionary_VR(tag)
+    return private.get(name)
+
+
+def _read_dictionary(path: Any) -> dict[str, tuple[Any, str]]:
+    """Return the keywords of a MATLAB-format DICOM dictionary, ``{}`` when there is none to read."""
+    if path is None:
+        return {}
+    try:
+        lines = Path(path).read_text(encoding="latin-1").splitlines()
+    except OSError as error:
+        logging.warning("DICOM dictionary %s cannot be read: %s", path, error)
+        return {}
+    found = {}
+    for line in lines:
+        match = _DICTIONARY_LINE.match(line.strip())
+        if match:
+            group, element, vr, keyword = match.groups()
+            found[keyword] = (pydicom.tag.Tag(int(group, 16), int(element, 16)), vr)
+    return found
+
+
+def _write(dicomDset: pydicom.Dataset, tag: Any, vr: str, text: str) -> None:
+    """Set one attribute from its text, logging and leaving out one that does not convert."""
+    try:
+        dicomDset[tag] = pydicom.DataElement(tag, vr, _typed(vr, text))
+    except (ValueError, TypeError) as error:
+        logging.warning("DICOM attribute %s = %r left out: %s", tag, text, error)
+
+
+def _typed(vr: str, text: str) -> Any:
+    """Return ``text`` as the value of an element of representation ``vr``."""
+    values = text.split("\\")
+    if vr in _INTEGER_VRS:
+        values = [int(float(value)) for value in values]
+    elif vr in _FLOAT_VRS:
+        values = [float(value) for value in values]
+    return values[0] if len(values) == 1 else values
+
+
+def _image_quantities(
+    dicomDset: pydicom.Dataset, centre: np.ndarray, normal: np.ndarray
+) -> dict[str, Any]:
+    """Return the per-image quantities a ``dicom:`` value may name; see :class:`MrdDicomBuilder`.
+
+    ``centre`` and ``normal`` are in DICOM's patient frame, x towards left, y
+    towards posterior, z towards superior.
+    """
+    ras = np.array([-1.0, -1.0, 1.0])
+    magnitude = np.abs(normal)
+    axis = int(np.argmax(magnitude))
+    others = np.delete(magnitude, axis)
+    if magnitude[axis] > _AXIAL_DOMINANCE * others.max():
+        location = float(centre[axis] * ras[axis])
+        letter = ("RL", "AP", "SI")[axis][0 if location >= 0 else 1]
+    else:
+        direction = normal * ras
+        direction = direction if direction[axis] >= 0 else -direction
+        location = float((centre * ras) @ direction)
+        letter = "+" if location >= 0 else "-"
+    return {
+        "slice_location": f"{float(dicomDset.SliceLocation):.6g}",
+        "location": f"{round(location, 4):.6g}",
+        "location_letter": letter,
+    }

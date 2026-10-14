@@ -13,6 +13,7 @@ import warnings
 
 import ismrmrd
 import numpy as np
+import pydicom
 import pytest
 
 from pulserver.mrd import AcquisitionFlag
@@ -434,3 +435,60 @@ def test_an_integer_reference_of_a_volume_is_warned_of_once():
         )
 
     assert len(caught) == 1
+
+
+# %% colour results
+
+
+def test_an_rgb_result_reaches_the_client_as_three_channels_of_its_values():
+    head = header(encoding((200.0, 200.0, 5.0)))
+    pixels = np.zeros((6, 4, 3), dtype=np.uint8)
+    pixels[..., 0] = 255
+    pixels[2, 1] = (10, 20, 30)
+
+    (image,) = images(
+        run(lambda data: ReconResult(pixels, image_type="rgb"), head, unit())
+    )
+
+    assert image.image_type == ismrmrd.IMTYPE_RGB
+    assert image.data.shape == (3, 1, 6, 4)
+    np.testing.assert_array_equal(np.moveaxis(image.data[:, 0], 0, -1), pixels)
+
+
+def test_an_rgb_result_is_written_as_a_secondary_capture_of_its_pixels():
+    head = header(encoding((200.0, 200.0, 5.0)))
+    pixels = np.random.default_rng(0).integers(0, 256, (6, 4, 3), dtype=np.uint8)
+
+    (dataset,) = datasets(
+        run(
+            lambda data: ReconResult(pixels, image_type="rgb", dicom=True), head, unit()
+        )
+    )
+
+    assert dataset.SOPClassUID == pydicom.uid.SecondaryCaptureImageStorage
+    assert dataset.PhotometricInterpretation == "RGB"
+    np.testing.assert_array_equal(dataset.pixel_array, pixels)
+
+
+def test_an_rgb_result_must_be_three_colour_planes():
+    head = header(encoding((200.0, 200.0, 5.0)))
+
+    with pytest.raises(ValueError, match="RGB result"):
+        run(lambda data: ReconResult(np.zeros((6, 4)), image_type="rgb"), head, unit())
+
+
+def test_a_figure_is_drawn_to_the_pixels_of_an_rgb_result():
+    matplotlib = pytest.importorskip("matplotlib")
+    matplotlib.use("Agg")
+    from matplotlib.figure import Figure
+
+    from pulserver.recon import figure_rgb
+
+    figure = Figure(figsize=(2, 1), dpi=50)
+    figure.patch.set_facecolor((1.0, 0.0, 0.0))
+
+    pixels = figure_rgb(figure)
+
+    assert pixels.shape == (50, 100, 3)
+    assert pixels.dtype == np.uint8
+    np.testing.assert_array_equal(pixels[0, 0], (255, 0, 0))

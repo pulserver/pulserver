@@ -391,7 +391,7 @@ on `SIGINT` or `SIGTERM` and waits for the series it is running.
 ## Series replay
 
 ```bash
-pulserver replay SERIES --plugin FILE (--store DIR | --design SEQ) [--config TEXT] [--output DIR]
+pulserver replay SERIES --plugin FILE (--store DIR | --design SEQ) [--config TEXT] [--dicom] [--dicom-dictionary FILE] [--output DIR]
 ```
 
 `pulserver replay` reconstructs one series kept by `--save-data` in the calling
@@ -403,7 +403,9 @@ store `--store`, or the one whose sequence file, the first of its chain, is
 `--design`. That file must be one the manifest beside it records, and the
 manifest must name the design the header names. A series exported beside a
 copy of its design's files replays with no store. Images go to `images.h5` in `--output`, and DICOM datasets to the files
-they are named by. An exception raised by the plugin is not caught, so its
+they are named by; with `--dicom` every image is written as DICOM, as the
+proxy's `--dicom` writes it, and `--dicom-dictionary` names the private
+dictionary of the header's DICOM attributes ({ref}`dicom-attributes`). An exception raised by the plugin is not caught, so its
 traceback names the line that raised it.
 
 ## Playout validation

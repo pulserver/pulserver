@@ -277,7 +277,7 @@ def exam_directory_name(exam_id: Hashable) -> str:
     """Return the name of an exam's directory under the exam root.
 
     An identity :func:`resolve_exam_id` returns is named ``<source>-<value>``,
-    ``exam-5084`` for the ``ExamID`` 5084, so a design call can name the
+    ``exam-42`` for the ``ExamID`` 42, so a design call can name the
     directory of the exam it is made in from the exam's number. Any other
     identity, and a value that is not a plain file name, is named by the
     SHA-256 of its ``repr``.

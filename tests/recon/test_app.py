@@ -184,10 +184,10 @@ def test_a_deleted_value_is_gone_for_the_next_cache(tmp_path):
 def test_an_exam_directory_is_named_by_the_exam_it_holds(tmp_path):
     """A design call names the directory of its exam from the exam's number."""
     manager = ExamCacheManager(directory=tmp_path)
-    with manager.lease(_header("5084")) as exam:
+    with manager.lease(_header("42")) as exam:
         exam["maps"] = 1
-        assert exam.directory == tmp_path / "exam-5084"
-    with manager.lease(_header("../5085")) as unsafe:
+        assert exam.directory == tmp_path / "exam-42"
+    with manager.lease(_header("../43")) as unsafe:
         unsafe["maps"] = 1
         assert unsafe.directory.parent == tmp_path
         assert len(unsafe.directory.name) == 64

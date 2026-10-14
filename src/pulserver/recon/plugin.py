@@ -110,8 +110,10 @@ class ReconResult:
     image_index
         MRD ``image_index``; ``None`` numbers images consecutively.
     image_type
-        ``"magnitude"``, ``"phase"``, ``"real"``, ``"imaginary"`` or
-        ``"complex"``.
+        ``"magnitude"``, ``"phase"``, ``"real"``, ``"imaginary"``,
+        ``"complex"`` or ``"rgb"``. An RGB result is a ``(y, x, 3)`` array of
+        values from 0 to 255, such as :func:`figure_rgb` draws, and becomes a
+        DICOM secondary capture.
     attributes
         MRD meta attributes, merged over the runtime's defaults. In a DICOM
         image ``RescaleSlope`` and ``RescaleIntercept`` state the mapping
@@ -913,6 +915,8 @@ class ReconPlugin(ABC):
         config: Any = None,
         store: str | None = None,
         design: str | None = None,
+        dicom: bool = False,
+        dicom_dictionary: str | None = None,
     ) -> list[Any]:
         """Reconstruct one ISMRMRD HDF5 file in this process, through the same hooks.
 
@@ -939,12 +943,20 @@ class ReconPlugin(ABC):
             The design's sequence file, the first of its chain, in place of
             ``store``: ``<store>/<scan>/<id>/sequence.seq`` or a copy of it,
             with the design's manifest beside it.
+        dicom : bool, default=False
+            Convert every MRD image emitted to DICOM, as the proxy's
+            ``--dicom`` does.
+        dicom_dictionary : str, default=None
+            Private DICOM dictionary the header's ``dicom:`` attributes are
+            resolved against, in place of the one the header names
+            (:ref:`dicom-attributes`).
 
         Returns
         -------
         list
             Everything emitted, in order: MRD images, named DICOM datasets for
-            results with ``dicom=True``, and any other output the plugin returned.
+            results with ``dicom=True`` and, under ``dicom``, for every image,
+            and any other output the plugin returned.
 
         Raises
         ------
@@ -967,6 +979,8 @@ class ReconPlugin(ABC):
             config=config,
             store=store,
             design=design,
+            dicom=dicom,
+            dicom_dictionary=dicom_dictionary,
         )
 
     def __call__(self, bucket: AcquisitionBucket, context: ReconContext) -> Any:

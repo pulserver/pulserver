@@ -15,6 +15,7 @@ import ismrmrd.xsd
 
 from ..plugin import ExamCache, ReconContext
 from .application import run_application
+from .mrd2dicom import MrdDicomBuilder, name_dictionary
 
 
 class _FileConnection:
@@ -55,6 +56,8 @@ def reconstruct_file(
     config: Any = None,
     store: Any = None,
     design: Any = None,
+    dicom: bool = False,
+    dicom_dictionary: Any = None,
 ) -> list[Any]:
     """Drive ``plugin`` over one ISMRMRD HDF5 file and return what it emitted.
 
@@ -70,6 +73,8 @@ def reconstruct_file(
                 "header the scanner sends ahead of the data"
             )
         header = ismrmrd.xsd.CreateFromDocument(document)
+        if dicom_dictionary is not None:
+            name_dictionary(header, dicom_dictionary)
         played = _played(header, store, design)
         fov_offset_m = None
         if played is not None:
@@ -84,7 +89,13 @@ def reconstruct_file(
         )
         connection = _FileConnection(dataset, played, fov_offset_m)
         run_application(plugin, connection, context)
-        return connection.sent
+        if not dicom:
+            return connection.sent
+        convert = MrdDicomBuilder(header)
+        return [
+            convert(item) if isinstance(item, ismrmrd.Image) else item
+            for item in connection.sent
+        ]
     finally:
         with contextlib.suppress(Exception):
             dataset.close()
