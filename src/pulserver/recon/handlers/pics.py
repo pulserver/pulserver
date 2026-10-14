@@ -4,6 +4,7 @@ from __future__ import annotations
 
 __all__ = ["PLUGIN", "PicsRecon"]
 
+import math
 from typing import Any
 
 import numpy as np
@@ -20,6 +21,10 @@ from ..plugin import ReconContext, ReconPlugin, ReconResult
 #: :class:`bartorch.priors.Wavelet` takes it by default, decomposes: the
 #: coarsest scale of a shorter axis is never reached, and the process dies.
 WAVELET_MIN_POINTS = 4
+
+#: Lines of every encoded axis, around the k-space centre, the coil maps are
+#: fitted to, as :func:`bartorch.apps.nlinv_maps` takes them.
+CALIBRATION_LINES = 24
 
 
 class PicsRecon(ReconPlugin):
@@ -44,10 +49,10 @@ class PicsRecon(ReconPlugin):
     with :func:`nlinv_estimate` as the estimate: from the unit's calibration
     readouts, else the maps stored for its slice, else the exam's. A unit for
     which none of these has maps takes them from the low-resolution centre of
-    its own k-space (``bart nlinv -m 1``, with ``--phase-pole 0`` for a
-    plane), with unit sensitivity for one coil. A unit that holds calibration
-    readouts and no imaging readouts makes no image; its maps are stored for
-    the later units of its slice. The image minimises
+    its own k-space (``bart nlinv -m 1 --phase-pole 0``), with unit
+    sensitivity for one coil. A unit that holds calibration readouts and no
+    imaging readouts makes no image; its maps are stored for the later units
+    of its slice. The image minimises
     ``|P F S x - y|^2 + lambda |W x|_1`` over the maps (``bart pics -R W``),
     ``W`` the wavelet transform over the encoded axes of at least
     ``WAVELET_MIN_POINTS`` points. An encoded axis is
@@ -208,20 +213,26 @@ PLUGIN = PicsRecon()
 
 
 def nlinv_estimate(kspace: Any, traj: Any = None) -> Any:
-    """Return the coil maps :func:`bartorch.apps.nlinv_maps` fits to ``kspace``, with phase-pole correction for a plane.
+    """Return the coil maps :func:`bartorch.apps.nlinv_maps` fits to ``kspace``, with phase-pole correction.
 
-    A plane, ``(coils, [1,] y, x)`` or samples along a trajectory, is fitted
-    as ``bart nlinv -m 1 --phase-pole 0``: after every Gauss-Newton step the
-    phase poles the maps share are moved into the image, where they would
-    otherwise drive every coil's sensitivity towards zero and leave a dark
-    spot in the image. A volume, ``(coils, z, y, x)``, is fitted without:
-    BART's detection refuses a volume with an axis no longer than a twentieth
-    of its longest, rounded up, as a slab of a few partitions is.
+    ``bart nlinv -m 1 --phase-pole 0`` on the central ``CALIBRATION_LINES``
+    lines of every axis: after every Gauss-Newton step the phase poles the
+    maps share are moved into the image, where they would otherwise drive
+    every coil's sensitivity towards zero and leave a dark spot in the image.
+    BART refuses the detection on a grid with an axis no longer than a
+    twentieth of its longest, rounded up; a volume whose calibration grid has
+    such an axis, a slab of fewer than 3 partitions, is fitted without it.
     """
     from bartorch import apps
 
-    plane = traj is not None or kspace.ndim == 3 or kspace.shape[1] == 1
-    return apps.nlinv_maps(kspace, traj, phase_pole=0 if plane else None)
+    grid = [min(CALIBRATION_LINES, n) for n in kspace.shape[1:] if n > 1]
+    detectable = traj is not None or min(grid) > math.ceil(max(grid) / 20)
+    return apps.nlinv_maps(
+        kspace,
+        traj,
+        size=CALIBRATION_LINES,
+        phase_pole=0 if detectable else None,
+    )
 
 
 def wavelet_axes(shape: tuple[int, ...], axes: tuple[int, ...]) -> tuple[int, ...]:

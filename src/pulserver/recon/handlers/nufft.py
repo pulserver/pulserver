@@ -51,7 +51,8 @@ class NufftRecon(ReconPlugin):
     and fitted partition by partition. A trajectory that encodes kz, with no
     partitions, is one three-dimensional solve, its maps fitted as
     ``bart nlinv -m 1 -t`` fits them over three spatial axes, without the
-    phase-pole correction.
+    phase-pole correction: that fit is on the grid of the whole volume, where
+    the detection is several times the cost of the fit.
 
     A unit closes as that of
     :class:`~pulserver.recon.handlers.pics.PicsRecon` does, and also once the

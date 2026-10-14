@@ -195,7 +195,7 @@ def test_maps_of_a_plane_from_calibration_readouts_and_from_the_units_own_centre
     )
     reconstruct(stream(kspace, lines), device=device)
 
-    assert options == [{"phase_pole": 0}, {"phase_pole": 0}]
+    assert options == [{"size": 24, "phase_pole": 0}] * 2
 
 
 @pytest.mark.parametrize(
@@ -204,13 +204,24 @@ def test_maps_of_a_plane_from_calibration_readouts_and_from_the_units_own_centre
         ((COILS, MATRIX, MATRIX), False, 0),
         ((COILS, 1, MATRIX, MATRIX), False, 0),
         ((COILS, 2, MATRIX, MATRIX), False, None),
+        ((COILS, 3, MATRIX, MATRIX), False, 0),
+        ((COILS, 3, 256, 256), False, 0),
         ((COILS, 8, MATRIX), True, 0),
     ],
-    ids=["plane", "one partition", "volume", "trajectory"],
+    ids=[
+        "plane",
+        "one partition",
+        "2 partitions",
+        "3 partitions",
+        "3 of 256",
+        "trajectory",
+    ],
 )
-def test_phase_pole_correction_is_asked_for_a_plane_and_not_for_a_volume(
+def test_phase_pole_correction_is_asked_unless_the_calibration_grid_is_too_thin(
     shape, trajectory, phase_pole, monkeypatch
 ):
+    """The calibration grid is 24 lines a side, where BART's detection
+    circle is 2 points: 3 partitions are enough, whatever the matrix."""
     import torch
     from bartorch import apps
 
@@ -223,7 +234,7 @@ def test_phase_pole_correction_is_asked_for_a_plane_and_not_for_a_volume(
     traj = torch.zeros(shape[1], shape[2], 3) if trajectory else None
     nlinv_estimate(torch.zeros(shape, dtype=torch.complex64), traj)
 
-    assert asked == [{"phase_pole": phase_pole}]
+    assert asked == [{"size": 24, "phase_pole": phase_pole}]
 
 
 def test_noise_readouts_whiten_the_imaging_readouts_and_are_not_placed(device):
