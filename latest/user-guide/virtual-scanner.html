@@ -528,10 +528,12 @@ at <a class="reference external" href="https://pulserver.github.io/MaRGE/">https
 field-of-view offset in the protocol block, under the limits file <code class="docutils literal notranslate"><span class="pre">system.txt</span></code>
 (<a class="reference internal" href="running.html#scanner-limits"><span class="std std-ref">Scanner limits</span></a>):</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="nb">printf</span><span class="w"> </span><span class="s1">'[Protocol]\nTE: 5000\nnx: 64\nny: 64\nfov_offset_x: 20.0\n[Protocol End]\n'</span><span class="w"> </span><span class="se">\</span>
-<span class="w">  </span><span class="p">|</span><span class="w"> </span>pulserver<span class="w"> </span>design<span class="w"> </span>generate<span class="w"> </span>--plugins<span class="w"> </span>sequences<span class="w"> </span>--plugin<span class="w"> </span>gre2d<span class="w"> </span>--limits<span class="w"> </span>system.txt<span class="w"> </span>--store<span class="w"> </span>designs
+<span class="w">  </span><span class="p">|</span><span class="w"> </span>pulserver<span class="w"> </span>design<span class="w"> </span>generate<span class="w"> </span>--plugins<span class="w"> </span>sequences<span class="w"> </span>--plugin<span class="w"> </span>gre2d<span class="w"> </span>--limits<span class="w"> </span>system.txt<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--store<span class="w"> </span>designs<span class="w"> </span>--scan<span class="w"> </span>scan1
 </pre></div>
 </div>
-<p>The reply is <code class="docutils literal notranslate"><span class="pre">GENERATED</span> <span class="pre">&lt;id&gt;</span></code>. Start a reconstruction proxy on the same store
+<p>The reply is <code class="docutils literal notranslate"><span class="pre">GENERATED</span> <span class="pre">&lt;id&gt;</span></code>, and the design is stored for the scan <code class="docutils literal notranslate"><span class="pre">scan1</span></code>.
+Start a reconstruction proxy on the same store
 (<a class="reference internal" href="running.html"><span class="doc">Services</span></a>):</p>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pulserver<span class="w"> </span>proxy<span class="w"> </span>--store<span class="w"> </span>designs<span class="w"> </span>--port<span class="w"> </span><span class="m">9002</span><span class="w"> </span>--plugins<span class="w"> </span>recon
 </pre></div>
@@ -542,7 +544,7 @@ field-of-view offset in the protocol block, under the limits file <code class="d
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pulserver</span><span class="w"> </span><span class="kn">import</span> <span class="n">virtual</span>
 
 <span class="n">design</span> <span class="o">=</span> <span class="s2">"..."</span>  <span class="c1"># the identifier the generation replied</span>
-<span class="n">sequence</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"designs/</span><span class="si">{</span><span class="n">design</span><span class="si">}</span><span class="s2">/sequence.seq"</span>
+<span class="n">sequence</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"designs/scan1/</span><span class="si">{</span><span class="n">design</span><span class="si">}</span><span class="s2">/sequence.seq"</span>
 <span class="n">phantom</span> <span class="o">=</span> <span class="n">virtual</span><span class="o">.</span><span class="n">Phantom</span><span class="p">(</span>
     <span class="p">[</span>
         <span class="n">virtual</span><span class="o">.</span><span class="n">Ellipse</span><span class="p">((</span><span class="mf">0.02</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span> <span class="p">(</span><span class="mf">0.08</span><span class="p">,</span> <span class="mf">0.06</span><span class="p">),</span> <span class="n">t1</span><span class="o">=</span><span class="mf">0.9</span><span class="p">,</span> <span class="n">t2</span><span class="o">=</span><span class="mf">0.07</span><span class="p">),</span>
@@ -553,6 +555,7 @@ field-of-view offset in the protocol block, under the limits file <code class="d
 <span class="n">readouts</span> <span class="o">=</span> <span class="n">virtual</span><span class="o">.</span><span class="n">simulate</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">phantom</span><span class="o">.</span><span class="n">tissue</span><span class="p">(</span><span class="mf">1e-3</span><span class="p">))</span>
 <span class="n">received</span> <span class="o">=</span> <span class="n">virtual</span><span class="o">.</span><span class="n">send</span><span class="p">(</span>
     <span class="p">(</span><span class="s2">"127.0.0.1"</span><span class="p">,</span> <span class="mi">9002</span><span class="p">),</span>
+    <span class="s2">"scan1"</span><span class="p">,</span>
     <span class="n">design</span><span class="p">,</span>
     <span class="n">readouts</span><span class="p">,</span>
     <span class="n">position_mm</span><span class="o">=</span><span class="p">(</span><span class="mf">20.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">),</span>
@@ -625,7 +628,9 @@ gradients can be written as it plays:</p>
             <span class="n">audio</span><span class="o">.</span><span class="n">writeframes</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="mi">32767</span> <span class="o">*</span> <span class="n">chunk</span><span class="o">.</span><span class="n">sound</span><span class="o">.</span><span class="n">T</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="s2">"&lt;i2"</span><span class="p">)</span><span class="o">.</span><span class="n">tobytes</span><span class="p">())</span>
             <span class="k">yield from</span> <span class="n">chunk</span><span class="o">.</span><span class="n">readouts</span>
 
-    <span class="n">received</span> <span class="o">=</span> <span class="n">virtual</span><span class="o">.</span><span class="n">send</span><span class="p">((</span><span class="s2">"127.0.0.1"</span><span class="p">,</span> <span class="mi">9002</span><span class="p">),</span> <span class="n">design</span><span class="p">,</span> <span class="n">acquired</span><span class="p">(),</span> <span class="n">config</span><span class="o">=</span><span class="s2">"pics"</span><span class="p">)</span>
+    <span class="n">received</span> <span class="o">=</span> <span class="n">virtual</span><span class="o">.</span><span class="n">send</span><span class="p">(</span>
+        <span class="p">(</span><span class="s2">"127.0.0.1"</span><span class="p">,</span> <span class="mi">9002</span><span class="p">),</span> <span class="s2">"scan1"</span><span class="p">,</span> <span class="n">design</span><span class="p">,</span> <span class="n">acquired</span><span class="p">(),</span> <span class="n">config</span><span class="o">=</span><span class="s2">"pics"</span>
+    <span class="p">)</span>
 </pre></div>
 </div>
 <p>The scan is simulated in a thread of its own, ahead of the clock. At
@@ -658,6 +663,7 @@ send <span class="math notranslate nohighlight">\(R\)</span> times the offset as
 <span class="n">readouts</span> <span class="o">=</span> <span class="n">virtual</span><span class="o">.</span><span class="n">simulate</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">phantom</span><span class="o">.</span><span class="n">tissue</span><span class="p">(</span><span class="mf">1e-3</span><span class="p">),</span> <span class="n">rotation</span><span class="o">=</span><span class="n">rotation</span><span class="p">)</span>
 <span class="n">received</span> <span class="o">=</span> <span class="n">virtual</span><span class="o">.</span><span class="n">send</span><span class="p">(</span>
     <span class="p">(</span><span class="s2">"127.0.0.1"</span><span class="p">,</span> <span class="mi">9002</span><span class="p">),</span>
+    <span class="s2">"scan1"</span><span class="p">,</span>
     <span class="n">design</span><span class="p">,</span>
     <span class="n">readouts</span><span class="p">,</span>
     <span class="n">position_mm</span><span class="o">=</span><span class="mf">1e3</span> <span class="o">*</span> <span class="n">centre</span><span class="p">,</span>
@@ -690,8 +696,8 @@ line, is written to standard output, and the scan clock to standard error.</p>
 <li><p><code class="docutils literal notranslate"><span class="pre">--limits</span></code> is the <code class="docutils literal notranslate"><span class="pre">[Limits]</span></code> block of <a class="reference internal" href="running.html#scanner-limits"><span class="std std-ref">Scanner limits</span></a>; the phantom’s
 chemical shifts are resolved at its <code class="docutils literal notranslate"><span class="pre">B0</span></code>. <code class="docutils literal notranslate"><span class="pre">--protocol</span></code> holds a protocol
 block, as <code class="docutils literal notranslate"><span class="pre">pulserver</span> <span class="pre">design</span> <span class="pre">generate</span></code> reads it on standard input; without
-it, the plugin’s defaults are designed. Without <code class="docutils literal notranslate"><span class="pre">--store</span></code>, the design is
-stored in a temporary directory.</p></li>
+it, the plugin’s defaults are designed. The design is stored for a new scan,
+named after the time; without <code class="docutils literal notranslate"><span class="pre">--store</span></code>, in a temporary directory.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">--orientation</span></code> names the rotation from logical to physical axes by the
 physical direction of each logical axis:</p>
 <div class="pst-scrollable-table-container"><table class="table">

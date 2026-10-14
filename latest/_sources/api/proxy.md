@@ -43,6 +43,7 @@ and fields of a series in {doc}`../user-guide/reconstruction-client`.
 | --- | --- |
 | {obj}`~pulserver.proxy.DesignCache` | The designs of a store, the most recently read kept tabulated. |
 | {obj}`~pulserver.proxy.Design` | A stored design as the reconstruction side reads it. |
+| {obj}`~pulserver.proxy.SCAN_PARAMETER` | Header user parameter naming the scan a series was played in. |
 | {obj}`~pulserver.proxy.DESIGN_PARAMETER` | Header user parameter naming the design a series was played from. |
 | {obj}`~pulserver.proxy.DesignIntake` | HTTP endpoint receiving pushed designs into the store the proxy reads. |
 

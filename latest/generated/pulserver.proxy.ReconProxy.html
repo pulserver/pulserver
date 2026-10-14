@@ -542,8 +542,8 @@ is deleted once a header names another exam, or nothing has leased it for
 the exam still runs on any proxy.</p>
 <p>A series whose sequence sets <code class="docutils literal notranslate"><span class="pre">EnablePmc</span></code> is corrected for motion while it
 plays: the poses its reconstruction states are published into the pose
-file the scan reads, <code class="docutils literal notranslate"><span class="pre">motion.buf</span></code> in the design’s directory, rather than
-sent to the client. A forwarded series publishes the poses the server
+file the scan reads, <code class="docutils literal notranslate"><span class="pre">motion.buf</span></code> in the scan’s directory of the store,
+rather than sent to the client. A forwarded series publishes the poses the server
 passes back.</p>
 <p>What goes back to a client is also written to a directory under the
 system’s temporary directory, shared with every other proxy on this host,
@@ -554,7 +554,7 @@ takes up is removed after a day.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>store</strong> (<em>Path</em><em> | </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a>) – Directory of designs, as the design calls write it; read only.</p></li>
+<li><p><strong>store</strong> (<em>Path</em><em> | </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a>) – Design store, one directory per scan, as the design calls write it.</p></li>
 <li><p><strong>plugins</strong> (<em>PluginPath</em><em>, </em><em>default=None</em>) – Directories of reconstruction plugin files, <code class="docutils literal notranslate"><span class="pre">&lt;plugin&gt;.py</span></code>, in search
 order; required unless the proxy forwards.</p></li>
 <li><p><strong>slots</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>, </em><em>default=None</em>) – Series reconstructed at once; derived from memory and the GPUs when
@@ -574,8 +574,9 @@ when <code class="docutils literal notranslate"><span class="pre">None</span></c
 proxy on this host so a map one series measures reaches a series on
 another;
 <code class="xref py py-data docutils literal notranslate"><span class="pre">DEFAULT_EXAM_DIRECTORY</span></code> when
-<code class="docutils literal notranslate"><span class="pre">None</span></code>. An exam’s directory is removed when the last proxy on that
-exam lets go of it.</p></li>
+<code class="docutils literal notranslate"><span class="pre">None</span></code>. A directory the proxy creates is readable by its owner alone;
+one that exists is used with the permissions it has. An exam’s
+directory is removed when the last proxy on that exam lets go of it.</p></li>
 <li><p><strong>forward</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.15)"><em>tuple</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>]</em><em>, </em><em>default=None</em>) – <code class="docutils literal notranslate"><span class="pre">(host,</span> <span class="pre">port)</span></code> of the MRD server that reconstructs every series;
 local workers when <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
 <li><p><strong>forward_config</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em>, </em><em>default=None</em>) – Config name sent to that server instead of the reconstruction plugin.</p></li>

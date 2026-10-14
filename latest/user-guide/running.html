@@ -507,6 +507,7 @@
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reconstruction-server">Reconstruction server</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#series-replay">Series replay</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#playout-validation">Playout validation</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>
 </ul>
@@ -538,9 +539,9 @@ store are described in <a class="reference internal" href="../explanations/archi
 <h2>Design calls<a class="headerlink" href="#design-calls" title="Link to this heading">#</a></h2>
 <div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pulserver<span class="w"> </span>design<span class="w"> </span>list<span class="w">     </span>--plugins<span class="w"> </span>DIR<span class="w"> </span>--plugin<span class="w"> </span>NAME<span class="w"> </span><span class="o">[</span>--limits<span class="w"> </span>FILE<span class="w"> </span>--rf-definitions<span class="o">]</span><span class="w"> </span><span class="o">[</span>--socket<span class="w"> </span>PATH<span class="o">]</span>
 pulserver<span class="w"> </span>design<span class="w"> </span>validate<span class="w"> </span>--plugins<span class="w"> </span>DIR<span class="w"> </span>--plugin<span class="w"> </span>NAME<span class="w"> </span>--limits<span class="w"> </span>FILE<span class="w"> </span><span class="o">[</span>--rf-layout<span class="o">]</span><span class="w"> </span><span class="o">[</span>--exam<span class="w"> </span>DIR<span class="o">]</span><span class="w"> </span><span class="o">[</span>--socket<span class="w"> </span>PATH<span class="o">]</span><span class="w"> </span>&lt;<span class="w"> </span>VALUES
-pulserver<span class="w"> </span>design<span class="w"> </span>generate<span class="w"> </span>--plugins<span class="w"> </span>DIR<span class="w"> </span>--plugin<span class="w"> </span>NAME<span class="w"> </span>--limits<span class="w"> </span>FILE<span class="w"> </span>--store<span class="w"> </span>DIR<span class="w"> </span><span class="o">[</span>--exam<span class="w"> </span>DIR<span class="o">]</span><span class="w"> </span><span class="o">[</span>--push<span class="w"> </span>URL<span class="o">]</span><span class="w"> </span><span class="o">[</span>--socket<span class="w"> </span>PATH<span class="o">]</span><span class="w"> </span>&lt;<span class="w"> </span>VALUES
-pulserver<span class="w"> </span>design<span class="w"> </span>import<span class="w">   </span>--limits<span class="w"> </span>FILE<span class="w"> </span>--store<span class="w"> </span>DIR<span class="w"> </span><span class="o">[</span>--push<span class="w"> </span>URL<span class="o">]</span><span class="w"> </span><span class="o">[</span>--socket<span class="w"> </span>PATH<span class="o">]</span><span class="w"> </span>&lt;<span class="w"> </span>IMPORT
-pulserver<span class="w"> </span>design<span class="w"> </span>push<span class="w">     </span>--store<span class="w"> </span>DIR<span class="w"> </span>--to<span class="w"> </span>URL<span class="w"> </span>ID...
+pulserver<span class="w"> </span>design<span class="w"> </span>generate<span class="w"> </span>--plugins<span class="w"> </span>DIR<span class="w"> </span>--plugin<span class="w"> </span>NAME<span class="w"> </span>--limits<span class="w"> </span>FILE<span class="w"> </span>--store<span class="w"> </span>DIR<span class="w"> </span>--scan<span class="w"> </span>NAME<span class="w"> </span><span class="o">[</span>--exam<span class="w"> </span>DIR<span class="o">]</span><span class="w"> </span><span class="o">[</span>--push<span class="w"> </span>URL<span class="o">]</span><span class="w"> </span><span class="o">[</span>--socket<span class="w"> </span>PATH<span class="o">]</span><span class="w"> </span>&lt;<span class="w"> </span>VALUES
+pulserver<span class="w"> </span>design<span class="w"> </span>import<span class="w">   </span>--limits<span class="w"> </span>FILE<span class="w"> </span>--store<span class="w"> </span>DIR<span class="w"> </span>--scan<span class="w"> </span>NAME<span class="w"> </span><span class="o">[</span>--push<span class="w"> </span>URL<span class="o">]</span><span class="w"> </span><span class="o">[</span>--socket<span class="w"> </span>PATH<span class="o">]</span><span class="w"> </span>&lt;<span class="w"> </span>IMPORT
+pulserver<span class="w"> </span>design<span class="w"> </span>push<span class="w">     </span>--store<span class="w"> </span>DIR<span class="w"> </span>--scan<span class="w"> </span>NAME<span class="w"> </span>--to<span class="w"> </span>URL<span class="w"> </span>ID...
 pulserver<span class="w"> </span>design<span class="w"> </span>prune<span class="w">    </span>--store<span class="w"> </span>DIR<span class="w"> </span><span class="o">[</span>--max-age-days<span class="w"> </span>D<span class="o">]</span><span class="w"> </span><span class="o">[</span>--max-bytes<span class="w"> </span>B<span class="o">]</span>
 </pre></div>
 </div>
@@ -550,7 +551,8 @@ arguments. <code class="docutils literal notranslate"><span class="pre">--plugin
 <code class="docutils literal notranslate"><span class="pre">&lt;plugin&gt;.py</span></code>, and may be repeated: a plugin is the file of the first directory
 that holds it, and the shipped plugins are searched last
 (<a class="reference internal" href="scanner-sequences.html#shipped-sequences"><span class="std std-ref">Shipped sequences</span></a>). <code class="docutils literal notranslate"><span class="pre">--store</span></code> is the design store, created when
-missing.</p>
+missing, and <code class="docutils literal notranslate"><span class="pre">--scan</span></code> the name of the scan the design is stored for: one
+directory name, not starting with <code class="docutils literal notranslate"><span class="pre">.</span></code>.</p>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
 <tr class="row-odd"><th class="head"><p>Call</p></th>
@@ -565,7 +567,7 @@ missing.</p>
 <td><p><code class="docutils literal notranslate"><span class="pre">VALID</span> <span class="pre">&lt;seconds&gt;</span></code> or <code class="docutils literal notranslate"><span class="pre">INVALID</span></code>, an <code class="docutils literal notranslate"><span class="pre">INFO</span></code> line and the value block of the resolved protocol; with <code class="docutils literal notranslate"><span class="pre">--rf-layout</span></code>, a valid reply ends with the <code class="docutils literal notranslate"><span class="pre">[RfLayout]</span></code> block</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">generate</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">GENERATED</span> <span class="pre">&lt;id&gt;</span></code>, the identifier of the design in the store</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">GENERATED</span> <span class="pre">&lt;id&gt;</span></code>, the identifier of the design in the scan’s directory</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">import</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">IMPORTED</span> <span class="pre">&lt;id&gt;</span></code></p></td>
@@ -574,7 +576,7 @@ missing.</p>
 <td><p><code class="docutils literal notranslate"><span class="pre">PUSHED</span> <span class="pre">&lt;count&gt;</span></code>: the designs sent, not counting those the intake already holds</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">prune</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">PRUNED</span> <span class="pre">&lt;count&gt;</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">PRUNED</span> <span class="pre">&lt;count&gt;</span></code>: the scans removed</p></td>
 </tr>
 </tbody>
 </table>
@@ -744,7 +746,7 @@ gradient heating from it.</p>
 <td><p>Channel drive per Hz of RF amplitude, one value or one per channel separated by spaces; a scale common to every channel cancels. Equal drives when left out</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">vop_default_shim</span></code></p></td>
-<td><p>Magnitude and phase in rad of each channel’s weight for a pulse played without an RF shim, separated by spaces; equal weights when left out</p></td>
+<td><p>Magnitude and phase in rad of each channel’s weight for a pulse played without an RF shim, separated by spaces; equal weights whose squares sum to 1 when left out</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">vop_coil</span></code></p></td>
 <td><p>Transmit configuration the scanner reports; the VOP file’s <code class="docutils literal notranslate"><span class="pre">transmit</span></code> metadata must name the same one</p></td>
@@ -773,20 +775,24 @@ which exercises a plugin without a scanner:</p>
 <span class="n">status</span><span class="p">,</span> <span class="n">reply</span> <span class="o">=</span> <span class="n">call</span><span class="p">(</span><span class="s2">"validate"</span><span class="p">,</span> <span class="n">plugins</span><span class="o">=</span><span class="s2">"sequences"</span><span class="p">,</span> <span class="n">plugin</span><span class="o">=</span><span class="s2">"gre2d"</span><span class="p">,</span>
                      <span class="n">limits</span><span class="o">=</span><span class="n">limits</span><span class="p">,</span> <span class="n">block</span><span class="o">=</span><span class="n">block</span><span class="p">)</span>
 <span class="n">status</span><span class="p">,</span> <span class="n">reply</span> <span class="o">=</span> <span class="n">call</span><span class="p">(</span><span class="s2">"generate"</span><span class="p">,</span> <span class="n">plugins</span><span class="o">=</span><span class="s2">"sequences"</span><span class="p">,</span> <span class="n">plugin</span><span class="o">=</span><span class="s2">"gre2d"</span><span class="p">,</span>
-                     <span class="n">limits</span><span class="o">=</span><span class="n">limits</span><span class="p">,</span> <span class="n">block</span><span class="o">=</span><span class="n">block</span><span class="p">,</span> <span class="n">store</span><span class="o">=</span><span class="n">DesignStore</span><span class="p">(</span><span class="s2">"designs"</span><span class="p">))</span>
+                     <span class="n">limits</span><span class="o">=</span><span class="n">limits</span><span class="p">,</span> <span class="n">block</span><span class="o">=</span><span class="n">block</span><span class="p">,</span>
+                     <span class="n">store</span><span class="o">=</span><span class="n">DesignStore</span><span class="p">(</span><span class="s2">"designs"</span><span class="p">,</span> <span class="s2">"scan"</span><span class="p">))</span>
 </pre></div>
 </div>
 <p>A plugin file is imported again when its modification time changes.</p>
 </section>
 <section id="design-store">
 <h3>Design store<a class="headerlink" href="#design-store" title="Link to this heading">#</a></h3>
-<p>The store holds one directory per design, <code class="docutils literal notranslate"><span class="pre">&lt;store&gt;/&lt;id&gt;/</span></code>, laid out as
-<a class="reference internal" href="../explanations/architecture.html"><span class="doc">Architecture</span></a> shows. <code class="docutils literal notranslate"><span class="pre">prune</span></code> removes designs least
-recently used first: those unused for longer than <code class="docutils literal notranslate"><span class="pre">--max-age-days</span></code>, then others
-until the store holds at most <code class="docutils literal notranslate"><span class="pre">--max-bytes</span></code>. A design used within the last day
-is kept whatever the limits, since a series may still be playing it or the
-proxy reading it. A store that receives pushed designs is pruned the same way,
-on the reconstruction computer.</p>
+<p>The store holds one directory per scan, <code class="docutils literal notranslate"><span class="pre">&lt;store&gt;/&lt;scan&gt;/</span></code>, and a scan’s
+directory holds its design, <code class="docutils literal notranslate"><span class="pre">&lt;store&gt;/&lt;scan&gt;/&lt;id&gt;/</span></code>, laid out as
+<a class="reference internal" href="../explanations/architecture.html"><span class="doc">Architecture</span></a> shows. A design is reused while its scan
+holds it: a call that resolves to the same design replies with it, and one
+that resolves to another stores the new design in place of the scan’s
+previous one. <code class="docutils literal notranslate"><span class="pre">prune</span></code> removes whole scans, least recently used first: those
+unused for longer than <code class="docutils literal notranslate"><span class="pre">--max-age-days</span></code>, then others until the store holds at
+most <code class="docutils literal notranslate"><span class="pre">--max-bytes</span></code>. A scan used within the last day is kept whatever the
+limits, since it may still be playing or reconstructing. A store that receives
+pushed designs is pruned the same way, on the reconstruction computer.</p>
 </section>
 <section id="design-push">
 <h3>Design push<a class="headerlink" href="#design-push" title="Link to this heading">#</a></h3>
@@ -845,7 +851,7 @@ pulserver<span class="w"> </span>proxy<span class="w"> </span>--store<span class
 </thead>
 <tbody>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--store</span></code></p></td>
-<td><p>The design store the proxy reads: the one the design calls write, or the one the intake writes</p></td>
+<td><p>The design store the proxy reads: the one the design calls write, or the one the intake writes. It also holds each scan’s pose file, <code class="docutils literal notranslate"><span class="pre">&lt;store&gt;/&lt;scan&gt;/motion.buf</span></code>, for a scan corrected for motion</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--port</span></code></p></td>
 <td><p>TCP port the scanner’s reconstruction client connects to</p></td>
@@ -863,7 +869,7 @@ pulserver<span class="w"> </span>proxy<span class="w"> </span>--store<span class
 <td><p>Directory the series waiting for a slot are written to; a temporary directory, removed when the proxy stops, when unset</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--exams</span></code></p></td>
-<td><p>Directory in which the proxies of this host share the caches of an exam; a location under the system temporary directory when unset</p></td>
+<td><p>Directory in which the proxies of this host share the caches of an exam, one directory per exam named by its identity: <code class="docutils literal notranslate"><span class="pre">exam-&lt;ExamID&gt;</span></code> for a header carrying <code class="docutils literal notranslate"><span class="pre">ExamID</span></code>. Created readable by the proxy’s user alone; one that exists is used with the permissions the site gave it, so design calls running as another user can read the exam’s maps. A location under the system temporary directory, private to the proxy’s user, when unset</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--slots</span></code></p></td>
 <td><p>Series reconstructed at once; derived from available memory and the GPUs when unset</p></td>
@@ -906,9 +912,9 @@ pulserver<span class="w"> </span>proxy<span class="w"> </span>--store<span class
 fields the client sends in <a class="reference internal" href="reconstruction-client.html"><span class="doc">Reconstruction client</span></a>.</p>
 <section id="series-routing">
 <h3>Series routing<a class="headerlink" href="#series-routing" title="Link to this heading">#</a></h3>
-<p>The MRD header of each series names the design it was played from in the
-<code class="docutils literal notranslate"><span class="pre">pulserver_design</span></code> user parameter, and the proxy refuses a series whose header
-names no stored design. The client’s config names the reconstruction plugin, as
+<p>The MRD header of each series names the scan in the <code class="docutils literal notranslate"><span class="pre">pulserver_scan</span></code> user
+parameter and the design it was played from in <code class="docutils literal notranslate"><span class="pre">pulserver_design</span></code>, and the
+proxy refuses a series whose header names no design stored for that scan. The client’s config names the reconstruction plugin, as
 a bare plugin name or the path of its file, or as either under
 <code class="docutils literal notranslate"><span class="pre">parameters.config</span></code>; the design names none. A series whose config names none
 is refused unless the proxy forwards with <code class="docutils literal notranslate"><span class="pre">--forward-config</span></code>.</p>
@@ -922,10 +928,10 @@ place of a new reconstruction.</p>
 <h3>Saved series<a class="headerlink" href="#saved-series" title="Link to this heading">#</a></h3>
 <p>With <code class="docutils literal notranslate"><span class="pre">--save-data</span></code>, each series is also written to
 <code class="docutils literal notranslate"><span class="pre">&lt;save-data&gt;/mrd_&lt;timestamp&gt;.h5</span></code> as the scanner sends it, header first and each
-acquisition as it arrives, before it is enriched. A plugin run on that file
-against the store reconstructs it offline exactly as the proxy did
-(<a class="reference internal" href="reconstruction-plugins.html#offline-reconstruction"><span class="std std-ref">Offline reconstruction</span></a>). The queue directory holds a series only until
-it is reconstructed.</p>
+acquisition as it arrives, before it is enriched. <code class="docutils literal notranslate"><span class="pre">pulserver</span> <span class="pre">replay</span></code> runs a
+plugin on that file and reconstructs it offline as the proxy did
+(<a class="reference internal" href="#series-replay"><span class="std std-ref">Series replay</span></a>). The queue directory holds a series only until it is
+reconstructed.</p>
 </section>
 <section id="proxy-lifetime">
 <h3>Proxy lifetime<a class="headerlink" href="#proxy-lifetime" title="Link to this heading">#</a></h3>
@@ -973,11 +979,11 @@ relayed back to the client.</p>
 <h3>Design intake<a class="headerlink" href="#design-intake" title="Link to this heading">#</a></h3>
 <p>With <code class="docutils literal notranslate"><span class="pre">--intake-port</span></code>, the proxy runs a design intake beside it
 (<a class="reference internal" href="../generated/pulserver.proxy.DesignIntake.html#pulserver.proxy.DesignIntake" title="pulserver.proxy.DesignIntake"><code class="xref py py-class docutils literal notranslate"><span class="pre">DesignIntake</span></code></a>), an HTTP endpoint that writes the
-designs pushed to it into <code class="docutils literal notranslate"><span class="pre">--store</span></code>. <code class="docutils literal notranslate"><span class="pre">HEAD</span> <span class="pre">/designs/&lt;id&gt;</span></code> answers 200 when the
-store holds the design and 404 otherwise; <code class="docutils literal notranslate"><span class="pre">PUT</span> <span class="pre">/designs/&lt;id&gt;</span></code> stores a bundle
-and answers 201, 200 for a design already stored, or 400 with the reason for a
-bundle that is not the design its path names. A <code class="docutils literal notranslate"><span class="pre">HEAD</span></code> for a stored design
-marks it as used for <code class="docutils literal notranslate"><span class="pre">prune</span></code>.</p>
+designs pushed to it into <code class="docutils literal notranslate"><span class="pre">--store</span></code>. <code class="docutils literal notranslate"><span class="pre">HEAD</span> <span class="pre">/designs/&lt;scan&gt;/&lt;id&gt;</span></code> answers 200
+when the scan holds the design and 404 otherwise; <code class="docutils literal notranslate"><span class="pre">PUT</span> <span class="pre">/designs/&lt;scan&gt;/&lt;id&gt;</span></code>
+stores a bundle as the scan’s design and answers 201, 200 for a design already
+stored, or 400 with the reason for a bundle that is not the design its path
+names. A <code class="docutils literal notranslate"><span class="pre">HEAD</span></code> for a stored design marks its scan as used for <code class="docutils literal notranslate"><span class="pre">prune</span></code>.</p>
 </section>
 <section id="network-exposure">
 <h3>Network exposure<a class="headerlink" href="#network-exposure" title="Link to this heading">#</a></h3>
@@ -1003,6 +1009,25 @@ workers, slots, queue and exam directories; <code class="docutils literal notran
 the proxy forwarded it, enriched. Its stream is neither authenticated nor
 encrypted, and <code class="docutils literal notranslate"><span class="pre">--host</span></code> names the interface the proxy reaches it on. It stops
 on <code class="docutils literal notranslate"><span class="pre">SIGINT</span></code> or <code class="docutils literal notranslate"><span class="pre">SIGTERM</span></code> and waits for the series it is running.</p>
+</section>
+<section id="series-replay">
+<span id="id2"></span><h2>Series replay<a class="headerlink" href="#series-replay" title="Link to this heading">#</a></h2>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pulserver<span class="w"> </span>replay<span class="w"> </span>SERIES<span class="w"> </span>--plugin<span class="w"> </span>FILE<span class="w"> </span><span class="o">(</span>--store<span class="w"> </span>DIR<span class="w"> </span><span class="p">|</span><span class="w"> </span>--design<span class="w"> </span>SEQ<span class="o">)</span><span class="w"> </span><span class="o">[</span>--config<span class="w"> </span>TEXT<span class="o">]</span><span class="w"> </span><span class="o">[</span>--dicom<span class="o">]</span><span class="w"> </span><span class="o">[</span>--dicom-dictionary<span class="w"> </span>FILE<span class="o">]</span><span class="w"> </span><span class="o">[</span>--output<span class="w"> </span>DIR<span class="o">]</span>
+</pre></div>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">pulserver</span> <span class="pre">replay</span></code> reconstructs one series kept by <code class="docutils literal notranslate"><span class="pre">--save-data</span></code> in the calling
+process, with no proxy running. The series is enriched from the design it was
+played from, at the field-of-view offset its header states, as the proxy
+enriches it, and runs through the plugin’s hooks
+(<a class="reference internal" href="reconstruction-plugins.html#offline-reconstruction"><span class="std std-ref">Offline reconstruction</span></a>). The design is the one the header names in the
+store <code class="docutils literal notranslate"><span class="pre">--store</span></code>, or the one whose sequence file, the first of its chain, is
+<code class="docutils literal notranslate"><span class="pre">--design</span></code>. That file must be one the manifest beside it records, and the
+manifest must name the design the header names. A series exported beside a
+copy of its design’s files replays with no store. Images go to <code class="docutils literal notranslate"><span class="pre">images.h5</span></code> in <code class="docutils literal notranslate"><span class="pre">--output</span></code>, and DICOM datasets to the files
+they are named by; with <code class="docutils literal notranslate"><span class="pre">--dicom</span></code> every image is written as DICOM, as the
+proxy’s <code class="docutils literal notranslate"><span class="pre">--dicom</span></code> writes it, and <code class="docutils literal notranslate"><span class="pre">--dicom-dictionary</span></code> names the private
+dictionary of the header’s DICOM attributes (<a class="reference internal" href="reconstruction-client.html#dicom-attributes"><span class="std std-ref">DICOM attributes</span></a>). An exception raised by the plugin is not caught, so its
+traceback names the line that raised it.</p>
 </section>
 <section id="playout-validation">
 <h2>Playout validation<a class="headerlink" href="#playout-validation" title="Link to this heading">#</a></h2>
@@ -1151,6 +1176,7 @@ built beside a copy and discarded.</p>
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reconstruction-server">Reconstruction server</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#series-replay">Series replay</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#playout-validation">Playout validation</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See also</a></li>
 </ul>

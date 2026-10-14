@@ -284,7 +284,7 @@ receives carries the message. `required=False` returns `None` instead of
 raising.
 
 (dicom-pixel-values)=
-## DICOM pixel values
+## DICOM output
 
 A DICOM dataset stores integer pixels, made when a result with `dicom=True` is
 converted from the image the plugin returned. The dataset's rescale maps them
@@ -331,6 +331,32 @@ with one mapping per DICOM series, a series being the images that share
 
 `RescaleType` is `US`, unspecified: the units are those of the reconstruction.
 
+A DICOM image is written in the radiological display orientation of the plane
+it lies closest to: an axial image with the patient's right on the left and
+anterior at the top, a coronal one with the right on the left and superior at
+the top, a sagittal one with anterior on the left and superior at the top. Its
+pixels are flipped and transposed to that orientation, never resampled; the MRD
+image keeps the orientation the reconstruction returned.
+
+Each `series_index` is a DICOM series of its own. The first to arrive takes the
+series identity the header states; each later one a series UID derived from it
+and, on a GE system, the series number `100 × measurementID + k` for the
+`k`-th after the first.
+
+A plot, a fit or a report reaches the scanner as an RGB result: a `(y, x, 3)`
+array of values from 0 to 255, which {func}`~pulserver.recon.figure_rgb` draws
+from a matplotlib figure, stored as a DICOM secondary capture.
+
+```python
+return recon.ReconResult(
+    recon.figure_rgb(figure),
+    image_type="rgb",
+    series_index=10,
+    dicom=True,
+    attributes={"SeriesDescription": "T1 fit"},
+)
+```
+
 ## Diffusion tables
 
 The proxy states the diffusion table a design names in the header's
@@ -365,11 +391,16 @@ process ID, level and logger name.
 {meth}`~pulserver.recon.ReconPlugin.run` reconstructs an ISMRMRD HDF5 file in
 the calling process, through the same hooks. A file recorded as the scanner
 sends it, such as `pulserver scan --mrd raw.h5` or the proxy's `--save-data`
-writes, is enriched from its design store first:
+writes, is enriched first from the design it was played from, found in a design
+store or given as its sequence file, with its manifest beside it:
 
 ```python
 images = PLUGIN.run("raw.h5", store="designs")
+images = PLUGIN.run("raw.h5", design="designs/scan/9c74a8aa28527cf231/sequence.seq")
 ```
+
+`pulserver replay` does the same from the command line
+({ref}`series-replay`).
 
 Calling the plugin on an {class}`~pulserver.mrd.AcquisitionBucket` runs
 `startup`, passes every acquisition to `receive`, reconstructs the units still

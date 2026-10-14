@@ -502,6 +502,9 @@
 <dt class="sig sig-object py" id="pulserver.virtual.Console.design">
 <span class="sig-prename descclassname"><span class="pre">Console.</span></span><span class="sig-name descname"><span class="pre">design</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pulserver/virtual/_console.html#Console.design"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.virtual.Console.design" title="Link to this definition">#</a></dt>
 <dd><p>Answer a design call; the id of a generated or imported design is <code class="docutils literal notranslate"><span class="pre">design</span></code>.</p>
+<p>A generated or imported design is stored as the design of a new scan,
+named in the reply as <code class="docutils literal notranslate"><span class="pre">scan</span></code> and found again by <a class="reference internal" href="pulserver.virtual.Console.scan.html#pulserver.virtual.Console.scan" title="pulserver.virtual.Console.scan"><code class="xref py py-meth docutils literal notranslate"><span class="pre">scan()</span></code></a> from the
+design, and scans the store has not used for a day are removed.</p>
 </dd></dl>
 
 </section>

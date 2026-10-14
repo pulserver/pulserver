@@ -23,6 +23,7 @@ described in {doc}`../user-guide/running`, and the identity of a design in
 
 | Object | Description |
 | --- | --- |
-| {obj}`~pulserver.host.DesignStore` | The designs under one directory, each in `<id>/` and immutable once written. |
+| {obj}`~pulserver.host.DesignStore` | The designs of one scan, each in `<root>/<scan>/<id>/` and immutable once written. |
+| {obj}`~pulserver.host.prune` | Remove scan directories of a store root, least recently used first. |
 | {obj}`~pulserver.host.design_identity` | SHA-256 of what a design depends on: plugin, limits, resolved protocol and source. |
 | {obj}`~pulserver.host.design_id` | Identifier of a design: the first 18 hexadecimal digits of its identity. |

@@ -454,9 +454,12 @@
 <span class="n">_CALL_INPUTS</span> <span class="o">=</span> <span class="p">{</span>
     <span class="s2">"list"</span><span class="p">:</span> <span class="p">(</span><span class="s2">"plugins"</span><span class="p">,</span> <span class="s2">"plugin"</span><span class="p">),</span>
     <span class="s2">"validate"</span><span class="p">:</span> <span class="p">(</span><span class="s2">"plugins"</span><span class="p">,</span> <span class="s2">"plugin"</span><span class="p">,</span> <span class="s2">"limits"</span><span class="p">,</span> <span class="s2">"input"</span><span class="p">),</span>
-    <span class="s2">"generate"</span><span class="p">:</span> <span class="p">(</span><span class="s2">"plugins"</span><span class="p">,</span> <span class="s2">"plugin"</span><span class="p">,</span> <span class="s2">"limits"</span><span class="p">,</span> <span class="s2">"input"</span><span class="p">,</span> <span class="s2">"store"</span><span class="p">,</span> <span class="s2">"push"</span><span class="p">),</span>
-    <span class="s2">"import"</span><span class="p">:</span> <span class="p">(</span><span class="s2">"limits"</span><span class="p">,</span> <span class="s2">"input"</span><span class="p">,</span> <span class="s2">"store"</span><span class="p">,</span> <span class="s2">"push"</span><span class="p">),</span>
+    <span class="s2">"generate"</span><span class="p">:</span> <span class="p">(</span><span class="s2">"plugins"</span><span class="p">,</span> <span class="s2">"plugin"</span><span class="p">,</span> <span class="s2">"limits"</span><span class="p">,</span> <span class="s2">"input"</span><span class="p">,</span> <span class="s2">"store"</span><span class="p">,</span> <span class="s2">"scan"</span><span class="p">,</span> <span class="s2">"push"</span><span class="p">),</span>
+    <span class="s2">"import"</span><span class="p">:</span> <span class="p">(</span><span class="s2">"limits"</span><span class="p">,</span> <span class="s2">"input"</span><span class="p">,</span> <span class="s2">"store"</span><span class="p">,</span> <span class="s2">"scan"</span><span class="p">,</span> <span class="s2">"push"</span><span class="p">),</span>
 <span class="p">}</span>
+
+<span class="c1">#: Seconds a scan of the console's store is kept after its last use.</span>
+<span class="n">_KEEP</span> <span class="o">=</span> <span class="mf">86400.0</span>
 
 
 <span class="c1">#: The environment variable naming the image a console runs in, as</span>
@@ -533,7 +536,8 @@
 <span class="sd">        Text of the ``[Limits]`` block every design is made under; its ``B0``</span>
 <span class="sd">        is the virtual magnet's field.</span>
 <span class="sd">    store : Path | str</span>
-<span class="sd">        Design store.</span>
+<span class="sd">        Design store, one directory per scan; each design a console generates or</span>
+<span class="sd">        imports is stored for a new scan.</span>
 <span class="sd">    recon : tuple[str, int], default=None</span>
 <span class="sd">        ``(host, port)`` of the reconstruction proxy.</span>
 <span class="sd">    recon_plugins : PluginPath, default=None</span>
@@ -624,19 +628,27 @@
 <div class="viewcode-block" id="Console.design">
 <a class="viewcode-back" href="../../../generated/pulserver.virtual.Console.design.html#pulserver.virtual.Console.design">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">design</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">call</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">plugin</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">block</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">""</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Answer a design call; the id of a generated or imported design is ``design``."""</span>
+<span class="w">        </span><span class="sd">"""Answer a design call; the id of a generated or imported design is ``design``.</span>
+
+<span class="sd">        A generated or imported design is stored as the design of a new scan,</span>
+<span class="sd">        named in the reply as ``scan`` and found again by :meth:`scan` from the</span>
+<span class="sd">        design, and scans the store has not used for a day are removed.</span>
+<span class="sd">        """</span>
         <span class="kn">from</span><span class="w"> </span><span class="nn">..host._server</span><span class="w"> </span><span class="kn">import</span> <span class="n">answer</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">..host._store</span><span class="w"> </span><span class="kn">import</span> <span class="n">new_scan</span><span class="p">,</span> <span class="n">prune</span>
 
         <span class="k">if</span> <span class="n">call</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">DESIGN_CALLS</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                 <span class="sa">f</span><span class="s2">"a console makes the design calls </span><span class="si">{</span><span class="n">DESIGN_CALLS</span><span class="si">}</span><span class="s2">, not </span><span class="si">{</span><span class="n">call</span><span class="si">!r}</span><span class="s2">"</span>
             <span class="p">)</span>
+        <span class="n">scan</span> <span class="o">=</span> <span class="n">new_scan</span><span class="p">()</span>
         <span class="n">request</span> <span class="o">=</span> <span class="p">{</span>
             <span class="s2">"call"</span><span class="p">:</span> <span class="n">call</span><span class="p">,</span>
             <span class="s2">"plugins"</span><span class="p">:</span> <span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">directory</span><span class="p">)</span> <span class="k">for</span> <span class="n">directory</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">plugins</span><span class="p">],</span>
             <span class="s2">"plugin"</span><span class="p">:</span> <span class="n">plugin</span><span class="p">,</span>
             <span class="s2">"limits"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_limits</span><span class="p">(),</span>
             <span class="s2">"store"</span><span class="p">:</span> <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">store</span><span class="p">),</span>
+            <span class="s2">"scan"</span><span class="p">:</span> <span class="n">scan</span><span class="p">,</span>
             <span class="s2">"push"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">push</span><span class="p">,</span>
             <span class="s2">"input"</span><span class="p">:</span> <span class="n">block</span><span class="p">,</span>
         <span class="p">}</span>
@@ -646,6 +658,8 @@
         <span class="n">answered</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"status"</span><span class="p">:</span> <span class="n">status</span><span class="p">,</span> <span class="s2">"reply"</span><span class="p">:</span> <span class="n">reply</span><span class="p">}</span>
         <span class="k">if</span> <span class="n">status</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">call</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"generate"</span><span class="p">,</span> <span class="s2">"import"</span><span class="p">):</span>
             <span class="n">answered</span><span class="p">[</span><span class="s2">"design"</span><span class="p">]</span> <span class="o">=</span> <span class="n">reply</span><span class="o">.</span><span class="n">split</span><span class="p">()[</span><span class="mi">1</span><span class="p">]</span>
+            <span class="n">answered</span><span class="p">[</span><span class="s2">"scan"</span><span class="p">]</span> <span class="o">=</span> <span class="n">scan</span>
+            <span class="n">prune</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">store</span><span class="p">,</span> <span class="n">max_age</span><span class="o">=</span><span class="n">_KEEP</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">answered</span></div>
 
 
@@ -765,16 +779,19 @@
 <span class="sd">            not.</span>
 <span class="sd">        """</span>
         <span class="kn">from</span><span class="w"> </span><span class="nn">..host</span><span class="w"> </span><span class="kn">import</span> <span class="n">DesignStore</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">..host._store</span><span class="w"> </span><span class="kn">import</span> <span class="n">find_scan</span>
 
+        <span class="n">scan</span> <span class="o">=</span> <span class="n">find_scan</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">store</span><span class="p">,</span> <span class="n">design</span><span class="p">)</span>
         <span class="n">plugin</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">recon</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">local</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">plugin</span> <span class="o">=</span> <span class="n">reconstruction_plugin</span><span class="p">(</span>
-                <span class="n">DesignStore</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">store</span><span class="p">)</span><span class="o">.</span><span class="n">manifest</span><span class="p">(</span><span class="n">design</span><span class="p">)</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"plugin"</span><span class="p">,</span> <span class="s2">""</span><span class="p">),</span> <span class="n">recon</span>
+                <span class="n">DesignStore</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">store</span><span class="p">,</span> <span class="n">scan</span><span class="p">)</span><span class="o">.</span><span class="n">manifest</span><span class="p">(</span><span class="n">design</span><span class="p">)</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"plugin"</span><span class="p">,</span> <span class="s2">""</span><span class="p">),</span> <span class="n">recon</span>
             <span class="p">)</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">speed</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">emit</span><span class="p">({</span><span class="s2">"preparing"</span><span class="p">:</span> <span class="kc">None</span><span class="p">})</span>
         <span class="n">rotation</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">rotation</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_scan</span><span class="p">(</span>
+            <span class="n">scan</span><span class="p">,</span>
             <span class="n">design</span><span class="p">,</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_exam_tissue</span><span class="p">(),</span>
             <span class="n">rotation</span><span class="p">,</span>
@@ -858,6 +875,7 @@
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_scan</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
+        <span class="n">scan_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
         <span class="n">design</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
         <span class="n">tissue</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
         <span class="n">rotation</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
@@ -872,7 +890,7 @@
 
         <span class="n">rotation</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">rotation</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
         <span class="n">scan</span> <span class="o">=</span> <span class="n">Scan</span><span class="p">(</span>
-            <span class="n">DesignStore</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">store</span><span class="p">)</span><span class="o">.</span><span class="n">directory</span><span class="p">(</span><span class="n">design</span><span class="p">)</span> <span class="o">/</span> <span class="s2">"sequence.seq"</span><span class="p">,</span>
+            <span class="n">DesignStore</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">store</span><span class="p">,</span> <span class="n">scan_name</span><span class="p">)</span><span class="o">.</span><span class="n">directory</span><span class="p">(</span><span class="n">design</span><span class="p">)</span> <span class="o">/</span> <span class="s2">"sequence.seq"</span><span class="p">,</span>
             <span class="n">tissue</span><span class="p">,</span>
             <span class="n">rotation</span><span class="o">=</span><span class="n">rotation</span><span class="p">,</span>
             <span class="n">centre</span><span class="o">=</span><span class="mf">1e-3</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">centre_mm</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">),</span>
@@ -921,11 +939,12 @@
         <span class="c1"># Closed however the scan ends, which stops its simulation.</span>
         <span class="k">with</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">closing</span><span class="p">(</span><span class="n">played</span><span class="p">())</span> <span class="k">as</span> <span class="n">readouts</span><span class="p">:</span>
             <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_acquire</span><span class="p">(</span>
-                <span class="n">design</span><span class="p">,</span> <span class="n">readouts</span><span class="p">,</span> <span class="n">rotation</span><span class="p">,</span> <span class="n">centre_mm</span><span class="p">,</span> <span class="n">emit</span><span class="p">,</span> <span class="n">stopped</span><span class="p">,</span> <span class="n">plugin</span>
+                <span class="n">scan_name</span><span class="p">,</span> <span class="n">design</span><span class="p">,</span> <span class="n">readouts</span><span class="p">,</span> <span class="n">rotation</span><span class="p">,</span> <span class="n">centre_mm</span><span class="p">,</span> <span class="n">emit</span><span class="p">,</span> <span class="n">stopped</span><span class="p">,</span> <span class="n">plugin</span>
             <span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_acquire</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
+        <span class="n">scan_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
         <span class="n">design</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
         <span class="n">readouts</span><span class="p">:</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">],</span>
         <span class="n">rotation</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
@@ -960,7 +979,11 @@
             <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="n">ismrmrd</span><span class="o">.</span><span class="n">Image</span><span class="p">):</span>
                 <span class="k">if</span> <span class="n">convert</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                     <span class="n">header</span> <span class="o">=</span> <span class="n">_header</span><span class="p">(</span>
-                        <span class="n">design</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">coil</span><span class="o">.</span><span class="n">receive_channels</span><span class="p">,</span> <span class="n">series</span><span class="p">[</span><span class="s2">"frequency_hz"</span><span class="p">],</span> <span class="kc">None</span>
+                        <span class="n">scan_name</span><span class="p">,</span>
+                        <span class="n">design</span><span class="p">,</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">coil</span><span class="o">.</span><span class="n">receive_channels</span><span class="p">,</span>
+                        <span class="n">series</span><span class="p">[</span><span class="s2">"frequency_hz"</span><span class="p">],</span>
+                        <span class="kc">None</span><span class="p">,</span>
                     <span class="p">)</span>
                     <span class="n">convert</span> <span class="o">=</span> <span class="n">MrdDicomBuilder</span><span class="p">(</span><span class="n">ismrmrd</span><span class="o">.</span><span class="n">xsd</span><span class="o">.</span><span class="n">CreateFromDocument</span><span class="p">(</span><span class="n">header</span><span class="p">))</span>
                 <span class="n">item</span> <span class="o">=</span> <span class="n">convert</span><span class="p">(</span><span class="n">item</span><span class="p">)</span>
@@ -971,10 +994,13 @@
                 <span class="n">status</span> <span class="o">=</span> <span class="mi">1</span> <span class="k">if</span> <span class="n">item</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">"pulserver:"</span><span class="p">)</span> <span class="k">else</span> <span class="n">status</span>
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">local</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">send</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">recon</span><span class="p">,</span> <span class="n">design</span><span class="p">,</span> <span class="n">readouts</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">,</span> <span class="o">**</span><span class="n">series</span><span class="p">):</span>
+            <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">send</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">recon</span><span class="p">,</span> <span class="n">scan_name</span><span class="p">,</span> <span class="n">design</span><span class="p">,</span> <span class="n">readouts</span><span class="p">,</span> <span class="n">config</span><span class="o">=</span><span class="n">config</span><span class="p">,</span> <span class="o">**</span><span class="n">series</span>
+            <span class="p">):</span>
                 <span class="n">returned</span><span class="p">(</span><span class="n">item</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">header</span><span class="p">,</span> <span class="n">acquisitions</span> <span class="o">=</span> <span class="n">_series</span><span class="p">(</span>
+                <span class="n">scan_name</span><span class="p">,</span>
                 <span class="n">design</span><span class="p">,</span>
                 <span class="n">readouts</span><span class="p">,</span>
                 <span class="n">series</span><span class="p">[</span><span class="s2">"frequency_hz"</span><span class="p">],</span>

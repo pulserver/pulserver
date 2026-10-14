@@ -501,7 +501,7 @@
 <dl class="py property">
 <dt class="sig sig-object py" id="pulserver.virtual.Coil.default_shim">
 <span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">Coil.</span></span><span class="sig-name descname"><span class="pre">default_shim</span></span><a class="headerlink" href="#pulserver.virtual.Coil.default_shim" title="Link to this definition">#</a></dt>
-<dd><p>Unit channel weights that bring every transmit channel into phase at the isocentre; None for one channel.</p>
+<dd><p>Channel weights of magnitude 1/sqrt(channels) that bring every transmit channel into phase at the isocentre; None for one channel.</p>
 <p>A single-channel pulse played without an RF shim is played on every
 channel with these weights. They are an RF shim’s weights, which scale
 the waveform in Pulseq’s convention, the conjugate of the field.</p>

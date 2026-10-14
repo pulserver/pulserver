@@ -534,12 +534,15 @@ described in <a class="reference internal" href="../user-guide/running.html"><sp
 </thead>
 <tbody>
 <tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.host.DesignStore.html#pulserver.host.DesignStore" title="pulserver.host.DesignStore"><code class="xref py py-obj docutils literal notranslate"><span class="pre">DesignStore</span></code></a></p></td>
-<td><p>The designs under one directory, each in <code class="docutils literal notranslate"><span class="pre">&lt;id&gt;/</span></code> and immutable once written.</p></td>
+<td><p>The designs of one scan, each in <code class="docutils literal notranslate"><span class="pre">&lt;root&gt;/&lt;scan&gt;/&lt;id&gt;/</span></code> and immutable once written.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.host.design_identity.html#pulserver.host.design_identity" title="pulserver.host.design_identity"><code class="xref py py-obj docutils literal notranslate"><span class="pre">design_identity</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.host.prune.html#pulserver.host.prune" title="pulserver.host.prune"><code class="xref py py-obj docutils literal notranslate"><span class="pre">prune</span></code></a></p></td>
+<td><p>Remove scan directories of a store root, least recently used first.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.host.design_identity.html#pulserver.host.design_identity" title="pulserver.host.design_identity"><code class="xref py py-obj docutils literal notranslate"><span class="pre">design_identity</span></code></a></p></td>
 <td><p>SHA-256 of what a design depends on: plugin, limits, resolved protocol and source.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.host.design_id.html#pulserver.host.design_id" title="pulserver.host.design_id"><code class="xref py py-obj docutils literal notranslate"><span class="pre">design_id</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.host.design_id.html#pulserver.host.design_id" title="pulserver.host.design_id"><code class="xref py py-obj docutils literal notranslate"><span class="pre">design_id</span></code></a></p></td>
 <td><p>Identifier of a design: the first 18 hexadecimal digits of its identity.</p></td>
 </tr>
 </tbody>

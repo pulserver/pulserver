@@ -61,7 +61,7 @@ series, ``full`` and ``undersampled``: one fully sampled, and one that
 acquires every second line (``Ry`` of 2) plus 24 calibration lines at the
 centre of k-space, half the scan time.
 
-.. GENERATED FROM PYTHON SOURCE LINES 45-92
+.. GENERATED FROM PYTHON SOURCE LINES 45-95
 
 
 
@@ -70,7 +70,7 @@ centre of k-space, half the scan time.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 93-108
+.. GENERATED FROM PYTHON SOURCE LINES 96-111
 
 A Fourier transform
 -------------------
@@ -88,7 +88,7 @@ You return the pixels only. pulserver writes the rest of the image: its
 position, orientation and field of view from the sequence and the scanner,
 its series and slice numbers, and the DICOM the console receives.
 
-.. GENERATED FROM PYTHON SOURCE LINES 108-141
+.. GENERATED FROM PYTHON SOURCE LINES 111-144
 
 .. code-block:: Python
 
@@ -132,7 +132,7 @@ its series and slice numbers, and the DICOM the console receives.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 142-156
+.. GENERATED FROM PYTHON SOURCE LINES 145-159
 
 Compressed sensing with bartorch
 --------------------------------
@@ -149,7 +149,7 @@ k-space of a 2D slice gets a z axis of length one, ``[:, None]``.
 
 Only ``recon`` changes. Subclassing ``FFT`` keeps its gadget and trigger:
 
-.. GENERATED FROM PYTHON SOURCE LINES 156-187
+.. GENERATED FROM PYTHON SOURCE LINES 159-190
 
 .. code-block:: Python
 
@@ -181,7 +181,7 @@ Only ``recon`` changes. Subclassing ``FFT`` keeps its gadget and trigger:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 188-250
+.. GENERATED FROM PYTHON SOURCE LINES 191-253
 
 The middle image shows what is left of the fold. Without the calibration
 lines it would be a full copy of the phantom shifted by half the field of
@@ -249,7 +249,7 @@ What this lesson built, stated the way you would ask an agent for it:
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 1.563 seconds)
+   **Total running time of the script:** (0 minutes 1.533 seconds)
 
 
 .. _sphx_glr_download_generated_gallery_01-course_05_recon_plugin.py:

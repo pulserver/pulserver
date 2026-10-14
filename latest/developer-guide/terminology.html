@@ -617,7 +617,8 @@ estimate; the design the interpreter plays is the stored one.</p>
 <p><strong>Storage.</strong> A <em>design</em> is one generated or imported chain with its IR cache,
 immutable once written. Its <em>identity</em> is the hash of what it depends on; its
 <em>identifier</em> is the first 18 hexadecimal digits of the identity. The <em>design
-store</em> is the directory holding every design. A <em>design call</em> is one <code class="docutils literal notranslate"><span class="pre">list</span></code>,
+store</em> is the directory holding one directory per <em>scan</em>, named by whatever
+plays it, and a scan’s directory holds the design the scan plays. A <em>design call</em> is one <code class="docutils literal notranslate"><span class="pre">list</span></code>,
 <code class="docutils literal notranslate"><span class="pre">validate</span></code>, <code class="docutils literal notranslate"><span class="pre">generate</span></code> or <code class="docutils literal notranslate"><span class="pre">import</span></code> of an interpreter host process; no call
 keeps state beyond the designs it stores. A design is <em>pushed</em> to the <em>design intake</em>, the
 proxy’s HTTP endpoint writing its store, as a <em>bundle</em> of the files of its

@@ -642,15 +642,16 @@
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Reply ``GENERATED &lt;id&gt;`` for the design a request resolves to.</span>
 
-<span class="sd">    A design already stored for the resolved protocol, the plugin's options,</span>
-<span class="sd">    the plugin source, the package versions and the limits is returned</span>
-<span class="sd">    without designing again.</span>
+<span class="sd">    A design the scan of ``store`` already holds for the resolved protocol,</span>
+<span class="sd">    the plugin's options, the plugin source, the package versions and the</span>
+<span class="sd">    limits is returned without designing again.</span>
 <span class="sd">    Otherwise the sequence is designed once, under the scanner limits</span>
 <span class="sd">    capped by the design limits ``design_max_grad`` and ``design_max_slew``,</span>
 <span class="sd">    written in the logical frame, checked in the physical frame of the</span>
 <span class="sd">    prescription rotation against the scanner limits with</span>
 <span class="sd">    :func:`pulserver.ir.check`, converted to the IR cache at the prescribed</span>
-<span class="sd">    field-of-view offset, and stored. A request that resolves to other values</span>
+<span class="sd">    field-of-view offset, and stored in place of the scan's previous design.</span>
+<span class="sd">    A request that resolves to other values</span>
 <span class="sd">    is designed from the resolved values, so a design is a function of its</span>
 <span class="sd">    identifier. With ``push``, the URL of a design intake, the design is sent</span>
 <span class="sd">    there unless the intake holds it already. ``exam`` is passed as</span>
@@ -735,11 +736,12 @@
 <span class="w">    </span><span class="sd">"""Reply ``IMPORTED &lt;id&gt;`` for a sequence file, its chain and their IR cache.</span>
 
 <span class="sd">    The files are identified by their names and contents and the</span>
-<span class="sd">    prescription and averages of the import block. A chain already stored is</span>
-<span class="sd">    returned; otherwise it is copied, its main sequence, the last file, is</span>
+<span class="sd">    prescription and averages of the import block. A chain the scan of</span>
+<span class="sd">    ``store`` already holds is returned; otherwise it is copied, its main sequence, the last file, is</span>
 <span class="sd">    played as many times as the block's ``nex`` line asks, written into its</span>
 <span class="sd">    block table as binary Pulseq, and the chain is checked and converted as</span>
-<span class="sd">    :func:`generate` does, and pushed as :func:`generate` pushes. The first</span>
+<span class="sd">    :func:`generate` does, stored and pushed as :func:`generate` stores and</span>
+<span class="sd">    pushes it. The first</span>
 <span class="sd">    file is also reachable as ``sequence.seq``.</span>
 
 <span class="sd">    Raises</span>

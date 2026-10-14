@@ -188,16 +188,16 @@ Step 3: the sequence for the scanner
 
 The operator presses *Scan*. pulserver designs the whole sequence, checks it
 against the limits, converts it into the cache the scanner plays and keeps
-both in the store under one identifier.
+both in the store, under the scan that plays them.
 
 .. GENERATED FROM PYTHON SOURCE LINES 109-114
 
 .. code-block:: Python
 
     generated = console.design("generate", "gre2d", request)
-    design = generated["design"]
+    scan, design = generated["scan"], generated["design"]
     print(generated["reply"])
-    print(sorted(path.name for path in (store / design).iterdir()))
+    print(sorted(path.name for path in (store / scan / design).iterdir()))
 
 
 
@@ -207,7 +207,7 @@ both in the store under one identifier.
 
  .. code-block:: none
 
-    GENERATED a49bbe1b952ffee7be
+    GENERATED ca0dc5101c028e1885
 
     ['manifest.json', 'resolved.protocol', 'sequence.pseg', 'sequence.seq']
 
@@ -323,7 +323,7 @@ What this lesson did, stated the way you would ask an agent for it:
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.720 seconds)
+   **Total running time of the script:** (0 minutes 0.705 seconds)
 
 
 .. _sphx_glr_download_generated_gallery_01-course_01_protocol_to_image.py:

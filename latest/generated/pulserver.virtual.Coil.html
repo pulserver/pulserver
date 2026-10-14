@@ -514,7 +514,10 @@ along the physical axes; <code class="docutils literal notranslate"><span class=
 interpolated linearly.</p>
 <p>Receive sensitivities are scaled to a root sum of squares of 1 at the
 isocentre, and transmit sensitivities so that the <a class="reference internal" href="pulserver.virtual.Coil.default_shim.html#pulserver.virtual.Coil.default_shim" title="pulserver.virtual.Coil.default_shim"><code class="xref py py-attr docutils literal notranslate"><span class="pre">default_shim</span></code></a>
-plays a pulse at its nominal amplitude at the isocentre. A model’s
+plays a pulse at its nominal amplitude at the isocentre. Its weights have a
+root sum of squares of 1, so the channels driven by it carry together the
+power of one channel at that amplitude, as an RF shim of the same
+normalisation does. A model’s
 transmit sensitivities are the complex conjugates of its receive
 sensitivities, the quasi-static limit of reciprocity.</p>
 </dd></dl>
@@ -538,7 +541,7 @@ sensitivities, the quasi-static limit of reciprocity.</p>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table">
 <tbody>
 <tr class="row-odd"><td><p><a class="reference internal" href="pulserver.virtual.Coil.default_shim.html#pulserver.virtual.Coil.default_shim" title="pulserver.virtual.Coil.default_shim"><code class="xref py py-obj docutils literal notranslate"><span class="pre">default_shim</span></code></a></p></td>
-<td><p>Unit channel weights that bring every transmit channel into phase at the isocentre; None for one channel.</p></td>
+<td><p>Channel weights of magnitude 1/sqrt(channels) that bring every transmit channel into phase at the isocentre; None for one channel.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="pulserver.virtual.Coil.receive_channels.html#pulserver.virtual.Coil.receive_channels" title="pulserver.virtual.Coil.receive_channels"><code class="xref py py-obj docutils literal notranslate"><span class="pre">receive_channels</span></code></a></p></td>
 <td><p>Coils a readout is received by.</p></td>

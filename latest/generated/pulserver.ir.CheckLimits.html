@@ -520,7 +520,7 @@ is refused on SAR.</p></li>
 value, or one per channel. A scale common to every channel cancels in
 the ratios.</p></li>
 <li><p><strong>default_shim</strong> (<em>tuple[complex, …] | None</em>) – Complex channel weights of a pulse played without an RF shim, and of
-the reference pulse; equal weights when None.</p></li>
+the reference pulse; equal weights whose squares sum to 1 when None.</p></li>
 <li><p><strong>vop_coil</strong> (<em>str | None</em>) – The transmit configuration the scanner reports. When given, the VOP
 file’s <code class="docutils literal notranslate"><span class="pre">metadata[&quot;transmit&quot;]</span></code> must name the same one.</p></li>
 <li><p><strong>vop_head_limit, vop_local_limit</strong> – The scanner’s head and local SAR limits, W/kg, in its current

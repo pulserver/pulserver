@@ -70,3 +70,4 @@ sensitivity maps, noise prewhitening and coil compression are the subject of
 | {obj}`~pulserver.recon.ReconData` | The readouts of one reconstruction unit: imaging and calibration k-space, counters and waveforms. |
 | {obj}`~pulserver.recon.ReconBuffer` | K-space of one encoding space, filled one acquisition at a time, with the acquisition nearest the k-space centre. |
 | {obj}`~pulserver.recon.ReconResult` | Image array the runtime packages as an MRD image or DICOM dataset, with the acquisition its geometry is taken from and the rescale of its DICOM pixels. |
+| {obj}`~pulserver.recon.figure_rgb` | Return a matplotlib figure drawn to the pixels of an RGB result, sent as a DICOM secondary capture. |

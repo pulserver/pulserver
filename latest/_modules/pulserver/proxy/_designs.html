@@ -423,13 +423,13 @@
                 <article class="bd-article">
                   
   <h1>Source code for pulserver.proxy._designs</h1><div class="highlight"><pre>
-<span></span><span class="sd">"""Designs of a design store, found from the header of an incoming stream."""</span>
+<span></span><span class="sd">"""Designs of a design store, found from the scan and the design the header of an incoming stream names."""</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
 
-<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"DESIGN_PARAMETER"</span><span class="p">,</span> <span class="s2">"Design"</span><span class="p">,</span> <span class="s2">"DesignCache"</span><span class="p">]</span>
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"DESIGN_PARAMETER"</span><span class="p">,</span> <span class="s2">"SCAN_PARAMETER"</span><span class="p">,</span> <span class="s2">"Design"</span><span class="p">,</span> <span class="s2">"DesignCache"</span><span class="p">]</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">re</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">threading</span>
@@ -439,7 +439,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">..host._store</span><span class="w"> </span><span class="kn">import</span> <span class="n">ID_DIGITS</span><span class="p">,</span> <span class="n">MANIFEST</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..host._store</span><span class="w"> </span><span class="kn">import</span> <span class="n">ID_DIGITS</span><span class="p">,</span> <span class="n">MANIFEST</span><span class="p">,</span> <span class="n">_flat</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..mrd._metadata</span><span class="w"> </span><span class="kn">import</span> <span class="n">user_parameter</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..mrd._sequence</span><span class="w"> </span><span class="kn">import</span> <span class="n">read_chain</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._enrich</span><span class="w"> </span><span class="kn">import</span> <span class="n">SequenceTable</span>
@@ -448,6 +448,10 @@
 <span class="c1">#: Header user parameter naming the design a stream was played from: its</span>
 <span class="c1">#: identifier, as returned by ``GENERATED`` or ``IMPORTED``.</span>
 <span class="n">DESIGN_PARAMETER</span> <span class="o">=</span> <span class="s2">"pulserver_design"</span>
+
+<span class="c1">#: Header user parameter naming the scan a stream was played in: the</span>
+<span class="c1">#: directory of the store that holds the scan's design.</span>
+<span class="n">SCAN_PARAMETER</span> <span class="o">=</span> <span class="s2">"pulserver_scan"</span>
 
 <span class="n">_ENTRY</span> <span class="o">=</span> <span class="s2">"sequence.seq"</span>
 <span class="n">_IDENTIFIER</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="sa">rf</span><span class="s2">"[0-9a-f]</span><span class="se">{{</span><span class="si">{</span><span class="n">ID_DIGITS</span><span class="si">}</span><span class="se">}}</span><span class="s2">"</span><span class="p">)</span>
@@ -465,7 +469,7 @@
 <span class="sd">    Attributes</span>
 <span class="sd">    ----------</span>
 <span class="sd">    directory</span>
-<span class="sd">        ``&lt;store&gt;/&lt;id&gt;/``.</span>
+<span class="sd">        ``&lt;store&gt;/&lt;scan&gt;/&lt;id&gt;/``.</span>
 <span class="sd">    table</span>
 <span class="sd">        The readouts of the design's sequence chain, in play order.</span>
 <span class="sd">    prospective_motion</span>
@@ -497,7 +501,7 @@
 <div class="viewcode-block" id="DesignCache">
 <a class="viewcode-back" href="../../../generated/pulserver.proxy.DesignCache.html#pulserver.proxy.DesignCache">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">DesignCache</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""The designs of a store, the most recently read kept tabulated.</span>
+<span class="w">    </span><span class="sd">"""The designs of a store's scans, the most recently read kept tabulated.</span>
 
 <span class="sd">    Reading a design tabulates its sequence chain, which is the expensive</span>
 <span class="sd">    part of accepting a series; concurrent streams of one design wait for the</span>
@@ -517,17 +521,25 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">locate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">header</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Path</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""Return the directory of the design a header names.</span>
 
-<span class="sd">        The design is named by :data:`DESIGN_PARAMETER`, a</span>
-<span class="sd">        ``userParameterString`` holding the identifier.</span>
+<span class="sd">        The scan is named by :data:`SCAN_PARAMETER` and the design by</span>
+<span class="sd">        :data:`DESIGN_PARAMETER`, each a ``userParameterString``: the design is</span>
+<span class="sd">        ``&lt;store&gt;/&lt;scan&gt;/&lt;id&gt;/``.</span>
 
 <span class="sd">        Raises</span>
 <span class="sd">        ------</span>
 <span class="sd">        ValueError</span>
-<span class="sd">            If the header names no design, or names it by something that is</span>
-<span class="sd">            not an identifier.</span>
+<span class="sd">            If the header names no scan or no design, names a scan by</span>
+<span class="sd">            something that is not a directory name, or a design by something</span>
+<span class="sd">            that is not an identifier.</span>
 <span class="sd">        FileNotFoundError</span>
-<span class="sd">            If the store holds no such design.</span>
+<span class="sd">            If the scan holds no such design.</span>
 <span class="sd">        """</span>
+        <span class="n">scan</span> <span class="o">=</span> <span class="n">user_parameter</span><span class="p">(</span><span class="n">header</span><span class="p">,</span> <span class="n">SCAN_PARAMETER</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">scan</span> <span class="ow">in</span> <span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="s2">""</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"the header carries no </span><span class="si">{</span><span class="n">SCAN_PARAMETER</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+        <span class="n">scan</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">scan</span><span class="p">)</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">_flat</span><span class="p">(</span><span class="n">scan</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">SCAN_PARAMETER</span><span class="si">}</span><span class="s2">=</span><span class="si">{</span><span class="n">scan</span><span class="si">!r}</span><span class="s2"> is not a directory name"</span><span class="p">)</span>
         <span class="n">named</span> <span class="o">=</span> <span class="n">user_parameter</span><span class="p">(</span><span class="n">header</span><span class="p">,</span> <span class="n">DESIGN_PARAMETER</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">named</span> <span class="ow">in</span> <span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="s2">""</span><span class="p">):</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"the header carries no </span><span class="si">{</span><span class="n">DESIGN_PARAMETER</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
@@ -537,9 +549,11 @@
                 <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">DESIGN_PARAMETER</span><span class="si">}</span><span class="s2">=</span><span class="si">{</span><span class="n">named</span><span class="si">!r}</span><span class="s2"> is not a design identifier: "</span>
                 <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">ID_DIGITS</span><span class="si">}</span><span class="s2"> hexadecimal digits"</span>
             <span class="p">)</span>
-        <span class="n">directory</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">store</span> <span class="o">/</span> <span class="n">design</span>
+        <span class="n">directory</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">store</span> <span class="o">/</span> <span class="n">scan</span> <span class="o">/</span> <span class="n">design</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="n">directory</span> <span class="o">/</span> <span class="n">MANIFEST</span><span class="p">)</span><span class="o">.</span><span class="n">is_file</span><span class="p">():</span>
-            <span class="k">raise</span> <span class="ne">FileNotFoundError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"no design </span><span class="si">{</span><span class="n">design</span><span class="si">}</span><span class="s2"> in </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">store</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">FileNotFoundError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"no design </span><span class="si">{</span><span class="n">design</span><span class="si">}</span><span class="s2"> in scan </span><span class="si">{</span><span class="n">scan</span><span class="si">}</span><span class="s2"> of </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">store</span><span class="si">}</span><span class="s2">"</span>
+            <span class="p">)</span>
         <span class="k">return</span> <span class="n">directory</span></div>
 
 

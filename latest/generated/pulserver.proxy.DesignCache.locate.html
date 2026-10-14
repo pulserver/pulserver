@@ -502,14 +502,16 @@
 <dt class="sig sig-object py" id="pulserver.proxy.DesignCache.locate">
 <span class="sig-prename descclassname"><span class="pre">DesignCache.</span></span><span class="sig-name descname"><span class="pre">locate</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pulserver/proxy/_designs.html#DesignCache.locate"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.proxy.DesignCache.locate" title="Link to this definition">#</a></dt>
 <dd><p>Return the directory of the design a header names.</p>
-<p>The design is named by <a class="reference internal" href="pulserver.proxy.DESIGN_PARAMETER.html#pulserver.proxy.DESIGN_PARAMETER" title="pulserver.proxy.DESIGN_PARAMETER"><code class="xref py py-data docutils literal notranslate"><span class="pre">DESIGN_PARAMETER</span></code></a>, a
-<code class="docutils literal notranslate"><span class="pre">userParameterString</span></code> holding the identifier.</p>
+<p>The scan is named by <a class="reference internal" href="pulserver.proxy.SCAN_PARAMETER.html#pulserver.proxy.SCAN_PARAMETER" title="pulserver.proxy.SCAN_PARAMETER"><code class="xref py py-data docutils literal notranslate"><span class="pre">SCAN_PARAMETER</span></code></a> and the design by
+<a class="reference internal" href="pulserver.proxy.DESIGN_PARAMETER.html#pulserver.proxy.DESIGN_PARAMETER" title="pulserver.proxy.DESIGN_PARAMETER"><code class="xref py py-data docutils literal notranslate"><span class="pre">DESIGN_PARAMETER</span></code></a>, each a <code class="docutils literal notranslate"><span class="pre">userParameterString</span></code>: the design is
+<code class="docutils literal notranslate"><span class="pre">&lt;store&gt;/&lt;scan&gt;/&lt;id&gt;/</span></code>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Raises<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.15)"><strong>ValueError</strong></a> – If the header names no design, or names it by something that is
-    not an identifier.</p></li>
-<li><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#FileNotFoundError" title="(in Python v3.15)"><strong>FileNotFoundError</strong></a> – If the store holds no such design.</p></li>
+<li><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.15)"><strong>ValueError</strong></a> – If the header names no scan or no design, names a scan by
+    something that is not a directory name, or a design by something
+    that is not an identifier.</p></li>
+<li><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#FileNotFoundError" title="(in Python v3.15)"><strong>FileNotFoundError</strong></a> – If the scan holds no such design.</p></li>
 </ul>
 </dd>
 </dl>

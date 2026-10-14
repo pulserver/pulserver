@@ -423,7 +423,7 @@
                 <article class="bd-article">
                   
   <h1>Source code for pulserver.host._store</h1><div class="highlight"><pre>
-<span></span><span class="sd">"""Content-addressed store of generated and imported designs."""</span>
+<span></span><span class="sd">"""Store of generated and imported designs: one directory per scan, each design in it addressed by its content."""</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
@@ -432,6 +432,7 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">re</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">secrets</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">shutil</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">tarfile</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">tempfile</span>
@@ -451,7 +452,7 @@
 <span class="n">_IDENTITY</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">compile</span><span class="p">(</span><span class="sa">r</span><span class="s2">"[0-9a-f]</span><span class="si">{64}</span><span class="s2">"</span><span class="p">)</span>
 <span class="c1"># A stage older than this is left by a process that ended mid-design.</span>
 <span class="n">_STALE_STAGE</span> <span class="o">=</span> <span class="mf">3600.0</span>
-<span class="c1"># A design used more recently than this may be playing or reconstructing.</span>
+<span class="c1"># A scan used more recently than this may be playing or reconstructing.</span>
 <span class="n">_IN_USE</span> <span class="o">=</span> <span class="mf">86400.0</span>
 
 
@@ -503,23 +504,44 @@
 <div class="viewcode-block" id="DesignStore">
 <a class="viewcode-back" href="../../../generated/pulserver.host.DesignStore.html#pulserver.host.DesignStore">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">DesignStore</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""The designs under one directory, each in ``&lt;id&gt;/`` and immutable once written.</span>
+<span class="w">    </span><span class="sd">"""The designs of one scan, each in ``&lt;root&gt;/&lt;scan&gt;/&lt;id&gt;/`` and immutable once written.</span>
 
-<span class="sd">    A design directory holds the Pulseq files of its chain, its IR cache and</span>
+<span class="sd">    A store root holds one directory per scan, named by whatever plays it: a</span>
+<span class="sd">    scanner names it after the scan, and the reconstruction finds a series'</span>
+<span class="sd">    design from the scan and the identifier its header carries. A design</span>
+<span class="sd">    directory holds the Pulseq files of its chain, its IR cache and</span>
 <span class="sd">    :data:`MANIFEST`. It is written in a stage and renamed into place, so a</span>
 <span class="sd">    reader sees a design whole or not at all, and two processes writing one</span>
-<span class="sd">    design leave one directory.</span>
+<span class="sd">    design leave one directory. A scan plays one design, so committing a</span>
+<span class="sd">    design removes the scan's others.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    root : Path | str</span>
+<span class="sd">        Directory of scans; created when missing.</span>
+<span class="sd">    scan : str</span>
+<span class="sd">        Name of the scan's directory: one path component, not starting with</span>
+<span class="sd">        ``.``.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If ``scan`` is not a directory name.</span>
 <span class="sd">    """</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">root</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">root</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span> <span class="n">scan</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">_flat</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">scan</span><span class="p">)):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"a scan is named by one directory name, not </span><span class="si">{</span><span class="n">scan</span><span class="si">!r}</span><span class="s2">"</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">root</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">root</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">root</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">parents</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">scan</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">scan</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">path</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">root</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">scan</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">parents</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 
 <div class="viewcode-block" id="DesignStore.directory">
 <a class="viewcode-back" href="../../../generated/pulserver.host.DesignStore.directory.html#pulserver.host.DesignStore.directory">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">directory</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">design</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Path</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""Return the directory of a design, whether or not it exists."""</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">root</span> <span class="o">/</span> <span class="n">design</span></div>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">path</span> <span class="o">/</span> <span class="n">design</span></div>
 
 
 <div class="viewcode-block" id="DesignStore.find">
@@ -535,7 +557,7 @@
 <span class="sd">            If the directory of the identifier holds a design of another identity.</span>
 <span class="sd">        """</span>
         <span class="n">design</span> <span class="o">=</span> <span class="n">design_id</span><span class="p">(</span><span class="n">identity</span><span class="p">)</span>
-        <span class="n">manifest</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">root</span> <span class="o">/</span> <span class="n">design</span> <span class="o">/</span> <span class="n">MANIFEST</span>
+        <span class="n">manifest</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">path</span> <span class="o">/</span> <span class="n">design</span> <span class="o">/</span> <span class="n">MANIFEST</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">manifest</span><span class="o">.</span><span class="n">is_file</span><span class="p">():</span>
             <span class="k">return</span> <span class="kc">None</span>
         <span class="k">if</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">manifest</span><span class="o">.</span><span class="n">read_text</span><span class="p">())</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"identity"</span><span class="p">)</span> <span class="o">!=</span> <span class="n">identity</span><span class="p">:</span>
@@ -556,9 +578,9 @@
 <span class="sd">        FileNotFoundError</span>
 <span class="sd">            If the store holds no design with this identifier.</span>
 <span class="sd">        """</span>
-        <span class="n">path</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">root</span> <span class="o">/</span> <span class="n">design</span> <span class="o">/</span> <span class="n">MANIFEST</span>
+        <span class="n">path</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">path</span> <span class="o">/</span> <span class="n">design</span> <span class="o">/</span> <span class="n">MANIFEST</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">path</span><span class="o">.</span><span class="n">is_file</span><span class="p">():</span>
-            <span class="k">raise</span> <span class="ne">FileNotFoundError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"no design </span><span class="si">{</span><span class="n">design</span><span class="si">}</span><span class="s2"> in </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">root</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+            <span class="k">raise</span> <span class="ne">FileNotFoundError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"no design </span><span class="si">{</span><span class="n">design</span><span class="si">}</span><span class="s2"> in </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">path</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">path</span><span class="o">.</span><span class="n">read_text</span><span class="p">())</span></div>
 
 
@@ -566,7 +588,7 @@
 <a class="viewcode-back" href="../../../generated/pulserver.host.DesignStore.stage.html#pulserver.host.DesignStore.stage">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">stage</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Path</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""Create an empty directory to write a design into."""</span>
-        <span class="k">return</span> <span class="n">Path</span><span class="p">(</span><span class="n">tempfile</span><span class="o">.</span><span class="n">mkdtemp</span><span class="p">(</span><span class="n">prefix</span><span class="o">=</span><span class="s2">".stage-"</span><span class="p">,</span> <span class="nb">dir</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">root</span><span class="p">))</span></div>
+        <span class="k">return</span> <span class="n">Path</span><span class="p">(</span><span class="n">tempfile</span><span class="o">.</span><span class="n">mkdtemp</span><span class="p">(</span><span class="n">prefix</span><span class="o">=</span><span class="s2">".stage-"</span><span class="p">,</span> <span class="nb">dir</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">path</span><span class="p">))</span></div>
 
 
 <div class="viewcode-block" id="DesignStore.commit">
@@ -576,7 +598,8 @@
 
 <span class="sd">        The manifest is written with the identity, the identifier and the</span>
 <span class="sd">        SHA-256 of every file of the stage. A design another process committed</span>
-<span class="sd">        first is kept and the stage discarded.</span>
+<span class="sd">        first is kept and the stage discarded. The scan's other designs are</span>
+<span class="sd">        removed.</span>
 <span class="sd">        """</span>
         <span class="n">design</span> <span class="o">=</span> <span class="n">design_id</span><span class="p">(</span><span class="n">identity</span><span class="p">)</span>
         <span class="n">files</span> <span class="o">=</span> <span class="p">{</span>
@@ -586,7 +609,11 @@
         <span class="p">}</span>
         <span class="n">record</span> <span class="o">=</span> <span class="p">{</span><span class="o">**</span><span class="n">manifest</span><span class="p">,</span> <span class="s2">"id"</span><span class="p">:</span> <span class="n">design</span><span class="p">,</span> <span class="s2">"identity"</span><span class="p">:</span> <span class="n">identity</span><span class="p">,</span> <span class="s2">"files"</span><span class="p">:</span> <span class="n">files</span><span class="p">}</span>
         <span class="p">(</span><span class="n">staged</span> <span class="o">/</span> <span class="n">MANIFEST</span><span class="p">)</span><span class="o">.</span><span class="n">write_text</span><span class="p">(</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">record</span><span class="p">,</span> <span class="n">indent</span><span class="o">=</span><span class="mi">2</span><span class="p">))</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_publish</span><span class="p">(</span><span class="n">identity</span><span class="p">,</span> <span class="n">staged</span><span class="p">)</span></div>
+        <span class="n">published</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_publish</span><span class="p">(</span><span class="n">identity</span><span class="p">,</span> <span class="n">staged</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">other</span> <span class="ow">in</span> <span class="bp">self</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">other</span> <span class="o">!=</span> <span class="n">published</span><span class="p">:</span>
+                <span class="n">shutil</span><span class="o">.</span><span class="n">rmtree</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">path</span> <span class="o">/</span> <span class="n">other</span><span class="p">,</span> <span class="n">ignore_errors</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">published</span></div>
 
 
 <div class="viewcode-block" id="DesignStore.pack">
@@ -605,7 +632,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">manifest</span><span class="p">(</span><span class="n">design</span><span class="p">)</span>
         <span class="n">buffer</span> <span class="o">=</span> <span class="n">io</span><span class="o">.</span><span class="n">BytesIO</span><span class="p">()</span>
         <span class="k">with</span> <span class="n">tarfile</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="n">fileobj</span><span class="o">=</span><span class="n">buffer</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s2">"w:gz"</span><span class="p">,</span> <span class="n">compresslevel</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span> <span class="k">as</span> <span class="n">bundle</span><span class="p">:</span>
-            <span class="k">for</span> <span class="n">path</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">root</span> <span class="o">/</span> <span class="n">design</span><span class="p">)</span><span class="o">.</span><span class="n">iterdir</span><span class="p">()):</span>
+            <span class="k">for</span> <span class="n">path</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">path</span> <span class="o">/</span> <span class="n">design</span><span class="p">)</span><span class="o">.</span><span class="n">iterdir</span><span class="p">()):</span>
                 <span class="n">bundle</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">arcname</span><span class="o">=</span><span class="n">path</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">recursive</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">buffer</span><span class="o">.</span><span class="n">getvalue</span><span class="p">()</span></div>
 
@@ -676,7 +703,7 @@
         <span class="c1"># private say so with its umask.</span>
         <span class="n">staged</span><span class="o">.</span><span class="n">chmod</span><span class="p">(</span><span class="mo">0o777</span> <span class="o">&amp;</span> <span class="o">~</span><span class="n">_umask</span><span class="p">())</span>
         <span class="k">try</span><span class="p">:</span>
-            <span class="n">staged</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">root</span> <span class="o">/</span> <span class="n">design</span><span class="p">)</span>
+            <span class="n">staged</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">path</span> <span class="o">/</span> <span class="n">design</span><span class="p">)</span>
         <span class="k">except</span> <span class="ne">OSError</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">discard</span><span class="p">(</span><span class="n">staged</span><span class="p">)</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="n">identity</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
@@ -691,48 +718,95 @@
 
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__iter__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">"""Yield the identifier of every stored design."""</span>
-        <span class="k">for</span> <span class="n">manifest</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">root</span><span class="o">.</span><span class="n">glob</span><span class="p">(</span><span class="sa">f</span><span class="s2">"*/</span><span class="si">{</span><span class="n">MANIFEST</span><span class="si">}</span><span class="s2">"</span><span class="p">)):</span>
+<span class="w">        </span><span class="sd">"""Yield the identifier of every design of the scan."""</span>
+        <span class="k">for</span> <span class="n">manifest</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">glob</span><span class="p">(</span><span class="sa">f</span><span class="s2">"*/</span><span class="si">{</span><span class="n">MANIFEST</span><span class="si">}</span><span class="s2">"</span><span class="p">)):</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="n">manifest</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">name</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">"."</span><span class="p">):</span>
-                <span class="k">yield</span> <span class="n">manifest</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">name</span>
+                <span class="k">yield</span> <span class="n">manifest</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">name</span></div>
 
-<div class="viewcode-block" id="DesignStore.prune">
-<a class="viewcode-back" href="../../../generated/pulserver.host.DesignStore.prune.html#pulserver.host.DesignStore.prune">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">prune</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span>
-        <span class="o">*</span><span class="p">,</span>
-        <span class="n">max_age</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">max_bytes</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">now</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">"""Remove designs, least recently used first; return their identifiers.</span>
 
-<span class="sd">        A design is used when it is committed or found again. Designs unused</span>
-<span class="sd">        for longer than ``max_age`` seconds are removed, then the least</span>
-<span class="sd">        recently used until the store holds at most ``max_bytes``. A design</span>
-<span class="sd">        used within the last day is kept whatever the limits, since a series</span>
-<span class="sd">        may still be playing or reconstructing it. Stages older than an hour,</span>
-<span class="sd">        left by a process that ended mid-design, are removed as well.</span>
-<span class="sd">        """</span>
-        <span class="n">now</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="k">if</span> <span class="n">now</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">now</span>
-        <span class="k">for</span> <span class="n">stage</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">root</span><span class="o">.</span><span class="n">glob</span><span class="p">(</span><span class="s2">".stage-*"</span><span class="p">):</span>
-            <span class="k">if</span> <span class="n">now</span> <span class="o">-</span> <span class="n">stage</span><span class="o">.</span><span class="n">stat</span><span class="p">()</span><span class="o">.</span><span class="n">st_mtime</span> <span class="o">&gt;</span> <span class="n">_STALE_STAGE</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">discard</span><span class="p">(</span><span class="n">stage</span><span class="p">)</span>
-        <span class="n">used</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(((</span><span class="bp">self</span><span class="o">.</span><span class="n">root</span> <span class="o">/</span> <span class="n">d</span> <span class="o">/</span> <span class="n">MANIFEST</span><span class="p">)</span><span class="o">.</span><span class="n">stat</span><span class="p">()</span><span class="o">.</span><span class="n">st_mtime</span><span class="p">,</span> <span class="n">d</span><span class="p">)</span> <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="bp">self</span><span class="p">)</span>
-        <span class="n">sizes</span> <span class="o">=</span> <span class="p">{</span><span class="n">d</span><span class="p">:</span> <span class="n">_size</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">root</span> <span class="o">/</span> <span class="n">d</span><span class="p">)</span> <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">d</span> <span class="ow">in</span> <span class="n">used</span><span class="p">}</span>
-        <span class="n">removed</span> <span class="o">=</span> <span class="p">[]</span>
-        <span class="n">total</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">sizes</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
-        <span class="k">for</span> <span class="n">last</span><span class="p">,</span> <span class="n">design</span> <span class="ow">in</span> <span class="n">used</span><span class="p">:</span>
-            <span class="n">too_old</span> <span class="o">=</span> <span class="n">max_age</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">now</span> <span class="o">-</span> <span class="n">last</span> <span class="o">&gt;</span> <span class="n">max_age</span>
-            <span class="n">too_big</span> <span class="o">=</span> <span class="n">max_bytes</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">total</span> <span class="o">&gt;</span> <span class="n">max_bytes</span>
-            <span class="k">if</span> <span class="n">now</span> <span class="o">-</span> <span class="n">last</span> <span class="o">&lt;</span> <span class="n">_IN_USE</span> <span class="ow">or</span> <span class="ow">not</span> <span class="p">(</span><span class="n">too_old</span> <span class="ow">or</span> <span class="n">too_big</span><span class="p">):</span>
-                <span class="k">continue</span>
-            <span class="n">shutil</span><span class="o">.</span><span class="n">rmtree</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">root</span> <span class="o">/</span> <span class="n">design</span><span class="p">,</span> <span class="n">ignore_errors</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-            <span class="n">total</span> <span class="o">-=</span> <span class="n">sizes</span><span class="p">[</span><span class="n">design</span><span class="p">]</span>
-            <span class="n">removed</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">design</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">removed</span></div>
-</div>
 
+<span class="k">def</span><span class="w"> </span><span class="nf">new_scan</span><span class="p">(</span><span class="n">now</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return a name for a new scan directory: its time, then a random suffix."""</span>
+    <span class="n">stamp</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">strftime</span><span class="p">(</span><span class="s2">"%Y%m</span><span class="si">%d</span><span class="s2">T%H%M%S"</span><span class="p">,</span> <span class="n">time</span><span class="o">.</span><span class="n">localtime</span><span class="p">(</span><span class="n">now</span><span class="p">))</span>
+    <span class="k">return</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">stamp</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="n">secrets</span><span class="o">.</span><span class="n">token_hex</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">find_scan</span><span class="p">(</span><span class="n">root</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span> <span class="n">design</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the newest scan of a store root that holds a design.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    FileNotFoundError</span>
+<span class="sd">        If no scan of the root holds the design.</span>
+<span class="sd">    """</span>
+    <span class="n">holding</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="n">scan</span>
+        <span class="k">for</span> <span class="n">scan</span> <span class="ow">in</span> <span class="n">scans</span><span class="p">(</span><span class="n">root</span><span class="p">)</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="n">root</span><span class="p">)</span> <span class="o">/</span> <span class="n">scan</span> <span class="o">/</span> <span class="n">design</span> <span class="o">/</span> <span class="n">MANIFEST</span><span class="p">)</span><span class="o">.</span><span class="n">is_file</span><span class="p">()</span>
+    <span class="p">]</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">holding</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">FileNotFoundError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"no scan of </span><span class="si">{</span><span class="n">root</span><span class="si">}</span><span class="s2"> holds design </span><span class="si">{</span><span class="n">design</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+    <span class="k">return</span> <span class="nb">max</span><span class="p">(</span><span class="n">holding</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">scan</span><span class="p">:</span> <span class="n">_last_use</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="n">root</span><span class="p">)</span> <span class="o">/</span> <span class="n">scan</span><span class="p">))</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">scans</span><span class="p">(</span><span class="n">root</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Return the name of every scan directory of a store root."""</span>
+    <span class="n">root</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">root</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">root</span><span class="o">.</span><span class="n">is_dir</span><span class="p">():</span>
+        <span class="k">return</span> <span class="p">[]</span>
+    <span class="k">return</span> <span class="nb">sorted</span><span class="p">(</span>
+        <span class="n">entry</span><span class="o">.</span><span class="n">name</span> <span class="k">for</span> <span class="n">entry</span> <span class="ow">in</span> <span class="n">root</span><span class="o">.</span><span class="n">iterdir</span><span class="p">()</span> <span class="k">if</span> <span class="n">entry</span><span class="o">.</span><span class="n">is_dir</span><span class="p">()</span> <span class="ow">and</span> <span class="n">_flat</span><span class="p">(</span><span class="n">entry</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+    <span class="p">)</span>
+
+
+<div class="viewcode-block" id="prune">
+<a class="viewcode-back" href="../../../generated/pulserver.host.prune.html#pulserver.host.prune">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">prune</span><span class="p">(</span>
+    <span class="n">root</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">max_age</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">max_bytes</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">now</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Remove scan directories of a store root, least recently used first; return their names.</span>
+
+<span class="sd">    A scan is used when anything in its directory, or in a design of it, is</span>
+<span class="sd">    written, or a design of it is found again. Scans unused for longer than</span>
+<span class="sd">    ``max_age`` seconds are removed, then the least recently used until the</span>
+<span class="sd">    root holds at most ``max_bytes``. A scan used within the last day is kept</span>
+<span class="sd">    whatever the limits, since it may still be playing or reconstructing.</span>
+<span class="sd">    Stages older than an hour, left by a process that ended mid-design, are</span>
+<span class="sd">    removed as well.</span>
+<span class="sd">    """</span>
+    <span class="n">root</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">root</span><span class="p">)</span>
+    <span class="n">now</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span> <span class="k">if</span> <span class="n">now</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">now</span>
+    <span class="k">for</span> <span class="n">stage</span> <span class="ow">in</span> <span class="n">root</span><span class="o">.</span><span class="n">glob</span><span class="p">(</span><span class="s2">"*/.stage-*"</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">now</span> <span class="o">-</span> <span class="n">stage</span><span class="o">.</span><span class="n">stat</span><span class="p">()</span><span class="o">.</span><span class="n">st_mtime</span> <span class="o">&gt;</span> <span class="n">_STALE_STAGE</span><span class="p">:</span>
+            <span class="n">shutil</span><span class="o">.</span><span class="n">rmtree</span><span class="p">(</span><span class="n">stage</span><span class="p">,</span> <span class="n">ignore_errors</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">used</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">((</span><span class="n">_last_use</span><span class="p">(</span><span class="n">root</span> <span class="o">/</span> <span class="n">scan</span><span class="p">),</span> <span class="n">scan</span><span class="p">)</span> <span class="k">for</span> <span class="n">scan</span> <span class="ow">in</span> <span class="n">scans</span><span class="p">(</span><span class="n">root</span><span class="p">))</span>
+    <span class="n">sizes</span> <span class="o">=</span> <span class="p">{</span><span class="n">scan</span><span class="p">:</span> <span class="n">_size</span><span class="p">(</span><span class="n">root</span> <span class="o">/</span> <span class="n">scan</span><span class="p">)</span> <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">scan</span> <span class="ow">in</span> <span class="n">used</span><span class="p">}</span>
+    <span class="n">removed</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">total</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">sizes</span><span class="o">.</span><span class="n">values</span><span class="p">())</span>
+    <span class="k">for</span> <span class="n">last</span><span class="p">,</span> <span class="n">scan</span> <span class="ow">in</span> <span class="n">used</span><span class="p">:</span>
+        <span class="n">too_old</span> <span class="o">=</span> <span class="n">max_age</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">now</span> <span class="o">-</span> <span class="n">last</span> <span class="o">&gt;</span> <span class="n">max_age</span>
+        <span class="n">too_big</span> <span class="o">=</span> <span class="n">max_bytes</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">total</span> <span class="o">&gt;</span> <span class="n">max_bytes</span>
+        <span class="k">if</span> <span class="n">now</span> <span class="o">-</span> <span class="n">last</span> <span class="o">&lt;</span> <span class="n">_IN_USE</span> <span class="ow">or</span> <span class="ow">not</span> <span class="p">(</span><span class="n">too_old</span> <span class="ow">or</span> <span class="n">too_big</span><span class="p">):</span>
+            <span class="k">continue</span>
+        <span class="n">shutil</span><span class="o">.</span><span class="n">rmtree</span><span class="p">(</span><span class="n">root</span> <span class="o">/</span> <span class="n">scan</span><span class="p">,</span> <span class="n">ignore_errors</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">total</span> <span class="o">-=</span> <span class="n">sizes</span><span class="p">[</span><span class="n">scan</span><span class="p">]</span>
+        <span class="n">removed</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">scan</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">removed</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_last_use</span><span class="p">(</span><span class="n">directory</span><span class="p">:</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return when anything in a scan directory, or in a design of it, was last written."""</span>
+    <span class="n">times</span> <span class="o">=</span> <span class="p">[</span><span class="n">directory</span><span class="o">.</span><span class="n">stat</span><span class="p">()</span><span class="o">.</span><span class="n">st_mtime</span><span class="p">]</span>
+    <span class="k">for</span> <span class="n">entry</span> <span class="ow">in</span> <span class="n">directory</span><span class="o">.</span><span class="n">iterdir</span><span class="p">():</span>
+        <span class="n">times</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">entry</span><span class="o">.</span><span class="n">lstat</span><span class="p">()</span><span class="o">.</span><span class="n">st_mtime</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">entry</span><span class="o">.</span><span class="n">is_dir</span><span class="p">()</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">entry</span><span class="o">.</span><span class="n">is_symlink</span><span class="p">():</span>
+            <span class="n">times</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">path</span><span class="o">.</span><span class="n">lstat</span><span class="p">()</span><span class="o">.</span><span class="n">st_mtime</span> <span class="k">for</span> <span class="n">path</span> <span class="ow">in</span> <span class="n">entry</span><span class="o">.</span><span class="n">iterdir</span><span class="p">())</span>
+    <span class="k">return</span> <span class="nb">max</span><span class="p">(</span><span class="n">times</span><span class="p">)</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_read_bundle</span><span class="p">(</span><span class="n">bundle</span><span class="p">:</span> <span class="nb">bytes</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">bytes</span><span class="p">],</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]]:</span>
@@ -773,7 +847,7 @@
 <span class="k">def</span><span class="w"> </span><span class="nf">_size</span><span class="p">(</span><span class="n">directory</span><span class="p">:</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
     <span class="k">return</span> <span class="nb">sum</span><span class="p">(</span>
         <span class="n">path</span><span class="o">.</span><span class="n">stat</span><span class="p">()</span><span class="o">.</span><span class="n">st_size</span>
-        <span class="k">for</span> <span class="n">path</span> <span class="ow">in</span> <span class="n">directory</span><span class="o">.</span><span class="n">iterdir</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">path</span> <span class="ow">in</span> <span class="n">directory</span><span class="o">.</span><span class="n">rglob</span><span class="p">(</span><span class="s2">"*"</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">path</span><span class="o">.</span><span class="n">is_file</span><span class="p">()</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">path</span><span class="o">.</span><span class="n">is_symlink</span><span class="p">()</span>
     <span class="p">)</span>
 </pre></div>
