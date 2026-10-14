@@ -59,7 +59,7 @@ class CheckLimits:
         the ratios.
     default_shim
         Complex channel weights of a pulse played without an RF shim, and of
-        the reference pulse; equal weights when None.
+        the reference pulse; equal weights whose squares sum to 1 when None.
     vop_coil
         The transmit configuration the scanner reports. When given, the VOP
         file's ``metadata["transmit"]`` must name the same one.

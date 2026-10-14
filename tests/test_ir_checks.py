@@ -183,12 +183,13 @@ def test_a_sequence_without_rf_has_no_sar_ratio(tmp_path, one_channel):
     assert ir.sar_ratios(path, SYSTEM, one_channel) == [ir.SarRatio(0.0, 0.0)]
 
 
-@pytest.mark.parametrize(("default_shim", "ratio"), [(None, 0.5), ((1, 0), 1.0)])
+@pytest.mark.parametrize(("default_shim", "ratio"), [(None, 1.0), ((1, 1), 0.5)])
 def test_the_reference_pulse_is_played_in_the_default_shim(
     tmp_path, default_shim, ratio
 ):
-    # Two uncoupled channels: a pulse on the first alone deposits half of one
-    # on both.
+    # Two uncoupled channels: a unit-weight pulse on the first alone carries
+    # the power of the equal weights whose squares sum to 1, and half that of
+    # unit weights on both.
     vops = tmp_path / "vops.npz"
     np.savez(vops, vops=np.eye(2)[None], global_matrix=0.5 * np.eye(2))
     on_first = pp.make_rf_shim([1.0, 0.0])
