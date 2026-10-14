@@ -173,6 +173,81 @@ def test_a_unit_of_calibration_readouts_makes_no_image_and_its_maps_serve_the_ne
     assert relative_difference(image, calibrated_by_its_readouts) < 1e-4
 
 
+def test_maps_of_a_plane_from_calibration_readouts_and_from_the_units_own_centre_are_fitted_with_phase_pole_correction(
+    device, monkeypatch
+):
+    from bartorch import apps
+
+    kspace = vials()
+    lines = acquired(range(0, MATRIX, 2))
+    nlinv_maps = apps.nlinv_maps
+    options = []
+
+    def recorded(*args, **kwargs):
+        options.append(kwargs)
+        return nlinv_maps(*args, **kwargs)
+
+    monkeypatch.setattr(apps, "nlinv_maps", recorded)
+    reconstruct(
+        readouts(kspace, CALIBRATION, lines=CENTRE, last=LAST)
+        + readouts(kspace, lines=lines, last=LAST),
+        device=device,
+    )
+    reconstruct(stream(kspace, lines), device=device)
+
+    assert [option["phase_pole"] for option in options] == [0, 0]
+
+
+@pytest.mark.parametrize(
+    ("shape", "trajectory", "image", "phase_pole"),
+    [
+        ((COILS, MATRIX, MATRIX), False, None, 0),
+        ((COILS, 1, MATRIX, MATRIX), False, None, 0),
+        ((COILS, 2, MATRIX, MATRIX), False, None, None),
+        ((COILS, 3, MATRIX, MATRIX), False, None, 0),
+        ((COILS, 3, 256, 256), False, None, 0),
+        ((COILS, 8, MATRIX), True, None, 0),
+        ((COILS, 8, MATRIX), True, (MATRIX,) * 3, 0),
+        ((COILS, 8, MATRIX), True, (2, MATRIX, MATRIX), None),
+    ],
+    ids=[
+        "plane",
+        "one partition",
+        "2 partitions",
+        "3 partitions",
+        "3 of 256",
+        "trajectory",
+        "3D trajectory",
+        "3D trajectory of 2 partitions",
+    ],
+)
+def test_phase_pole_correction_is_asked_unless_the_calibration_grid_is_too_thin(
+    shape, trajectory, image, phase_pole, monkeypatch
+):
+    """The calibration grid is 24 points a side, where BART's detection
+    circle is 2 points: 3 along every axis are enough, whatever the matrix."""
+    import torch
+    from bartorch import apps
+
+    from pulserver.recon.handlers.pics import nlinv_estimate
+
+    asked = []
+    monkeypatch.setattr(
+        apps, "nlinv_maps", lambda *args, **kwargs: asked.append(kwargs)
+    )
+    traj = torch.zeros(shape[1], shape[2], 3) if trajectory else None
+    nlinv_estimate(torch.zeros(shape, dtype=torch.complex64), traj, image)
+
+    assert asked == [
+        {
+            "size": 24,
+            "radius": 12.0,
+            "shape": image,
+            "phase_pole": phase_pole,
+        }
+    ]
+
+
 def test_noise_readouts_whiten_the_imaging_readouts_and_are_not_placed(device):
     kspace = vials()
     lines = acquired(range(0, MATRIX, 2))
