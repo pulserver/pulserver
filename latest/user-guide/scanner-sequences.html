@@ -994,7 +994,12 @@ default. A file names only the options it changes:</p>
 </div>
 <p>A file naming an option the plugin does not declare, or giving one a value it
 does not take, is refused. The options join the design’s identity and its
-manifest, so a design is a function of the set’s contents, not of its number.
+manifest, so a design is a function of the set’s contents, not of its number.</p>
+<p>One key is not an option of the plugin, and any set may state it:
+<code class="docutils literal notranslate"><span class="pre">field_camera</span> <span class="pre">=</span> <span class="pre">true</span></code> has the series’ manual prescan play the interpreter’s
+field-camera trigger train instead of the sequence. It reaches the interpreter
+as <code class="docutils literal notranslate"><span class="pre">sfc_enable</span> <span class="pre">1</span></code> in <code class="docutils literal notranslate"><span class="pre">psd.cvs</span></code> beside the design, and joins the design’s
+identity and its manifest (<code class="docutils literal notranslate"><span class="pre">psd</span></code>).
 <code class="docutils literal notranslate"><span class="pre">pulserver</span> <span class="pre">design</span></code> takes the set as <code class="docutils literal notranslate"><span class="pre">--parameter-set</span></code> and the directory as
 <code class="docutils literal notranslate"><span class="pre">--parameters</span></code>; <code class="docutils literal notranslate"><span class="pre">src/pulserver/_zoo/parameters/</span></code> ships a file for each choice
 below.</p>

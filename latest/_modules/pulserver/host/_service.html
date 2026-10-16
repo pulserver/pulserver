@@ -533,6 +533,40 @@
     <span class="n">parameters</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span>
 
 
+<span class="c1">#: Parameter-file keys that set the PSD rather than the plugin, which any set</span>
+<span class="c1">#: may state, and the PSD setting each one writes to the design's ``psd.cvs``.</span>
+<span class="c1">#: ``field_camera`` plays the field-camera trigger train in manual prescan.</span>
+<span class="n">PSD_KEYS</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"field_camera"</span><span class="p">:</span> <span class="s2">"sfc_enable"</span><span class="p">}</span>
+
+<span class="c1">#: The file beside a design's sequence that carries its PSD settings.</span>
+<span class="n">PSD_SETTINGS</span> <span class="o">=</span> <span class="s2">"psd.cvs"</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_split_options</span><span class="p">(</span><span class="n">options</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]]:</span>
+<span class="w">    </span><span class="sd">"""Return a parameter file's options for the plugin, and its PSD settings.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    CallError</span>
+<span class="sd">        If a PSD key is not true or false.</span>
+<span class="sd">    """</span>
+    <span class="n">plugin</span> <span class="o">=</span> <span class="p">{</span><span class="n">key</span><span class="p">:</span> <span class="n">value</span> <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">options</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">PSD_KEYS</span><span class="p">}</span>
+    <span class="n">settings</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">setting</span> <span class="ow">in</span> <span class="n">PSD_KEYS</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">options</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">options</span><span class="p">[</span><span class="n">key</span><span class="p">],</span> <span class="nb">bool</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="n">CallError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2"> is </span><span class="si">{</span><span class="n">options</span><span class="p">[</span><span class="n">key</span><span class="p">]</span><span class="si">!r}</span><span class="s2">; it is true or false"</span><span class="p">)</span>
+            <span class="n">settings</span><span class="p">[</span><span class="n">setting</span><span class="p">]</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">options</span><span class="p">[</span><span class="n">key</span><span class="p">])</span>
+    <span class="k">return</span> <span class="n">plugin</span><span class="p">,</span> <span class="n">settings</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_psd_settings</span><span class="p">(</span><span class="n">variant</span><span class="p">:</span> <span class="n">_Variant</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Return the PSD settings of a variant's parameter file; none without one."""</span>
+    <span class="k">if</span> <span class="n">variant</span><span class="o">.</span><span class="n">parameters</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">{}</span>
+    <span class="k">return</span> <span class="n">_split_options</span><span class="p">(</span><span class="n">read_options</span><span class="p">(</span><span class="n">variant</span><span class="o">.</span><span class="n">parameters</span><span class="p">))[</span><span class="mi">1</span><span class="p">]</span>
+
+
 <span class="k">def</span><span class="w"> </span><span class="nf">_variant</span><span class="p">(</span>
     <span class="n">plugins</span><span class="p">:</span> <span class="n">PluginPath</span><span class="p">,</span>
     <span class="n">plugin</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
@@ -681,9 +715,12 @@
     <span class="k">if</span> <span class="ow">not</span> <span class="n">validation</span><span class="o">.</span><span class="n">valid</span><span class="p">:</span>
         <span class="k">raise</span> <span class="n">CallError</span><span class="p">(</span><span class="n">validation</span><span class="o">.</span><span class="n">info</span><span class="p">)</span>
     <span class="n">source</span> <span class="o">=</span> <span class="n">_source</span><span class="p">(</span><span class="n">variant</span><span class="p">)</span>
+    <span class="n">settings</span> <span class="o">=</span> <span class="n">_psd_settings</span><span class="p">(</span><span class="n">variant</span><span class="p">)</span>
     <span class="n">identified</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">validation</span><span class="o">.</span><span class="n">values</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">scanner</span><span class="o">.</span><span class="n">options</span><span class="p">:</span>
         <span class="n">identified</span><span class="p">[</span><span class="s2">"options"</span><span class="p">]</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">scanner</span><span class="o">.</span><span class="n">options</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">settings</span><span class="p">:</span>
+        <span class="n">identified</span><span class="p">[</span><span class="s2">"psd"</span><span class="p">]</span> <span class="o">=</span> <span class="n">settings</span>
     <span class="k">if</span> <span class="n">exam</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">identified</span><span class="p">[</span><span class="s2">"exam"</span><span class="p">]</span> <span class="o">=</span> <span class="n">_exam_digest</span><span class="p">(</span><span class="n">exam</span><span class="p">)</span>
     <span class="n">identity</span> <span class="o">=</span> <span class="n">design_identity</span><span class="p">(</span><span class="n">plugin</span><span class="p">,</span> <span class="n">identified_limits</span><span class="p">(</span><span class="n">limits</span><span class="p">),</span> <span class="n">identified</span><span class="p">,</span> <span class="n">source</span><span class="p">)</span>
@@ -692,6 +729,10 @@
         <span class="k">return</span> <span class="sa">f</span><span class="s2">"GENERATED </span><span class="si">{</span><span class="n">_pushed</span><span class="p">(</span><span class="n">store</span><span class="p">,</span><span class="w"> </span><span class="n">found</span><span class="p">,</span><span class="w"> </span><span class="n">push</span><span class="p">)</span><span class="si">}</span><span class="se">\n</span><span class="s2">"</span>
     <span class="n">staged</span> <span class="o">=</span> <span class="n">store</span><span class="o">.</span><span class="n">stage</span><span class="p">()</span>
     <span class="k">try</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">settings</span><span class="p">:</span>
+            <span class="p">(</span><span class="n">staged</span> <span class="o">/</span> <span class="n">PSD_SETTINGS</span><span class="p">)</span><span class="o">.</span><span class="n">write_text</span><span class="p">(</span>
+                <span class="s2">""</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">value</span><span class="si">}</span><span class="se">\n</span><span class="s2">"</span> <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">settings</span><span class="o">.</span><span class="n">items</span><span class="p">())</span>
+            <span class="p">)</span>
         <span class="n">accepted</span><span class="p">,</span> <span class="n">paths</span><span class="p">,</span> <span class="n">written</span> <span class="o">=</span> <span class="n">scanner</span><span class="o">.</span><span class="n">_design</span><span class="p">(</span>
             <span class="n">design</span><span class="p">,</span> <span class="n">validation</span><span class="o">.</span><span class="n">values</span><span class="p">,</span> <span class="n">staged</span><span class="p">,</span> <span class="n">exam</span>
         <span class="p">)</span>
@@ -716,6 +757,7 @@
             <span class="o">**</span><span class="n">_record</span><span class="p">(</span><span class="n">limits</span><span class="p">),</span>
             <span class="s2">"plugin"</span><span class="p">:</span> <span class="n">plugin</span><span class="p">,</span>
             <span class="s2">"options"</span><span class="p">:</span> <span class="nb">dict</span><span class="p">(</span><span class="n">scanner</span><span class="o">.</span><span class="n">options</span><span class="p">),</span>
+            <span class="s2">"psd"</span><span class="p">:</span> <span class="n">settings</span><span class="p">,</span>
             <span class="s2">"source"</span><span class="p">:</span> <span class="n">source</span><span class="p">,</span>
             <span class="s2">"scan_time"</span><span class="p">:</span> <span class="n">validation</span><span class="o">.</span><span class="n">duration</span><span class="p">,</span>
             <span class="s2">"fov_offset_mm"</span><span class="p">:</span> <span class="p">[</span><span class="mf">1e3</span> <span class="o">*</span> <span class="n">value</span> <span class="k">for</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">offset</span><span class="p">],</span>
@@ -888,7 +930,7 @@
 <span class="nd">@lru_cache</span><span class="p">(</span><span class="n">maxsize</span><span class="o">=</span><span class="mi">32</span><span class="p">)</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">_cached</span><span class="p">(</span><span class="n">variant</span><span class="p">:</span> <span class="n">_Variant</span><span class="p">,</span> <span class="n">mtimes_ns</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">SequencePlugin</span><span class="p">:</span>  <span class="c1"># noqa: ARG001 -- part of the key</span>
     <span class="n">options</span> <span class="o">=</span> <span class="p">{}</span> <span class="k">if</span> <span class="n">variant</span><span class="o">.</span><span class="n">parameters</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">read_options</span><span class="p">(</span><span class="n">variant</span><span class="o">.</span><span class="n">parameters</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">load_plugin</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="n">variant</span><span class="o">.</span><span class="n">path</span><span class="p">),</span> <span class="n">options</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">load_plugin</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="n">variant</span><span class="o">.</span><span class="n">path</span><span class="p">),</span> <span class="n">_split_options</span><span class="p">(</span><span class="n">options</span><span class="p">)[</span><span class="mi">0</span><span class="p">])</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_mtimes</span><span class="p">(</span><span class="n">variant</span><span class="p">:</span> <span class="n">_Variant</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]:</span>
