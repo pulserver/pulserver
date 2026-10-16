@@ -36,6 +36,42 @@ ANY_ORIENTATION = {
     "design_max_slew": LIMITS["max_slew"] / math.sqrt(3.0),
 }
 
+# A matrix small enough to scan here, at the reference's field of view. The
+# balanced SSFP is read at a bandwidth whose readout outlasts the half of its
+# excitation that follows the pulse centre. The gradient-echo spiral is read in
+# enough interleaves that its image is not limited by undersampling. The zero
+# echo time sequence is read at a bandwidth at which the dead-time gap after
+# each pulse leaves no sample at the centre of k-space unacquired.
+SMALL = {"nx": 32, "ny": 32, "fov": 220.0, "phase_fov": 220.0}
+NONCARTESIAN = {"ny": None, "phase_fov": None}
+SMALLER = {
+    "bssfp2d": {"bandwidth": 25e3},
+    "bssfp3d": {"nslices": 8, "bandwidth": 25e3},
+    "gre_propeller2d": NONCARTESIAN,
+    "gre_radial2d": NONCARTESIAN,
+    "gre_spiral2d": {**NONCARTESIAN, "num_shots": 32},
+    "se_epi_propeller2d": {**NONCARTESIAN, "bandwidth": 50e3},
+    "se_propeller2d": NONCARTESIAN,
+    "se_radial2d": NONCARTESIAN,
+    "se_spiral2d": NONCARTESIAN,
+    "epi2d": {"bandwidth": 50e3},
+    "epi3d": {"nslices": 8},
+    "fse3d": {"nslices": 8},
+    "gre3d": {"nslices": 8},
+    "gre_multiecho3d": {"nslices": 8, "num_echoes": 2},
+    "se3d": {"nslices": 8},
+    "gre_stack_of_blades3d": {**NONCARTESIAN, "nslices": 8},
+    "gre_stack_of_stars3d": {**NONCARTESIAN, "nslices": 8},
+    "gre_stack_of_spirals3d": {**NONCARTESIAN, "nslices": 8},
+    "mprage3d": {"nslices": 8},
+    "se_stack_of_blades3d": {**NONCARTESIAN, "nslices": 8},
+    "se_stack_of_stars3d": {**NONCARTESIAN, "nslices": 8},
+    "se_stack_of_spirals3d": {**NONCARTESIAN, "nslices": 8},
+    "mprage_stack_of_stars3d": {**NONCARTESIAN, "nslices": 8},
+    "mprage_stack_of_spirals3d": {**NONCARTESIAN, "nslices": 8},
+    "zte3d": {**NONCARTESIAN, "bandwidth": 25e3},
+}
+
 
 def value_block(values):
     lines = [f"{name}: {value}" for name, value in values.items()]
