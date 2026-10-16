@@ -14,7 +14,7 @@ GradientRasterTime 2e-05
 Matrix 32 32 32 
 MissingSamples 2 
 Name zte_3d 
-NumGainCalibrationReadouts 1 
+NumGainCalibrationReadouts 16 
 NumShots 4 
 PhaseModulationMode base_trajectory 
 RadiofrequencyRasterTime 2e-06 
@@ -2158,4 +2158,4 @@ num_samples 90
 # preceding [SIGNATURE] BELONGS to the signature (and needs to be sripped away
 # for recalculating/verification)
 Type md5
-Hash db2890d24f756c8a04aefcc1c6e92ed2
+Hash 2b69821d0a3c30f8d7d8151aca1ae0aa

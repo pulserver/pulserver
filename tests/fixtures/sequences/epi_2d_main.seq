@@ -15,7 +15,7 @@ FOV 0.22 0.22 0.005
 GradientRasterTime 2e-05 
 Matrix 32 16 1 
 Name epi_2d 
-NumGainCalibrationReadouts 1 
+NumGainCalibrationReadouts 16 
 PhaseModulationMode base_trajectory 
 RadiofrequencyRasterTime 2e-06 
 TE 0.00542 
@@ -5831,4 +5831,4 @@ num_samples 96
 # preceding [SIGNATURE] BELONGS to the signature (and needs to be sripped away
 # for recalculating/verification)
 Type md5
-Hash 4b8f0d8e65dc8400b7f4381602cd1100
+Hash c9d43b3ea3a77dcfb735a2f0df65e97b
