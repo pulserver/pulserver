@@ -18,11 +18,10 @@ from pathlib import Path
 import numpy as np
 import pypulseqpp as pp
 import pytest
-import tomllib
 from _host import LIMITS, SMALL, SMALLER
 
 from pulserver import _plugins, ir, virtual
-from pulserver.design import load_plugin
+from pulserver.design import load_plugin, read_options
 from pulserver.mrd._sequence import read_chain
 from pulserver.proxy import SequenceTable
 
@@ -153,7 +152,7 @@ def _designed(name, parameters, directory, changes=None):
     options = (
         None
         if parameters is None
-        else tomllib.loads((PARAMETERS / name / f"{parameters}.toml").read_text())
+        else read_options(PARAMETERS / name / f"{parameters}.toml")
     )
     plugin = load_plugin(_plugins.SEQUENCES / f"{name}.py", options)
     validation, paths = plugin.design(
