@@ -121,8 +121,8 @@ class FourierPlayer:
 
     A pulse turns an entry through its flip angle on resonance times the
     magnitude of the transmit field the entry sees, with the pulse's profile at
-    the field the entry sees during it, about an axis turned by the phase of the
-    transmit field. A pulse under a gradient that changes along one axis, as a
+    the field the entry sees during it, about its axis turned as a pulse phase
+    of minus the transmit field's phase turns it. A pulse under a gradient that changes along one axis, as a
     spectral-spatial pulse, has its profile across the field and the position
     along that axis, simulated over those the entries span. Between events, the
     net gradient moment across a voxel shifts the configuration states by one
@@ -480,7 +480,7 @@ class FourierPlayer:
         entries = self._entries
         scale = entries.density[local].to(torch.complex64)
         if entries.transmit is not None:
-            scale = scale * torch.exp(-1j * torch.angle(entries.transmit[local]))
+            scale = scale * torch.exp(1j * torch.angle(entries.transmit[local]))
         mixed = temporal[:, :, None] * across[:, None, :]
         return mixed.reshape(local.numel(), -1) * scale[:, None]
 

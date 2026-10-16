@@ -206,7 +206,11 @@ def describe(seq: Any, *, subsequence_index: int = 0) -> SequenceDescription:
         rows[int(block)] = SequenceEvent(
             EventType.ADC,
             float(samples[first + centre]) * 1e6,
-            (int(AdcRole.SINGLE), pp.calc_absolute_offsets(adc, system=seq.system)[1], 1),
+            (
+                int(AdcRole.SINGLE),
+                pp.calc_absolute_offsets(adc, system=seq.system)[1],
+                1,
+            ),
         )
 
     events = tuple(
