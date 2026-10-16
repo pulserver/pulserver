@@ -200,7 +200,10 @@ instance.
 
 The receive-gain calibration prescan plays one subsequence from its start to
 the segment instance that completes the readouts its sequence declares
-(`NumGainCalibrationReadouts`, at least one). It waits for no trigger and
+(`NumGainCalibrationReadouts`). The count ends with a repetition, so the gain
+is set on whole repetitions of the scan; the conversion refuses one that ends
+inside a repetition, and takes the readouts through the first repetition that
+acquires when the sequence declares none. It waits for no trigger and
 drives no digital output, and every gradient whose amplitude varies across
 repetitions, a phase encoding for instance, plays at zero, as does a wave any
 of whose logical axes varies.
