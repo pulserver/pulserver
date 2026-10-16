@@ -238,3 +238,33 @@ def test_every_shipped_parameter_file_loads_in_its_shipped_sequence(preset):
     plugin = load_plugin(_plugins.SEQUENCES / f"{preset.parent.name}.py", options)
 
     assert options.items() <= plugin.options.items()
+
+
+def test_a_parameter_set_asks_for_the_field_camera_train_for_the_psd_not_the_plugin(
+    installed, tmp_path
+):
+    """``field_camera`` is no option of the plugin: it reaches the PSD in ``psd.cvs``."""
+    store = DesignStore(tmp_path / "designs", "scan")
+    six = _generated(store, installed, parameter_set=1)
+    file = installed.parent / "parameters" / "repeated" / "03.toml"
+    file.write_text("repetitions = 6\nfield_camera = true\n")
+
+    camera = _generated(store, installed, parameter_set=3)
+
+    assert camera != six
+    assert store.manifest(camera)["options"]["repetitions"] == 6
+    assert store.manifest(camera)["psd"] == {"sfc_enable": 1}
+    assert (store.directory(camera) / "psd.cvs").read_text() == "sfc_enable 1\n"
+    assert not (store.directory(six) / "psd.cvs").exists()
+
+
+def test_a_field_camera_that_is_not_true_or_false_is_refused(installed):
+    file = installed.parent / "parameters" / "repeated" / "01.toml"
+    file.write_text("field_camera = 1\n")
+
+    status, reply = _service.call(
+        "list", plugins=installed, plugin="sequence3", parameter_set=1
+    )
+
+    assert status == 1
+    assert "field_camera" in reply and "true or false" in reply
