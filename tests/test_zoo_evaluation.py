@@ -15,7 +15,7 @@ from pulserver._zoo import ZOO_PAIRS
 from pulserver._zoo._evaluation import achieved, rf_layout
 from pulserver._zoo._saturation import explicit_bands
 from pulserver._zoo._slab import slab
-from pulserver._zoo._user import SHARED
+from pulserver._zoo._user import LINE_SPACING, SHARED
 from pulserver.design import Protocol, StatedParam, load_plugin
 from pulserver.host import call
 from pulserver.protocol import (
@@ -1206,6 +1206,8 @@ def test_every_shared_control_a_sequence_takes_is_named_at_its_own_user_cv(name,
                 entry, "automatic", None
             ):
                 label = label.split(",")[0]
+            if name.startswith("mprage"):
+                label = LINE_SPACING.get(free[0], label)
             assert plugin.protocol[UIParam.user_name(index)].text == label
 
 

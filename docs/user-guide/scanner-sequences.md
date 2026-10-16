@@ -376,7 +376,7 @@ function takes, at the same user entry in every plugin, each as a
 | `user2`, `user3` | Partial Fourier along the phase and the partition encodes |
 | `user4`, `user5` | Calibration (ACS) lines along the phase and the partition encodes |
 | `user6` | Readout oversampling |
-| `user7` | Echo spacing, in ms; 0 the shortest |
+| `user7` | Echo spacing, in ms; 0 the shortest. In the MPRAGE plugins, the line spacing (inner TR) of the gradient-echo train |
 | `user8` | Refocusing flip angle, in degrees |
 | `user9` | CAIPIRINHA shift, in partitions per acquired line |
 | `user10`, `user11` | Wave-encoding amplitude, in mT/m, and cycles per readout, shown while the `wave` option is on |
