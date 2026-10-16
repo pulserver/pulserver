@@ -128,6 +128,8 @@ const char *pulseg_get_error_message(int code)
         return "RF amplitude pattern is not periodic across canonical TRs";
     case PULSEG_ERR_CONSISTENCY_RF_SHIM_PERIODIC:
         return "RF shim ID pattern is not periodic across canonical TRs";
+    case PULSEG_ERR_CONSISTENCY_PTX_RF_PERIODIC:
+        return "pTx RF pulse pattern is not periodic across canonical TRs";
     default:
         return "Unknown error";
     }
@@ -221,6 +223,10 @@ const char *pulseg_get_error_hint(int code)
         return "RF shim IDs differ between canonical TR instances that should "
                "be identical. If variable shimming across canonical units is intended, "
                "split volumes into separate subsequences";
+    case PULSEG_ERR_CONSISTENCY_PTX_RF_PERIODIC:
+        return "A pTx RF pulse (several channels, or an RF shim) differs between "
+               "canonical TR instances that should be identical. Play interleaved "
+               "pulses within one hyper-TR, and sequential ones in chained subsequences";
     default:
         return "Check sequence design for structural consistency.";
     }

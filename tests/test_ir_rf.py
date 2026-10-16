@@ -278,3 +278,76 @@ def test_a_ptx_pulse_reads_as_uniform_only_when_its_samples_sit_on_the_rf_raster
     }
 
     assert read == {100: uniform, len(sinc.signal): 1}
+
+
+def _ptx(channel):
+    """A two-channel pulse led by ``channel``, the other at a third of it."""
+    signal = np.tile(np.hanning(100) * 200.0 / 3.0, (2, 1)).astype(complex)
+    signal[channel] *= 3.0 * np.exp(0.3j)
+    return pp.make_ptx_pulse(
+        signal, dwell=SYSTEM.rf_raster_time, system=SYSTEM, use="excitation"
+    )
+
+
+def test_a_ptx_pulse_that_changes_between_repetitions_is_refused(tmp_path):
+    """Each repetition is costed as the worst one, so a pTx one must play the same pulses.
+
+    The channel pattern decides local SAR, so no repetition stands for one that
+    drives other channels: sequential pTx pulses belong in chained subsequences.
+    """
+    first, second = _ptx(0), _ptx(1)
+    path = _written(tmp_path, [first, first, second, second], repetitions=1)
+
+    with pytest.raises(ValueError, match="pTx RF pulse pattern is not periodic"):
+        convert(
+            path, SYSTEM, vendor=VENDOR, label_column_map=LABELS, cache_ext=".cache"
+        )
+
+
+def test_ptx_pulses_interleaved_within_the_repetition_are_accepted(tmp_path):
+    first, second = _ptx(0), _ptx(1)
+    path = _written(tmp_path, [first, second], repetitions=3)
+
+    assert convert(
+        path, SYSTEM, vendor=VENDOR, label_column_map=LABELS, cache_ext=".cache"
+    ).exists()
+
+
+def test_a_varying_pulse_is_costed_as_the_repetition_that_plays_the_strongest(
+    tmp_path, scanner_build
+):
+    """The RF of a subsequence is costed from the pulses of its worst-B1rms repetition.
+
+    The repetitions here differ in their pulse, not in its amplitude: costed
+    from the first, the scan would be costed as a 10 degree hard pulse while
+    it also plays a 30 degree sinc.
+    """
+    hard = pp.make_block_pulse(
+        np.pi / 18, duration=2e-3, system=SYSTEM, use="excitation"
+    )
+    sinc = pp.make_sinc_pulse(
+        np.pi / 6, duration=2e-3, time_bw_product=4, system=SYSTEM, use="excitation"
+    )
+    path = _written(tmp_path, [hard, hard, sinc, sinc], repetitions=1)
+    cache = convert(
+        path, SYSTEM, vendor=VENDOR, label_column_map=LABELS, cache_ext=".cache"
+    )
+    reader = scanner_build(tmp_path, "read_rf_definitions.c", "read_rf_definitions")
+
+    printed = subprocess.run(
+        [str(reader), str(cache), str(path.stat().st_size)],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    read = [
+        (int(parts[1]), float(parts[2]))
+        for parts in (line.split() for line in printed.splitlines())
+        if parts[0] == "rf"
+    ]
+    stated = dict(played_rf(pp.io.read(path)))
+
+    assert len(read) == 1
+    ((definition, angle),) = read
+    assert definition == max(stated, key=stated.get)
+    assert angle == pytest.approx(30.0, rel=1e-3)

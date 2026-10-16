@@ -391,6 +391,99 @@ static int check_rf_amplitude_periodicity(
 }
 
 /*
+ * get_block_rf_definition --
+ *   Return the RF definition block 'block_idx' plays, or -1 if it has no RF.
+ */
+static int get_block_rf_definition(const pulseg_sequence_descriptor *desc, int block_idx)
+{
+    const pulseg_block_table_element *bte = &desc->block_table[block_idx];
+    int id;
+
+    if (bte->rf_id < 0 || bte->rf_id >= desc->rf_table_size)
+        return -1;
+    id = desc->rf_table[bte->rf_id].id;
+    return (id >= 0 && id < desc->num_unique_rfs) ? id : -1;
+}
+
+/* Whether the RF of block 'block_idx' is a pTx pulse: several channels, or
+ * played through an RF shim. */
+static int block_rf_is_ptx(const pulseg_sequence_descriptor *desc, int block_idx)
+{
+    const int id = get_block_rf_definition(desc, block_idx);
+
+    if (id < 0)
+        return 0;
+    return desc->rf_definitions[id].num_channels > 1
+        || desc->block_table[block_idx].rf_shim_id >= 0;
+}
+
+/*
+ * check_rf_definition_periodicity --
+ *   Verify that every TR instance plays the RF definitions of the reference
+ *   TR, position by position. A pTx position (check_rf_shim_periodicity's
+ *   reasoning: the channel pattern decides local SAR, so no instance stands
+ *   for another) must match; it is refused otherwise. A single-channel one
+ *   that differs is, under the permissive gate, accepted with the
+ *   rf_amplitude_variable flag raised, so that the RF is costed from the
+ *   pulses of the worst-B1rms instance (pulseg_get_rf_array).
+ */
+static int check_rf_definition_periodicity(
+    pulseg_sequence_descriptor *desc,
+    int allow_variable,
+    int ref_tr,
+    int first_tr,
+    int last_tr,
+    pulseg_diagnostic *diag)
+{
+    const int tr_size = desc->tr_descriptor.tr_size;
+    const int ref_start = ref_tr * tr_size;
+    int tr_idx, j;
+
+    for (tr_idx = first_tr; tr_idx <= last_tr; ++tr_idx)
+    {
+        const int chk_start = tr_idx * tr_size;
+        if (tr_idx == ref_tr)
+            continue;
+        for (j = 0; j < tr_size; ++j)
+        {
+            const int ref_def = get_block_rf_definition(desc, ref_start + j);
+            const int chk_def = get_block_rf_definition(desc, chk_start + j);
+            if (ref_def == chk_def)
+                continue;
+            if (block_rf_is_ptx(desc, ref_start + j) || block_rf_is_ptx(desc, chk_start + j))
+            {
+                if (diag)
+                    pulseg__diag_printf(
+                        diag,
+                        "pTx RF periodicity: TR %d block %d plays RF definition %d, "
+                        "expected %d (from reference TR %d)\n",
+                        tr_idx, j, chk_def, ref_def, ref_tr);
+                return PULSEG_ERR_CONSISTENCY_PTX_RF_PERIODIC;
+            }
+            if (!allow_variable)
+            {
+                if (diag)
+                    pulseg__diag_printf(
+                        diag,
+                        "RF periodicity: TR %d block %d plays RF definition %d, "
+                        "expected %d (from reference TR %d)\n",
+                        tr_idx, j, chk_def, ref_def, ref_tr);
+                return PULSEG_ERR_CONSISTENCY_RF_PERIODIC;
+            }
+            if (!desc->rf_amplitude_variable && diag)
+                pulseg__diag_printf(
+                    diag,
+                    "RF pulse varies (TR %d block %d: definition %d vs %d at TR %d); "
+                    "costing the worst-B1rms instance\n",
+                    tr_idx, j, chk_def, ref_def, ref_tr);
+            desc->rf_amplitude_variable = 1;
+        }
+    }
+
+    return PULSEG_SUCCESS;
+}
+
+/*
  * check_rf_shim_periodicity --
  *   Same logic as check_rf_amplitude_periodicity but compares
  *   rf_shim_id values instead of RF amplitudes.
@@ -617,6 +710,26 @@ int pulseg__check_consistency(
                     pulseg__diag_printf(
                         diag,
                         "Consistency check failed: canonical RF amplitude "
+                        "not periodic in subsequence %d\n",
+                        subseq_idx);
+                }
+                return rc;
+            }
+
+            rc = check_rf_definition_periodicity(
+                desc,
+                allow_variable_rf,
+                ref_tr,
+                first_check,
+                last_check,
+                diag);
+            if (PULSEG_FAILED(rc))
+            {
+                if (diag)
+                {
+                    pulseg__diag_printf(
+                        diag,
+                        "Consistency check failed: canonical RF pulses "
                         "not periodic in subsequence %d\n",
                         subseq_idx);
                 }
