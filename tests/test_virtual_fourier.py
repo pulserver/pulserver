@@ -1,5 +1,6 @@
 """The virtual scanner's Fourier engine: its timeline, its event streams, and what it acquires."""
 
+import dataclasses
 import itertools
 import shutil
 from pathlib import Path
@@ -18,6 +19,7 @@ from pypulseqpp.sequences.preparation.fatsat import FAT_SHIFT_PPM
 from pulserver import ir, virtual
 from pulserver.virtual import _fourier
 from pulserver.virtual._timeline import Timeline
+from pulserver.virtual._tissue import transmitted
 
 FIXTURES = Path(__file__).parent / "fixtures" / "sequences"
 #: Converged Bloch simulations of the cases below, the readouts of each joined
@@ -718,4 +720,48 @@ def test_a_readout_of_one_shape_is_spanned_by_one_finite_term():
     assert torch.isfinite(basis).all()
     np.testing.assert_allclose(
         torch.abs(basis.mH @ column).item(), np.sqrt(10.0), rtol=1e-5
+    )
+
+
+def _free_induction(path, phase):
+    """A hard pulse of phase ``phase``, in rad, and a readout of its free induction, converted beside ``path``."""
+    seq = pp.Sequence(SYSTEM)
+    seq.add_block(
+        pp.make_block_pulse(np.pi / 8, duration=5e-4, phase_offset=phase, system=SYSTEM)
+    )
+    seq.add_block(pp.make_adc(num_samples=16, duration=1.6e-3, system=SYSTEM))
+    seq.write(str(path))
+    ir.convert(path, SYSTEM)
+    return path
+
+
+@pytest.mark.parametrize("phase", [0.5, -2.0])
+def test_a_channel_driven_at_phase_phi_turns_the_signal_by_minus_phi_as_a_pulse_of_phase_phi_does(
+    tmp_path, device, phase
+):
+    water = virtual.Phantom(
+        [virtual.Ellipse((0.0, 0.0, 0.0), (0.03, 0.03), t1=0.8, t2=0.08)]
+    )
+    tissue = water.tissue(2e-3, field_t=3.0)
+    driven = SimpleNamespace(
+        transmit=lambda points: np.ones((len(points), 1), complex),
+        default_shim=np.array([np.exp(1j * phase)]),
+    )
+    shimmed = dataclasses.replace(
+        tissue, transmit=transmitted(driven, tissue.positions)
+    )
+
+    def first_sample(path, tissue):
+        player = virtual.FourierPlayer(path, tissue, device=device)
+        return list(player.readouts(0, player.blocks))[-1].ravel()[0]
+
+    still = first_sample(_free_induction(tmp_path / "still.seq", 0.0), tissue)
+    pulsed = first_sample(_free_induction(tmp_path / "pulsed.seq", phase), tissue)
+    drive = first_sample(_free_induction(tmp_path / "drive.seq", 0.0), shimmed)
+
+    assert np.angle(pulsed / still) == pytest.approx(
+        np.angle(np.exp(-1j * phase)), abs=1e-4
+    )
+    assert np.angle(drive / still) == pytest.approx(
+        np.angle(np.exp(-1j * phase)), abs=1e-4
     )

@@ -285,7 +285,7 @@ typedef struct pulseq_reserved_definitions
 typedef struct pulseq_rf_shim_entry
 {
     int num_channels;
-    PULSEQ_REAL values[2 * PULSEQ_MAX_RF_SHIM_CHANNELS];
+    PULSEQ_REAL values[2 * PULSEQ_MAX_RF_SHIM_CHANNELS]; /**< per channel: magnitude, phase (rad) */
 } pulseq_rf_shim_entry;
 
 /**
@@ -374,6 +374,10 @@ typedef struct pulseq_file
     pulseq_int_column adc_labels[PULSEQ_ADC_LABEL_WIDTH];
     int is_rf_library_parsed;
     int rf_library_size;
+    /* Per RF row: amplitude (Hz); magnitude, phase and time shape ids; centre
+     * and delay (us); the frequency and phase ppm offsets, 0 once the host
+     * folds them into the next two; frequency offset (Hz); phase offset (rad).
+     * An RF phase shape holds cycles. */
     PULSEQ_REAL (*rf_library)[10];
     int *rf_use_tags; /* per-RF-event use tag (parsed from .seq) */
     /* Per-RF-event spectrum, as pypulseqpp.calc_rf_bandwidth measures it:
