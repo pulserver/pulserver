@@ -217,21 +217,27 @@ def seqfile(tmp_path, key=""):
 
 
 def test_a_scan_that_asks_to_be_corrected_for_motion_says_so(tmp_path):
-    from pulserver.proxy._designs import _asks_for_motion_correction
+    from pulserver.proxy._motion import (
+        asks_for_motion_correction as _asks_for_motion_correction,
+    )
 
     assert _asks_for_motion_correction(seqfile(tmp_path, "EnablePmc 1\n"))
 
 
 @pytest.mark.parametrize("key", ["", "EnablePmc 0\n"])
 def test_a_scan_that_does_not_ask_is_not_corrected(tmp_path, key):
-    from pulserver.proxy._designs import _asks_for_motion_correction
+    from pulserver.proxy._motion import (
+        asks_for_motion_correction as _asks_for_motion_correction,
+    )
 
     assert not _asks_for_motion_correction(seqfile(tmp_path, key))
 
 
 def test_the_key_is_read_only_inside_the_definitions(tmp_path):
     """A later block naming it is not the scan asking."""
-    from pulserver.proxy._designs import _asks_for_motion_correction
+    from pulserver.proxy._motion import (
+        asks_for_motion_correction as _asks_for_motion_correction,
+    )
 
     path = tmp_path / "sequence.seq"
     path.write_text(
@@ -241,6 +247,49 @@ def test_the_key_is_read_only_inside_the_definitions(tmp_path):
 
 
 def test_a_file_that_is_not_there_asks_for_nothing(tmp_path):
-    from pulserver.proxy._designs import _asks_for_motion_correction
+    from pulserver.proxy._motion import (
+        asks_for_motion_correction as _asks_for_motion_correction,
+    )
 
     assert not _asks_for_motion_correction(tmp_path / "no_such.seq")
+
+
+def _committed(tmp_path, key):
+    from pulserver.host import DesignStore
+
+    store = DesignStore(tmp_path / "designs", "scan")
+    staged = store.stage()
+    seqfile(staged, key)
+    store.commit("a" * 64, staged, {})
+    return store.path / "motion.buf"
+
+
+def test_a_design_asking_for_motion_correction_is_stored_with_an_empty_pose_file(
+    tmp_path,
+):
+    """The scan opens the pose file once, when it starts, before any series runs."""
+    path = _committed(tmp_path, "EnablePmc 1\n")
+
+    raw = path.read_bytes()
+    assert struct.unpack("=4I", raw[:16]) == (MAGIC, LAYOUT, SLOTS, _SLOT_BYTES)
+    assert raw[16:] == bytes(len(raw) - 16)
+
+
+def test_a_design_not_asking_for_motion_correction_is_stored_without_a_pose_file(
+    tmp_path,
+):
+    assert not _committed(tmp_path, "").exists()
+
+
+def test_a_series_clears_the_pose_file_the_scan_already_holds_open(tmp_path):
+    """Created anew for the series, in place: the scan's descriptor still reads it."""
+    path = _committed(tmp_path, "EnablePmc 1\n")
+    with MotionWriter(path) as writer:
+        writer.publish(TURNED)
+    with path.open("rb") as scan:
+        with MotionWriter(path) as writer:
+            assert writer.version == 0
+            assert slot_of(path, 0) == [0] * 12
+            writer.publish(IDENTITY)
+        scan.seek(_HEADER_BYTES)
+        assert struct.unpack("=I", scan.read(4))[0] == 1
