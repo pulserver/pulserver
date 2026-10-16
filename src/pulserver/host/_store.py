@@ -80,7 +80,9 @@ class DesignStore:
     :data:`MANIFEST`. It is written in a stage and renamed into place, so a
     reader sees a design whole or not at all, and two processes writing one
     design leave one directory. A scan plays one design, so committing a
-    design removes the scan's others.
+    design removes the scan's others. A design whose sequence sets
+    ``EnablePmc`` is published with its scan's empty pose file,
+    ``<root>/<scan>/motion.buf``.
 
     Parameters
     ----------
@@ -254,6 +256,11 @@ class DesignStore:
             self.discard(staged)
             if self.find(identity) is None:
                 raise
+        # The scan opens its pose file once, as it starts, before any series
+        # is reconstructed: it has to be there with the design.
+        from ..proxy._motion import prepare
+
+        prepare(self.path, self.path / design / "sequence.seq")
         return design
 
     @staticmethod
