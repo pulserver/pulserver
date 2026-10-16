@@ -300,18 +300,22 @@ typedef struct pulseg_opts
     void *vendor_section_ctx;
 
     /**
-     * @brief Accept RF amplitude that varies across canonical TR instances.
+     * @brief Accept RF that varies across canonical TR instances.
      *
      * Default 1. When set, a subsequence whose positional RF amplitude
-     * pattern differs between TR instances (or passes) is accepted instead
-     * of returning @c PULSEG_ERR_CONSISTENCY_RF_PERIODIC; the descriptor's
-     * @c rf_amplitude_variable flag is raised and the RF safety model is
-     * built from the *positional-max envelope* rather than one canonical
-     * instance -- see pulseg_get_rf_array().
+     * pattern, or single-channel pulse, differs between TR instances (or
+     * passes) is accepted instead of returning
+     * @c PULSEG_ERR_CONSISTENCY_RF_PERIODIC; the descriptor's
+     * @c rf_amplitude_variable flag is raised and the RF is costed from the
+     * pulses of the worst-B1rms instance, with a *positional-max envelope*
+     * for peak-only limits -- see pulseg_get_rf_array().
      *
-     * RF *shim* pattern variation stays rejected regardless of this flag:
-     * VOP SAR with changing shim vectors is not order-monotone in any
-     * per-position scalar, so no envelope dominates it.
+     * RF *shim* pattern variation, and any variation of a pTx pulse (several
+     * channels, or a shim), stay rejected regardless of this flag
+     * (@c PULSEG_ERR_CONSISTENCY_RF_SHIM_PERIODIC,
+     * @c PULSEG_ERR_CONSISTENCY_PTX_RF_PERIODIC): VOP SAR with a changing
+     * channel pattern is not order-monotone in any per-position scalar, so
+     * no instance stands for the others.
      *
      * Set to 0 to restore the strict periodicity gate.
      */
@@ -707,9 +711,10 @@ typedef struct pulseg_subseq_info
     int num_gain_cal_readouts; /**< readouts of the receive-gain calibration prescan */
     /** TR instances the subsequence plays; always >= 1. */
     int num_tr_instances;
-    /** 1 where the RF amplitude at some position differs between TR
-     *  instances, which is what makes pulseg_get_rf_array() report a
-     *  positional-max envelope rather than one canonical instance. */
+    /** 1 where the RF amplitude, or a single-channel pulse, at some position
+     *  differs between TR instances, which is what makes
+     *  pulseg_get_rf_array() cost the worst-B1rms instance's pulses and report
+     *  a positional-max envelope rather than one canonical instance. */
     int rf_amplitude_variable;
     /** Local SAR term, per pulse, against the reference pulse (hard, 1 ms,
      *  180 degrees, in the default channel shim) at the drive scale where
