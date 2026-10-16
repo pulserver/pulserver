@@ -281,8 +281,9 @@ def test_a_ptx_pulse_reads_as_uniform_only_when_its_samples_sit_on_the_rf_raster
 
 
 def _ptx(channel):
-    signal = np.zeros((2, 100), complex)
-    signal[channel] = np.hanning(100) * 200.0
+    """A two-channel pulse led by ``channel``, the other at a third of it."""
+    signal = np.tile(np.hanning(100) * 200.0 / 3.0, (2, 1)).astype(complex)
+    signal[channel] *= 3.0 * np.exp(0.3j)
     return pp.make_ptx_pulse(
         signal, dwell=SYSTEM.rf_raster_time, system=SYSTEM, use="excitation"
     )
