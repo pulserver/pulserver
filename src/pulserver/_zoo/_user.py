@@ -113,10 +113,20 @@ def wave_entries() -> dict[ProtocolKey, Entry]:
     }
 
 
+#: The name of the echo spacing of a gradient-echo train inside an inversion
+#: shot: the repetition time of its lines.
+LINE_SPACING = {"esp": "Line spacing (inner TR), 0 the shortest"}
+
+
 def user_entries(
-    app: Callable[..., Any], protocol: Mapping[ProtocolKey, Entry]
+    app: Callable[..., Any],
+    protocol: Mapping[ProtocolKey, Entry],
+    names: Mapping[str, str] | None = None,
 ) -> dict[ProtocolKey, Entry]:
-    """Return the shared controls of the arguments ``app`` takes and ``protocol`` does not bind, each named, at its user CV."""
+    """Return the shared controls of the arguments ``app`` takes and ``protocol`` does not bind, each named, at its user CV.
+
+    ``names`` renames the control of an argument, by argument.
+    """
     taken = inspect.signature(app).parameters
     bound = {getattr(entry, "argument", None) for entry in protocol.values()}
     entries: dict[ProtocolKey, Entry] = {}
@@ -132,7 +142,9 @@ def user_entries(
                         made, automatic=None, range_min=made.automatic + 1
                     )
                     name = name.split(",")[0]
-                entries[UIParam.user_name(index)] = Description(name)
+                entries[UIParam.user_name(index)] = Description(
+                    (names or {}).get(argument, name)
+                )
                 entries[UIParam.user_value(index)] = made
                 break
     return entries

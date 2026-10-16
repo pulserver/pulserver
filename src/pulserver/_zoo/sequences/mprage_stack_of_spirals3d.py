@@ -8,7 +8,7 @@ from pypulseqpp.sequences.sequence.mprage_stack_of_spirals3D_sequence import (
 
 from pulserver._zoo._inversion import inversion_train, shots_of_spirals
 from pulserver._zoo._slab import slab
-from pulserver._zoo._user import OWN, shortest_at_zero, user_entries
+from pulserver._zoo._user import LINE_SPACING, OWN, shortest_at_zero, user_entries
 from pulserver.design import (
     ChoiceParam,
     Description,
@@ -85,7 +85,7 @@ class MprageStackOfSpirals3D(SequencePlugin):
             ),
         }
 
-    protocol |= user_entries(app, protocol)
+    protocol |= user_entries(app, protocol, LINE_SPACING)
 
     def evaluate(self, system, protocol):
         return inversion_train(self, system, protocol, shots_of_spirals)
