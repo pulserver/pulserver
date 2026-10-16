@@ -19,7 +19,7 @@ InnerTR 0.00686
 Matrix 32 32 4 
 Name mprage_stack_of_spirals_3d 
 NumArms 3 
-NumGainCalibrationReadouts 1 
+NumGainCalibrationReadouts 3 
 PartitionAngleOffset 0 
 PhaseModulationMode base_trajectory 
 RadiofrequencyRasterTime 2e-06 
@@ -14926,4 +14926,4 @@ num_samples 1086
 # preceding [SIGNATURE] BELONGS to the signature (and needs to be sripped away
 # for recalculating/verification)
 Type md5
-Hash c81a40788a68974e49f943a166af02a0
+Hash 26297632ea6667550354f97758a1e844

@@ -21,7 +21,7 @@ class Prescan:
     readouts
         The readouts after which it ends, with the segment instance that
         completes them; 0 takes the number its sequence declares
-        (``NumGainCalibrationReadouts``), at least one.
+        (``NumGainCalibrationReadouts``), whole repetitions of it.
     """
 
     subsequence: int = 0
