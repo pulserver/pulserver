@@ -108,6 +108,40 @@ class _Variant(NamedTuple):
     parameters: str | None
 
 
+#: Parameter-file keys that set the PSD rather than the plugin, which any set
+#: may state, and the PSD setting each one writes to the design's ``psd.cvs``.
+#: ``field_camera`` plays the field-camera trigger train in manual prescan.
+PSD_KEYS = {"field_camera": "sfc_enable"}
+
+#: The file beside a design's sequence that carries its PSD settings.
+PSD_SETTINGS = "psd.cvs"
+
+
+def _split_options(options: Mapping[str, Any]) -> tuple[dict[str, Any], dict[str, int]]:
+    """Return a parameter file's options for the plugin, and its PSD settings.
+
+    Raises
+    ------
+    CallError
+        If a PSD key is not true or false.
+    """
+    plugin = {key: value for key, value in options.items() if key not in PSD_KEYS}
+    settings = {}
+    for key, setting in PSD_KEYS.items():
+        if key in options:
+            if not isinstance(options[key], bool):
+                raise CallError(f"{key} is {options[key]!r}; it is true or false")
+            settings[setting] = int(options[key])
+    return plugin, settings
+
+
+def _psd_settings(variant: _Variant) -> dict[str, int]:
+    """Return the PSD settings of a variant's parameter file; none without one."""
+    if variant.parameters is None:
+        return {}
+    return _split_options(read_options(variant.parameters))[1]
+
+
 def _variant(
     plugins: PluginPath,
     plugin: str,
@@ -256,9 +290,12 @@ def generate(
     if not validation.valid:
         raise CallError(validation.info)
     source = _source(variant)
+    settings = _psd_settings(variant)
     identified = dict(validation.values)
     if scanner.options:
         identified["options"] = dict(scanner.options)
+    if settings:
+        identified["psd"] = settings
     if exam is not None:
         identified["exam"] = _exam_digest(exam)
     identity = design_identity(plugin, identified_limits(limits), identified, source)
@@ -267,6 +304,10 @@ def generate(
         return f"GENERATED {_pushed(store, found, push)}\n"
     staged = store.stage()
     try:
+        if settings:
+            (staged / PSD_SETTINGS).write_text(
+                "".join(f"{name} {value}\n" for name, value in settings.items())
+            )
         accepted, paths, written = scanner._design(
             design, validation.values, staged, exam
         )
@@ -291,6 +332,7 @@ def generate(
             **_record(limits),
             "plugin": plugin,
             "options": dict(scanner.options),
+            "psd": settings,
             "source": source,
             "scan_time": validation.duration,
             "fov_offset_mm": [1e3 * value for value in offset],
@@ -460,7 +502,7 @@ def _record(limits: Mapping[str, Any]) -> dict[str, Any]:
 @lru_cache(maxsize=32)
 def _cached(variant: _Variant, mtimes_ns: tuple[int, ...]) -> SequencePlugin:  # noqa: ARG001 -- part of the key
     options = {} if variant.parameters is None else read_options(variant.parameters)
-    return load_plugin(Path(variant.path), options)
+    return load_plugin(Path(variant.path), _split_options(options)[0])
 
 
 def _mtimes(variant: _Variant) -> tuple[int, ...]:

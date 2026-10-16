@@ -425,6 +425,12 @@ navigator = true
 A file naming an option the plugin does not declare, or giving one a value it
 does not take, is refused. The options join the design's identity and its
 manifest, so a design is a function of the set's contents, not of its number.
+
+One key is not an option of the plugin, and any set may state it:
+`field_camera = true` has the series' manual prescan play the interpreter's
+field-camera trigger train instead of the sequence. It reaches the interpreter
+as `sfc_enable 1` in `psd.cvs` beside the design, and joins the design's
+identity and its manifest (`psd`).
 `pulserver design` takes the set as `--parameter-set` and the directory as
 `--parameters`; `src/pulserver/_zoo/parameters/` ships a file for each choice
 below.
