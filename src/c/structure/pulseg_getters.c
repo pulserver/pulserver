@@ -480,6 +480,49 @@ static int pulseg__rf_worst_b1rms_instance(
     return best_u;
 }
 
+/*
+ * pulseg__rf_costed_instance --
+ *   The TR instance whose pulses the RF of a subsequence is costed from: the
+ *   worst-B1rms one when the RF varies across instances (amplitude, or a
+ *   single-channel pulse; pulseg_core.c), the canonical one (0) otherwise.
+ *   Shared by pulseg_get_rf_array and pulseg_get_rf_event_array, which must
+ *   stay index-aligned.
+ */
+static int pulseg__rf_costed_instance(const pulseg_sequence_descriptor *desc, int count)
+{
+    const pulseg_tr_descriptor *trd = &desc->tr_descriptor;
+
+    if (!desc->rf_amplitude_variable || trd->num_trs <= 1)
+        return 0;
+    return pulseg__rf_worst_b1rms_instance(desc, 0, 0, trd->tr_size, trd->num_trs, count);
+}
+
+/*
+ * pulseg__rf_costed_block --
+ *   The block at canonical position @p pos in instance @p instance, when it
+ *   plays an RF definition; @p canonical (that position in instance 0)
+ *   otherwise. The pulse costed at a position is the costed instance's own:
+ *   its definition, amplitude, shim and safety group.
+ */
+static const pulseg_block_table_element *pulseg__rf_costed_block(
+    const pulseg_sequence_descriptor *desc,
+    const pulseg_block_table_element *canonical,
+    int instance,
+    int pos)
+{
+    const int blk = instance * desc->tr_descriptor.tr_size + pos;
+    const pulseg_block_table_element *bte;
+
+    if (instance <= 0 || blk < 0 || blk >= desc->num_blocks)
+        return canonical;
+    bte = &desc->block_table[blk];
+    if (bte->rf_id < 0 || bte->rf_id >= desc->rf_table_size)
+        return canonical;
+    if (desc->rf_table[bte->rf_id].id < 0 || desc->rf_table[bte->rf_id].id >= desc->num_unique_rfs)
+        return canonical;
+    return bte;
+}
+
 /* ================================================================== */
 /*  pulseg_get_rf_array --                                         */
 /*    Build an ordered array of RF stats for a TR region.             */
@@ -546,15 +589,7 @@ int pulseg_get_rf_array(const pulseg_collection *coll, pulseg_rf_stats **out_pul
      * pulseg__rf_worst_b1rms_instance(). u=0 (the canonical instance
      * already selected by start/count above) when the sequence is
      * periodic, which keeps this a no-op for the regression contract. */
-    winner_u = 0;
-    if (desc->rf_amplitude_variable && env_units > 1)
-        winner_u = pulseg__rf_worst_b1rms_instance(
-            desc,
-            use_exec_stream,
-            env_base,
-            env_stride,
-            env_units,
-            count);
+    winner_u = pulseg__rf_costed_instance(desc, count);
 
     /* Pass 1: count RF-bearing blocks */
     num_rf = 0;
@@ -594,6 +629,10 @@ int pulseg_get_rf_array(const pulseg_collection *coll, pulseg_rf_stats **out_pul
         if (rf_def_id < 0 || rf_def_id >= desc->num_unique_rfs)
             continue;
 
+        /* The costed instance's own pulse at this position: a single-channel
+         * pulse may differ between instances under the permissive gate. */
+        bte = pulseg__rf_costed_block(desc, bte, winner_u, i);
+        rf_def_id = desc->rf_table[bte->rf_id].id;
         rfdef = &desc->rf_definitions[rf_def_id];
 
         /* Hard-copy base stats */
@@ -661,6 +700,7 @@ int pulseg_get_rf_event_array(
     int start, count, num_instances;
     int use_exec_stream;
     int i, n, num_rf;
+    int winner_u;
 
     if (!coll || !out_events)
         return PULSEG_ERR_NULL_POINTER;
@@ -694,6 +734,9 @@ int pulseg_get_rf_event_array(
     }
     if (count < 0)
         count = 0;
+
+    /* The instance pulseg_get_rf_array costs, so the two stay index-aligned */
+    winner_u = pulseg__rf_costed_instance(desc, count);
 
     /* Pass 1: count RF-bearing blocks */
     num_rf = 0;
@@ -733,6 +776,8 @@ int pulseg_get_rf_event_array(
         if (rf_def_id < 0 || rf_def_id >= desc->num_unique_rfs)
             continue;
 
+        bte = pulseg__rf_costed_block(desc, bte, winner_u, i);
+        rf_def_id = desc->rf_table[bte->rf_id].id;
         rfdef = &desc->rf_definitions[rf_def_id];
 
         act_amp = desc->rf_table[bte->rf_id].amplitude;
