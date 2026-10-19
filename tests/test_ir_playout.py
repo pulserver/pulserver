@@ -276,6 +276,35 @@ def test_the_prescan_plays_one_subsequence_to_the_instance_completing_its_readou
     assert scan["segment"].size > blocks["segment"].size
 
 
+def test_the_prescan_plays_but_neither_acquires_nor_counts_an_exempt_readout(
+    tmp_path,
+):
+    rf = pp.make_block_pulse(0.1, duration=1e-3, system=SYSTEM)
+    adc = pp.make_adc(64, duration=2e-3, system=SYSTEM)
+    skip = pp.make_label(type="SET", label="NOPRESCAN", value=1)
+    keep = pp.make_label(type="SET", label="NOPRESCAN", value=0)
+    seq = pp.Sequence(SYSTEM)
+    for _ in range(6):
+        seq.add_block(rf)
+        seq.add_block(adc, keep)
+        seq.add_block(adc, skip)
+        seq.add_block(pp.make_delay(5e-3))
+    seq.set_definition("NumGainCalibrationReadouts", 3)
+    path = tmp_path / "exempt.seq"
+    seq.write(str(path))
+    ir.convert(path, SYSTEM)
+
+    budget = WaveBudget(LOTS, RASTER_US)
+    prescan = ir.playout(path, budget, prescan=Prescan())["blocks"]
+    scan = ir.playout(path, budget)["blocks"]
+    played = prescan["segment"].size
+
+    assert scan["adc"].sum() == 12
+    assert played >= 2 * 4 + 3
+    assert prescan["adc"].sum() == 3
+    assert (scan["adc"][:played] - prescan["adc"]).sum() == 3
+
+
 def test_the_prescan_plays_no_gradient_whose_amplitude_varies(tmp_path):
     seq = _converted("gre_2d_3sl.seq", tmp_path)
     budget = WaveBudget(LOTS, RASTER_US)

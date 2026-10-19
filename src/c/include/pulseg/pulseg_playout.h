@@ -54,6 +54,8 @@ extern "C"
         int slot;           /**< the slot of its positions' rings it plays,
                                  @c instance modulo the plan's slots; -1
                                  unless the waves are streamed             */
+        int visit;          /**< the prescan tour's visit it plays, -1
+                                 outside the tour                          */
     } pulseg_playout_segment;
 
     /**
@@ -181,11 +183,68 @@ extern "C"
                                       with the instance that completes them;
                                       0 takes the subsequence's
                                       num_gain_cal_readouts, at least 1    */
+        int tour;                /**< PULSEG_TOUR_*: whether the prescan
+                                      plays the pTx tour first, and whether
+                                      it acquires the tour's readouts      */
     } pulseg_playout_options;
 
+/** The prescan plays no tour. */
+#define PULSEG_TOUR_NONE 0
+/** The prescan plays the tour first and acquires none of its readouts. */
+#define PULSEG_TOUR_PLAYED 1
+/** The prescan plays the tour first, acquires its readouts and counts them
+ *  on top of the calibration's. */
+#define PULSEG_TOUR_ACQUIRED 2
+
 /* clang-format off */
-#define PULSEG_PLAYOUT_OPTIONS_INIT {-1, 0}
+#define PULSEG_PLAYOUT_OPTIONS_INIT {-1, 0, PULSEG_TOUR_NONE}
 /* clang-format on */
+
+    /**
+     * @brief One segment instance of the pTx prescan tour.
+     *
+     * The instance of its subsequence that holds the largest drive one
+     * channel of a parallel-transmit RF definition receives: the RF
+     * amplitude times the channel's shim magnitude, or the amplitude alone
+     * for a pulse with a waveform per channel, whose channels all peak at
+     * the instance of largest amplitude.
+     */
+    typedef struct pulseg_prescan_visit
+    {
+        int subsequence;    /**< subsequence it plays in                   */
+        int segment;        /**< global segment index                      */
+        int first_position; /**< execution-stream position of its first
+                                 block                                     */
+        int num_blocks;     /**< its blocks                                */
+        int rf_definition;  /**< the subsequence's RF definition whose
+                                 largest drive it plays                    */
+        int channels;       /**< channels whose largest drive it plays     */
+        float drive_hz;     /**< the largest of those drives, in Hz        */
+        long duration_us;   /**< its duration                              */
+        int rf_pulses;      /**< RF blocks it plays                        */
+        int readouts;       /**< readouts it acquires outside prescan that
+                                 NOPRESCAN does not exempt                 */
+    } pulseg_prescan_visit;
+
+    /**
+     * @brief The pTx prescan tour: one segment instance per largest channel
+     *        drive of every parallel-transmit RF definition.
+     *
+     * An RF definition is parallel-transmit where it plays a waveform per
+     * channel, or plays under an RF shim of more than one channel.  Visits
+     * are listed by subsequence, then by first position; one instance that
+     * holds the largest drive of several channels, or of several
+     * definitions, is listed once, for the first definition, with the
+     * channels of all of them counted.  A sequence with no
+     * parallel-transmit RF has no tour.
+     *
+     * Needs the execution stream and the instance tables, as the scan does.
+     *
+     * @param[out] out_visits  Set to an array the caller releases with
+     *                         PULSEG_FREE(), or NULL for no visit.
+     * @return The number of visits (>= 0), or a negative error code.
+     */
+    int pulseg_get_prescan_tour(const pulseg_collection *coll, pulseg_prescan_visit **out_visits);
 
     /**
      * @brief The first stage: prepare every segment and load resident waves.
@@ -214,10 +273,15 @@ extern "C"
      * while the instances before it play.
      *
      * The prescan plays one subsequence from its start and ends with the
-     * instance that completes its readouts.  It waits for no trigger, drives
-     * no digital output, and plays at zero every gradient whose amplitude
-     * varies across repetitions, and a wave any of whose logical axes
-     * varies.
+     * instance that completes its readouts.  With a tour it plays every
+     * visit of pulseg_get_prescan_tour() first, each once, under the same
+     * rules; PULSEG_TOUR_ACQUIRED adds the visits' readouts to those it ends
+     * after, PULSEG_TOUR_PLAYED neither acquires nor counts them.  It waits
+     * for no trigger, drives
+     * no digital output, plays at zero every gradient whose amplitude varies
+     * across repetitions, and a wave any of whose logical axes varies, and
+     * neither acquires nor counts a readout its block's NOPRESCAN label
+     * marks.
      *
      * @param[in,out] coll     Collection with its execution stream loaded;
      *                         its cursor is reset and moved.

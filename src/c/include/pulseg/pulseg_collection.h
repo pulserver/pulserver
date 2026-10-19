@@ -737,6 +737,19 @@ extern "C"
     void pulseg_cursor_reset(pulseg_collection *coll);
 
     /**
+     * @brief Place the cursor so that the next pulseg_cursor_next() lands on
+     *        one position.
+     *
+     * Also the rewind anchor, as pulseg_cursor_mark() sets it.  A playout
+     * that plays a segment instance out of stream order, as the prescan tour
+     * does, seeks to its first block.
+     *
+     * @return PULSEG_SUCCESS, or PULSEG_ERR_INDEX if either index is out of
+     *         range, leaving the cursor where it was.
+     */
+    int pulseg_cursor_seek(pulseg_collection *coll, int subseq_idx, int exec_stream_position);
+
+    /**
      * @brief Get the resolved block instance at the current cursor position.
      * @return PULSEG_SUCCESS on success, error code if cursor is done.
      */
