@@ -289,19 +289,36 @@ def _ptx(channel):
     )
 
 
-def test_a_ptx_pulse_that_changes_between_repetitions_is_refused(tmp_path):
-    """Each repetition is costed as the worst one, so a pTx one must play the same pulses.
+def test_repetitions_playing_different_ptx_pulses_are_costed_as_one_hyper_tr(
+    tmp_path, scanner_build
+):
+    """The channel pattern decides local SAR, so no shot stands for one that drives other channels.
 
-    The channel pattern decides local SAR, so no repetition stands for one that
-    drives other channels: sequential pTx pulses belong in chained subsequences.
+    Shot by shot the two pulses match in timing; the repetition holds both,
+    and the subsequence's RF is costed over both pulses.
     """
     first, second = _ptx(0), _ptx(1)
-    path = _written(tmp_path, [first, first, second, second], repetitions=1)
+    path = _written(tmp_path, [first, second], repetitions=3)
+    cache = convert(
+        path, SYSTEM, vendor=VENDOR, label_column_map=LABELS, cache_ext=".cache"
+    )
+    reader = scanner_build(tmp_path, "read_rf_definitions.c", "read_rf_definitions")
 
-    with pytest.raises(ValueError, match="pTx RF pulse pattern is not periodic"):
-        convert(
-            path, SYSTEM, vendor=VENDOR, label_column_map=LABELS, cache_ext=".cache"
-        )
+    printed = subprocess.run(
+        [str(reader), str(cache), str(path.stat().st_size)],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    costed = [
+        int(parts[1])
+        for parts in (line.split() for line in printed.splitlines())
+        if parts[0] == "rf"
+    ]
+
+    assert pp.io.read(path).repetition() == (4, 1)
+    assert sorted(costed) == sorted({d for d, _ in played_rf(pp.io.read(path))})
+    assert len(costed) == 2
 
 
 def test_ptx_pulses_interleaved_within_the_repetition_are_accepted(tmp_path):
