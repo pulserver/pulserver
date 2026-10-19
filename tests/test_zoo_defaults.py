@@ -1,15 +1,20 @@
 """Every shipped sequence, in every parameter set, is feasible at its default protocol on realistic scanners."""
 
 import math
+import sys
 
 import pypulseqpp as pp
 import pytest
-import tomllib
 
 from pulserver import _plugins
 from pulserver.design import Protocol, load_plugin
 from pulserver.host._limits import design_system
 from pulserver.protocol import TRPreset
+
+if sys.version_info >= (3, 11):
+    import tomllib
+else:
+    import tomli as tomllib
 
 SHIPPED = sorted(path.stem for path in _plugins.SEQUENCES.glob("*.py"))
 PARAMETERS = _plugins.SEQUENCES.parent / "parameters"
