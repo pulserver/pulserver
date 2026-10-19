@@ -548,8 +548,8 @@
 
 <span class="sd">    A pulse turns an entry through its flip angle on resonance times the</span>
 <span class="sd">    magnitude of the transmit field the entry sees, with the pulse's profile at</span>
-<span class="sd">    the field the entry sees during it, about an axis turned by the phase of the</span>
-<span class="sd">    transmit field. A pulse under a gradient that changes along one axis, as a</span>
+<span class="sd">    the field the entry sees during it, about its axis turned as a pulse phase</span>
+<span class="sd">    of minus the transmit field's phase turns it. A pulse under a gradient that changes along one axis, as a</span>
 <span class="sd">    spectral-spatial pulse, has its profile across the field and the position</span>
 <span class="sd">    along that axis, simulated over those the entries span. Between events, the</span>
 <span class="sd">    net gradient moment across a voxel shifts the configuration states by one</span>
@@ -913,7 +913,7 @@
         <span class="n">entries</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_entries</span>
         <span class="n">scale</span> <span class="o">=</span> <span class="n">entries</span><span class="o">.</span><span class="n">density</span><span class="p">[</span><span class="n">local</span><span class="p">]</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">complex64</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">entries</span><span class="o">.</span><span class="n">transmit</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">scale</span> <span class="o">=</span> <span class="n">scale</span> <span class="o">*</span> <span class="n">torch</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="n">j</span> <span class="o">*</span> <span class="n">torch</span><span class="o">.</span><span class="n">angle</span><span class="p">(</span><span class="n">entries</span><span class="o">.</span><span class="n">transmit</span><span class="p">[</span><span class="n">local</span><span class="p">]))</span>
+            <span class="n">scale</span> <span class="o">=</span> <span class="n">scale</span> <span class="o">*</span> <span class="n">torch</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="mi">1</span><span class="n">j</span> <span class="o">*</span> <span class="n">torch</span><span class="o">.</span><span class="n">angle</span><span class="p">(</span><span class="n">entries</span><span class="o">.</span><span class="n">transmit</span><span class="p">[</span><span class="n">local</span><span class="p">]))</span>
         <span class="n">mixed</span> <span class="o">=</span> <span class="n">temporal</span><span class="p">[:,</span> <span class="p">:,</span> <span class="kc">None</span><span class="p">]</span> <span class="o">*</span> <span class="n">across</span><span class="p">[:,</span> <span class="kc">None</span><span class="p">,</span> <span class="p">:]</span>
         <span class="k">return</span> <span class="n">mixed</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">local</span><span class="o">.</span><span class="n">numel</span><span class="p">(),</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="n">scale</span><span class="p">[:,</span> <span class="kc">None</span><span class="p">]</span>
 

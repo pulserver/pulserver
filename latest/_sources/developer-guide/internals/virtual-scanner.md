@@ -90,9 +90,9 @@ $$
 \alpha_j = \alpha\,|b^+(\mathbf{r}_j)|\,P(\mathbf{g}\cdot\mathbf{r}_j + f_j - f_\mathrm{rf}),
 $$
 
-about its axis turned by the phase of the transmit field $b^+$, relative to
-the pulse's nominal amplitude. A pulse played under a gradient that changes
-along one direction $\hat{\mathbf{n}}$, as a spectral-spatial pulse's
+with $b^+$ relative to the pulse's nominal amplitude, about its axis turned as
+a pulse phase of $-\arg b^+$ turns it ({ref}`transmit-phase-convention`). A
+pulse played under a gradient that changes along one direction $\hat{\mathbf{n}}$, as a spectral-spatial pulse's
 alternating lobes do, has a profile in both the field and the position along
 it, $P(f_j - f_\mathrm{rf}, \hat{\mathbf{n}}\cdot\mathbf{r}_j)$, simulated
 from its samples under that gradient; a pulse played under no gradient, or
@@ -230,7 +230,8 @@ A pulse plays on every transmit channel, weighted by the coil's default shim,
 the weights of magnitude $1/\sqrt{N}$ for $N$ channels that bring the channels
 into phase at the isocentre, where the pulse then has its nominal amplitude:
 each cube sees the transmit field
-$b^+(\mathbf{r}) = \sum_c w_c\,s^+_c(\mathbf{r})$, for the weights $w_c$. The
+$b^+(\mathbf{r}) = \sum_c \overline{w_c}\,s^+_c(\mathbf{r})$, for the weights
+$w_c$, which drive the channels. The
 squares of the weights sum to 1, so the channels together carry the power of
 one channel at the pulse's amplitude, and an RF shim is written in the same
 normalisation: a circularly polarised shim of $N$ channels has weights of

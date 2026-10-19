@@ -99,7 +99,8 @@ designs/
       manifest.json       identity and identifier, limits, package versions,
                           creation time, plugin and source, scan time,
                           field-of-view offset, SHA-256 of every file
-    motion.buf            the poses of a scan corrected for motion
+    motion.buf            the poses of a scan corrected for motion, created
+                          empty with its design
 ```
 
 A design is reused while its scan holds it; a design call that resolves to

@@ -342,6 +342,39 @@ value in the evaluated protocol, is invalid. What the scanner checks before the
 scan is the stored design, not the layout. The blocks that carry the layout are
 described in {doc}`../explanations/protocol`.
 
+(transmit-phase-convention)=
+## RF phase convention
+
+Phases and frequencies keep Pulseq's units: an RF phase shape holds cycles, RF
+and ADC phase offsets and RF shim phases are in radians, and frequency offsets
+are in hertz. The ppm offsets are resolved to hertz and radians at the
+scanner's Larmor frequency when the IR is built.
+
+An RF waveform $b_c(t)$ and an RF shim weight $w_c$ are the complex drive of
+transmit channel $c$, the envelope of a carrier $e^{+i\omega_0 t}$. Protons
+precess clockwise about the static field, and the part of the field that turns
+them is the conjugate of the drive times the channel's transmit sensitivity
+$s^+_c$, the rotating field of a unit drive:
+
+$$
+b^+(\mathbf{r}, t) = \sum_c \overline{w_c\, b_c(t)}\; s^+_c(\mathbf{r}).
+$$
+
+A drive of phase $+\phi$, on one channel through its shim weight or its
+waveform, or on every channel through the pulse's phase offset, turns the
+excited magnetization and the reconstructed image by $-\phi$; an ADC phase
+offset of $+\theta$ turns them by $+\theta$, so a receiver that follows the
+pulse's phase offset cancels it. A pulse of phase zero tips $+z$ towards $+y$.
+On the scanner, a channel driven at $+\phi$ relative to another appears at
+$-\phi$ in the reconstructed images, for RF shims and per-channel waveforms
+alike. The virtual scanner follows the same convention, and the VOP check
+takes the drives as they are written: the SAR of a pulse is $v^H Q\, v$ for
+$v_c = d\, w_c\, b_c(t)$, with $d$ the drive per hertz of RF amplitude.
+
+A per-channel image of a small-angle excitation has the phase of $s^+_c$ plus
+the receive phase and a constant. A shim fitted to such maps under the model
+$\sum_c w_c\, s^+_c$ is written as $\overline{w_c}$.
+
 (shipped-sequences)=
 ## Shipped sequences
 

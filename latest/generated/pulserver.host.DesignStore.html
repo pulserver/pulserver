@@ -510,7 +510,9 @@ directory holds the Pulseq files of its chain, its IR cache and
 <code class="xref py py-data docutils literal notranslate"><span class="pre">MANIFEST</span></code>. It is written in a stage and renamed into place, so a
 reader sees a design whole or not at all, and two processes writing one
 design leave one directory. A scan plays one design, so committing a
-design removes the scan’s others.</p>
+design removes the scan’s others. A design whose sequence sets
+<code class="docutils literal notranslate"><span class="pre">EnablePmc</span></code> is published with its scan’s empty pose file,
+<code class="docutils literal notranslate"><span class="pre">&lt;root&gt;/&lt;scan&gt;/motion.buf</span></code>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">

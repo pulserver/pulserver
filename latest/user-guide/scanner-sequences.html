@@ -52,6 +52,8 @@
     <script src="../_static/copybutton.js?v=f281be69"></script>
     <script src="../_static/sg-tags.js?v=d80f6fa4"></script>
     <script src="../_static/scripts/sphinx-book-theme.js?v=fab101a9"></script>
+    <script>window.MathJax = {"options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+    <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'user-guide/scanner-sequences';</script>
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
@@ -492,6 +494,7 @@
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#protocol-evaluation">Protocol evaluation</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#exam-cache">Exam cache</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#rf-layout">RF layout</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#rf-phase-convention">RF phase convention</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#shipped-sequences">Shipped sequences</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#shared-user-entries">Shared user entries</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#console-controls">Console controls</a></li>
@@ -854,6 +857,35 @@ estimate; one whose control is not an entry of <code class="docutils literal not
 value in the evaluated protocol, is invalid. What the scanner checks before the
 scan is the stored design, not the layout. The blocks that carry the layout are
 described in <a class="reference internal" href="../explanations/protocol.html"><span class="doc">Protocol resolution</span></a>.</p>
+</section>
+<section id="rf-phase-convention">
+<span id="transmit-phase-convention"></span><h2>RF phase convention<a class="headerlink" href="#rf-phase-convention" title="Link to this heading">#</a></h2>
+<p>Phases and frequencies keep Pulseq’s units: an RF phase shape holds cycles, RF
+and ADC phase offsets and RF shim phases are in radians, and frequency offsets
+are in hertz. The ppm offsets are resolved to hertz and radians at the
+scanner’s Larmor frequency when the IR is built.</p>
+<p>An RF waveform <span class="math notranslate nohighlight">\(b_c(t)\)</span> and an RF shim weight <span class="math notranslate nohighlight">\(w_c\)</span> are the complex drive of
+transmit channel <span class="math notranslate nohighlight">\(c\)</span>, the envelope of a carrier <span class="math notranslate nohighlight">\(e^{+i\omega_0 t}\)</span>. Protons
+precess clockwise about the static field, and the part of the field that turns
+them is the conjugate of the drive times the channel’s transmit sensitivity
+<span class="math notranslate nohighlight">\(s^+_c\)</span>, the rotating field of a unit drive:</p>
+<div class="math notranslate nohighlight">
+\[
+b^+(\mathbf{r}, t) = \sum_c \overline{w_c\, b_c(t)}\; s^+_c(\mathbf{r}).
+\]</div>
+<p>A drive of phase <span class="math notranslate nohighlight">\(+\phi\)</span>, on one channel through its shim weight or its
+waveform, or on every channel through the pulse’s phase offset, turns the
+excited magnetization and the reconstructed image by <span class="math notranslate nohighlight">\(-\phi\)</span>; an ADC phase
+offset of <span class="math notranslate nohighlight">\(+\theta\)</span> turns them by <span class="math notranslate nohighlight">\(+\theta\)</span>, so a receiver that follows the
+pulse’s phase offset cancels it. A pulse of phase zero tips <span class="math notranslate nohighlight">\(+z\)</span> towards <span class="math notranslate nohighlight">\(+y\)</span>.
+On the scanner, a channel driven at <span class="math notranslate nohighlight">\(+\phi\)</span> relative to another appears at
+<span class="math notranslate nohighlight">\(-\phi\)</span> in the reconstructed images, for RF shims and per-channel waveforms
+alike. The virtual scanner follows the same convention, and the VOP check
+takes the drives as they are written: the SAR of a pulse is <span class="math notranslate nohighlight">\(v^H Q\, v\)</span> for
+<span class="math notranslate nohighlight">\(v_c = d\, w_c\, b_c(t)\)</span>, with <span class="math notranslate nohighlight">\(d\)</span> the drive per hertz of RF amplitude.</p>
+<p>A per-channel image of a small-angle excitation has the phase of <span class="math notranslate nohighlight">\(s^+_c\)</span> plus
+the receive phase and a constant. A shim fitted to such maps under the model
+<span class="math notranslate nohighlight">\(\sum_c w_c\, s^+_c\)</span> is written as <span class="math notranslate nohighlight">\(\overline{w_c}\)</span>.</p>
 </section>
 <section id="shipped-sequences">
 <span id="id3"></span><h2>Shipped sequences<a class="headerlink" href="#shipped-sequences" title="Link to this heading">#</a></h2>
@@ -1222,6 +1254,7 @@ request names under <code class="docutils literal notranslate"><span class="pre"
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#protocol-evaluation">Protocol evaluation</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#exam-cache">Exam cache</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#rf-layout">RF layout</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#rf-phase-convention">RF phase convention</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#shipped-sequences">Shipped sequences</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#shared-user-entries">Shared user entries</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#console-controls">Console controls</a></li>

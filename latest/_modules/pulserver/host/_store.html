@@ -513,7 +513,9 @@
 <span class="sd">    :data:`MANIFEST`. It is written in a stage and renamed into place, so a</span>
 <span class="sd">    reader sees a design whole or not at all, and two processes writing one</span>
 <span class="sd">    design leave one directory. A scan plays one design, so committing a</span>
-<span class="sd">    design removes the scan's others.</span>
+<span class="sd">    design removes the scan's others. A design whose sequence sets</span>
+<span class="sd">    ``EnablePmc`` is published with its scan's empty pose file,</span>
+<span class="sd">    ``&lt;root&gt;/&lt;scan&gt;/motion.buf``.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
@@ -708,6 +710,11 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">discard</span><span class="p">(</span><span class="n">staged</span><span class="p">)</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="n">identity</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="k">raise</span>
+        <span class="c1"># The scan opens its pose file once, as it starts, before any series</span>
+        <span class="c1"># is reconstructed: it has to be there with the design.</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">..proxy._motion</span><span class="w"> </span><span class="kn">import</span> <span class="n">prepare</span>
+
+        <span class="n">prepare</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">path</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">path</span> <span class="o">/</span> <span class="n">design</span> <span class="o">/</span> <span class="s2">"sequence.seq"</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">design</span>
 
 <div class="viewcode-block" id="DesignStore.discard">
