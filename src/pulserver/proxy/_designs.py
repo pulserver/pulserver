@@ -18,6 +18,7 @@ from ..host._store import ID_DIGITS, MANIFEST, _flat
 from ..mrd._metadata import user_parameter
 from ..mrd._sequence import read_chain
 from ._enrich import SequenceTable
+from ._motion import asks_for_motion_correction as _asks_for_motion_correction
 from ._seqdesc import describe, message
 
 #: Header user parameter naming the design a stream was played from: its
@@ -159,27 +160,3 @@ def _fov_offset_m(directory: Path) -> tuple[float, float, float]:
     return tuple(
         1e-3 * float(v) for v in manifest.get("fov_offset_mm", (0.0, 0.0, 0.0))
     )
-
-
-def _asks_for_motion_correction(entry: Path) -> bool:
-    """Whether a sequence file asks to be corrected for motion while it plays.
-
-    Read from the preamble rather than the cache: a design is resolved before
-    anything has been converted.
-    """
-    try:
-        with entry.open("r", errors="replace") as f:
-            inside = False
-            for line in f:
-                stripped = line.strip()
-                if stripped.startswith("["):
-                    if inside:
-                        return False
-                    inside = stripped.startswith("[DEFINITIONS]")
-                    continue
-                if inside and stripped.startswith("EnablePmc"):
-                    parts = stripped.split()
-                    return len(parts) > 1 and parts[1] not in ("0", "0.0")
-    except OSError:
-        return False
-    return False

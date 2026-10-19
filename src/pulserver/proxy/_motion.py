@@ -118,6 +118,68 @@ def pose_waveform(pose: Pose) -> Any:
     return waveform
 
 
+def _blank(path: Path) -> int:
+    """Write an empty pose file at ``path`` in place; return it open for writing."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    header = struct.pack("=4I", MAGIC, LAYOUT, SLOTS, _SLOT_BYTES)
+    fd = os.open(path, os.O_RDWR | os.O_CREAT, 0o666)
+    try:
+        os.pwrite(fd, header + bytes(_SIZE - _HEADER_BYTES), 0)
+        os.ftruncate(fd, _SIZE)
+    except BaseException:
+        os.close(fd)
+        raise
+    return fd
+
+
+def asks_for_motion_correction(entry: Path) -> bool:
+    """Whether a sequence file sets ``EnablePmc``, read from its definitions."""
+    try:
+        with Path(entry).open("r", errors="replace") as f:
+            inside = False
+            for line in f:
+                stripped = line.strip()
+                if stripped.startswith("["):
+                    if inside:
+                        return False
+                    inside = stripped.startswith("[DEFINITIONS]")
+                    continue
+                if inside and stripped.startswith("EnablePmc"):
+                    parts = stripped.split()
+                    return len(parts) > 1 and parts[1] not in ("0", "0.0")
+    except OSError:
+        return False
+    return False
+
+
+def prepare(scan: Path | str, entry: Path | str) -> Path | None:
+    """Create the empty pose file of a scan whose sequence asks for motion correction.
+
+    The scan opens the file once, when it starts, so it has to exist before
+    then: it is created with the design, empty and at version 0, and the
+    series' reconstruction clears it again in place when it starts. A file
+    already there is left as it is.
+
+    Parameters
+    ----------
+    scan : Path | str
+        The scan's directory of the store.
+    entry : Path | str
+        The first sequence file of the design.
+
+    Returns
+    -------
+    Path or None
+        The pose file, or None where the sequence does not ask for it.
+    """
+    if not asks_for_motion_correction(Path(entry)):
+        return None
+    path = Path(scan) / FILENAME
+    if not path.is_file():
+        os.close(_blank(path))
+    return path
+
+
 class MotionWriter:
     """Publishes poses into the file a running scan reads.
 
@@ -144,15 +206,13 @@ class MotionWriter:
         return self._version
 
     def create(self) -> MotionWriter:
-        """Create the file at its full size and write its header.
+        """Create the file at its full size and write its header, at version 0.
 
-        An existing file is replaced: a scan reads the poses of its own run.
+        An existing file is cleared in place, never truncated or replaced: a
+        scan reads the poses of its own run, through a descriptor it may
+        already hold.
         """
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        header = struct.pack("=4I", MAGIC, LAYOUT, SLOTS, _SLOT_BYTES)
-        with self.path.open("wb") as f:
-            f.write(header + bytes(_SIZE - _HEADER_BYTES))
-        self._fd = os.open(self.path, os.O_RDWR)
+        self._fd = _blank(self.path)
         self._version = 0
         self._slot = SLOTS - 1
         return self
