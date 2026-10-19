@@ -192,9 +192,11 @@ class _Listener:
     def _kept(self, header: Any, items: Iterator[Any]) -> Iterator[Any]:
         """Return a series, written where it can be received again.
 
-        The header is written as this is called, before anything enriches it,
-        so replaying the file offline puts this server back where the scan put
-        it.
+        The proxy keeps the series as it reconstructs it, header and
+        acquisitions enriched (the header marked ``pulserver_enriched``); a
+        replay plays such a file as it is. A server keeps a forwarded series
+        as the proxy sent it, enriched too. The header is written as this is
+        called.
         """
         if self.save_to is None:
             return items
@@ -381,8 +383,10 @@ class ReconProxy(_Listener):
             return
         design = self.designs.resolve(header)
         plugin = _config_plugin(config)
-        received = self._kept(header, _received(client))
         enrich_header(header, design.table)
+        enriched = self._kept(
+            header, _enriched(_received(client), design, header_fov_offset_m(header))
+        )
         _log.info(
             "series on %s: %s, %d readouts",
             design.directory,
@@ -395,10 +399,7 @@ class ReconProxy(_Listener):
                 config,
                 header,
                 plugin,
-                itertools.chain(
-                    (design.description,),
-                    _enriched(received, design, header_fov_offset_m(header)),
-                ),
+                itertools.chain((design.description,), enriched),
                 motion=design.directory.parent / FILENAME
                 if design.prospective_motion
                 else None,
