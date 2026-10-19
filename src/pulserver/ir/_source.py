@@ -42,7 +42,7 @@ MAX_BANDS = 8
 
 #: Flags the IR keeps per block, in the order of the payload's block_flags
 #: columns.
-_BLOCK_FLAGS = ("NOROT", "NOPOS", "PMC", "NAV", "TRID")
+_BLOCK_FLAGS = ("NOROT", "NOPOS", "PMC", "NAV", "TRID", "NOPRESCAN")
 
 #: Labels the IR records per readout, in the order of the converter's label
 #: state, which label_column_map indexes.
@@ -317,6 +317,12 @@ def conversion_payload(sequence: Any, system: pp.Opts) -> dict[str, Any]:
     specifications = _specification_libraries(tables)
     declared = sequence.definitions
     repetition = _repetition_size(sequence)
+    states = _block_states(sequence)
+    calibrates = np.asarray(events)[:, 4] > 0
+    calibrates &= np.broadcast_to(
+        np.asarray(states["flag_labels"][_BLOCK_FLAGS.index("NOPRESCAN")]) == 0,
+        calibrates.shape,
+    )
 
     return {
         "version": [
@@ -338,7 +344,7 @@ def conversion_payload(sequence: Any, system: pp.Opts) -> dict[str, Any]:
             "total_duration": _numbers(declared, "TotalDuration", 1)[0],
             "enable_pmc": int(_numbers(declared, "EnablePmc", 1)[0]),
             "num_gain_cal_readouts": _gain_calibration_readouts(
-                declared, events, repetition
+                declared, calibrates, repetition
             ),
             "enable_sar_burst_mode": int(
                 _numbers(declared, "EnableSarBurstMode", 1)[0]
@@ -387,7 +393,7 @@ def conversion_payload(sequence: Any, system: pp.Opts) -> dict[str, Any]:
         "labelinc": specifications.labelinc,
         "soft_delays": specifications.soft_delays,
         "rf_shims": list(specifications.rf_shims),
-        **_block_states(sequence),
+        **states,
     }
 
 
@@ -738,15 +744,17 @@ def _repetition_size(sequence: Any) -> int:
 
 
 def _gain_calibration_readouts(
-    declared: dict[str, Any], events: NDArray[np.int64], repetition: int
+    declared: dict[str, Any], calibrates: NDArray[np.bool_], repetition: int
 ) -> int:
     """Return the readouts the receive-gain prescan acquires.
 
-    The count is ``NumGainCalibrationReadouts``, which must end with a
-    repetition: the prescan plays from the first block, and stopping inside a
-    repetition sets the gain on part of one. A sequence that states none plays
-    through the first repetition that acquires. A sequence with no readout is
-    not checked.
+    ``calibrates`` marks, per block, a readout the prescan acquires: one its
+    NOPRESCAN label does not exempt. The count is
+    ``NumGainCalibrationReadouts``, which must end with a repetition: the
+    prescan plays from the first block, and stopping inside a repetition sets
+    the gain on part of one. A sequence that states none plays through the
+    first repetition that acquires. A sequence with no such readout is not
+    checked.
 
     Raises
     ------
@@ -755,7 +763,7 @@ def _gain_calibration_readouts(
         inside a repetition.
     """
     stated = declared.get("NumGainCalibrationReadouts")
-    acquires = np.cumsum(np.asarray(events)[:, 4] > 0)
+    acquires = np.cumsum(calibrates)
     if not acquires.size or not acquires[-1]:
         return int(_numbers(declared, "NumGainCalibrationReadouts", 1)[0])
     ends = np.unique(np.append(acquires[repetition - 1 :: repetition], acquires[-1]))

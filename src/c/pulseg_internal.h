@@ -253,6 +253,8 @@ typedef struct pulseg_block_table_element
     int rf_shim_id; /* index into rf_shim_definitions, or -1 */
     int trid;       /* sticky pulseq TRID, 0 = ungrouped (default) */
     int trid_set;   /* 1 where the block carries the TRID label itself */
+    int noprescan_flag; /* 1 where the receive-gain prescan does not acquire
+                           the block's readout */
 } pulseg_block_table_element;
 
 /* NOTE: digitalout_id occupies the former trigger_id position */

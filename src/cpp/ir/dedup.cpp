@@ -1585,6 +1585,7 @@ int pulseg__get_unique_blocks(
          * definition, so they have no dedup footprint. */
         tmp_blk_tab[n].trid = PULSEQ_COLUMN(seq->block_flags[4], n);
         tmp_blk_tab[n].trid_set = seq->block_trid_set[n];
+        tmp_blk_tab[n].noprescan_flag = PULSEQ_COLUMN(seq->block_flags[5], n);
     }
 
     /* step 3: the block definitions the cache holds */

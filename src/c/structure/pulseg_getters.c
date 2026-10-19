@@ -2825,6 +2825,19 @@ void pulseg_cursor_reset(pulseg_collection *coll)
     coll->block_cursor.from_last_reset = 0;
 }
 
+int pulseg_cursor_seek(pulseg_collection *coll, int subseq_idx, int exec_stream_position)
+{
+    if (!coll)
+        return PULSEG_ERR_NULL_POINTER;
+    if (subseq_idx < 0 || subseq_idx >= coll->num_subsequences || exec_stream_position < 0 ||
+        exec_stream_position >= coll->descriptors[subseq_idx].exec_stream_len)
+        return PULSEG_ERR_INDEX;
+    coll->block_cursor.sequence_index = subseq_idx;
+    coll->block_cursor.exec_stream_position = exec_stream_position - 1;
+    coll->block_cursor.from_last_reset = 0;
+    return PULSEG_SUCCESS;
+}
+
 void pulseg_cursor_mark(pulseg_collection *coll)
 {
     if (!coll)
@@ -3036,6 +3049,7 @@ static int resolve_block_instance(
     /* Flags */
     inst->norot_flag = bte->norot_flag;
     inst->nopos_flag = bte->nopos_flag;
+    inst->noprescan_flag = bte->noprescan_flag;
 
     /* Digital output: a trigger event of output type.  An input trigger is
      * its segment's, which the segment reports. */

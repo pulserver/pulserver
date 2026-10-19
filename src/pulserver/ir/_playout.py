@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from .._accelerators import require
 from ._convert import WaveBudget, _held, cache_path
@@ -22,10 +22,18 @@ class Prescan:
         The readouts after which it ends, with the segment instance that
         completes them; 0 takes the number its sequence declares
         (``NumGainCalibrationReadouts``), whole repetitions of it.
+    tour
+        Whether it first plays the pTx tour of :func:`prescan_tour`, each
+        visit once: ``"played"`` acquires none of the tour's readouts,
+        ``"acquired"`` acquires them and adds them to ``readouts``.
     """
 
     subsequence: int = 0
     readouts: int = 0
+    tour: Literal["none", "played", "acquired"] = "none"
+
+
+_TOURS = {"none": 0, "played": 1, "acquired": 2}
 
 
 def playout(
@@ -86,7 +94,8 @@ def playout(
         - ``blocks``: per played block, in play order, ``subsequence``,
           ``segment``, ``position``, ``instance`` (instances of its segment
           played before its own), ``slot`` (of its position's ring, -1 unless
-          the waves are streamed), ``rotate`` (0 where NOROT keeps the prescription
+          the waves are streamed), ``visit`` (of the prescan's tour, -1
+          outside it), ``rotate`` (0 where NOROT keeps the prescription
           rotation out), ``await_trigger``, ``first_position`` (the
           execution-stream position of its instance's first block) and
           ``duration_us``; the registers ``rf_amp_hz``, ``rf_phase_rad``,
@@ -123,7 +132,9 @@ def playout(
     """
     seq_path = Path(seq_path)
     calibration = (
-        (-1, 0) if prescan is None else (prescan.subsequence, prescan.readouts)
+        (-1, 0, 0)
+        if prescan is None
+        else (prescan.subsequence, prescan.readouts, _TOURS[prescan.tour])
     )
     return require("playout_from_cache")(
         str(cache_path(seq_path, cache_ext)),
@@ -132,4 +143,29 @@ def playout(
         calibration,
         waveforms,
         pulses,
+    )
+
+
+def prescan_tour(seq_path: Path | str, cache_ext: str = ".pseg") -> dict[str, Any]:
+    """List the pTx prescan tour of the cache beside a sequence file.
+
+    One visit per segment instance holding the largest drive one channel of a
+    parallel-transmit RF definition receives in its subsequence: the RF
+    amplitude times the channel's shim magnitude, or the amplitude alone for
+    a pulse with a waveform per channel. An instance that holds several is
+    listed once. A sequence without parallel-transmit RF has no visit.
+
+    Returns
+    -------
+    dict of str to numpy.ndarray
+        Per visit, by subsequence and then stream position: ``subsequence``,
+        ``segment`` (global), ``first_position`` and ``num_blocks`` of its
+        instance, ``rf_definition`` (local to the subsequence), ``channels``
+        whose largest drive it plays, the largest of them ``drive_hz``,
+        ``duration_us``, ``rf_pulses`` and ``readouts``: those the scan
+        acquires that NOPRESCAN does not exempt.
+    """
+    seq_path = Path(seq_path)
+    return require("prescan_tour_from_cache")(
+        str(cache_path(seq_path, cache_ext)), seq_path.stat().st_size
     )

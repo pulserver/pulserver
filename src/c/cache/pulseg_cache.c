@@ -33,7 +33,7 @@
 /* The full (major, minor, revision) triple must match exactly on read: a
  * cache at any other revision is rejected outright and the .seq is
  * re-parsed, never partially or heuristically read. */
-#define PULSEG_CACHE_VERSION_REVISION 3
+#define PULSEG_CACHE_VERSION_REVISION 4
 
 /* Per-consumer sections. Each carries its own distinct payload.
  * COMMON establishes the collection + descriptor framing; the others
@@ -726,7 +726,7 @@ static int write_shapes(FILE *f, const pulseg_sequence_descriptor *d)
  * PULSEG_ASSERT_PACKED (below) is what keeps the premise true: adding a member
  * of another width, or reordering one, breaks the build rather than the file
  * format. read_instances() reads them back the same way. */
-PULSEG_ASSERT_PACKED(pulseg_block_table_element, 16);
+PULSEG_ASSERT_PACKED(pulseg_block_table_element, 17);
 PULSEG_ASSERT_PACKED(pulseg_rf_table_element, 5);
 PULSEG_ASSERT_PACKED(pulseg_grad_table_element, 3); /* id, shape_id, amplitude */
 PULSEG_ASSERT_PACKED(pulseg_adc_table_element, 4); /* id, freq, phase, phase_shape_id */

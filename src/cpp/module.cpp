@@ -944,7 +944,7 @@ PYBIND11_MODULE(_ext, module)
         [](const std::string &cache_path,
            int source_size,
            const std::optional<Budget> &budget,
-           const std::array<int, 2> &prescan,
+           const std::array<int, 3> &prescan,
            bool waveforms,
            bool pulses)
         {
@@ -953,10 +953,54 @@ PYBIND11_MODULE(_ext, module)
             pulseg_playout_options options = PULSEG_PLAYOUT_OPTIONS_INIT;
             options.prescan_subsequence = prescan[0];
             options.prescan_readouts = prescan[1];
+            options.tour = prescan[2];
             return native::record_playout(
                 coll.get(), planned.plan, options, waveforms, pulses);
         },
         "Play a written cache's two stages over a backend that records them.");
+
+    module.def(
+        "prescan_tour_from_cache",
+        [](const std::string &cache_path, int source_size)
+        {
+            const Collection coll = load(cache_path, source_size);
+            pulseg_prescan_visit *visits = nullptr;
+            const int count = pulseg_get_prescan_tour(coll.get(), &visits);
+            if (count < 0)
+                throw py::value_error("the prescan tour could not be listed: " + std::to_string(count));
+            std::vector<int> subsequence, segment, first, blocks, definition, channels, rf, readouts;
+            std::vector<float> drive;
+            std::vector<long> duration;
+            for (int i = 0; i < count; ++i)
+            {
+                subsequence.push_back(visits[i].subsequence);
+                segment.push_back(visits[i].segment);
+                first.push_back(visits[i].first_position);
+                blocks.push_back(visits[i].num_blocks);
+                definition.push_back(visits[i].rf_definition);
+                channels.push_back(visits[i].channels);
+                drive.push_back(visits[i].drive_hz);
+                duration.push_back(visits[i].duration_us);
+                rf.push_back(visits[i].rf_pulses);
+                readouts.push_back(visits[i].readouts);
+            }
+            if (visits)
+                PULSEG_FREE(visits);
+            const std::vector<py::ssize_t> n{count};
+            py::dict out;
+            out["subsequence"] = as_array(subsequence, n);
+            out["segment"] = as_array(segment, n);
+            out["first_position"] = as_array(first, n);
+            out["num_blocks"] = as_array(blocks, n);
+            out["rf_definition"] = as_array(definition, n);
+            out["channels"] = as_array(channels, n);
+            out["drive_hz"] = as_array(drive, n);
+            out["duration_us"] = as_array(duration, n);
+            out["rf_pulses"] = as_array(rf, n);
+            out["readouts"] = as_array(readouts, n);
+            return out;
+        },
+        "List the pTx prescan tour of a written cache.");
 
     module.def(
         "repetition_gradients_from_cache",

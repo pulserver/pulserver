@@ -579,13 +579,18 @@ typedef struct pulseg_block_instance
      * g*_amp_hz_per_m above. */
     int wave_id;
     float wave_amp_hz_per_m[3];
+
+    /* Prescan (appended; do not reorder above): 1 where the receive-gain
+     * calibration prescan plays the block but does not acquire its readout,
+     * the NOPRESCAN label.  The scan acquires it as adc_flag says. */
+    int noprescan_flag;
 } pulseg_block_instance;
 
 /* clang-format off */
 #define PULSEG_BLOCK_INSTANCE_INIT \
     { \
     0, 0.0f, 0.0f, 0.0f, -1, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0, 0, 0, {1, 0, 0, 0, 1, 0, 0, \
-    0, 1}, 0, 0, 0, -1, 0, 0.0f, 0.0f, 0, 0, -1, {0.0f, 0.0f, 0.0f} \
+    0, 1}, 0, 0, 0, -1, 0, 0.0f, 0.0f, 0, 0, -1, {0.0f, 0.0f, 0.0f}, 0 \
     }
 /* clang-format on */
 
