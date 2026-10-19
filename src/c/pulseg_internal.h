@@ -74,9 +74,9 @@ typedef struct pulseg_rf_definition
 typedef struct pulseg_rf_table_element
 {
     int id;
-    float amplitude;
-    float freq_offset;
-    float phase_offset;
+    float amplitude;    /* Hz */
+    float freq_offset;  /* Hz */
+    float phase_offset; /* rad */
     int rf_use; /* PULSEG_RF_USE_* (0 = unknown) */
 } pulseg_rf_table_element;
 
@@ -88,7 +88,7 @@ typedef struct pulseg_rf_shim_definition
     int id;
     int num_channels;
     float magnitudes[PULSEG_MAX_RF_SHIM_CHANNELS];
-    float phases[PULSEG_MAX_RF_SHIM_CHANNELS];
+    float phases[PULSEG_MAX_RF_SHIM_CHANNELS]; /* rad */
 } pulseg_rf_shim_definition;
 
 /* ================================================================== */
@@ -198,8 +198,8 @@ typedef struct pulseg_adc_definition
 typedef struct pulseg_adc_table_element
 {
     int id;
-    float freq_offset;
-    float phase_offset;
+    float freq_offset;  /* Hz */
+    float phase_offset; /* rad */
     int phase_shape_id; /* pulseq shape id of this instance's phase modulation (rad); 0 for none */
 } pulseg_adc_table_element;
 

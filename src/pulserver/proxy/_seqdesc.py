@@ -35,6 +35,7 @@ from enum import IntEnum
 from typing import Any
 
 import numpy as np
+import pypulseqpp as pp
 
 #: Band offset slots every RF definition carries, filled or not.
 BANDS = 8
@@ -116,7 +117,10 @@ class SequenceEvent:
 
     An RF row carries ``(definition_id, use, amplitude_hz, phase_rad,
     frequency_hz, shim_id, slice_select_gradient_hz_per_m)``; an ADC row
-    ``(role, phase_rad, is_echo)``; a WAIT row nothing.
+    ``(role, phase_rad, is_echo)``; a WAIT row nothing. An RF row's phase is
+    the one at the pulse's centre, its frequency offset accrued from the
+    pulse's start; phases and frequencies hold the ppm offsets resolved at the
+    design's field.
     """
 
     type: EventType
@@ -202,7 +206,11 @@ def describe(seq: Any, *, subsequence_index: int = 0) -> SequenceDescription:
         rows[int(block)] = SequenceEvent(
             EventType.ADC,
             float(samples[first + centre]) * 1e6,
-            (int(AdcRole.SINGLE), float(adc.phase_offset), 1),
+            (
+                int(AdcRole.SINGLE),
+                pp.calc_absolute_offsets(adc, system=seq.system)[1],
+                1,
+            ),
         )
 
     events = tuple(
