@@ -727,13 +727,28 @@ frequency and phase offsets, and the digital output. Then it starts the
 instance.</p>
 <p>The receive-gain calibration prescan plays one subsequence from its start to
 the segment instance that completes the readouts its sequence declares
-(<code class="docutils literal notranslate"><span class="pre">NumGainCalibrationReadouts</span></code>). The count ends with a repetition, so the gain
+(<code class="docutils literal notranslate"><span class="pre">NumGainCalibrationReadouts</span></code>). A readout whose block carries the <code class="docutils literal notranslate"><span class="pre">NOPRESCAN</span></code>
+label plays without being acquired and is not counted, so a multi-echo
+sequence calibrates on its first echo. The count ends with a repetition, so the gain
 is set on whole repetitions of the scan; the conversion refuses one that ends
 inside a repetition, and takes the readouts through the first repetition that
 acquires when the sequence declares none. It waits for no trigger and
 drives no digital output, and every gradient whose amplitude varies across
 repetitions, a phase encoding for instance, plays at zero, as does a wave any
 of whose logical axes varies.</p>
+<p>A parallel-transmit sequence can open its prescan with the pTx tour
+(<code class="docutils literal notranslate"><span class="pre">pulseg_get_prescan_tour</span></code>): for every channel of every parallel-transmit RF
+definition of every subsequence, the segment instance holding the largest
+drive that channel receives, the RF amplitude times the channel’s shim
+magnitude, or the amplitude alone for a pulse with a waveform per channel.
+Each instance is visited once, under the prescan’s rules, whether or not it
+reads out; the tour either acquires its readouts, counted on top of the
+calibration’s, or plays them unacquired. A playout reaches each visit by
+seeking the cursor to its first block (<code class="docutils literal notranslate"><span class="pre">pulseg_cursor_seek</span></code>). A visit plays
+part of one occurrence of its subsequence’s repetition, each pulse at its
+largest, so resting after it until it has lasted the time per occurrence the
+scan’s RF is costed at keeps its average power within the scan’s; the rest is
+the interpreter’s, from the visit’s duration.</p>
 <p>Waveform memory holds samples of the type and scale a scanner build defines
 before it includes the library: <code class="docutils literal notranslate"><span class="pre">PULSEG_WAVE_SAMPLE</span></code>, the type;
 <code class="docutils literal notranslate"><span class="pre">PULSEG_WAVE_FULL_SCALE</span></code>, the sample at the peak of a waveform normalised to

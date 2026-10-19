@@ -18,3 +18,4 @@
 
    ~Prescan.readouts
    ~Prescan.subsequence
+   ~Prescan.tour

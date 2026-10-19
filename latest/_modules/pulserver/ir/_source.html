@@ -467,7 +467,7 @@
 
 <span class="c1">#: Flags the IR keeps per block, in the order of the payload's block_flags</span>
 <span class="c1">#: columns.</span>
-<span class="n">_BLOCK_FLAGS</span> <span class="o">=</span> <span class="p">(</span><span class="s2">"NOROT"</span><span class="p">,</span> <span class="s2">"NOPOS"</span><span class="p">,</span> <span class="s2">"PMC"</span><span class="p">,</span> <span class="s2">"NAV"</span><span class="p">,</span> <span class="s2">"TRID"</span><span class="p">)</span>
+<span class="n">_BLOCK_FLAGS</span> <span class="o">=</span> <span class="p">(</span><span class="s2">"NOROT"</span><span class="p">,</span> <span class="s2">"NOPOS"</span><span class="p">,</span> <span class="s2">"PMC"</span><span class="p">,</span> <span class="s2">"NAV"</span><span class="p">,</span> <span class="s2">"TRID"</span><span class="p">,</span> <span class="s2">"NOPRESCAN"</span><span class="p">)</span>
 
 <span class="c1">#: Labels the IR records per readout, in the order of the converter's label</span>
 <span class="c1">#: state, which label_column_map indexes.</span>
@@ -742,6 +742,12 @@
     <span class="n">specifications</span> <span class="o">=</span> <span class="n">_specification_libraries</span><span class="p">(</span><span class="n">tables</span><span class="p">)</span>
     <span class="n">declared</span> <span class="o">=</span> <span class="n">sequence</span><span class="o">.</span><span class="n">definitions</span>
     <span class="n">repetition</span> <span class="o">=</span> <span class="n">_repetition_size</span><span class="p">(</span><span class="n">sequence</span><span class="p">)</span>
+    <span class="n">states</span> <span class="o">=</span> <span class="n">_block_states</span><span class="p">(</span><span class="n">sequence</span><span class="p">)</span>
+    <span class="n">calibrates</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">events</span><span class="p">)[:,</span> <span class="mi">4</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">0</span>
+    <span class="n">calibrates</span> <span class="o">&amp;=</span> <span class="n">np</span><span class="o">.</span><span class="n">broadcast_to</span><span class="p">(</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">states</span><span class="p">[</span><span class="s2">"flag_labels"</span><span class="p">][</span><span class="n">_BLOCK_FLAGS</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="s2">"NOPRESCAN"</span><span class="p">)])</span> <span class="o">==</span> <span class="mi">0</span><span class="p">,</span>
+        <span class="n">calibrates</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span>
+    <span class="p">)</span>
 
     <span class="k">return</span> <span class="p">{</span>
         <span class="s2">"version"</span><span class="p">:</span> <span class="p">[</span>
@@ -763,7 +769,7 @@
             <span class="s2">"total_duration"</span><span class="p">:</span> <span class="n">_numbers</span><span class="p">(</span><span class="n">declared</span><span class="p">,</span> <span class="s2">"TotalDuration"</span><span class="p">,</span> <span class="mi">1</span><span class="p">)[</span><span class="mi">0</span><span class="p">],</span>
             <span class="s2">"enable_pmc"</span><span class="p">:</span> <span class="nb">int</span><span class="p">(</span><span class="n">_numbers</span><span class="p">(</span><span class="n">declared</span><span class="p">,</span> <span class="s2">"EnablePmc"</span><span class="p">,</span> <span class="mi">1</span><span class="p">)[</span><span class="mi">0</span><span class="p">]),</span>
             <span class="s2">"num_gain_cal_readouts"</span><span class="p">:</span> <span class="n">_gain_calibration_readouts</span><span class="p">(</span>
-                <span class="n">declared</span><span class="p">,</span> <span class="n">events</span><span class="p">,</span> <span class="n">repetition</span>
+                <span class="n">declared</span><span class="p">,</span> <span class="n">calibrates</span><span class="p">,</span> <span class="n">repetition</span>
             <span class="p">),</span>
             <span class="s2">"enable_sar_burst_mode"</span><span class="p">:</span> <span class="nb">int</span><span class="p">(</span>
                 <span class="n">_numbers</span><span class="p">(</span><span class="n">declared</span><span class="p">,</span> <span class="s2">"EnableSarBurstMode"</span><span class="p">,</span> <span class="mi">1</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
@@ -812,7 +818,7 @@
         <span class="s2">"labelinc"</span><span class="p">:</span> <span class="n">specifications</span><span class="o">.</span><span class="n">labelinc</span><span class="p">,</span>
         <span class="s2">"soft_delays"</span><span class="p">:</span> <span class="n">specifications</span><span class="o">.</span><span class="n">soft_delays</span><span class="p">,</span>
         <span class="s2">"rf_shims"</span><span class="p">:</span> <span class="nb">list</span><span class="p">(</span><span class="n">specifications</span><span class="o">.</span><span class="n">rf_shims</span><span class="p">),</span>
-        <span class="o">**</span><span class="n">_block_states</span><span class="p">(</span><span class="n">sequence</span><span class="p">),</span>
+        <span class="o">**</span><span class="n">states</span><span class="p">,</span>
     <span class="p">}</span>
 
 
@@ -1166,15 +1172,17 @@
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_gain_calibration_readouts</span><span class="p">(</span>
-    <span class="n">declared</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">events</span><span class="p">:</span> <span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">],</span> <span class="n">repetition</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">declared</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">calibrates</span><span class="p">:</span> <span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">bool_</span><span class="p">],</span> <span class="n">repetition</span><span class="p">:</span> <span class="nb">int</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Return the readouts the receive-gain prescan acquires.</span>
 
-<span class="sd">    The count is ``NumGainCalibrationReadouts``, which must end with a</span>
-<span class="sd">    repetition: the prescan plays from the first block, and stopping inside a</span>
-<span class="sd">    repetition sets the gain on part of one. A sequence that states none plays</span>
-<span class="sd">    through the first repetition that acquires. A sequence with no readout is</span>
-<span class="sd">    not checked.</span>
+<span class="sd">    ``calibrates`` marks, per block, a readout the prescan acquires: one its</span>
+<span class="sd">    NOPRESCAN label does not exempt. The count is</span>
+<span class="sd">    ``NumGainCalibrationReadouts``, which must end with a repetition: the</span>
+<span class="sd">    prescan plays from the first block, and stopping inside a repetition sets</span>
+<span class="sd">    the gain on part of one. A sequence that states none plays through the</span>
+<span class="sd">    first repetition that acquires. A sequence with no such readout is not</span>
+<span class="sd">    checked.</span>
 
 <span class="sd">    Raises</span>
 <span class="sd">    ------</span>
@@ -1183,7 +1191,7 @@
 <span class="sd">        inside a repetition.</span>
 <span class="sd">    """</span>
     <span class="n">stated</span> <span class="o">=</span> <span class="n">declared</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"NumGainCalibrationReadouts"</span><span class="p">)</span>
-    <span class="n">acquires</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">cumsum</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">events</span><span class="p">)[:,</span> <span class="mi">4</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span>
+    <span class="n">acquires</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">cumsum</span><span class="p">(</span><span class="n">calibrates</span><span class="p">)</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="n">acquires</span><span class="o">.</span><span class="n">size</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">acquires</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]:</span>
         <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">_numbers</span><span class="p">(</span><span class="n">declared</span><span class="p">,</span> <span class="s2">"NumGainCalibrationReadouts"</span><span class="p">,</span> <span class="mi">1</span><span class="p">)[</span><span class="mi">0</span><span class="p">])</span>
     <span class="n">ends</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">acquires</span><span class="p">[</span><span class="n">repetition</span> <span class="o">-</span> <span class="mi">1</span> <span class="p">::</span> <span class="n">repetition</span><span class="p">],</span> <span class="n">acquires</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]))</span>

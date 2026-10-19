@@ -74,6 +74,7 @@ from.
    sample_wave
    playout
    Prescan
+   prescan_tour
    repetition_gradients
    chain
    cache_path

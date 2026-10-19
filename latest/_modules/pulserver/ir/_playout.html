@@ -429,7 +429,7 @@
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Literal</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">.._accelerators</span><span class="w"> </span><span class="kn">import</span> <span class="n">require</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._convert</span><span class="w"> </span><span class="kn">import</span> <span class="n">WaveBudget</span><span class="p">,</span> <span class="n">_held</span><span class="p">,</span> <span class="n">cache_path</span>
@@ -449,11 +449,19 @@
 <span class="sd">        The readouts after which it ends, with the segment instance that</span>
 <span class="sd">        completes them; 0 takes the number its sequence declares</span>
 <span class="sd">        (``NumGainCalibrationReadouts``), whole repetitions of it.</span>
+<span class="sd">    tour</span>
+<span class="sd">        Whether it first plays the pTx tour of :func:`prescan_tour`, each</span>
+<span class="sd">        visit once: ``"played"`` acquires none of the tour's readouts,</span>
+<span class="sd">        ``"acquired"`` acquires them and adds them to ``readouts``.</span>
 <span class="sd">    """</span>
 
     <span class="n">subsequence</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
-    <span class="n">readouts</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span></div>
+    <span class="n">readouts</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">tour</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">"none"</span><span class="p">,</span> <span class="s2">"played"</span><span class="p">,</span> <span class="s2">"acquired"</span><span class="p">]</span> <span class="o">=</span> <span class="s2">"none"</span></div>
 
+
+
+<span class="n">_TOURS</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"none"</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">"played"</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span> <span class="s2">"acquired"</span><span class="p">:</span> <span class="mi">2</span><span class="p">}</span>
 
 
 <div class="viewcode-block" id="playout">
@@ -516,7 +524,8 @@
 <span class="sd">        - ``blocks``: per played block, in play order, ``subsequence``,</span>
 <span class="sd">          ``segment``, ``position``, ``instance`` (instances of its segment</span>
 <span class="sd">          played before its own), ``slot`` (of its position's ring, -1 unless</span>
-<span class="sd">          the waves are streamed), ``rotate`` (0 where NOROT keeps the prescription</span>
+<span class="sd">          the waves are streamed), ``visit`` (of the prescan's tour, -1</span>
+<span class="sd">          outside it), ``rotate`` (0 where NOROT keeps the prescription</span>
 <span class="sd">          rotation out), ``await_trigger``, ``first_position`` (the</span>
 <span class="sd">          execution-stream position of its instance's first block) and</span>
 <span class="sd">          ``duration_us``; the registers ``rf_amp_hz``, ``rf_phase_rad``,</span>
@@ -553,7 +562,9 @@
 <span class="sd">    """</span>
     <span class="n">seq_path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">seq_path</span><span class="p">)</span>
     <span class="n">calibration</span> <span class="o">=</span> <span class="p">(</span>
-        <span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="k">if</span> <span class="n">prescan</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="p">(</span><span class="n">prescan</span><span class="o">.</span><span class="n">subsequence</span><span class="p">,</span> <span class="n">prescan</span><span class="o">.</span><span class="n">readouts</span><span class="p">)</span>
+        <span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">prescan</span> <span class="ow">is</span> <span class="kc">None</span>
+        <span class="k">else</span> <span class="p">(</span><span class="n">prescan</span><span class="o">.</span><span class="n">subsequence</span><span class="p">,</span> <span class="n">prescan</span><span class="o">.</span><span class="n">readouts</span><span class="p">,</span> <span class="n">_TOURS</span><span class="p">[</span><span class="n">prescan</span><span class="o">.</span><span class="n">tour</span><span class="p">])</span>
     <span class="p">)</span>
     <span class="k">return</span> <span class="n">require</span><span class="p">(</span><span class="s2">"playout_from_cache"</span><span class="p">)(</span>
         <span class="nb">str</span><span class="p">(</span><span class="n">cache_path</span><span class="p">(</span><span class="n">seq_path</span><span class="p">,</span> <span class="n">cache_ext</span><span class="p">)),</span>
@@ -562,6 +573,34 @@
         <span class="n">calibration</span><span class="p">,</span>
         <span class="n">waveforms</span><span class="p">,</span>
         <span class="n">pulses</span><span class="p">,</span>
+    <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="prescan_tour">
+<a class="viewcode-back" href="../../../generated/pulserver.ir.prescan_tour.html#pulserver.ir.prescan_tour">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">prescan_tour</span><span class="p">(</span><span class="n">seq_path</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span> <span class="n">cache_ext</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">".pseg"</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""List the pTx prescan tour of the cache beside a sequence file.</span>
+
+<span class="sd">    One visit per segment instance holding the largest drive one channel of a</span>
+<span class="sd">    parallel-transmit RF definition receives in its subsequence: the RF</span>
+<span class="sd">    amplitude times the channel's shim magnitude, or the amplitude alone for</span>
+<span class="sd">    a pulse with a waveform per channel. An instance that holds several is</span>
+<span class="sd">    listed once. A sequence without parallel-transmit RF has no visit.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    dict of str to numpy.ndarray</span>
+<span class="sd">        Per visit, by subsequence and then stream position: ``subsequence``,</span>
+<span class="sd">        ``segment`` (global), ``first_position`` and ``num_blocks`` of its</span>
+<span class="sd">        instance, ``rf_definition`` (local to the subsequence), ``channels``</span>
+<span class="sd">        whose largest drive it plays, the largest of them ``drive_hz``,</span>
+<span class="sd">        ``duration_us``, ``rf_pulses`` and ``readouts``: those the scan</span>
+<span class="sd">        acquires that NOPRESCAN does not exempt.</span>
+<span class="sd">    """</span>
+    <span class="n">seq_path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">seq_path</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">require</span><span class="p">(</span><span class="s2">"prescan_tour_from_cache"</span><span class="p">)(</span>
+        <span class="nb">str</span><span class="p">(</span><span class="n">cache_path</span><span class="p">(</span><span class="n">seq_path</span><span class="p">,</span> <span class="n">cache_ext</span><span class="p">)),</span> <span class="n">seq_path</span><span class="o">.</span><span class="n">stat</span><span class="p">()</span><span class="o">.</span><span class="n">st_size</span>
     <span class="p">)</span></div>
 
 </pre></div>

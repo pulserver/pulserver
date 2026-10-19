@@ -200,13 +200,29 @@ instance.
 
 The receive-gain calibration prescan plays one subsequence from its start to
 the segment instance that completes the readouts its sequence declares
-(`NumGainCalibrationReadouts`). The count ends with a repetition, so the gain
+(`NumGainCalibrationReadouts`). A readout whose block carries the `NOPRESCAN`
+label plays without being acquired and is not counted, so a multi-echo
+sequence calibrates on its first echo. The count ends with a repetition, so the gain
 is set on whole repetitions of the scan; the conversion refuses one that ends
 inside a repetition, and takes the readouts through the first repetition that
 acquires when the sequence declares none. It waits for no trigger and
 drives no digital output, and every gradient whose amplitude varies across
 repetitions, a phase encoding for instance, plays at zero, as does a wave any
 of whose logical axes varies.
+
+A parallel-transmit sequence can open its prescan with the pTx tour
+(`pulseg_get_prescan_tour`): for every channel of every parallel-transmit RF
+definition of every subsequence, the segment instance holding the largest
+drive that channel receives, the RF amplitude times the channel's shim
+magnitude, or the amplitude alone for a pulse with a waveform per channel.
+Each instance is visited once, under the prescan's rules, whether or not it
+reads out; the tour either acquires its readouts, counted on top of the
+calibration's, or plays them unacquired. A playout reaches each visit by
+seeking the cursor to its first block (`pulseg_cursor_seek`). A visit plays
+part of one occurrence of its subsequence's repetition, each pulse at its
+largest, so resting after it until it has lasted the time per occurrence the
+scan's RF is costed at keeps its average power within the scan's; the rest is
+the interpreter's, from the visit's duration.
 
 Waveform memory holds samples of the type and scale a scanner build defines
 before it includes the library: `PULSEG_WAVE_SAMPLE`, the type;
