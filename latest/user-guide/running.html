@@ -893,7 +893,7 @@ pulserver<span class="w"> </span>proxy<span class="w"> </span>--store<span class
 <td><p>Convert each image to DICOM before it is relayed, whatever reconstructed it; for a client that reads DICOM only</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--save-data</span></code></p></td>
-<td><p>Directory each series is kept in as the scanner sends it; kept nowhere when unset</p></td>
+<td><p>Directory each series is kept in, enriched; kept nowhere when unset</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--idle-timeout</span></code></p></td>
 <td><p>Seconds without a client after which the proxy closes, never while a series is reconstructed. Unlimited when unset</p></td>
@@ -927,10 +927,10 @@ place of a new reconstruction.</p>
 <section id="saved-series">
 <h3>Saved series<a class="headerlink" href="#saved-series" title="Link to this heading">#</a></h3>
 <p>With <code class="docutils literal notranslate"><span class="pre">--save-data</span></code>, each series is also written to
-<code class="docutils literal notranslate"><span class="pre">&lt;save-data&gt;/mrd_&lt;timestamp&gt;.h5</span></code> as the scanner sends it, header first and each
-acquisition as it arrives, before it is enriched. <code class="docutils literal notranslate"><span class="pre">pulserver</span> <span class="pre">replay</span></code> runs a
-plugin on that file and reconstructs it offline as the proxy did
-(<a class="reference internal" href="#series-replay"><span class="std std-ref">Series replay</span></a>). The queue directory holds a series only until it is
+<code class="docutils literal notranslate"><span class="pre">&lt;save-data&gt;/mrd_&lt;timestamp&gt;.h5</span></code> as the proxy reconstructs it: header and
+acquisitions enriched, the header marked <code class="docutils literal notranslate"><span class="pre">pulserver_enriched</span></code>, each acquisition
+as it arrives. <code class="docutils literal notranslate"><span class="pre">pulserver</span> <span class="pre">replay</span></code> runs a plugin on that file as it stands and
+gives the image the proxy did (<a class="reference internal" href="#series-replay"><span class="std std-ref">Series replay</span></a>). The queue directory holds a series only until it is
 reconstructed.</p>
 </section>
 <section id="proxy-lifetime">

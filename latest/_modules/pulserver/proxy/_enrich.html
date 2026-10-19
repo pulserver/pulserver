@@ -433,10 +433,12 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s2">"ENRICHED"</span><span class="p">,</span>
     <span class="s2">"SequenceTable"</span><span class="p">,</span>
     <span class="s2">"TableSpace"</span><span class="p">,</span>
     <span class="s2">"enrich_acquisition"</span><span class="p">,</span>
     <span class="s2">"enrich_header"</span><span class="p">,</span>
+    <span class="s2">"is_enriched"</span><span class="p">,</span>
 <span class="p">]</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">dataclasses</span>
@@ -793,6 +795,17 @@
         <span class="k">return</span> <span class="kc">None</span>
 
 
+<span class="c1">#: User parameter :func:`enrich_header` marks a header with: its series is</span>
+<span class="c1">#: enriched, so a replay plays it as it is rather than enriching it again (the</span>
+<span class="c1">#: phase a shifted field of view puts on the samples would be applied twice).</span>
+<span class="n">ENRICHED</span> <span class="o">=</span> <span class="s2">"pulserver_enriched"</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">is_enriched</span><span class="p">(</span><span class="n">header</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Whether :func:`enrich_header` has written this header."""</span>
+    <span class="k">return</span> <span class="n">user_parameter</span><span class="p">(</span><span class="n">header</span><span class="p">,</span> <span class="n">ENRICHED</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+
+
 <span class="k">def</span><span class="w"> </span><span class="nf">_set_user_string</span><span class="p">(</span><span class="n">header</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
     <span class="k">if</span> <span class="n">header</span><span class="o">.</span><span class="n">userParameters</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">header</span><span class="o">.</span><span class="n">userParameters</span> <span class="o">=</span> <span class="n">xsd</span><span class="o">.</span><span class="n">userParametersType</span><span class="p">()</span>
@@ -820,6 +833,7 @@
 <span class="sd">    becomes the ``diffusion_table`` user parameter string, one ``x y z b`` row</span>
 <span class="sd">    per volume (:func:`pulserver.mrd.diffusion_table`).</span>
 <span class="sd">    """</span>
+    <span class="n">_set_user_string</span><span class="p">(</span><span class="n">header</span><span class="p">,</span> <span class="n">ENRICHED</span><span class="p">,</span> <span class="s2">"1"</span><span class="p">)</span>
     <span class="n">parameters</span> <span class="o">=</span> <span class="n">header</span><span class="o">.</span><span class="n">sequenceParameters</span>
     <span class="k">if</span> <span class="n">table</span><span class="o">.</span><span class="n">sequence_parameters</span> <span class="ow">and</span> <span class="n">parameters</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">parameters</span> <span class="o">=</span> <span class="n">xsd</span><span class="o">.</span><span class="n">sequenceParametersType</span><span class="p">()</span>

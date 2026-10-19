@@ -51,9 +51,9 @@ on the other end refuses a series it cannot serve, enriches it from its design
 - **Publishes the poses of a motion-corrected series to the running scan.**
 
   Code: `pulserver.proxy._motion`. Tests: *a motion corrected series publishes its poses to the scan*; *a series not corrected for motion writes no pose file* (`test_proxy.py`).
-- **Keeps each series as the scanner sent it, for an offline rerun that gives the same image.**
+- **Keeps each series enriched, for an offline rerun that gives the same image.**
 
-  Code: `--save-data`. Tests: *a kept series runs offline and gives the image the proxy returned*; *what a proxy keeps is the header the scanner sent* (`test_proxy.py`).
+  Code: `--save-data`. Tests: *a kept series runs offline and gives the image the proxy returned*; *what a proxy keeps is the series it reconstructed, enriched*; *a kept series given its design is not enriched twice* (`test_proxy.py`).
 - **Holds images for a client that dropped, and closes on its own when idle.**
 
   Code: `--idle-timeout`. Tests: *images whose client has gone reach it when it returns*; *the idle timeout counts from the last client leaving* (`test_proxy.py`).

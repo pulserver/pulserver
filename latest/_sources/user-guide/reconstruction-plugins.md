@@ -399,10 +399,12 @@ process ID, level and logger name.
 ## Offline reconstruction
 
 {meth}`~pulserver.recon.ReconPlugin.run` reconstructs an ISMRMRD HDF5 file in
-the calling process, through the same hooks. A file recorded as the scanner
-sends it, such as `pulserver scan --mrd raw.h5` or the proxy's `--save-data`
-writes, is enriched first from the design it was played from, found in a design
-store or given as its sequence file, with its manifest beside it:
+the calling process, through the same hooks. A file the proxy's `--save-data`
+keeps is enriched already and plays as it stands. A file recorded as the
+scanner sends it, such as `pulserver scan --mrd raw.h5` writes, is enriched
+first from the design it was played from, found in a design store or given as
+its sequence file, with its manifest beside it; given a design, an enriched
+file is still played as it stands, never enriched twice:
 
 ```python
 images = PLUGIN.run("raw.h5", store="designs")

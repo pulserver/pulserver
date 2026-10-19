@@ -617,9 +617,11 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">_kept</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">header</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">items</span><span class="p">:</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Any</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">"""Return a series, written where it can be received again.</span>
 
-<span class="sd">        The header is written as this is called, before anything enriches it,</span>
-<span class="sd">        so replaying the file offline puts this server back where the scan put</span>
-<span class="sd">        it.</span>
+<span class="sd">        The proxy keeps the series as it reconstructs it, header and</span>
+<span class="sd">        acquisitions enriched (the header marked ``pulserver_enriched``); a</span>
+<span class="sd">        replay plays such a file as it is. A server keeps a forwarded series</span>
+<span class="sd">        as the proxy sent it, enriched too. The header is written as this is</span>
+<span class="sd">        called.</span>
 <span class="sd">        """</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">save_to</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">return</span> <span class="n">items</span>
@@ -811,8 +813,10 @@
             <span class="k">return</span>
         <span class="n">design</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">designs</span><span class="o">.</span><span class="n">resolve</span><span class="p">(</span><span class="n">header</span><span class="p">)</span>
         <span class="n">plugin</span> <span class="o">=</span> <span class="n">_config_plugin</span><span class="p">(</span><span class="n">config</span><span class="p">)</span>
-        <span class="n">received</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_kept</span><span class="p">(</span><span class="n">header</span><span class="p">,</span> <span class="n">_received</span><span class="p">(</span><span class="n">client</span><span class="p">))</span>
         <span class="n">enrich_header</span><span class="p">(</span><span class="n">header</span><span class="p">,</span> <span class="n">design</span><span class="o">.</span><span class="n">table</span><span class="p">)</span>
+        <span class="n">enriched</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_kept</span><span class="p">(</span>
+            <span class="n">header</span><span class="p">,</span> <span class="n">_enriched</span><span class="p">(</span><span class="n">_received</span><span class="p">(</span><span class="n">client</span><span class="p">),</span> <span class="n">design</span><span class="p">,</span> <span class="n">header_fov_offset_m</span><span class="p">(</span><span class="n">header</span><span class="p">))</span>
+        <span class="p">)</span>
         <span class="n">_log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
             <span class="s2">"series on </span><span class="si">%s</span><span class="s2">: </span><span class="si">%s</span><span class="s2">, </span><span class="si">%d</span><span class="s2"> readouts"</span><span class="p">,</span>
             <span class="n">design</span><span class="o">.</span><span class="n">directory</span><span class="p">,</span>
@@ -825,10 +829,7 @@
                 <span class="n">config</span><span class="p">,</span>
                 <span class="n">header</span><span class="p">,</span>
                 <span class="n">plugin</span><span class="p">,</span>
-                <span class="n">itertools</span><span class="o">.</span><span class="n">chain</span><span class="p">(</span>
-                    <span class="p">(</span><span class="n">design</span><span class="o">.</span><span class="n">description</span><span class="p">,),</span>
-                    <span class="n">_enriched</span><span class="p">(</span><span class="n">received</span><span class="p">,</span> <span class="n">design</span><span class="p">,</span> <span class="n">header_fov_offset_m</span><span class="p">(</span><span class="n">header</span><span class="p">)),</span>
-                <span class="p">),</span>
+                <span class="n">itertools</span><span class="o">.</span><span class="n">chain</span><span class="p">((</span><span class="n">design</span><span class="o">.</span><span class="n">description</span><span class="p">,),</span> <span class="n">enriched</span><span class="p">),</span>
                 <span class="n">motion</span><span class="o">=</span><span class="n">design</span><span class="o">.</span><span class="n">directory</span><span class="o">.</span><span class="n">parent</span> <span class="o">/</span> <span class="n">FILENAME</span>
                 <span class="k">if</span> <span class="n">design</span><span class="o">.</span><span class="n">prospective_motion</span>
                 <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
