@@ -7,6 +7,7 @@ __all__ = ["reconstruct_file"]
 import contextlib
 import hashlib
 import json
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +17,8 @@ import ismrmrd.xsd
 from ..plugin import ExamCache, ReconContext
 from .application import run_application
 from .mrd2dicom import MrdDicomBuilder, name_dictionary
+
+_log = logging.getLogger(__name__)
 
 
 class _FileConnection:
@@ -78,10 +81,16 @@ def reconstruct_file(
         played = _played(header, store, design)
         fov_offset_m = None
         if played is not None:
-            from ...proxy._enrich import enrich_header, header_fov_offset_m
+            from ...proxy._enrich import enrich_header, header_fov_offset_m, is_enriched
 
-            enrich_header(header, played.table)
-            fov_offset_m = header_fov_offset_m(header)
+            if is_enriched(header):
+                # Kept by a proxy as it reconstructed it: enriching it again
+                # would apply a shifted field of view's phase twice.
+                _log.info("%s is enriched already; replayed as it is", path)
+                played = None
+            else:
+                enrich_header(header, played.table)
+                fov_offset_m = header_fov_offset_m(header)
         context = ReconContext(
             header=header,
             exam=ExamCache(path if exam_id is None else exam_id),

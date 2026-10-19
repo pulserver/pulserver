@@ -8,10 +8,12 @@ stream order.
 from __future__ import annotations
 
 __all__ = [
+    "ENRICHED",
     "SequenceTable",
     "TableSpace",
     "enrich_acquisition",
     "enrich_header",
+    "is_enriched",
 ]
 
 import dataclasses
@@ -353,6 +355,17 @@ def _diffusion(seq: Any) -> tuple[np.ndarray, np.ndarray] | None:
         return None
 
 
+#: User parameter :func:`enrich_header` marks a header with: its series is
+#: enriched, so a replay plays it as it is rather than enriching it again (the
+#: phase a shifted field of view puts on the samples would be applied twice).
+ENRICHED = "pulserver_enriched"
+
+
+def is_enriched(header: Any) -> bool:
+    """Whether :func:`enrich_header` has written this header."""
+    return user_parameter(header, ENRICHED) is not None
+
+
 def _set_user_string(header: Any, name: str, value: str) -> None:
     if header.userParameters is None:
         header.userParameters = xsd.userParametersType()
@@ -378,6 +391,7 @@ def enrich_header(header: Any, table: SequenceTable) -> None:
     becomes the ``diffusion_table`` user parameter string, one ``x y z b`` row
     per volume (:func:`pulserver.mrd.diffusion_table`).
     """
+    _set_user_string(header, ENRICHED, "1")
     parameters = header.sequenceParameters
     if table.sequence_parameters and parameters is None:
         parameters = xsd.sequenceParametersType()

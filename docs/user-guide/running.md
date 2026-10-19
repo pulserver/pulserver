@@ -277,7 +277,7 @@ pulserver proxy --store DIR --port N --forward HOST:PORT [--forward-config NAME]
 | `--forward` | `HOST:PORT` of the MRD server that reconstructs every series, instead of local workers |
 | `--forward-config` | Config name sent to the `--forward` server; the series' reconstruction plugin when unset |
 | `--dicom` | Convert each image to DICOM before it is relayed, whatever reconstructed it; for a client that reads DICOM only |
-| `--save-data` | Directory each series is kept in as the scanner sends it; kept nowhere when unset |
+| `--save-data` | Directory each series is kept in, enriched; kept nowhere when unset |
 | `--idle-timeout` | Seconds without a client after which the proxy closes, never while a series is reconstructed. Unlimited when unset |
 | `--logfile` | File the log is appended to, together with the standard output and error of the proxy and its workers, so whatever a reconstruction plugin logs, prints or warns lands there too; standard error when unset |
 | `--log-level` | `DEBUG`, `INFO`, `WARNING` or `ERROR`; `INFO` when unset |
@@ -304,10 +304,10 @@ place of a new reconstruction.
 ### Saved series
 
 With `--save-data`, each series is also written to
-`<save-data>/mrd_<timestamp>.h5` as the scanner sends it, header first and each
-acquisition as it arrives, before it is enriched. `pulserver replay` runs a
-plugin on that file and reconstructs it offline as the proxy did
-({ref}`series-replay`). The queue directory holds a series only until it is
+`<save-data>/mrd_<timestamp>.h5` as the proxy reconstructs it: header and
+acquisitions enriched, the header marked `pulserver_enriched`, each acquisition
+as it arrives. `pulserver replay` runs a plugin on that file as it stands and
+gives the image the proxy did ({ref}`series-replay`). The queue directory holds a series only until it is
 reconstructed.
 
 ### Proxy lifetime

@@ -33,6 +33,7 @@ from pulserver.proxy import (
     _designs,
     _held,
 )
+from pulserver.proxy._enrich import is_enriched
 from pulserver.proxy._proxy import _config_plugin
 from pulserver.proxy._seqdesc import is_message
 from pulserver.recon import load_plugin
@@ -1419,10 +1420,10 @@ def test_pulserver_replay_writes_dicom_files_under_dicom(bucket, tmp_path):
     assert pydicom.dcmread(written).Modality == "MR"
 
 
-def test_what_a_proxy_keeps_is_the_header_the_scanner_sent(
+def test_what_a_proxy_keeps_is_the_series_it_reconstructed_enriched(
     start_proxy, bucket, tmp_path
 ):
-    """The proxy enriches what it passes on, and keeps what it was given."""
+    """The proxy keeps the series as it reconstructs it, header and counters enriched."""
     _, series = bucket
     kept = tmp_path / "kept"
     proxy = start_proxy(slots=1, save_to=kept)
@@ -1436,10 +1437,49 @@ def test_what_a_proxy_keeps_is_the_header_the_scanner_sent(
     held = ismrmrd.Dataset(str(written[0]), "dataset", create_if_needed=False)
     try:
         header = ismrmrd.xsd.CreateFromDocument(held.read_xml_header())
+        lines = [
+            held.read_acquisition(i).idx.kspace_encode_step_1
+            for i in range(held.number_of_acquisitions())
+        ]
     finally:
         held.close()
-    assert header.encoding[0].encodedSpace.matrixSize.x == 1
-    assert header.sequenceParameters is None
+    assert is_enriched(header)
+    assert header.encoding[0].reconSpace.matrixSize.y == MATRIX["ny"]
+    assert header.sequenceParameters is not None
+    table = series["gre2d"].table
+    assert lines == [int(table.counters["LIN"][i]) for i in range(len(table))]
+
+
+def test_a_kept_series_given_its_design_is_not_enriched_twice(
+    start_proxy, bucket, tmp_path, monkeypatch
+):
+    """A shifted field of view's phase is on the kept samples once, whatever the replay is given."""
+    root, series = bucket
+    played = series["gre2d"]
+
+    def kspace(table, index):
+        return point(table, index, (0.004, -0.002, 0.0))
+
+    kept = tmp_path / "kept"
+    proxy = start_proxy(slots=1, save_to=kept)
+    received = stream(proxy.port, played, data=kspace)
+    (written,) = kept.glob("*.h5")
+    plugin = load_plugin(RECON_PLUGINS / "gre2d.py")
+
+    def enriched_again(*args, **kwargs):
+        raise AssertionError("a kept series was enriched again")
+
+    monkeypatch.setattr("pulserver.proxy._proxy._enriched", enriched_again)
+    monkeypatch.setattr("pulserver.proxy._enrich.enrich_header", enriched_again)
+    as_it_stands = plugin.run(str(written))
+    given_design = plugin.run(str(written), store=root)
+
+    np.testing.assert_array_equal(
+        images(as_it_stands)[0].data, images(received)[0].data
+    )
+    np.testing.assert_array_equal(
+        images(given_design)[0].data, images(received)[0].data
+    )
 
 
 def test_two_series_at_once_are_kept_in_files_of_their_own(
