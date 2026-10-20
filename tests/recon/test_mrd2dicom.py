@@ -807,6 +807,28 @@ def test_the_image_position_is_the_centre_of_the_first_pixel(parsed_mrd_header):
     np.testing.assert_allclose([float(v) for v in dicom.ImagePositionPatient], expected)
 
 
+def test_the_image_position_is_in_the_frame_that_moves_with_the_table(parsed_mrd_header):
+    """A prescription moved along the table by moving the table keeps its MRD
+    position at the isocentre and states the move as the table's offset."""
+    at_isocentre = _placed_image(
+        (10.0, 20.0, 30.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (240.0, 120.0, 5.0)
+    )
+    moved = _placed_image(
+        (10.0, 20.0, 30.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (240.0, 120.0, 5.0)
+    )
+    moved.patient_table_position = (0.0, 0.0, -19.4)
+    builder = MrdDicomBuilder(parsed_mrd_header)
+    reference = builder(at_isocentre).dset
+    dicom = builder(moved).dset
+    np.testing.assert_allclose(
+        np.array([float(v) for v in dicom.ImagePositionPatient])
+        - np.array([float(v) for v in reference.ImagePositionPatient]),
+        (0.0, 0.0, 19.4),
+        atol=1e-5,
+    )
+    assert float(dicom.SliceLocation) == pytest.approx(float(reference.SliceLocation) + 19.4)
+
+
 def test_the_default_window_is_centred_on_the_data_not_on_half_its_width(
     parsed_mrd_header,
 ):
