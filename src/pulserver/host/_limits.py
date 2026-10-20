@@ -63,7 +63,10 @@ def split_limits(
     and those starting with ``design_`` the design limits of
     :func:`design_system`. The other keys are ``pypulseqpp.Opts`` keyword
     arguments, among which ``B0`` is required: the field in T the scan runs
-    at, which ppm offsets are resolved at.
+    at, which ppm offsets are resolved at. ``max_b1``, the peak B1 the
+    transmit chain allows, in µT unless ``b1_unit`` says otherwise, is
+    optional: without it the pulses are not limited, and with it a plugin's
+    excitation and refocusing pulses are lengthened until they fit.
 
     Raises
     ------

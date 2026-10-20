@@ -319,6 +319,32 @@ def test_design_limits_that_cannot_be_read_are_refused(limits, message):
         split_limits({**SCANNER, **limits})
 
 
+def test_the_peak_b1_limit_is_read_in_microtesla_and_reaches_the_design():
+    limits = {**SCANNER, "max_b1": 11.2}
+    held = pytest.approx(11.2e-6 * pp.Opts(**SCANNER).gamma)
+    assert split_limits(limits)[0].max_b1 == held
+    assert design_system(limits).max_b1 == held
+    assert design_system({**limits, "design_max_grad": 23.0}).max_b1 == held
+
+
+def test_without_a_peak_b1_limit_the_pulses_are_not_limited():
+    assert split_limits(SCANNER)[0].max_b1 is None
+    assert design_system({**SCANNER, "design_max_grad": 23.0}).max_b1 is None
+
+
+@pytest.mark.parametrize(
+    ("limits", "message"),
+    [
+        ({"max_b1": 0.0}, "positive"),
+        ({"max_b1": -11.2}, "positive"),
+        ({"max_b1": 11.2, "b1_unit": "mT/m"}, "b1_unit"),
+    ],
+)
+def test_a_peak_b1_limit_that_cannot_be_read_is_refused(limits, message):
+    with pytest.raises(ValueError, match=message):
+        split_limits({**SCANNER, **limits})
+
+
 def test_limits_without_the_field_strength_are_refused_naming_it():
     without = {k: v for k, v in SCANNER.items() if k != "B0"}
 

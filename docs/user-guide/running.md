@@ -113,6 +113,14 @@ include the scanner's RF and ADC dead times, RF ringdown time and ADC sample
 divisor; `pypulseqpp.Opts` sets the dead times to zero and the divisor to four
 when they are left out.
 
+`max_b1` is the peak B1 the transmit chain allows, in µT, or in the `b1_unit`
+given beside it; left out, the pulses are not limited. The selective and
+non-selective excitation and refocusing modules of pypulseqpp keep their own
+duration while the pulse peaks within it, and are otherwise lengthened, flip
+angle and time-bandwidth product held, until it does; the shortest TE and TR a
+plugin reports follow. Spectral, adiabatic, two-dimensional and multiband
+pulses are designed as given.
+
 `max_grad` and `max_slew` are the limits of the gradient coils, to which the
 checks hold every physical axis. Logical axes played together add on one
 physical axis, so under an oblique prescription a design held to `max_grad` and
