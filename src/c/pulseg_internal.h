@@ -994,6 +994,7 @@ void pulseg__compute_exec_stream_tr_start(pulseg_sequence_descriptor *desc);
  * exec_stream_* arrays (see pulseg_exec_run). */
 int pulseg__exec_block_idx(const pulseg_sequence_descriptor *desc, int n);
 int pulseg__exec_seg_id(const pulseg_sequence_descriptor *desc, int n);
+int pulseg__exec_seg_run_start(const pulseg_sequence_descriptor *desc, int n);
 int pulseg__exec_tr_start(const pulseg_sequence_descriptor *desc, int n);
 int pulseg__build_seg_runs(pulseg_sequence_descriptor *desc);
 long pulseg__verify_exec_runs(const pulseg_sequence_descriptor *desc);

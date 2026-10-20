@@ -2882,7 +2882,7 @@ int pulseg_cursor_get_info(const pulseg_collection *coll, pulseg_cursor_info *in
      * phase-encoding readout lines in MPRAGE within one TR).
      * A new instance begins when the seg_id changes, or when enough
      * blocks have elapsed to complete one full instance of the segment
-     * (detected by counting back to the start of the same-seg_id run). */
+     * (counted from the start of the same-seg_id run). */
     {
         int new_inst;
         if (pos == 0 || pulseg__exec_seg_id(desc, pos) != pulseg__exec_seg_id(desc, pos - 1))
@@ -2892,11 +2892,9 @@ int pulseg_cursor_get_info(const pulseg_collection *coll, pulseg_cursor_info *in
         else if (seg_id >= 0 && seg_id < desc->num_unique_segments)
         {
             int nb = desc->segment_definitions[seg_id].num_blocks;
-            int run_start = pos;
+            int run_start = pulseg__exec_seg_run_start(desc, pos);
             if (nb <= 0)
                 nb = 1;
-            while (run_start > 0 && pulseg__exec_seg_id(desc, run_start - 1) == seg_id)
-                run_start--;
             new_inst = (((pos - run_start) % nb) == 0) ? 1 : 0;
         }
         else
@@ -2915,11 +2913,9 @@ int pulseg_cursor_get_info(const pulseg_collection *coll, pulseg_cursor_info *in
         else if (seg_id >= 0 && seg_id < desc->num_unique_segments)
         {
             int nb = desc->segment_definitions[seg_id].num_blocks;
-            int run_start = pos;
+            int run_start = pulseg__exec_seg_run_start(desc, pos);
             if (nb <= 0)
                 nb = 1;
-            while (run_start > 0 && pulseg__exec_seg_id(desc, run_start - 1) == seg_id)
-                run_start--;
             last_inst = ((((pos - run_start) + 1) % nb) == 0) ? 1 : 0;
         }
         else
