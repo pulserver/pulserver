@@ -576,7 +576,8 @@ def test_a_request_is_validated_and_designed_under_the_peak_b1_limit(store):
         if seq.get_block(n).rf is not None
     ]
     assert peaks
-    assert max(peaks) <= pp.Opts(**limited).max_b1 * (1 + 1e-6)
+    # The design keeps its margin below the limit the scanner sent.
+    assert max(peaks) <= pp.MAX_B1_DERATE * pp.Opts(**limited).max_b1 * (1 + 1e-6)
 
 
 def test_a_design_in_a_forbidden_band_is_refused(store):

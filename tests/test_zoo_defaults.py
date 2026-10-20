@@ -38,7 +38,7 @@ def _oblique(limits):
 
 #: A 7 T head gradient and a 3 T body gradient, designed for any orientation.
 #: The 7 T transmit chain allows a peak B1 below the 30 uT of a 3 ms
-#: refocusing pulse, which the spin echoes lengthen to fit.
+#: refocusing pulse, which the spin echoes lengthen to fit under 0.9 of it.
 SCANNERS = {
     "7T-head": _oblique(
         {
@@ -62,8 +62,24 @@ SCANNERS = {
 }
 
 
-@pytest.mark.parametrize("scanner", SCANNERS)
-@pytest.mark.parametrize("variant", VARIANTS)
+#: The variants whose default protocol the 7 T peak-B1 limit refuses. The ZTE
+#: pulse, 3 degrees in 10 us, is held to 0.9 of 11.2 uT, which takes 20 us:
+#: two dwells of its 250 kHz readout, which ZteReadout refuses.
+B1_REFUSED = {"zte3d/default", "zte3d/meridian"}
+
+
+def _cases():
+    for variant in VARIANTS:
+        for scanner in SCANNERS:
+            marks = ()
+            if scanner == "7T-head" and variant in B1_REFUSED:
+                marks = pytest.mark.xfail(
+                    strict=True, reason="the ZTE pulse outlasts two dwells under max_b1"
+                )
+            yield pytest.param(variant, scanner, marks=marks, id=f"{variant}-{scanner}")
+
+
+@pytest.mark.parametrize(("variant", "scanner"), _cases())
 def test_the_default_protocol_of_every_variant_is_feasible(variant, scanner):
     name, options = VARIANTS[variant]
     plugin = load_plugin(_plugins.SEQUENCES / f"{name}.py", options)

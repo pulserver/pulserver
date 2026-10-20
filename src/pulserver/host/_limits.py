@@ -66,7 +66,9 @@ def split_limits(
     at, which ppm offsets are resolved at. ``max_b1``, the peak B1 the
     transmit chain allows, in µT unless ``b1_unit`` says otherwise, is
     optional: without it the pulses are not limited, and with it a plugin's
-    excitation and refocusing pulses are lengthened until they fit.
+    excitation and refocusing pulses are lengthened until they peak within
+    ``pypulseqpp.MAX_B1_DERATE`` of it. The scanner's value is passed as it
+    is; the margin is the design's.
 
     Raises
     ------
