@@ -1176,6 +1176,51 @@ int pulseg__compute_variable_grad_flags(pulseg_sequence_descriptor *desc)
     return PULSEG_SUCCESS;
 }
 
+/* The frequency offsets one TR position plays: their count, sum and range. */
+struct RfFreqSpread
+{
+    long count = 0;
+    double sum = 0.0;
+    float lo = 0.0f;
+    float hi = 0.0f;
+
+    void add(float f)
+    {
+        if (count == 0 || f < lo)
+            lo = f;
+        if (count == 0 || f > hi)
+            hi = f;
+        sum += (double)f;
+        ++count;
+    }
+};
+
+/* The RF frequency offset execution-stream entry @p si plays, in *freq_hz;
+ * 0 where it plays no RF or plays it at zero amplitude. */
+static int played_rf_freq(const pulseg_sequence_descriptor *desc, int si, float *freq_hz)
+{
+    const int bt = pulseg__exec_block_idx(desc, si);
+    const pulseg_rf_table_element *rf;
+
+    if (bt < 0 || bt >= desc->num_blocks)
+        return 0;
+    if (desc->block_table[bt].rf_id < 0 || desc->block_table[bt].rf_id >= desc->rf_table_size)
+        return 0;
+    rf = &desc->rf_table[desc->block_table[bt].rf_id];
+    if (rf->amplitude == 0.0f)
+        return 0;
+    *freq_hz = rf->freq_offset;
+    return 1;
+}
+
+static void free_rf_freq_flags(pulseg_sequence_descriptor *desc)
+{
+    PULSEG_FREE(desc->rf_freq_variable);
+    PULSEG_FREE(desc->rf_freq_mean_hz);
+    desc->rf_freq_variable = NULL;
+    desc->rf_freq_mean_hz = NULL;
+}
+
 /**
  * For each position within the canonical TR, whether the RF frequency offset
  * varies across TR instances, and its mean -- what the block instance reports
@@ -1192,21 +1237,13 @@ int pulseg__compute_variable_grad_flags(pulseg_sequence_descriptor *desc)
 int pulseg__compute_rf_freq_flags(pulseg_sequence_descriptor *desc)
 {
     int tr_size, si, pos, tr_pos;
+    float f;
 
     if (!desc)
         return PULSEG_ERR_NULL_POINTER;
 
+    free_rf_freq_flags(desc);
     tr_size = desc->tr_descriptor.tr_size;
-    if (desc->rf_freq_variable)
-    {
-        PULSEG_FREE(desc->rf_freq_variable);
-        desc->rf_freq_variable = NULL;
-    }
-    if (desc->rf_freq_mean_hz)
-    {
-        PULSEG_FREE(desc->rf_freq_mean_hz);
-        desc->rf_freq_mean_hz = NULL;
-    }
     if (tr_size <= 0 || desc->exec_stream_len <= 0)
         return PULSEG_SUCCESS;
 
@@ -1214,57 +1251,27 @@ int pulseg__compute_rf_freq_flags(pulseg_sequence_descriptor *desc)
     desc->rf_freq_mean_hz = (float *)PULSEG_ALLOC((size_t)tr_size * sizeof(float));
     if (!desc->rf_freq_variable || !desc->rf_freq_mean_hz)
     {
-        PULSEG_FREE(desc->rf_freq_variable);
-        PULSEG_FREE(desc->rf_freq_mean_hz);
-        desc->rf_freq_variable = NULL;
-        desc->rf_freq_mean_hz = NULL;
+        free_rf_freq_flags(desc);
         return PULSEG_ERR_ALLOC_FAILED;
     }
 
+    std::vector<RfFreqSpread> spread((size_t)tr_size);
+    tr_pos = 0;
+    for (si = 0; si < desc->exec_stream_len; ++si)
     {
-        std::vector<double> sum((size_t)tr_size, 0.0);
-        std::vector<long> count((size_t)tr_size, 0);
-        std::vector<float> lo((size_t)tr_size, 0.0f), hi((size_t)tr_size, 0.0f);
-
-        tr_pos = 0;
-        for (si = 0; si < desc->exec_stream_len; ++si)
-        {
-            const int bt = pulseg__exec_block_idx(desc, si);
-
-            if (pulseg__exec_tr_start(desc, si))
-                tr_pos = 0;
-            if (tr_pos < tr_size && bt >= 0 && bt < desc->num_blocks &&
-                desc->block_table[bt].rf_id >= 0 &&
-                desc->block_table[bt].rf_id < desc->rf_table_size)
-            {
-                const pulseg_rf_table_element *rf = &desc->rf_table[desc->block_table[bt].rf_id];
-                if (rf->amplitude != 0.0f)
-                {
-                    const float f = rf->freq_offset;
-                    const size_t p = (size_t)tr_pos;
-                    if (count[p] == 0 || f < lo[p])
-                        lo[p] = f;
-                    if (count[p] == 0 || f > hi[p])
-                        hi[p] = f;
-                    sum[p] += (double)f;
-                    count[p] += 1;
-                }
-            }
-            tr_pos++;
-            if (tr_pos >= tr_size)
-                tr_pos = 0;
-        }
-
-        for (pos = 0; pos < tr_size; ++pos)
-        {
-            const size_t p = (size_t)pos;
-            desc->rf_freq_variable[pos] =
-                (count[p] > 0 && hi[p] - lo[p] > PULSEG_RF_FREQ_TOL_HZ) ? 1 : 0;
-            desc->rf_freq_mean_hz[pos] =
-                count[p] > 0 ? (float)(sum[p] / (double)count[p]) : 0.0f;
-        }
+        if (pulseg__exec_tr_start(desc, si))
+            tr_pos = 0;
+        if (played_rf_freq(desc, si, &f))
+            spread[(size_t)tr_pos].add(f);
+        tr_pos = (tr_pos + 1) % tr_size;
     }
 
+    for (pos = 0; pos < tr_size; ++pos)
+    {
+        const RfFreqSpread &p = spread[(size_t)pos];
+        desc->rf_freq_variable[pos] = (p.count > 0 && p.hi - p.lo > PULSEG_RF_FREQ_TOL_HZ) ? 1 : 0;
+        desc->rf_freq_mean_hz[pos] = p.count > 0 ? (float)(p.sum / (double)p.count) : 0.0f;
+    }
     return PULSEG_SUCCESS;
 }
 
