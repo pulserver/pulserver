@@ -3095,6 +3095,15 @@ static int resolve_block_instance(
             inst->gy_variable = 0;
             inst->gz_variable = 0;
         }
+        inst->rf_freq_variable = 0;
+        inst->rf_freq_mean_hz = 0.0f;
+        if (vg_tr_size > 0 && desc->rf_freq_variable && desc->rf_freq_mean_hz &&
+            inst->rf_amp_hz != 0.0f)
+        {
+            vg_pos = exec_stream_position % vg_tr_size;
+            inst->rf_freq_variable = desc->rf_freq_variable[vg_pos];
+            inst->rf_freq_mean_hz = desc->rf_freq_mean_hz[vg_pos];
+        }
     }
 
     pulseg__block_wave(desc, idx, &inst->wave_id, inst->wave_amp_hz_per_m);

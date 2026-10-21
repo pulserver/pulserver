@@ -14,6 +14,8 @@
 #include <stdlib.h>
 #include <math.h>
 
+#include <vector>
+
 /* The passes keep C linkage: the collection is assembled in C, which
  * calls them by the names pulseg_internal.h declares. */
 extern "C"
@@ -1168,6 +1170,98 @@ int pulseg__compute_variable_grad_flags(pulseg_sequence_descriptor *desc)
         {
             PULSEG_FREE(pfa);
             PULSEG_FREE(psv);
+        }
+    }
+
+    return PULSEG_SUCCESS;
+}
+
+/**
+ * For each position within the canonical TR, whether the RF frequency offset
+ * varies across TR instances, and its mean -- what the block instance reports
+ * as rf_freq_variable and rf_freq_mean_hz.
+ *
+ * Positions follow pulseg__compute_variable_grad_flags: the TR is anchored at
+ * the first block, so every block of the execution stream has a position, a
+ * last TR cut short included, and a sequence with no repetition is one TR,
+ * each of whose positions has one instance.  Only instances that play RF at
+ * a nonzero amplitude count.  The offsets are the converted ones, the
+ * field-of-view offset included, so the mean of a slice stack is the centre
+ * of the positioned stack.
+ */
+int pulseg__compute_rf_freq_flags(pulseg_sequence_descriptor *desc)
+{
+    int tr_size, si, pos, tr_pos;
+
+    if (!desc)
+        return PULSEG_ERR_NULL_POINTER;
+
+    tr_size = desc->tr_descriptor.tr_size;
+    if (desc->rf_freq_variable)
+    {
+        PULSEG_FREE(desc->rf_freq_variable);
+        desc->rf_freq_variable = NULL;
+    }
+    if (desc->rf_freq_mean_hz)
+    {
+        PULSEG_FREE(desc->rf_freq_mean_hz);
+        desc->rf_freq_mean_hz = NULL;
+    }
+    if (tr_size <= 0 || desc->exec_stream_len <= 0)
+        return PULSEG_SUCCESS;
+
+    desc->rf_freq_variable = (int *)PULSEG_ALLOC((size_t)tr_size * sizeof(int));
+    desc->rf_freq_mean_hz = (float *)PULSEG_ALLOC((size_t)tr_size * sizeof(float));
+    if (!desc->rf_freq_variable || !desc->rf_freq_mean_hz)
+    {
+        PULSEG_FREE(desc->rf_freq_variable);
+        PULSEG_FREE(desc->rf_freq_mean_hz);
+        desc->rf_freq_variable = NULL;
+        desc->rf_freq_mean_hz = NULL;
+        return PULSEG_ERR_ALLOC_FAILED;
+    }
+
+    {
+        std::vector<double> sum((size_t)tr_size, 0.0);
+        std::vector<long> count((size_t)tr_size, 0);
+        std::vector<float> lo((size_t)tr_size, 0.0f), hi((size_t)tr_size, 0.0f);
+
+        tr_pos = 0;
+        for (si = 0; si < desc->exec_stream_len; ++si)
+        {
+            const int bt = pulseg__exec_block_idx(desc, si);
+
+            if (pulseg__exec_tr_start(desc, si))
+                tr_pos = 0;
+            if (tr_pos < tr_size && bt >= 0 && bt < desc->num_blocks &&
+                desc->block_table[bt].rf_id >= 0 &&
+                desc->block_table[bt].rf_id < desc->rf_table_size)
+            {
+                const pulseg_rf_table_element *rf = &desc->rf_table[desc->block_table[bt].rf_id];
+                if (rf->amplitude != 0.0f)
+                {
+                    const float f = rf->freq_offset;
+                    const size_t p = (size_t)tr_pos;
+                    if (count[p] == 0 || f < lo[p])
+                        lo[p] = f;
+                    if (count[p] == 0 || f > hi[p])
+                        hi[p] = f;
+                    sum[p] += (double)f;
+                    count[p] += 1;
+                }
+            }
+            tr_pos++;
+            if (tr_pos >= tr_size)
+                tr_pos = 0;
+        }
+
+        for (pos = 0; pos < tr_size; ++pos)
+        {
+            const size_t p = (size_t)pos;
+            desc->rf_freq_variable[pos] =
+                (count[p] > 0 && hi[p] - lo[p] > PULSEG_RF_FREQ_TOL_HZ) ? 1 : 0;
+            desc->rf_freq_mean_hz[pos] =
+                count[p] > 0 ? (float)(sum[p] / (double)count[p]) : 0.0f;
         }
     }
 

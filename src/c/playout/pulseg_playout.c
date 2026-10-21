@@ -635,9 +635,12 @@ static int begin_instance(scan_walk *w, const pulseg_collection *coll, int s, in
 
 /* The receive-gain calibration plays no digital output, no gradient whose
  * amplitude varies across repetitions, and acquires no readout NOPRESCAN
- * marks. */
+ * marks.  An RF pulse whose frequency offset varies across repetitions, the
+ * slices of a stack, plays at their mean: the centre of the stack. */
 static void prescan_registers(pulseg_block_instance *b)
 {
+    if (b->rf_freq_variable)
+        b->rf_freq_hz = b->rf_freq_mean_hz;
     b->digitalout_flag = 0;
     if (b->noprescan_flag)
         b->adc_flag = 0;

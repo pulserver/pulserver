@@ -542,6 +542,12 @@ def play(
           carries no rotation, so the scanner may move the excitation by a
           carrier offset; and ``(blocks, 3)``, that gradient along x, y and z
           over the amplitude of the event playing it there;
+        - ``rf_freq_variable``, ``rf_freq_mean_hz``: 1 where the repetitions
+          play the RF pulse at the block's position within the repetition at
+          more than one frequency offset, the slices of a stack, more than
+          0.5 Hz apart; and the mean offset over them, in Hz, the
+          field-of-view offset included: the centre of the positioned stack,
+          at which the receive-gain prescan plays the pulse. 0 without RF;
         - ``gradient_hz_per_m``: ``(blocks, 3)``, the amplitude along the
           logical x, y and z axes: the factor on the shape of the gradient
           event, or on the wave, the block plays there, each normalised to a

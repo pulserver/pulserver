@@ -208,7 +208,13 @@ inside a repetition, and takes the readouts through the first repetition that
 acquires when the sequence declares none. It waits for no trigger and
 drives no digital output, and every gradient whose amplitude varies across
 repetitions, a phase encoding for instance, plays at zero, as does a wave any
-of whose logical axes varies.
+of whose logical axes varies. An RF pulse whose frequency offset varies across
+repetitions, the slices of a stack, plays at the mean offset over them, as a
+scanner calibrates on one slice. Both are kept per position within the
+repetition, as the gradient flags are, and reported on the block instance
+(`rf_freq_variable` and `rf_freq_mean_hz`). The offsets are those of the
+cache, the field-of-view offset included, so the mean is the centre of the
+positioned stack.
 
 A parallel-transmit sequence can open its prescan with the pTx tour
 (`pulseg_get_prescan_tour`): for every channel of every parallel-transmit RF
