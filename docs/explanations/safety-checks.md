@@ -91,8 +91,9 @@ converted into the IR cache with its sound pressure levels and SAR ratios.
 
 Two logical axes at 0.8 of the amplitude limit put $0.8\sqrt{2}$ of it on one
 physical axis at 45°. So the sequence is designed under `design_max_grad` and
-`design_max_slew`, which the scanner derates for the prescription, and checked
-on the physical axes against `max_grad` and `max_slew`. The rotation arrives
+`design_max_slew`, which the scanner derates for the prescription, less the
+design margin of `pypulseqpp.apply_system_derates`, and checked on the physical
+axes against `max_grad` and `max_slew` as sent. The rotation arrives
 in the protocol's `fov_rotation_ij` entries; your sequence function never sees
 it.
 

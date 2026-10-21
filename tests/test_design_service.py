@@ -537,6 +537,49 @@ def test_a_request_is_validated_under_the_design_limits(store):
     )
 
 
+def test_a_design_is_one_of_the_peak_b1_limit_it_was_made_under(store):
+    free = generated(generate(store, "tiny", {"TE": 8000}))
+    limited = {**LIMITS, "max_b1": 11.2}
+    held = generated(generate(store, "tiny", {"TE": 8000}, limits=limited))
+    assert held != free
+    assert store.manifest(held)["limits"] == limited
+    assert generated(generate(store, "tiny", {"TE": 8000}, limits=limited)) == held
+
+
+def test_a_request_is_validated_and_designed_under_the_peak_b1_limit(store):
+    """A limit below the excitation's peak lengthens the pulse, and the shortest TE with it."""
+    listed = service.call("list", plugins=PLUGINS, plugin="gre2d")[1]
+    listing = parse_listing(listed.split("\n", 1)[1])
+    request = block({**GRE, "TE": TEPreset.MINIMUM})
+    limited = {**LIMITS, "max_b1": 0.5}
+    shortest = {
+        name: parse_validation(
+            service.call(
+                "validate",
+                plugins=PLUGINS,
+                plugin="gre2d",
+                limits=limits,
+                block=request,
+            )[1],
+            listing,
+        ).values["TE"]
+        for name, limits in (("free", LIMITS), ("limited", limited))
+    }
+    assert shortest["limited"] > shortest["free"]
+    design = generated(
+        generate(store, "gre2d", {**GRE, "TE": shortest["limited"]}, limits=limited)
+    )
+    seq = pp.io.read(store.directory(design) / "sequence.seq")
+    peaks = [
+        np.abs(seq.get_block(n).rf.signal).max()
+        for n in range(1, seq.num_blocks + 1)
+        if seq.get_block(n).rf is not None
+    ]
+    assert peaks
+    # The design keeps its margin below the limit the scanner sent.
+    assert max(peaks) <= pp.MAX_B1_DERATE * pp.Opts(**limited).max_b1 * (1 + 1e-6)
+
+
 def test_a_design_in_a_forbidden_band_is_refused(store):
     limits = {**LIMITS, "forbidden_band_1": "all 1 5000 0.001"}
     status, text = generate(store, "gre2d", GRE, limits=limits)

@@ -18,6 +18,7 @@ from pulserver._zoo._slab import slab
 from pulserver._zoo._user import LINE_SPACING, SHARED
 from pulserver.design import Protocol, StatedParam, load_plugin
 from pulserver.host import call
+from pulserver.host._limits import design_system
 from pulserver.protocol import (
     ImagingMode,
     TEPreset,
@@ -27,7 +28,8 @@ from pulserver.protocol import (
     parse_rf_layout,
 )
 
-SYSTEM = pp.Opts(**LIMITS)
+#: The limits the service designs under: the scanner's, less the design margin.
+SYSTEM = design_system(LIMITS)
 SHIPPED = sorted(path.stem for path in _plugins.SEQUENCES.glob("*.py"))
 # The spin-echo sequences fix their flip angles; the others take one.
 SPIN_ECHO = [name for name in SHIPPED if name.startswith(("se", "fse"))]

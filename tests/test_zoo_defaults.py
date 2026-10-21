@@ -37,6 +37,8 @@ def _oblique(limits):
 
 
 #: A 7 T head gradient and a 3 T body gradient, designed for any orientation.
+#: The 7 T transmit chain allows a peak B1 below the 30 uT of a 3 ms
+#: refocusing pulse, which the spin echoes lengthen to fit under 0.9 of it.
 SCANNERS = {
     "7T-head": _oblique(
         {
@@ -45,6 +47,7 @@ SCANNERS = {
             "max_slew": 200.0,
             "slew_unit": "T/m/s",
             "B0": 7.0,
+            "max_b1": 11.2,
         }
     ),
     "3T-body": _oblique(
@@ -59,8 +62,14 @@ SCANNERS = {
 }
 
 
-@pytest.mark.parametrize("scanner", SCANNERS)
-@pytest.mark.parametrize("variant", VARIANTS)
+@pytest.mark.parametrize(
+    ("variant", "scanner"),
+    [
+        pytest.param(variant, scanner, id=f"{variant}-{scanner}")
+        for variant in VARIANTS
+        for scanner in SCANNERS
+    ],
+)
 def test_the_default_protocol_of_every_variant_is_feasible(variant, scanner):
     name, options = VARIANTS[variant]
     plugin = load_plugin(_plugins.SEQUENCES / f"{name}.py", options)

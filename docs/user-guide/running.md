@@ -107,11 +107,20 @@ design_max_slew: 86.603
 ```
 
 The lines without a prefix are keyword arguments of `pypulseqpp.Opts`, of which
-`B0`, the field in T, is required: ppm offsets are resolved at it. The limits
-are the `system` the plugin designs under and the checks hold the design to, so
-include the scanner's RF and ADC dead times, RF ringdown time and ADC sample
+`B0`, the field in T, is required: ppm offsets are resolved at it. The limits,
+less a design margin, are the `system` the plugin designs under, and the checks
+hold the design to them as sent, so include the scanner's RF and ADC dead times, RF ringdown time and ADC sample
 divisor; `pypulseqpp.Opts` sets the dead times to zero and the divisor to four
 when they are left out.
+
+`max_b1` is the peak B1 the transmit chain allows, in µT, or in the `b1_unit`
+given beside it, as the scanner states it; left out, the pulses are not
+limited. The selective and non-selective excitation and refocusing modules of
+pypulseqpp keep their own duration while the pulse peaks within
+`pypulseqpp.MAX_B1_DERATE` of it, and are otherwise lengthened, flip
+angle and time-bandwidth product held, until it does; the shortest TE and TR a
+plugin reports follow. Spectral, adiabatic, two-dimensional and multiband
+pulses are designed as given.
 
 `max_grad` and `max_slew` are the limits of the gradient coils, to which the
 checks hold every physical axis. Logical axes played together add on one
@@ -126,7 +135,11 @@ scanner for the prescription's rotation:
 | `design_max_slew` | Slew rate each logical axis is designed under, in the `slew_unit` of `max_slew` |
 
 A design limit above the scanner's leaves the scanner's, and one left out is the
-scanner's. `validate` resolves a request under the same limits as `generate`.
+scanner's. The plugin designs under these limits derated once by
+`pypulseqpp.apply_system_derates`: the gradient amplitude, slew rate and peak
+B1 scaled by `pypulseqpp.MAX_GRAD_DERATE`, `MAX_SLEW_DERATE` and
+`MAX_B1_DERATE`. The checks, the design's identity and its manifest keep the
+limits as the scanner sent them. `validate` resolves a request under the same limits as `generate`.
 An imported chain is not designed, and is checked against `max_grad` and
 `max_slew` alone.
 
