@@ -67,8 +67,8 @@ def split_limits(
     transmit chain allows, in µT unless ``b1_unit`` says otherwise, is
     optional: without it the pulses are not limited, and with it a plugin's
     excitation and refocusing pulses are lengthened until they peak within
-    ``pypulseqpp.MAX_B1_DERATE`` of it. The scanner's value is passed as it
-    is; the margin is the design's.
+    ``pypulseqpp.MAX_B1_DERATE`` of it. The scanner's values are returned as
+    they are; the margin is :func:`design_system`'s.
 
     Raises
     ------
@@ -128,15 +128,20 @@ def _wave_budget(limits: Mapping[str, Any]) -> ir.WaveBudget | None:
 
 
 def design_system(limits: Mapping[str, Any]) -> pp.Opts:
-    """Return the scanner limits an app is designed under.
+    """Return the limits an app is designed under: the scanner limits less the design margin.
 
     The scanner limits of :func:`split_limits`, with the gradient amplitude and
     slew rate capped by ``design_max_grad`` and ``design_max_slew`` where the
     limits carry them, in the units of ``max_grad`` and ``max_slew``. These
     are the per-logical-axis limits that a prescription rotation derates. A
-    design limit above the scanner's leaves the scanner's. The checks hold the
-    waveforms played in the physical frame to ``max_grad`` and ``max_slew``
-    themselves.
+    design limit above the scanner's leaves the scanner's. The result is then
+    derated by ``pypulseqpp.apply_system_derates``: the gradient amplitude,
+    the slew rate and the peak B1 are designed to ``pypulseqpp.MAX_GRAD_DERATE``,
+    ``MAX_SLEW_DERATE`` and ``MAX_B1_DERATE`` of them, a margin the modules
+    that derate again do not take a second time. The checks hold the
+    waveforms played in the physical frame to the scanner's ``max_grad`` and
+    ``max_slew`` themselves, and the design's identity and manifest record
+    the limits as the scanner sent them.
 
     Raises
     ------
@@ -145,16 +150,16 @@ def design_system(limits: Mapping[str, Any]) -> pp.Opts:
     """
     system = split_limits(limits)[0]
     ceilings = _design_ceilings(limits)
-    if not ceilings:
-        return system
-    derated = pp.Opts(**{**_scanner_arguments(limits), **ceilings})
-    return pp.cap_system(
-        system,
-        max_grad=derated.max_grad,
-        max_slew=derated.max_slew,
-        grad_unit="Hz/m",
-        slew_unit="Hz/m/s",
-    )
+    if ceilings:
+        derated = pp.Opts(**{**_scanner_arguments(limits), **ceilings})
+        system = pp.cap_system(
+            system,
+            max_grad=derated.max_grad,
+            max_slew=derated.max_slew,
+            grad_unit="Hz/m",
+            slew_unit="Hz/m/s",
+        )
+    return pp.apply_system_derates(system)
 
 
 def _scanner_arguments(limits: Mapping[str, Any]) -> dict[str, Any]:

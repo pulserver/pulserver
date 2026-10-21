@@ -284,26 +284,39 @@ def test_design_limits_cap_the_design_and_leave_the_scanner_limits_to_the_checks
     assert split_limits(limits)[0].max_slew == scanner.max_slew
     design = design_system(limits)
     assert design.max_grad == pytest.approx(
-        pp.Opts(max_grad=23.0, grad_unit="mT/m").max_grad
+        pp.MAX_GRAD_DERATE * pp.Opts(max_grad=23.0, grad_unit="mT/m").max_grad
     )
     assert design.max_slew == pytest.approx(
-        pp.Opts(max_slew=86.0, slew_unit="T/m/s").max_slew
+        pp.MAX_SLEW_DERATE * pp.Opts(max_slew=86.0, slew_unit="T/m/s").max_slew
     )
 
 
 def test_design_limits_are_in_the_units_of_the_scanner_limits():
     limits = {"B0": 3.0, "max_grad": 1.0e6, "design_max_grad": 5.0e5}
-    assert design_system(limits).max_grad == pytest.approx(5.0e5)
+    assert design_system(limits).max_grad == pytest.approx(pp.MAX_GRAD_DERATE * 5.0e5)
 
 
 def test_a_design_limit_above_the_scanners_leaves_it():
     limits = {**SCANNER, "design_max_slew": 200.0}
-    assert design_system(limits).max_slew == pp.Opts(**SCANNER).max_slew
+    assert design_system(limits).max_slew == pytest.approx(
+        pp.MAX_SLEW_DERATE * pp.Opts(**SCANNER).max_slew
+    )
 
 
-def test_without_design_limits_a_design_is_held_under_the_scanner_limits():
+def test_without_design_limits_a_design_is_held_under_the_scanner_limits_less_the_margin():
     design, scanner = design_system(SCANNER), pp.Opts(**SCANNER)
-    assert (design.max_grad, design.max_slew) == (scanner.max_grad, scanner.max_slew)
+    assert design.max_grad == pytest.approx(pp.MAX_GRAD_DERATE * scanner.max_grad)
+    assert design.max_slew == pytest.approx(pp.MAX_SLEW_DERATE * scanner.max_slew)
+
+
+def test_the_design_margin_is_taken_once():
+    design = design_system({**SCANNER, "design_max_grad": 23.0, "max_b1": 11.2})
+    again = pp.apply_system_derates(design)
+    assert (again.max_grad, again.max_slew, again.max_b1) == (
+        design.max_grad,
+        design.max_slew,
+        design.max_b1,
+    )
 
 
 @pytest.mark.parametrize(
@@ -323,8 +336,9 @@ def test_the_peak_b1_limit_is_read_in_microtesla_and_reaches_the_design():
     limits = {**SCANNER, "max_b1": 11.2}
     held = pytest.approx(11.2e-6 * pp.Opts(**SCANNER).gamma)
     assert split_limits(limits)[0].max_b1 == held
-    assert design_system(limits).max_b1 == held
-    assert design_system({**limits, "design_max_grad": 23.0}).max_b1 == held
+    margin = pytest.approx(pp.MAX_B1_DERATE * 11.2e-6 * pp.Opts(**SCANNER).gamma)
+    assert design_system(limits).max_b1 == margin
+    assert design_system({**limits, "design_max_grad": 23.0}).max_b1 == margin
 
 
 def test_without_a_peak_b1_limit_the_pulses_are_not_limited():
