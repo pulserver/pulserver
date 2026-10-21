@@ -62,24 +62,14 @@ SCANNERS = {
 }
 
 
-#: The variants whose default protocol the 7 T peak-B1 limit refuses. The ZTE
-#: pulse, 3 degrees in 10 us, is held to 0.9 of 11.2 uT, which takes 20 us:
-#: two dwells of its 250 kHz readout, which ZteReadout refuses.
-B1_REFUSED = {"zte3d/default", "zte3d/meridian"}
-
-
-def _cases():
-    for variant in VARIANTS:
-        for scanner in SCANNERS:
-            marks = ()
-            if scanner == "7T-head" and variant in B1_REFUSED:
-                marks = pytest.mark.xfail(
-                    strict=True, reason="the ZTE pulse outlasts two dwells under max_b1"
-                )
-            yield pytest.param(variant, scanner, marks=marks, id=f"{variant}-{scanner}")
-
-
-@pytest.mark.parametrize(("variant", "scanner"), _cases())
+@pytest.mark.parametrize(
+    ("variant", "scanner"),
+    [
+        pytest.param(variant, scanner, id=f"{variant}-{scanner}")
+        for variant in VARIANTS
+        for scanner in SCANNERS
+    ],
+)
 def test_the_default_protocol_of_every_variant_is_feasible(variant, scanner):
     name, options = VARIANTS[variant]
     plugin = load_plugin(_plugins.SEQUENCES / f"{name}.py", options)
