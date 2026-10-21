@@ -486,8 +486,10 @@
 <span class="sd">    them out for ``budget``, or, without one, as the cache lays them out.</span>
 
 <span class="sd">    With ``prescan``, the scan loop plays that receive-gain calibration</span>
-<span class="sd">    instead. It waits for no trigger, drives no digital output, and plays at</span>
-<span class="sd">    zero every gradient whose amplitude varies across repetitions.</span>
+<span class="sd">    instead. It waits for no trigger, drives no digital output, plays at</span>
+<span class="sd">    zero every gradient whose amplitude varies across repetitions, and plays</span>
+<span class="sd">    an RF pulse whose frequency offset varies across repetitions at their</span>
+<span class="sd">    mean, ``rf_freq_mean_hz`` of :func:`play`.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
@@ -531,8 +533,9 @@
 <span class="sd">          ``duration_us``; the registers ``rf_amp_hz``, ``rf_phase_rad``,</span>
 <span class="sd">          ``rf_freq_hz``, ``rf_shim``, ``rf_use``, ``gradient_hz_per_m``</span>
 <span class="sd">          ``(blocks, 3)``, ``adc``, ``adc_freq_hz``, ``adc_phase_rad`` and</span>
-<span class="sd">          ``digitalout``, and ``gradient_variable``, where the amplitude of</span>
-<span class="sd">          that gradient varies across repetitions; and its wave, ``wave`` (-1</span>
+<span class="sd">          ``digitalout``, ``gradient_variable``, where the amplitude of</span>
+<span class="sd">          that gradient varies across repetitions, and ``rf_freq_variable``,</span>
+<span class="sd">          where the frequency offset of its RF pulse does; and its wave, ``wave`` (-1</span>
 <span class="sd">          without one) at ``wave_amp_hz_per_m``, from the region</span>
 <span class="sd">          ``wave_offset``, ``wave_samples`` and ``wave_start_us``, with the</span>
 <span class="sd">          samples it reads there in ``wave_read``, ``wave_read_span``</span>
