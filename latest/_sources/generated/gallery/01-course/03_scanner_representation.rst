@@ -337,7 +337,7 @@ What this lesson did, stated the way you would ask an agent for it:
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.589 seconds)
+   **Total running time of the script:** (0 minutes 0.734 seconds)
 
 
 .. _sphx_glr_download_generated_gallery_01-course_03_scanner_representation.py:
