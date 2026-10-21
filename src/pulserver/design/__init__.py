@@ -11,12 +11,13 @@ from ._entries import (
     Description,
     FloatParam,
     IntParam,
+    OptionParam,
     Protocol,
     StatedParam,
     StringListParam,
     TimeParam,
 )
-from ._options import OptionError, option, read_options
+from ._options import OptionError, option
 from ._plugin import (
     Evaluation,
     ScannerSequence,
@@ -36,6 +37,7 @@ __all__ = [
     "FloatParam",
     "IntParam",
     "OptionError",
+    "OptionParam",
     "Protocol",
     "RfControl",
     "RfLayout",
@@ -47,5 +49,4 @@ __all__ = [
     "load_exam",
     "load_plugin",
     "option",
-    "read_options",
 ]

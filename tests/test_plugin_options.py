@@ -1,16 +1,18 @@
-"""Plugin options and the parameter files that set them, by numbered set."""
-
-import importlib.util
-import os
+"""Plugin options: user entries a request states, at which the design calls load the plugin."""
 
 import pytest
-from _host import LIMITS
+from _host import LIMITS, value_block
 
-from pulserver import _plugins
-from pulserver.design import OptionError, load_plugin, option, read_options
-from pulserver.design._options import loading_options
-from pulserver.host import DesignStore, _command, _service
-from pulserver.protocol import PROTOCOL_BEGIN, PROTOCOL_END, UIParam, parse_listing
+from pulserver.design import (
+    Description,
+    OptionError,
+    OptionParam,
+    SequencePlugin,
+    load_plugin,
+    option,
+)
+from pulserver.host import DesignStore, _command, _server, _service
+from pulserver.protocol import UIParam, parse_listing
 
 REPEATED = '''"""Delays, as many as an option says; another option adds a user entry."""
 
@@ -27,9 +29,11 @@ from pulserver.design import (
 )
 from pulserver.protocol import UIParam
 
-REPETITIONS = option("repetitions", 4)
-SPACING = option("spacing", "short", choices=("short", "long"))
-EXTRA = option("extra", False)
+REPETITIONS = option("repetitions", 4, choices=(2, 4, 6), user=40, label="Repeats")
+SPACING = option(
+    "spacing", "short", choices=("short", "very_long"), user=41, label="Spacing"
+)
+EXTRA = option("extra", False, user=42, label="Extra delays")
 
 
 def repeated(system, *, te: float = 8e-3, n_extra: int = 0):
@@ -54,49 +58,62 @@ class Repeated(SequencePlugin):
         return Evaluation(protocol, sequences.duration(sequence))
 '''
 
+REPEATS = UIParam.user_value(40)
+SPACING = UIParam.user_value(41)
+EXTRA = UIParam.user_value(42)
+
 
 @pytest.fixture
 def installed(tmp_path):
-    """A scanner layout: ``sequences/sequence3.py`` linked to ``sequences/src/repeated.py``, and set 1 (``repetitions = 6``) and set 2 (``extra = true``) of ``parameters/repeated``."""
+    """A scanner layout: ``sequences/sequence3.py`` linked to ``sequences/src/repeated.py``."""
     sequences = tmp_path / "sequences"
     (sequences / "src").mkdir(parents=True)
     (sequences / "src" / "repeated.py").write_text(REPEATED)
     (sequences / "sequence3.py").symlink_to("src/repeated.py")
-    parameters = tmp_path / "parameters" / "repeated"
-    parameters.mkdir(parents=True)
-    (parameters / "01.toml").write_text("repetitions = 6\n")
-    (parameters / "02.toml").write_text("extra = true\n")
     return sequences
 
 
-def _block(values):
-    lines = [f"{key}: {value}" for key, value in values.items()]
-    return "\n".join([PROTOCOL_BEGIN, *lines, PROTOCOL_END]) + "\n"
+def _listed(plugins, values=None):
+    status, reply = _service.call(
+        "list",
+        plugins=plugins,
+        plugin="sequence3",
+        block=value_block(values) if values else "",
+    )
+    assert status == 0, reply
+    return parse_listing(reply)
 
 
-def _generated(store, plugins, parameter_set=0):
+def _generated(store, plugins, options=None):
     status, reply = _service.call(
         "generate",
         plugins=plugins,
         plugin="sequence3",
         limits=LIMITS,
-        block=_block({"TE": 5000}),
+        block=value_block({"TE": 5000, **(options or {})}),
         store=store,
-        parameter_set=parameter_set,
     )
     assert status == 0, reply
     return reply.split()[1]
 
 
 def test_an_option_outside_a_plugin_load_is_its_default():
-    assert option("repetitions", 4) == 4
+    assert option("repetitions", 4, choices=(4, 6), user=40, label="Repeats") == 4
 
 
-def test_a_float_option_takes_an_int_and_holds_a_float():
-    with loading_options({"scale": 2}) as resolved:
-        assert option("scale", 1.5) == 2.0
-    assert resolved == {"scale": 2.0}
-    assert isinstance(resolved["scale"], float)
+@pytest.mark.parametrize(
+    ("arguments", "message"),
+    [
+        ({"default": True, "choices": (False, True)}, "a flag takes no choices"),
+        ({"default": 4}, "names its choices"),
+        ({"default": 3, "choices": (4, 6)}, "default 3 is not one of"),
+        ({"default": 1, "choices": tuple(range(6))}, "at most 5"),
+        ({"default": True, "user": 46}, "user46 is not a user entry"),
+    ],
+)
+def test_an_option_the_console_cannot_list_is_refused(arguments, message):
+    with pytest.raises(OptionError, match=message):
+        option("repetitions", **{"user": 40, "label": "Repeats", **arguments})
 
 
 def test_a_plugin_records_every_option_at_the_value_it_was_loaded_with(installed):
@@ -110,9 +127,9 @@ def test_a_plugin_records_every_option_at_the_value_it_was_loaded_with(installed
     ("options", "message"),
     [
         ({"repetitons": 6}, "does not declare the options \\['repetitons'\\]"),
-        ({"repetitions": "6"}, "repetitions is a int"),
-        ({"extra": 1}, "extra is a bool"),
-        ({"repetitions": True}, "repetitions is a int"),
+        ({"repetitions": "6"}, "repetitions is one of"),
+        ({"repetitions": 5}, "repetitions is one of"),
+        ({"extra": 1}, "extra is one of"),
         ({"spacing": "medium"}, "spacing is one of"),
     ],
 )
@@ -123,6 +140,19 @@ def test_an_option_the_plugin_does_not_declare_or_take_is_refused(
         load_plugin(installed / "sequence3.py", options)
 
 
+def test_an_option_is_listed_at_its_user_entry_as_the_index_of_its_value(installed):
+    plugin = load_plugin(installed / "sequence3.py", {"spacing": "very_long"})
+    listing = plugin.listing()
+
+    assert listing[REPEATS].value == 1
+    assert listing[REPEATS].options == (0, 1, 2)
+    assert listing[SPACING].value == 1
+    assert listing[EXTRA].value == 0
+    assert (listing[EXTRA].range_min, listing[EXTRA].range_max) == (0, 1)
+    assert listing[UIParam.user_name(41)].value == "Spacing: 0 short, 1 very long"
+    assert listing[UIParam.user_name(42)].value == "Extra delays: 0 off, 1 on"
+
+
 def test_an_option_shapes_the_protocol_the_plugin_declares(installed):
     plain = load_plugin(installed / "sequence3.py")
     extra = load_plugin(installed / "sequence3.py", {"extra": True})
@@ -131,140 +161,119 @@ def test_an_option_shapes_the_protocol_the_plugin_declares(installed):
     assert UIParam.user_value(12) in extra.protocol
 
 
-def test_a_parameter_file_that_is_not_toml_is_refused(tmp_path):
-    (tmp_path / "01.toml").write_text("repetitions 6\n")
+def test_a_request_for_another_choice_than_the_loaded_one_is_invalid(installed):
+    from pulserver.host._limits import design_system
 
-    with pytest.raises(OptionError, match="not TOML"):
-        read_options(tmp_path / "01.toml")
+    plugin = load_plugin(installed / "sequence3.py")
+
+    validation = plugin.validate(design_system(LIMITS), {REPEATS: 2})
+
+    assert not validation.valid
+    assert "repetitions 6" in validation.info
 
 
-def test_a_parameter_set_is_the_file_of_the_script_its_slot_links_to(installed):
-    slot = installed / "sequence3.py"
-    parameters = installed.parent / "parameters"
+def test_an_entry_at_the_user_entry_of_an_option_is_refused():
+    option("navigator", False, user=44, label="Navigator")
 
-    assert _service.parameter_file(slot, 0) is None
-    assert _service.parameter_file(slot, 1) == parameters / "repeated" / "01.toml"
-    assert _service.parameter_file(slot, 2, parameters) == (
-        parameters / "repeated" / "02.toml"
+    with pytest.raises(ValueError, match="holds the option navigator"):
+
+        class Clashing(SequencePlugin):
+            app = staticmethod(lambda system: None)
+            protocol = {UIParam.user_name(44): Description("Something else")}
+
+
+def test_two_options_at_one_user_entry_are_refused(tmp_path):
+    plugin = tmp_path / "clashing.py"
+    plugin.write_text(
+        "from pulserver.design import option\n"
+        "A = option('a', False, user=40, label='A')\n"
+        "B = option('b', False, user=40, label='B')\n"
     )
-    with pytest.raises(_service.CallError, match="no file"):
-        _service.parameter_file(slot, 3)
-    with pytest.raises(_service.CallError, match="negative"):
-        _service.parameter_file(slot, -1)
+
+    with pytest.raises(OptionError, match="both at user40"):
+        load_plugin(plugin)
 
 
-def test_a_listing_is_that_of_the_plugin_loaded_with_its_parameter_set(installed):
-    def listed(parameter_set):
-        status, reply = _service.call(
-            "list", plugins=installed, plugin="sequence3", parameter_set=parameter_set
-        )
-        assert status == 0, reply
-        return parse_listing(reply)
-
-    assert UIParam.user_value(12) not in listed(0)
-    assert UIParam.user_value(12) in listed(2)
+def test_a_listing_is_that_of_the_plugin_at_the_options_of_its_block(installed):
+    assert UIParam.user_value(12) not in _listed(installed)
+    assert UIParam.user_value(12) in _listed(installed, {EXTRA: 1})
+    # Other lines, of entries the plugin does or does not list, are not read.
+    assert _listed(installed, {EXTRA: 1, "TE": 9000, "user12_value": 3})[
+        EXTRA
+    ].value == (1)
 
 
-def test_a_parameter_set_is_a_design_of_its_own_and_its_options_are_recorded(
+def test_an_option_entry_that_holds_no_choice_is_an_error_naming_it(installed):
+    status, reply = _service.call(
+        "list", plugins=installed, plugin="sequence3", block=value_block({EXTRA: 2})
+    )
+
+    assert status == 1
+    assert "user42_value" in reply and "extra" in reply
+
+
+def test_the_options_of_a_request_are_a_design_of_their_own_and_are_recorded(
     installed, tmp_path
 ):
     store = DesignStore(tmp_path / "designs", "scan")
     plain = _generated(store, installed)
-    six = _generated(store, installed, parameter_set=1)
+    six = _generated(store, installed, {REPEATS: 2})
 
     assert plain != six
     assert store.manifest(six)["options"]["repetitions"] == 6
-    assert _generated(store, installed, parameter_set=1) == six
+    assert _generated(store, installed, {REPEATS: 2}) == six
+    assert _generated(store, installed, {REPEATS: 1}) == plain
 
 
-def test_an_edited_parameter_file_is_another_design(installed, tmp_path):
-    store = DesignStore(tmp_path / "designs", "scan")
-    first = _generated(store, installed, parameter_set=1)
-    file = installed.parent / "parameters" / "repeated" / "01.toml"
-    file.write_text('repetitions = 6\nspacing = "long"\n')
-    stat = file.stat()
-    os.utime(file, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000))
-
-    assert _generated(store, installed, parameter_set=1) != first
-
-
-def test_a_parameter_file_the_plugin_does_not_take_is_an_error_naming_it(installed):
-    file = installed.parent / "parameters" / "repeated" / "01.toml"
-    file.write_text("navigator = true\n")
-
+def test_a_request_that_shows_an_entry_its_options_hide_is_refused(installed):
     status, reply = _service.call(
-        "list", plugins=installed, plugin="sequence3", parameter_set=1
+        "validate",
+        plugins=installed,
+        plugin="sequence3",
+        limits=LIMITS,
+        block=value_block({"TE": 5000, "user12_value": 3}),
     )
 
     assert status == 1
-    assert str(file) in reply and "navigator" in reply
+    assert "user12_value" in reply
 
 
-def test_the_command_forwards_the_parameter_set_and_its_directory(tmp_path):
+def test_a_request_that_shows_an_entry_its_options_add_reaches_the_plugin(installed):
+    status, reply = _service.call(
+        "validate",
+        plugins=installed,
+        plugin="sequence3",
+        limits=LIMITS,
+        block=value_block({"TE": 5000, EXTRA: 1, "user12_value": 2}),
+    )
+
+    assert status == 0, reply
+    assert reply.startswith("VALID 0.03")
+
+
+def test_the_command_and_the_server_carry_a_listing_s_values(tmp_path, installed):
+    values = tmp_path / "values.protocol"
+    values.write_text(value_block({EXTRA: 1}))
     args = _command._parser().parse_args(
         [
             "list",
             "--plugins",
-            str(tmp_path),
+            str(installed),
             "--plugin",
             "sequence3",
-            "--parameter-set",
-            "2",
-            "--parameters",
-            str(tmp_path / "parameters"),
+            "--values",
+            str(values),
         ]
     )
     request = _command.request(args, "")
 
-    assert request["parameter_set"] == 2
-    assert request["parameters"] == str((tmp_path / "parameters").absolute())
+    assert request["input"] == value_block({EXTRA: 1})
+    status, reply = _server.answer(request)
+    assert status == 0, reply
+    assert UIParam.user_value(12) in parse_listing(reply)
 
 
-SHIPPED_PRESETS = sorted(_plugins.PARAMETERS.glob("*/*.toml"))
+def test_an_option_entry_is_an_option_param_of_the_plugin_s_protocol(installed):
+    plugin = load_plugin(installed / "sequence3.py")
 
-
-@pytest.mark.parametrize(
-    "preset",
-    SHIPPED_PRESETS,
-    ids=[f"{p.parent.name}/{p.stem}" for p in SHIPPED_PRESETS],
-)
-def test_every_shipped_parameter_file_loads_in_its_shipped_sequence(preset):
-    options = read_options(preset)
-    if (
-        options.get("refocusing", "constant") != "constant"
-        and importlib.util.find_spec("blochsim") is None
-    ):
-        pytest.skip("needs blochsim")
-    plugin = load_plugin(_plugins.SEQUENCES / f"{preset.parent.name}.py", options)
-
-    assert options.items() <= plugin.options.items()
-
-
-def test_a_parameter_set_asks_for_the_field_camera_train_for_the_psd_not_the_plugin(
-    installed, tmp_path
-):
-    """``field_camera`` is no option of the plugin: it reaches the PSD in ``psd.cvs``."""
-    store = DesignStore(tmp_path / "designs", "scan")
-    six = _generated(store, installed, parameter_set=1)
-    file = installed.parent / "parameters" / "repeated" / "03.toml"
-    file.write_text("repetitions = 6\nfield_camera = true\n")
-
-    camera = _generated(store, installed, parameter_set=3)
-
-    assert camera != six
-    assert store.manifest(camera)["options"]["repetitions"] == 6
-    assert store.manifest(camera)["psd"] == {"sfc_enable": 1}
-    assert (store.directory(camera) / "psd.cvs").read_text() == "sfc_enable 1\n"
-    assert not (store.directory(six) / "psd.cvs").exists()
-
-
-def test_a_field_camera_that_is_not_true_or_false_is_refused(installed):
-    file = installed.parent / "parameters" / "repeated" / "01.toml"
-    file.write_text("field_camera = 1\n")
-
-    status, reply = _service.call(
-        "list", plugins=installed, plugin="sequence3", parameter_set=1
-    )
-
-    assert status == 1
-    assert "field_camera" in reply and "true or false" in reply
+    assert plugin.protocol[EXTRA] == OptionParam("extra", (False, True), False)

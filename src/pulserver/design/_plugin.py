@@ -31,8 +31,15 @@ from ..protocol import (
     prescribed_rotation,
 )
 from ..protocol._keys import WIRE_NAMES
-from ._entries import AveragesParam, Entry, Protocol, _parameter
-from ._options import OptionValue, loading_options
+from ._entries import (
+    AveragesParam,
+    Description,
+    Entry,
+    OptionParam,
+    Protocol,
+    _parameter,
+)
+from ._options import Declared, OptionValue, declared_options, loading_options
 from ._rf import RfLayout
 
 _log = logging.getLogger("pulserver.design")
@@ -113,19 +120,18 @@ class SequencePlugin:
         entry is stored as its member. Empty by default. An entry that states
         its ``default`` may bind a name the app does not take; it is then read
         by the plugin's own :meth:`evaluate` and :meth:`generate`, which do
-        not pass it to the app.
-    options : mapping
-        The plugin's options, by name, at the values
-        :func:`~pulserver.design.load_plugin` loaded it with; empty for an
-        instance made otherwise.
+        not pass it to the app. The options the plugin module declares with
+        :func:`~pulserver.design.option` are added, each an
+        :class:`OptionParam` at its user entry, named in the user entry's
+        name.
 
     Raises
     ------
     ValueError
         When a subclass is defined with a ``protocol`` key the interpreter does
-        not know, which its parser would drop, or with one of the prescription
-        entries, which pulserver applies itself; or with both ``protocol`` and
-        ``ui``.
+        not know, which its parser would drop, with one of the prescription
+        entries, which pulserver applies itself, or with an entry at the user
+        entry of an option; or with both ``protocol`` and ``ui``.
     TypeError
         When a subclass is defined with a class as ``app``.
 
@@ -142,7 +148,6 @@ class SequencePlugin:
 
     app: ClassVar[Callable[..., Any]]
     protocol: ClassVar[Mapping[ProtocolKey, Entry]] = {}
-    options: Mapping[str, OptionValue] = {}
 
     _deprecated_alias: ClassVar[bool] = False
 
@@ -178,6 +183,8 @@ class SequencePlugin:
             )
         if inspect.isfunction(app) or isinstance(app, functools.partial):
             cls.app = staticmethod(app)
+        module = sys.modules.get(cls.__module__)
+        options = declared_options(vars(module)) if module else {}
         if "ui" in declared:
             if "protocol" in declared:
                 raise ValueError(
@@ -192,6 +199,8 @@ class SequencePlugin:
             entries = declared["ui"]
         elif "protocol" in declared:
             entries = declared["protocol"]
+        elif options:
+            entries = cls.protocol
         else:
             return
         unknown = sorted(name for name in entries if name not in WIRE_NAMES)
@@ -216,10 +225,33 @@ class SequencePlugin:
                 f"{cls.__name__} binds the prescription entries {reserved}, which "
                 "pulserver applies when it builds the IR"
             )
+        for option in options.values():
+            listed = {
+                UIParam.user_name(option.user): Description(_option_label(option)),
+                UIParam.user_value(option.user): OptionParam(
+                    option.name, option.choices, option.value
+                ),
+            }
+            for key, entry in listed.items():
+                if keyed.get(key, entry) != entry:
+                    raise ValueError(
+                        f"{cls.__name__} declares {key}, which holds the option "
+                        f"{option.name}"
+                    )
+            keyed |= listed
         keyed.setdefault(UIParam.NEX, AveragesParam())
         cls.protocol = keyed
         if "ui" in declared:
             cls.ui = keyed
+
+    @property
+    def options(self) -> dict[str, OptionValue]:
+        """The plugin's options, by name, at the values it was loaded with."""
+        return {
+            entry.name: entry.value
+            for entry in self.protocol.values()
+            if isinstance(entry, OptionParam)
+        }
 
     def listing(self) -> dict[ProtocolKey, Parameter]:
         """Return the protocol with its schema, at the sequence function's defaults.
@@ -468,6 +500,45 @@ class ScannerSequence(SequencePlugin):
     _deprecated_alias = True
 
 
+def _option_label(option: Declared) -> str:
+    """Return the console name of an option: its label and the code of each choice, as ``Refocusing: 0 constant, 1 optimized``."""
+    if option.choices == (False, True):
+        codes = ["0 off", "1 on"]
+    else:
+        codes = [
+            f"{index} {str(choice).replace('_', ' ')}"
+            for index, choice in enumerate(option.choices)
+        ]
+    return f"{option.label}: {', '.join(codes)}"
+
+
+def requested_options(
+    protocol: Mapping[ProtocolKey, Entry], values: Mapping[ProtocolKey, Any]
+) -> dict[str, OptionValue]:
+    """Return the options wire values state at the option entries of ``protocol``, by name.
+
+    An option entry ``values`` does not hold is left out. ``protocol`` is
+    the protocol of any load of the plugin: an option is at the same user
+    entry in all of them.
+
+    Raises
+    ------
+    ValueError
+        If a value is not the index of one of the option's choices.
+    """
+    found = {}
+    for key, entry in protocol.items():
+        if isinstance(entry, OptionParam) and key in values:
+            value = values[key]
+            index = float(value)
+            if index != round(index) or not 0 <= index < len(entry.choices):
+                raise ValueError(
+                    f"{key}: {entry.name} is 0 to {len(entry.choices) - 1}, not {value}"
+                )
+            found[entry.name] = entry.choices[int(index)]
+    return found
+
+
 def _takes_exam(hook: Callable[..., Any]) -> bool:
     return "exam" in inspect.signature(hook).parameters
 
@@ -582,9 +653,8 @@ def load_plugin(path: Path, options: Mapping[str, Any] | None = None) -> Sequenc
     another file with the same stem replaces it. A subclass of
     :class:`ScannerSequence` is a plugin too. ``options`` are the values the
     plugin's :func:`~pulserver.design.option` calls return in place of their
-    defaults, as a parameter file states them. The instance's ``options``
-    attribute holds every option the plugin declares, at the value it was
-    loaded with.
+    defaults, by option name; the module is executed again for each load, so
+    each combination of options is a plugin of its own.
 
     Raises
     ------
@@ -599,7 +669,7 @@ def load_plugin(path: Path, options: Mapping[str, Any] | None = None) -> Sequenc
     spec = importlib.util.spec_from_file_location(name, path)
     module = importlib.util.module_from_spec(spec)
     sys.modules[name] = module
-    with loading_options(options or {}) as resolved:
+    with loading_options(options or {}):
         spec.loader.exec_module(module)
     found = [
         obj
@@ -612,6 +682,4 @@ def load_plugin(path: Path, options: Mapping[str, Any] | None = None) -> Sequenc
         raise ValueError(
             f"{path} defines {len(found)} SequencePlugin subclasses; a plugin defines one"
         )
-    plugin = found[0]()
-    plugin.options = dict(resolved)
-    return plugin
+    return found[0]()

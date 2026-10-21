@@ -13,7 +13,13 @@ from pypulseqpp.sequences.sequence.fse3D_sequence import (
 from pulserver._zoo._evaluation import achieved, arguments, rf_layout, waved
 from pulserver._zoo._pmc import navigated
 from pulserver._zoo._slab import slab
-from pulserver._zoo._user import OWN, shortest_at_zero, user_entries, wave_entries
+from pulserver._zoo._user import (
+    OPTIONS,
+    OWN,
+    shortest_at_zero,
+    user_entries,
+    wave_entries,
+)
 from pulserver.design import (
     ChoiceParam,
     Description,
@@ -30,7 +36,7 @@ from pulserver.protocol import Excitation, ImagingMode, TEPreset, TRPreset, UIPa
 
 #: Three-plane navigators after each train, whose pose the ``pmc``
 #: reconstruction states to the scan.
-NAVIGATOR = option("navigator", False)
+NAVIGATOR = option("navigator", False, **OPTIONS["navigator"])
 
 #: The refocusing trains: ``"constant"``, at the refocusing angle;
 #: ``"optimized"``, designed with blochsim's extended phase graphs around the
@@ -40,7 +46,10 @@ NAVIGATOR = option("navigator", False)
 #: the two designs, which adds the TR and the echo train length at the
 #: periphery as user entries, TR and ETL being the centre's.
 REFOCUSING = option(
-    "refocusing", "constant", choices=("constant", "optimized", "dual_region")
+    "refocusing",
+    "constant",
+    choices=("constant", "optimized", "dual_region"),
+    **OPTIONS["refocusing"],
 )
 OPTIMIZED = REFOCUSING != "constant"
 DUAL_REGION = REFOCUSING == "dual_region"
@@ -48,13 +57,13 @@ DUAL_REGION = REFOCUSING == "dual_region"
 #: Wave-CAIPI: sinusoidal gradients on the phase- and partition-encoding axes
 #: during each readout, the calibration region acquired first without them;
 #: adds their amplitude and cycles as user entries.
-WAVE = option("wave", False)
+WAVE = option("wave", False, **OPTIONS["wave"])
 
 if OPTIMIZED:
     import blochsim  # noqa: F401  the trains are designed with it
 
 #: Order of the views across shots, ``"radial"`` or ``"shuffling"``.
-ORDERING = option("ordering", "radial", choices=ORDERINGS)
+ORDERING = option("ordering", "radial", choices=ORDERINGS, **OPTIONS["ordering"])
 
 
 class Fse3D(SequencePlugin):

@@ -160,6 +160,21 @@ class Description:
     text: str
 
 
+@dataclass(frozen=True)
+class OptionParam:
+    """A plugin option at a user entry, as :func:`~pulserver.design.option` declares it; binds no argument.
+
+    The wire carries the index of the value among ``choices``, 0 or 1 for a
+    flag. The plugin is loaded at ``value``, so a request for another
+    choice is refused: a design call loads the plugin at the options a
+    request asks before it reads the request.
+    """
+
+    name: str
+    choices: tuple
+    value: Any
+
+
 Entry = (
     FloatParam
     | TimeParam
@@ -170,6 +185,7 @@ Entry = (
     | AveragesParam
     | ConfigParam
     | Description
+    | OptionParam
 )
 
 
@@ -310,7 +326,42 @@ def _unbound_parameter(entry: Entry) -> Parameter | None:
             InputMode.DROPDOWN,
             options=tuple(type(entry.value)),
         )
+    if isinstance(entry, OptionParam):
+        count = len(entry.choices)
+        return Parameter(
+            Kind.INT,
+            entry.choices.index(entry.value),
+            InputMode.DROPDOWN,
+            0,
+            count - 1,
+            1,
+            "",
+            tuple(range(count)),
+        )
     return None
+
+
+def _chosen(key: ProtocolKey, entry: OptionParam, value: Any) -> Any:
+    """Return the choice an option's wire value, its index, names.
+
+    Raises
+    ------
+    ValueError
+        If the value is not the index of a choice, or names another choice
+        than the one the plugin is loaded with.
+    """
+    index = float(value)
+    if index != round(index) or not 0 <= index < len(entry.choices):
+        raise ValueError(
+            f"{key}: {entry.name} is 0 to {len(entry.choices) - 1}, not {value}"
+        )
+    choice = entry.choices[int(index)]
+    if choice != entry.value:
+        raise ValueError(
+            f"{key} asks for {entry.name} {choice!r}, and the plugin is loaded "
+            f"with {entry.value!r}"
+        )
+    return choice
 
 
 def _time_parameter(name: ProtocolKey, entry: TimeParam, default: Any) -> Parameter:
@@ -374,8 +425,8 @@ class Protocol(Mapping[ProtocolKey, Any]):
 
     An immutable mapping from :data:`~pulserver.protocol.ProtocolKey` to value.
     A time is in seconds and a float in the unit of the argument it binds,
-    metres for a length; an integer is an ``int``, a checkbox a ``bool`` and a
-    choice a member of its enum. A time entry showing a preset holds what the
+    metres for a length; an integer is an ``int``, a checkbox a ``bool``, a
+    choice a member of its enum and an option its value. A time entry showing a preset holds what the
     preset requests, a number of seconds or ``None`` for the sequence function's
     own shortest choice, and :meth:`preset` names the preset. The prescription
     entries bind no argument and keep the units of the wire: mm for the
@@ -444,8 +495,9 @@ class Protocol(Mapping[ProtocolKey, Any]):
         ------
         ValueError
             If a key is neither a declared entry nor a prescription entry, a
-            time is a preset its entry does not offer, or a choice is not one
-            of its options.
+            time is a preset its entry does not offer, a choice is not one
+            of its options, or an option names another choice than the one
+            the plugin is loaded with.
         """
         converted: dict[ProtocolKey, Any] = {}
         presets: dict[ProtocolKey, TEPreset | TRPreset] = {}
@@ -480,6 +532,8 @@ class Protocol(Mapping[ProtocolKey, Any]):
                 converted[key] = _stated(key, entry, value)
             elif isinstance(entry, AveragesParam):
                 converted[key] = _averages(key, entry, value)
+            elif isinstance(entry, OptionParam):
+                converted[key] = _chosen(key, entry, value)
             else:
                 converted[key] = _member(key, entry, value)
         return cls(entries, converted, presets)
@@ -506,6 +560,8 @@ class Protocol(Mapping[ProtocolKey, Any]):
                 wire[key] = bool(value)
             elif isinstance(entry, AveragesParam):
                 wire[key] = float(value)
+            elif isinstance(entry, OptionParam):
+                wire[key] = entry.choices.index(value)
             else:
                 wire[key] = value
         return wire
@@ -556,6 +612,10 @@ class Protocol(Mapping[ProtocolKey, Any]):
                 value = _stated(key, entry, value)
             elif isinstance(entry, AveragesParam):
                 value = _averages(key, entry, value)
+            elif isinstance(entry, OptionParam) and value != entry.value:
+                raise ValueError(
+                    f"{key}: {entry.name} is {entry.value!r} in this plugin load"
+                )
             values[key] = value
             presets.pop(key, None)
         return Protocol(self._entries, values, presets)

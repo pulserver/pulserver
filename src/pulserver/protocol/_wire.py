@@ -18,7 +18,7 @@ import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from types import SimpleNamespace
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 import numpy as np
 
@@ -193,23 +193,29 @@ def format_values(
 
 
 def parse_values(
-    text: str, listing: Mapping[ProtocolKey, Parameter]
+    text: str,
+    listing: Mapping[ProtocolKey, Parameter],
+    unlisted: Literal["refuse", "skip"] = "refuse",
 ) -> dict[ProtocolKey, float | int | bool | str]:
     """Read a value block against the listing it was edited from.
 
-    Lines for read-only entries are ignored. A stringlist's value is the
-    option object the listing holds, which is a member of the choices' enum
-    where the listing comes from a scanner sequence.
+    Lines for read-only entries are ignored, and with ``unlisted="skip"`` so
+    are lines naming a parameter the listing does not declare. A stringlist's
+    value is the option object the listing holds, which is a member of the
+    choices' enum where the listing comes from a scanner sequence.
 
     Raises
     ------
     ValueError
-        If a line names a parameter the listing does not declare, or carries a
-        value that parameter cannot take.
+        If a line names a parameter the listing does not declare and
+        ``unlisted`` is ``"refuse"``, or carries a value that parameter cannot
+        take.
     """
     values = {}
     for name, value in _block_lines(text):
         if name not in listing:
+            if unlisted == "skip":
+                continue
             raise ValueError(f"{name!r} is not a parameter of this protocol")
         p = listing[name]
         if p.editable:

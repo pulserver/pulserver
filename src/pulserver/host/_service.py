@@ -25,11 +25,12 @@ from .. import __version__, _plugins, ir
 from .._plugins import PluginPath
 from ..design import (
     OptionError,
+    OptionParam,
     RfLayout,
     SequencePlugin,
     load_plugin,
-    read_options,
 )
+from ..design._plugin import requested_options
 from ..ir._convert import _payload, _read_chain, _write_cache
 from ..mrd._sequence import designed_chain
 from ..protocol import (
@@ -73,84 +74,40 @@ def plugin_path(plugins: PluginPath, plugin: str) -> Path:
         raise CallError(str(error)) from None
 
 
-def parameter_file(
-    path: Path, parameter_set: int, parameters: Path | str | None = None
-) -> Path | None:
-    """Return the parameter file of set ``parameter_set`` for the plugin file ``path``; ``None`` for set 0.
-
-    The file is ``<parameters>/<script>/<NN>.toml``, the set number in two
-    digits at least. ``<script>`` is the stem of the plugin file once its
-    symbolic links are followed, so a slot ``sequence3.py`` linked to
-    ``src/fse3d.py`` reads ``fse3d/``. ``parameters`` defaults to the
-    ``parameters`` directory beside the plugin directory.
-
-    Raises
-    ------
-    CallError
-        If the set is negative, or positive and its file does not exist.
-    """
-    if parameter_set < 0:
-        raise CallError(f"parameter set {parameter_set} is negative")
-    if parameter_set == 0:
-        return None
-    directory = Path(parameters) if parameters else path.parent.parent / "parameters"
-    script = path.resolve().stem
-    file = directory / script / f"{parameter_set:02d}.toml"
-    if not file.is_file():
-        raise CallError(f"parameter set {parameter_set} of {script}: no file {file}")
-    return file
-
-
 class _Variant(NamedTuple):
-    """A plugin file and the parameter file it is loaded with, if any."""
+    """A plugin file and the options it is loaded with, by name."""
 
     path: str
-    parameters: str | None
+    options: tuple[tuple[str, Any], ...] = ()
 
 
-#: Parameter-file keys that set the PSD rather than the plugin, which any set
-#: may state, and the PSD setting each one writes to the design's ``psd.cvs``.
-#: ``field_camera`` plays the field-camera trigger train in manual prescan.
-PSD_KEYS = {"field_camera": "sfc_enable"}
+def _variant(plugins: PluginPath, plugin: str, block: str = "") -> _Variant:
+    """Return the plugin file of ``plugin`` and the options the option entries of ``block`` ask for.
 
-#: The file beside a design's sequence that carries its PSD settings.
-PSD_SETTINGS = "psd.cvs"
-
-
-def _split_options(options: Mapping[str, Any]) -> tuple[dict[str, Any], dict[str, int]]:
-    """Return a parameter file's options for the plugin, and its PSD settings.
+    The option entries are those of the plugin loaded at its defaults; the
+    other lines of ``block`` are not read here.
 
     Raises
     ------
     CallError
-        If a PSD key is not true or false.
+        If an option entry does not hold the index of one of its choices.
     """
-    plugin = {key: value for key, value in options.items() if key not in PSD_KEYS}
-    settings = {}
-    for key, setting in PSD_KEYS.items():
-        if key in options:
-            if not isinstance(options[key], bool):
-                raise CallError(f"{key} is {options[key]!r}; it is true or false")
-            settings[setting] = int(options[key])
-    return plugin, settings
-
-
-def _psd_settings(variant: _Variant) -> dict[str, int]:
-    """Return the PSD settings of a variant's parameter file; none without one."""
-    if variant.parameters is None:
-        return {}
-    return _split_options(read_options(variant.parameters))[1]
-
-
-def _variant(
-    plugins: PluginPath,
-    plugin: str,
-    parameter_set: int,
-    parameters: Path | str | None,
-) -> _Variant:
-    path = plugin_path(plugins, plugin)
-    file = parameter_file(path, parameter_set, parameters)
-    return _Variant(str(path), None if file is None else str(file))
+    path = str(plugin_path(plugins, plugin))
+    if not block:
+        return _Variant(path)
+    default = _plugin(_Variant(path))
+    entries = {
+        key: parameter
+        for key, parameter in default.listing().items()
+        if isinstance(default.protocol.get(key), OptionParam)
+    }
+    try:
+        values = parse_values(block, entries, unlisted="skip")
+        options = requested_options(default.protocol, values)
+    except ValueError as error:
+        raise CallError(str(error)) from None
+    changed = {n: v for n, v in options.items() if v != default.options[n]}
+    return _Variant(path, tuple(sorted(changed.items())))
 
 
 def list_protocol(
@@ -158,13 +115,14 @@ def list_protocol(
     plugin: str,
     limits: Mapping[str, Any] | None = None,
     rf_definitions: bool = False,
-    parameter_set: int = 0,
-    parameters: Path | str | None = None,
+    block: str = "",
 ) -> str:
     """Reply ``PROTOCOL`` and the plugin's listing block, and its RF definitions where asked.
 
-    The listing depends on the plugin file, the file of ``parameter_set``
-    (see :func:`parameter_file`) and the installed packages only.
+    The plugin is listed at the options the option entries of the value block
+    ``block`` hold, its defaults for those it does not hold; the other lines
+    of ``block`` are not read. The listing depends on the plugin file, those
+    options and the installed packages only.
     With ``rf_definitions``, the ``[RfDefinitions]`` block of the plugin's
     evaluation at its default protocol under ``limits`` follows it, naming the
     definitions, and the peak amplitudes, the RF layouts of later validations
@@ -177,7 +135,7 @@ def list_protocol(
     CallError
         If ``rf_definitions`` is asked without ``limits``.
     """
-    variant = _variant(plugins, plugin, parameter_set, parameters)
+    variant = _variant(plugins, plugin, block)
     reply = "PROTOCOL\n" + format_listing(_listing(variant))
     if not rf_definitions:
         return reply
@@ -201,8 +159,6 @@ def validate(
     block: str,
     rf_layout: bool = False,
     exam: str | None = None,
-    parameter_set: int = 0,
-    parameters: Path | str | None = None,
 ) -> str:
     """Reply ``VALID <seconds>`` or ``INVALID``, an ``INFO`` line and the value block.
 
@@ -214,10 +170,10 @@ def validate(
     protocol. Where that evaluation is invalid, a warning is logged and the
     amplitudes are the layout's own. ``exam`` is the directory of the current
     exam's cache, which the plugin's hooks read where they take it. The
-    plugin is loaded with the options of ``parameter_set``, as
-    :func:`list_protocol` loads it.
+    plugin is loaded at the options of ``block``, as :func:`list_protocol`
+    loads it, and the block is read against that listing.
     """
-    variant = _variant(plugins, plugin, parameter_set, parameters)
+    variant = _variant(plugins, plugin, block)
     listing = _listing(variant)
     request = _request(block, listing)
     limits = _read(limits)
@@ -246,8 +202,6 @@ def generate(
     store: DesignStore,
     push: str | None = None,
     exam: str | None = None,
-    parameter_set: int = 0,
-    parameters: Path | str | None = None,
 ) -> str:
     """Reply ``GENERATED <id>`` for the design a request resolves to.
 
@@ -273,7 +227,7 @@ def generate(
         If the request is invalid or the design fails a check, when nothing
         is stored; or if the design cannot be pushed, when it stays stored.
     """
-    variant = _variant(plugins, plugin, parameter_set, parameters)
+    variant = _variant(plugins, plugin, block)
     listing = _listing(variant)
     request = _request(block, listing)
     limits = _read(limits)
@@ -290,12 +244,9 @@ def generate(
     if not validation.valid:
         raise CallError(validation.info)
     source = _source(variant)
-    settings = _psd_settings(variant)
     identified = dict(validation.values)
     if scanner.options:
         identified["options"] = dict(scanner.options)
-    if settings:
-        identified["psd"] = settings
     if exam is not None:
         identified["exam"] = _exam_digest(exam)
     identity = design_identity(plugin, identified_limits(limits), identified, source)
@@ -304,10 +255,6 @@ def generate(
         return f"GENERATED {_pushed(store, found, push)}\n"
     staged = store.stage()
     try:
-        if settings:
-            (staged / PSD_SETTINGS).write_text(
-                "".join(f"{name} {value}\n" for name, value in settings.items())
-            )
         accepted, paths, written = scanner._design(
             design, validation.values, staged, exam
         )
@@ -332,7 +279,6 @@ def generate(
             **_record(limits),
             "plugin": plugin,
             "options": dict(scanner.options),
-            "psd": settings,
             "source": source,
             "scan_time": validation.duration,
             "fov_offset_mm": [1e3 * value for value in offset],
@@ -501,28 +447,26 @@ def _record(limits: Mapping[str, Any]) -> dict[str, Any]:
 
 @lru_cache(maxsize=32)
 def _cached(variant: _Variant, mtimes_ns: tuple[int, ...]) -> SequencePlugin:  # noqa: ARG001 -- part of the key
-    options = {} if variant.parameters is None else read_options(variant.parameters)
-    return load_plugin(Path(variant.path), _split_options(options)[0])
+    return load_plugin(Path(variant.path), dict(variant.options))
 
 
 def _mtimes(variant: _Variant) -> tuple[int, ...]:
-    """Return the modification times of the files of a variant, which change when either is edited."""
-    return tuple(Path(f).stat().st_mtime_ns for f in variant if f is not None)
+    """Return the modification time of the plugin file of a variant, which changes when it is edited."""
+    return (Path(variant.path).stat().st_mtime_ns,)
 
 
 def _plugin(variant: _Variant) -> SequencePlugin:
-    """Return the plugin of a variant, imported again when either of its files changed.
+    """Return the plugin of a variant, imported again when its file changed.
 
     Raises
     ------
     CallError
-        If the parameter file is not TOML, or sets options the plugin does
-        not declare or values it does not take.
+        If the plugin does not take the variant's options.
     """
     try:
         return _cached(variant, _mtimes(variant))
     except OptionError as error:
-        raise CallError(f"{variant.parameters}: {error}") from None
+        raise CallError(f"{variant.path}: {error}") from None
 
 
 def _listing(variant: _Variant) -> dict[ProtocolKey, Parameter]:

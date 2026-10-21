@@ -1,2 +1,0 @@
-# Retrospective ECG gating: each segment cycled over a heartbeat and binned into cardiac phases.
-retrospective = true

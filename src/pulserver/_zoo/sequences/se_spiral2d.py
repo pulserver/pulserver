@@ -5,7 +5,7 @@ import functools
 from pypulseqpp.sequences.sequence.se_spiral2D_sequence import se_spiral2d
 
 from pulserver._zoo._evaluation import evaluation, spiral_2d
-from pulserver._zoo._user import OWN, user_entries
+from pulserver._zoo._user import OPTIONS, OWN, user_entries
 from pulserver.design import (
     Description,
     FloatParam,
@@ -19,7 +19,7 @@ from pulserver.protocol import ImagingMode, TEPreset, TRPreset, UIParam
 
 #: Variable-density spirals: adds how much sparser the periphery is sampled
 #: than the centre as a user entry.
-VARIABLE_DENSITY = option("variable_density", False)
+VARIABLE_DENSITY = option("variable_density", False, **OPTIONS["variable_density"])
 
 
 class SeSpiral2D(SequencePlugin):
