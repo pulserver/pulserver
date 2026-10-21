@@ -794,194 +794,179 @@ int pulseg_get_rf_event_array(
 }
 
 /* ================================================================== */
-/*  TRID (safety-group) accessors                                     */
+/*  Repetition timing and RF energy windows                           */
 /* ================================================================== */
 
-int pulseg_get_tr_groups(
-    const pulseg_collection *coll,
-    pulseg_tr_group **out_groups,
-    int subseq_idx)
+/* Execution-stream positions per repetition; the whole stream where the
+ * subsequence does not repeat. */
+static int stream_repetition_size(const pulseg_sequence_descriptor *desc)
+{
+    int size = desc->tr_descriptor.tr_size;
+    return (size > 0 && size < desc->exec_stream_len) ? size : desc->exec_stream_len;
+}
+
+static const pulseg_sequence_descriptor *timed_subsequence(const pulseg_collection *coll, int subseq_idx)
 {
     const pulseg_sequence_descriptor *desc;
-    int *run_trid = NULL;
-    int *run_start = NULL;
-    int *run_len = NULL;
-    int num_runs = 0;
-    int *distinct_ids = NULL;
-    int num_distinct = 0;
-    pulseg_tr_group *groups = NULL;
-    int i, m;
-    int ret = 0;
 
-    if (!coll || !out_groups)
-        return PULSEG_ERR_NULL_POINTER;
-    *out_groups = NULL;
-    if (subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
-        return PULSEG_ERR_INVALID_ARGUMENT;
-
+    if (!coll || subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
+        return NULL;
     desc = &coll->descriptors[subseq_idx];
     if (desc->exec_stream_len <= 0 || !desc->exec_runs || !desc->block_table)
-        return 0;
+        return NULL;
+    return desc;
+}
 
-    /* ---- Pass 1: split the materialized scan table into maximal runs of
-     * consecutive positions sharing the same non-zero TRID. Worst
-     * case one run per position, so this bound is always safe. ---- */
-    run_trid = (int *)PULSEG_ALLOC((size_t)desc->exec_stream_len * sizeof(int));
-    run_start = (int *)PULSEG_ALLOC((size_t)desc->exec_stream_len * sizeof(int));
-    run_len = (int *)PULSEG_ALLOC((size_t)desc->exec_stream_len * sizeof(int));
-    if (!run_trid || !run_start || !run_len)
-    {
-        ret = PULSEG_ERR_ALLOC_FAILED;
-        goto cleanup;
-    }
+int pulseg_get_tr_timing(const pulseg_collection *coll, pulseg_tr_timing *out, int subseq_idx)
+{
+    const pulseg_sequence_descriptor *desc;
+    double t = 0.0, copy_start = 0.0, copy;
+    int n, size;
 
+    if (!coll || !out)
+        return PULSEG_ERR_NULL_POINTER;
+    out->num_copies = 0;
+    out->played_us = 0.0;
+    out->shortest_copy_us = 0.0;
+    out->longest_copy_us = 0.0;
+    desc = timed_subsequence(coll, subseq_idx);
+    if (!desc)
+        return PULSEG_ERR_INVALID_ARGUMENT;
+
+    size = stream_repetition_size(desc);
+    for (n = 0; n < desc->exec_stream_len; ++n)
     {
-        int prev_mid = 0;
-        for (i = 0; i < desc->exec_stream_len; ++i)
+        t += (double)pulseg__played_duration_us(desc, pulseg__exec_block_idx(desc, n));
+        if ((n + 1) % size == 0)
         {
-            int blk = pulseg__exec_block_idx(desc, i);
-            int mid = desc->block_table[blk].trid;
-            /* The label is the boundary: an occurrence starts where the
-             * sequence SETs TRID, which an author writes at the head of every
-             * repetition, and runs until the next SET. Two neighbouring
-             * repetitions of one group therefore stay two occurrences even
-             * though the sticky value never changes across them. */
-            int sets_trid = desc->block_table[blk].trid_set;
-            if (mid != 0 && (sets_trid || mid != prev_mid))
-            {
-                run_trid[num_runs] = mid;
-                run_start[num_runs] = i;
-                run_len[num_runs] = 0;
-                num_runs++;
-            }
-            if (mid != 0)
-                run_len[num_runs - 1]++;
-            prev_mid = mid;
+            /* A copy cut short at the end is not a repetition, and is left out. */
+            copy = t - copy_start;
+            if (out->num_copies == 0 || copy < out->shortest_copy_us)
+                out->shortest_copy_us = copy;
+            if (copy > out->longest_copy_us)
+                out->longest_copy_us = copy;
+            out->num_copies++;
+            copy_start = t;
         }
     }
+    out->played_us = t;
+    return PULSEG_SUCCESS;
+}
 
-    if (num_runs == 0)
-    {
-        ret = 0;
-        goto cleanup;
-    }
+/* The RF plays of a subsequence in play order: each at the start of its
+ * block, numbered within its repetition as pulseg_get_rf_array() numbers the
+ * repetition's pulses. */
+typedef struct rf_play_walk
+{
+    const pulseg_sequence_descriptor *desc;
+    int size;      /* positions per repetition */
+    int next;      /* next execution-stream position */
+    double end_us; /* where the blocks walked so far end */
+    int ordinal;   /* RF plays so far in the current repetition */
+    double at_us;  /* the current play */
+    int position;  /* its pulse within the repetition */
+} rf_play_walk;
 
-    /* ---- Pass 2: distinct TRIDs, first-seen order (num_runs is a
-     * safe upper bound). ---- */
-    distinct_ids = (int *)PULSEG_ALLOC((size_t)num_runs * sizeof(int));
-    if (!distinct_ids)
+static void rf_play_walk_start(rf_play_walk *w, const pulseg_sequence_descriptor *desc)
+{
+    w->desc = desc;
+    w->size = stream_repetition_size(desc);
+    w->next = 0;
+    w->end_us = 0.0;
+    w->ordinal = 0;
+    w->at_us = 0.0;
+    w->position = -1;
+}
+
+/* Advance @p w to the next RF play; 0 when there is none. */
+static int rf_play_walk_next(rf_play_walk *w)
+{
+    const pulseg_sequence_descriptor *desc = w->desc;
+
+    while (w->next < desc->exec_stream_len)
     {
-        ret = PULSEG_ERR_ALLOC_FAILED;
-        goto cleanup;
+        const int n = w->next++;
+        const int blk = pulseg__exec_block_idx(desc, n);
+        const pulseg_block_table_element *bte = &desc->block_table[blk];
+        const double start = w->end_us;
+        int id;
+
+        if (n % w->size == 0)
+            w->ordinal = 0;
+        w->end_us += (double)pulseg__played_duration_us(desc, blk);
+        if (bte->rf_id < 0 || bte->rf_id >= desc->rf_table_size)
+            continue;
+        id = desc->rf_table[bte->rf_id].id;
+        if (id < 0 || id >= desc->num_unique_rfs)
+            continue;
+        w->at_us = start;
+        w->position = w->ordinal++;
+        return 1;
     }
-    for (i = 0; i < num_runs; ++i)
+    return 0;
+}
+
+int pulseg_get_rf_window(
+    const pulseg_collection *coll,
+    int subseq_idx,
+    double window_us,
+    const double *weights,
+    int num_weights,
+    int *counts,
+    double *start_us)
+{
+    const pulseg_sequence_descriptor *desc;
+    rf_play_walk lead, lag;
+    int have_lead, k, plays = 0;
+    double sum = 0.0, best = -1.0, best_start = 0.0;
+
+    if (start_us)
+        *start_us = 0.0;
+    if (!coll || (num_weights > 0 && (!weights || !counts)))
+        return PULSEG_ERR_NULL_POINTER;
+    desc = timed_subsequence(coll, subseq_idx);
+    if (!desc || num_weights < 0 || !(window_us > 0.0))
+        return PULSEG_ERR_INVALID_ARGUMENT;
+    if (num_weights == 0)
+        return 0; /* no RF */
+    for (k = 0; k < num_weights; ++k)
+        counts[k] = 0;
+
+    /* The densest span starts at a play: slide its start over the plays and
+     * its end ahead of them, each walk passing over the stream once. */
+    rf_play_walk_start(&lead, desc);
+    rf_play_walk_start(&lag, desc);
+    have_lead = rf_play_walk_next(&lead);
+    while (rf_play_walk_next(&lag))
     {
-        int found = 0;
-        for (m = 0; m < num_distinct; ++m)
+        while (have_lead && lead.at_us < lag.at_us + window_us)
         {
-            if (distinct_ids[m] == run_trid[i])
-            {
-                found = 1;
-                break;
-            }
+            if (lead.position >= num_weights)
+                return PULSEG_ERR_INVALID_ARGUMENT;
+            sum += weights[lead.position];
+            have_lead = rf_play_walk_next(&lead);
         }
-        if (!found)
-            distinct_ids[num_distinct++] = run_trid[i];
-    }
-
-    groups = (pulseg_tr_group *)PULSEG_ALLOC((size_t)num_distinct * sizeof(pulseg_tr_group));
-    if (!groups)
-    {
-        ret = PULSEG_ERR_ALLOC_FAILED;
-        goto cleanup;
-    }
-
-    /* ---- Per distinct TRID: verify every occurrence after the first
-     * is structurally identical to the first, then dedup. ---- */
-    for (m = 0; m < num_distinct; ++m)
-    {
-        int mid = distinct_ids[m];
-        int ref_run = -1;
-        int ref_len = 0;
-        int one_instance_duration_us = 0;
-        int n_inst = 0;
-        int r;
-
-        for (r = 0; r < num_runs; ++r)
+        if (sum > best)
         {
-            if (run_trid[r] != mid)
-                continue;
-
-            if (ref_run < 0)
-            {
-                /* First occurrence: this is the reference. */
-                ref_run = r;
-                ref_len = run_len[r];
-                for (i = 0; i < ref_len; ++i)
-                {
-                    int blk = pulseg__exec_block_idx(desc, run_start[r] + i);
-                    one_instance_duration_us +=
-                        desc->base_blocks[desc->block_table[blk].id].duration_us;
-                }
-            }
-            else
-            {
-                /* Subsequent occurrence: must match the reference exactly
-                 * (length, and per-position content signature + order). */
-                if (run_len[r] != ref_len)
-                {
-                    ret = PULSEG_ERR_TRID_STRUCTURAL_MISMATCH;
-                    goto cleanup;
-                }
-                for (i = 0; i < ref_len; ++i)
-                {
-                    /* The block-definition id is the whole structural
-                     * signature -- duration, RF, gradients and ADC -- and
-                     * carries none of the amplitude, phase or rotation that
-                     * may legitimately vary per repeat or slice. */
-                    int ref_blk = pulseg__exec_block_idx(desc, run_start[ref_run] + i);
-                    int cur_blk = pulseg__exec_block_idx(desc, run_start[r] + i);
-
-                    if (desc->block_table[ref_blk].id != desc->block_table[cur_blk].id)
-                    {
-                        ret = PULSEG_ERR_TRID_STRUCTURAL_MISMATCH;
-                        goto cleanup;
-                    }
-                }
-            }
-            n_inst++;
+            best = sum;
+            best_start = lag.at_us;
         }
-
-        groups[m].trid = mid;
-        groups[m].one_instance_duration_us = one_instance_duration_us;
-        groups[m].num_instances = n_inst;
-        {
-            /* n_inst * one_instance_duration_us can overflow a 32-bit int
-             * for large num_trs even when one_instance_duration_us alone
-             * passes the caller's ceiling check, so the product is clamped. */
-            double total_d = (double)n_inst * (double)one_instance_duration_us;
-            if (total_d > 2.0e9)
-                total_d = 2.0e9;
-            groups[m].total_duration_us = (int)total_d;
-        }
+        sum -= weights[lag.position];
     }
+    if (best < 0.0)
+        return 0; /* no RF */
 
-    *out_groups = groups;
-    groups = NULL; /* ownership transferred to caller */
-    ret = num_distinct;
-
-cleanup:
-    if (run_trid)
-        PULSEG_FREE(run_trid);
-    if (run_start)
-        PULSEG_FREE(run_start);
-    if (run_len)
-        PULSEG_FREE(run_len);
-    if (distinct_ids)
-        PULSEG_FREE(distinct_ids);
-    if (groups)
-        PULSEG_FREE(groups);
-    return ret;
+    rf_play_walk_start(&lag, desc);
+    while (rf_play_walk_next(&lag) && lag.at_us < best_start + window_us)
+    {
+        if (lag.at_us < best_start)
+            continue;
+        counts[lag.position]++;
+        plays++;
+    }
+    if (start_us)
+        *start_us = best_start;
+    return plays;
 }
 
 /* ================================================================== */

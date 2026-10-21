@@ -270,35 +270,47 @@ extern "C"
         int subseq_idx);
 
     /**
-     * @brief Identify, structurally-verify, and deduplicate TRID-labeled
-     * groups within a subsequence's materialized scan table.
+     * @brief How long a subsequence plays, and its shortest and longest
+     * whole repetition, every block for its own duration.
      *
-     * An occurrence starts where the sequence SETs TRID (pulseq LABELSET
-     * TRID) and runs until the next SET, so the labels alone say where the
-     * repeating units are -- two neighbouring occurrences of one group are
-     * two occurrences even though the sticky value does not change across
-     * them. Every occurrence after the first must be structurally identical
-     * to the first (same block definitions in the same order -- content
-     * identity, not amplitude/phase/rotation, which may legitimately vary per
-     * repeat); the result holds one deduplicated pulseg_tr_group entry per
-     * TRID. Returns PULSEG_ERROR (not a partial/best-effort result) if any
-     * two occurrences of the same TRID are structurally inconsistent.
-     *
-     * Subsequences with no TRID labels return 0 (not an error) -- callers
-     * should keep their existing whole-subsequence behavior in that case.
-     *
-     * The library allocates @p *out_groups via PULSEG_ALLOC(); the caller
-     * must release it with PULSEG_FREE() when done.
-     *
-     * @param[in]  coll         Loaded collection.
-     * @param[out] out_groups   Set to a malloc'd array; caller must free().
-     * @param[in]  subseq_idx   Subsequence index.
-     * @return Number of distinct TR groups (>= 0), or negative error code.
+     * @param[in]  coll        Loaded collection, with its execution stream.
+     * @param[out] out         Overwritten.
+     * @param[in]  subseq_idx  Subsequence index.
+     * @return PULSEG_SUCCESS, or a negative error code.
      */
-    int pulseg_get_tr_groups(
+    int pulseg_get_tr_timing(
         const pulseg_collection *coll,
-        pulseg_tr_group **out_groups,
+        pulseg_tr_timing *out,
         int subseq_idx);
+
+    /**
+     * @brief The span of a subsequence's timeline in which its RF plays
+     * carry the most energy, as plays per pulse of the repetition.
+     *
+     * Each play is placed at the start of its block, every block timed at its
+     * own duration, and weighs @p weights[k], k being its pulse in the
+     * repetition as pulseg_get_rf_array() orders them. Of the half-open spans
+     * of @p window_us starting at a play, the one of largest total weight is
+     * taken, the earliest on a tie; a subsequence shorter than the span plays
+     * whole inside it. Two passes over the execution stream, no allocation.
+     *
+     * @param[in]  coll         Loaded collection, with its execution stream.
+     * @param[in]  subseq_idx   Subsequence index.
+     * @param[in]  window_us    Span, us; > 0.
+     * @param[in]  weights      Energy of one play of each pulse of the repetition.
+     * @param[in]  num_weights  Pulses in the repetition.
+     * @param[out] counts       num_weights entries: plays of each pulse in the span.
+     * @param[out] start_us     Where the span starts; may be NULL.
+     * @return Plays in the span (0 without RF), or a negative error code.
+     */
+    int pulseg_get_rf_window(
+        const pulseg_collection *coll,
+        int subseq_idx,
+        double window_us,
+        const double *weights,
+        int num_weights,
+        int *counts,
+        double *start_us);
 
     /**
      * @brief Return decompressed RF magnitude waveform (multi-channel).

@@ -91,8 +91,8 @@ every block. The *repetition* of a subsequence is the period
 `pypulseqpp.Sequence.repetition()` reports, the whole subsequence where it
 does not repeat; the conversion finds virtual segments within it. Do not write
 "repeating unit", which implies that every sequence is periodic, nor "segment
-definition" for a virtual segment. A `TRID` label marks a *safety group* here,
-not a segment boundary. The *IR cache* is the file; the *collection* is what a
+definition" for a virtual segment. A `TRID` label is carried with each block
+and places no segment boundary. The *IR cache* is the file; the *collection* is what a
 reader loads from it.
 
 **Virtual scanner.** The stand-ins for the scanner in tests: the *virtual

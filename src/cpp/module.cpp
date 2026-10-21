@@ -114,29 +114,39 @@ pulseg_opts make_opts(
     throw std::invalid_argument(std::string(message) + " [error " + std::to_string(code) + "]");
 }
 
-/* The TRID-labelled groups of one subsequence, in first-seen order. */
-py::list tr_groups(const pulseg_collection *coll, int subseq_idx)
+/* How one subsequence's repetitions play in time. */
+py::dict tr_timing(const pulseg_collection *coll, int subseq_idx)
 {
-    pulseg_tr_group *groups = NULL;
-    const int count = pulseg_get_tr_groups(coll, &groups, subseq_idx);
-    if (count < 0)
-    {
-        if (groups)
-            PULSEG_FREE(groups);
-        require(count, "TR groups");
-    }
-    py::list out;
-    for (int i = 0; i < count; ++i)
-    {
-        py::dict entry;
-        entry["trid"] = groups[i].trid;
-        entry["num_instances"] = groups[i].num_instances;
-        entry["one_instance_duration_us"] = groups[i].one_instance_duration_us;
-        entry["total_duration_us"] = groups[i].total_duration_us;
-        out.append(entry);
-    }
-    if (groups)
-        PULSEG_FREE(groups);
+    pulseg_tr_timing timing;
+    require(pulseg_get_tr_timing(coll, &timing, subseq_idx), "TR timing");
+    py::dict out;
+    out["num_copies"] = timing.num_copies;
+    out["played_us"] = timing.played_us;
+    out["shortest_copy_us"] = timing.shortest_copy_us;
+    out["longest_copy_us"] = timing.longest_copy_us;
+    return out;
+}
+
+/* The 10 s span of one subsequence holding the most RF plays, every pulse of
+ * its repetition weighed alike. */
+py::dict rf_window(const pulseg_collection *coll, int subseq_idx)
+{
+    pulseg_rf_stats *pulses = NULL;
+    const int num = pulseg_get_rf_array(coll, &pulses, subseq_idx);
+    if (pulses)
+        PULSEG_FREE(pulses);
+    require(num, "RF array");
+    std::vector<double> weights((size_t)num, 1.0);
+    std::vector<int> counts((size_t)std::max(num, 1), 0);
+    double start_us = 0.0;
+    const int plays = pulseg_get_rf_window(
+        coll, subseq_idx, 10.0e6, weights.data(), num, counts.data(), &start_us);
+    require(plays, "RF window");
+    counts.resize((size_t)num);
+    py::dict out;
+    out["plays"] = plays;
+    out["start_us"] = start_us;
+    out["counts"] = py::cast(counts);
     return out;
 }
 
@@ -203,7 +213,8 @@ py::dict summarize(const pulseg_collection *coll)
         entry["spl_peak_db"] = s.spl_peak_db;
         entry["spl_average_dba"] = s.spl_average_dba;
         entry["grad_raster_us"] = s.grad_raster_us;
-        entry["tr_groups"] = tr_groups(coll, i);
+        entry["tr_timing"] = tr_timing(coll, i);
+        entry["rf_window"] = rf_window(coll, i);
         entry["rf"] = rf_statistics(coll, i, s.num_unique_rf);
         entry["readout_labels"] = readout_labels(coll, i, s);
         py::list waves;

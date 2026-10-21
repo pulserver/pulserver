@@ -418,8 +418,8 @@ typedef struct pulseg_rf_stats
      *     vendor variants, a sibling struct may be added later and
      *     selected via this field) ---                                 */
     int vendor; /**< PULSEG_VENDOR_* constant of the conversion, 0 when unspecified */
-    /* --- safety-group label (appended; do not reorder above) --- */
-    int trid; /**< sticky pulseq TRID of the originating block, 0 = ungrouped */
+    /* --- label (appended; do not reorder above) --- */
+    int trid; /**< sticky pulseq TRID of the originating block, 0 = none */
 } pulseg_rf_stats;
 
 /* clang-format off */
@@ -430,25 +430,18 @@ typedef struct pulseg_rf_stats
 /* clang-format on */
 
 /**
- * @brief One entry per distinct TRID-labeled group in a subsequence, as
- * identified/verified/deduplicated by pulseg_get_tr_groups() from the
- * materialized scan table. See pulseg_get_tr_groups() for the identify ->
- * verify-structural-identity -> dedup algorithm.
- *
- * TRID is Pulseq's own label for the repeating unit of the sequence
- * (mr.getSupportedLabels: an integer ID of the TR, or sequence segment, that
- * interpreters use to optimise execution on the scanner), which is exactly
- * the grouping a per-contrast SAR check wants --
- * see the NeuroMix scheme, where each contrast is evaluated against the 10 s
- * limit and the whole run against the 6 min one.
+ * @brief How a subsequence's repetitions play in time, every block for its own
+ * duration: a pure delay's may differ from one repetition to the next, so
+ * the first repetition's tr_duration_us need not be any other's.
+ * Filled by pulseg_get_tr_timing().
  */
-typedef struct pulseg_tr_group
+typedef struct pulseg_tr_timing
 {
-    int trid;                     /**< sticky pulseq TRID (>=1)          */
-    int one_instance_duration_us; /**< duration of the validated reference occurrence */
-    int total_duration_us;        /**< num_instances * one_instance_duration_us */
-    int num_instances;            /**< count of structurally-identical occurrences */
-} pulseg_tr_group;
+    int num_copies;          /**< whole repetitions played; a last one cut short is not counted */
+    double played_us;        /**< the subsequence played through, us */
+    double shortest_copy_us; /**< the shortest whole repetition, us */
+    double longest_copy_us;  /**< the longest whole repetition, us */
+} pulseg_tr_timing;
 
 /* ================================================================== */
 /*  TR region selectors (for freq-mod plan)                           */
