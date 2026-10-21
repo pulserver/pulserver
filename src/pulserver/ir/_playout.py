@@ -56,8 +56,10 @@ def playout(
     them out for ``budget``, or, without one, as the cache lays them out.
 
     With ``prescan``, the scan loop plays that receive-gain calibration
-    instead. It waits for no trigger, drives no digital output, and plays at
-    zero every gradient whose amplitude varies across repetitions.
+    instead. It waits for no trigger, drives no digital output, plays at
+    zero every gradient whose amplitude varies across repetitions, and plays
+    an RF pulse whose frequency offset varies across repetitions at their
+    mean, ``rf_freq_mean_hz`` of :func:`play`.
 
     Parameters
     ----------
@@ -101,8 +103,9 @@ def playout(
           ``duration_us``; the registers ``rf_amp_hz``, ``rf_phase_rad``,
           ``rf_freq_hz``, ``rf_shim``, ``rf_use``, ``gradient_hz_per_m``
           ``(blocks, 3)``, ``adc``, ``adc_freq_hz``, ``adc_phase_rad`` and
-          ``digitalout``, and ``gradient_variable``, where the amplitude of
-          that gradient varies across repetitions; and its wave, ``wave`` (-1
+          ``digitalout``, ``gradient_variable``, where the amplitude of
+          that gradient varies across repetitions, and ``rf_freq_variable``,
+          where the frequency offset of its RF pulse does; and its wave, ``wave`` (-1
           without one) at ``wave_amp_hz_per_m``, from the region
           ``wave_offset``, ``wave_samples`` and ``wave_start_us``, with the
           samples it reads there in ``wave_read``, ``wave_read_span``

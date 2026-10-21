@@ -329,8 +329,8 @@ struct PlayedGradients
 py::dict play(pulseg_collection *coll, bool waveforms)
 {
     std::vector<int> subsequence, segment, duration_us, adc, trid, norot, nopos, rf_use;
-    std::vector<int> rf_channels, rf_grad_constant, wave;
-    std::vector<float> rf_amp, rf_freq, rf_phase, adc_freq, adc_phase, gradient;
+    std::vector<int> rf_channels, rf_grad_constant, rf_freq_variable, wave;
+    std::vector<float> rf_amp, rf_freq, rf_phase, rf_freq_mean, adc_freq, adc_phase, gradient;
     std::vector<float> rf_grad_level;
     std::vector<int> rf_delay_us, adc_delay_us, adc_dwell_ns, adc_samples;
     std::vector<float> rf_centre_us, rf_time, modulation;
@@ -372,6 +372,8 @@ py::dict play(pulseg_collection *coll, bool waveforms)
         rf_delay_us.push_back(b.has_rf ? b.rf_delay_us : 0);
         rf_channels.push_back(b.has_rf ? b.rf_num_channels : 0);
         rf_grad_constant.push_back(b.rf_grad_constant);
+        rf_freq_variable.push_back(block.rf_freq_variable);
+        rf_freq_mean.push_back(block.rf_freq_mean_hz);
         rf_grad_level.insert(rf_grad_level.end(), b.rf_grad_level, b.rf_grad_level + 3);
         adc_delay_us.push_back(block.adc_flag ? b.adc_delay_us : 0);
         adc_dwell_ns.push_back(window.dwell_ns);
@@ -405,6 +407,8 @@ py::dict play(pulseg_collection *coll, bool waveforms)
     out["rf_channels"] = as_array(rf_channels, {count});
     out["rf_grad_constant"] = as_array(rf_grad_constant, {count});
     out["rf_grad_level"] = as_array(rf_grad_level, {count, 3});
+    out["rf_freq_variable"] = as_array(rf_freq_variable, {count});
+    out["rf_freq_mean_hz"] = as_array(rf_freq_mean, {count});
     out["gradient_hz_per_m"] = as_array(gradient, {count, 3});
     out["wave"] = as_array(wave, {count});
     out["norot"] = as_array(norot, {count});

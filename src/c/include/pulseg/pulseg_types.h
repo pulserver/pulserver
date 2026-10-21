@@ -518,6 +518,11 @@ typedef struct pulseg_label_limits
 /*  Block instance (cursor output)                                    */
 /* ================================================================== */
 
+/** RF frequency offsets of one position within the TR that differ by no
+ *  more than this, in Hz, are one offset (pulseg_block_instance::
+ *  rf_freq_variable). */
+#define PULSEG_RF_FREQ_TOL_HZ 0.5f
+
 /**
  * @brief Resolved block data for the current cursor position.
  *
@@ -584,13 +589,23 @@ typedef struct pulseg_block_instance
      * calibration prescan plays the block but does not acquire its readout,
      * the NOPRESCAN label.  The scan acquires it as adc_flag says. */
     int noprescan_flag;
+
+    /* RF frequency offset across TRs (appended; do not reorder above), over
+     * the TR instances of this block's position within the TR that play RF,
+     * the field-of-view offset included: 1 where they play more than one
+     * offset, the slices of a stack, their least and greatest differing by
+     * more than PULSEG_RF_FREQ_TOL_HZ; and their mean, in Hz, the centre of
+     * the positioned stack.  0 for a constant offset, and both 0 for a block
+     * that plays no RF. */
+    int rf_freq_variable;
+    float rf_freq_mean_hz;
 } pulseg_block_instance;
 
 /* clang-format off */
 #define PULSEG_BLOCK_INSTANCE_INIT \
     { \
     0, 0.0f, 0.0f, 0.0f, -1, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0, 0, 0, {1, 0, 0, 0, 1, 0, 0, \
-    0, 1}, 0, 0, 0, -1, 0, 0.0f, 0.0f, 0, 0, -1, {0.0f, 0.0f, 0.0f}, 0 \
+    0, 1}, 0, 0, 0, -1, 0, 0.0f, 0.0f, 0, 0, -1, {0.0f, 0.0f, 0.0f}, 0, 0, 0.0f \
     }
 /* clang-format on */
 

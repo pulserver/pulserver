@@ -313,6 +313,7 @@ void put_registers(
     c.put("wave", b.wave_id);
     c.put3("gradient_hz_per_m", b.gx_amp_hz_per_m, b.gy_amp_hz_per_m, b.gz_amp_hz_per_m);
     c.put3("gradient_variable", b.gx_variable, b.gy_variable, b.gz_variable);
+    c.put("rf_freq_variable", b.rf_freq_variable);
     c.put3(
         "wave_amp_hz_per_m", b.wave_amp_hz_per_m[0], b.wave_amp_hz_per_m[1],
         b.wave_amp_hz_per_m[2]);

@@ -127,6 +127,12 @@ static int convert_collection(
             diag->code = result;
             goto fail;
         }
+        result = pulseg__compute_rf_freq_flags(&desc);
+        if (PULSEG_FAILED(result))
+        {
+            diag->code = result;
+            goto fail;
+        }
 
         result = pulseg__build_exec_stream(&desc, diag);
         if (PULSEG_FAILED(diag->code))
@@ -141,6 +147,12 @@ static int convert_collection(
          * multipass patterns can update tr_descriptor.tr_size). Refresh the
          * variable-gradient flags so they index the final TR size. */
         result = pulseg__compute_variable_grad_flags(&desc);
+        if (PULSEG_FAILED(result))
+        {
+            diag->code = result;
+            goto fail;
+        }
+        result = pulseg__compute_rf_freq_flags(&desc);
         if (PULSEG_FAILED(result))
         {
             diag->code = result;
