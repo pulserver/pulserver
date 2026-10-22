@@ -92,6 +92,11 @@ def test_a_value_for_an_undeclared_parameter_is_refused():
         parse_values(f"{PROTOCOL_BEGIN}\nnex: 2\n{PROTOCOL_END}", LISTING)
 
 
+def test_a_value_its_entry_cannot_take_is_an_error_naming_the_entry():
+    with pytest.raises(ValueError, match=r"^TR: "):
+        parse_values(f"{PROTOCOL_BEGIN}\nTR: 0.6\n{PROTOCOL_END}", LISTING)
+
+
 @pytest.mark.parametrize(
     "validation",
     [

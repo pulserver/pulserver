@@ -341,8 +341,41 @@ def _unbound_parameter(entry: Entry) -> Parameter | None:
     return None
 
 
-def _chosen(key: ProtocolKey, entry: OptionParam, value: Any) -> Any:
+def _preset(
+    key: ProtocolKey, entry: TimeParam, code: Any, system: pp.Opts
+) -> tuple[TEPreset | TRPreset, Any]:
+    """Return the preset a negative time code selects and the value it requests, in seconds or ``None``.
+
+    Raises
+    ------
+    ValueError
+        If the entry does not offer the preset.
+    """
+    found = next((c for c in entry.presets if c == code), None)
+    if found is None:
+        raise ValueError(f"{key} does not offer preset {code}")
+    preset = entry.presets[found]
+    return found, preset(system) if callable(preset) else preset
+
+
+def _choice(key: ProtocolKey, entry: OptionParam, value: Any) -> Any:
     """Return the choice an option's wire value, its index, names.
+
+    Raises
+    ------
+    ValueError
+        If the value is not the index of a choice.
+    """
+    index = float(value)
+    if index != round(index) or not 0 <= index < len(entry.choices):
+        raise ValueError(
+            f"{key}: {entry.name} is 0 to {len(entry.choices) - 1}, not {value}"
+        )
+    return entry.choices[int(index)]
+
+
+def _chosen(key: ProtocolKey, entry: OptionParam, value: Any) -> Any:
+    """Return the choice an option's wire value names, the one the plugin is loaded with.
 
     Raises
     ------
@@ -350,12 +383,7 @@ def _chosen(key: ProtocolKey, entry: OptionParam, value: Any) -> Any:
         If the value is not the index of a choice, or names another choice
         than the one the plugin is loaded with.
     """
-    index = float(value)
-    if index != round(index) or not 0 <= index < len(entry.choices):
-        raise ValueError(
-            f"{key}: {entry.name} is 0 to {len(entry.choices) - 1}, not {value}"
-        )
-    choice = entry.choices[int(index)]
+    choice = _choice(key, entry, value)
     if choice != entry.value:
         raise ValueError(
             f"{key} asks for {entry.name} {choice!r}, and the plugin is loaded "
@@ -509,16 +537,10 @@ class Protocol(Mapping[ProtocolKey, Any]):
                 if key not in PRESCRIPTION:
                     raise ValueError(f"{key} is not an entry of this protocol")
                 converted[key] = float(value)
+            elif isinstance(entry, TimeParam) and entry.presets and value < 0:
+                presets[key], converted[key] = _preset(key, entry, value, system)
             elif isinstance(entry, TimeParam):
-                if entry.presets and value < 0:
-                    code = next((c for c in entry.presets if c == value), None)
-                    if code is None:
-                        raise ValueError(f"{key} does not offer preset {value}")
-                    preset = entry.presets[code]
-                    presets[key] = code
-                    converted[key] = preset(system) if callable(preset) else preset
-                else:
-                    converted[key] = _to_seconds(value)
+                converted[key] = _to_seconds(value)
             elif isinstance(entry, FloatParam):
                 converted[key] = _to_si(value, entry.scale)
             elif isinstance(entry, IntParam):

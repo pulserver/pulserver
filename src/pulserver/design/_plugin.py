@@ -37,6 +37,7 @@ from ._entries import (
     Entry,
     OptionParam,
     Protocol,
+    _choice,
     _parameter,
 )
 from ._options import Declared, OptionValue, declared_options, loading_options
@@ -82,6 +83,103 @@ class Evaluation:
     duration: float = 0.0
     info: str = ""
     rf_layout: RfLayout | tuple[()] = ()
+
+
+def _warn_deprecated(cls: type) -> None:
+    declared = cls.__dict__
+    if any(base.__dict__.get("_deprecated_alias") for base in cls.__bases__):
+        warnings.warn(
+            f"{cls.__name__} subclasses ScannerSequence, which is deprecated; "
+            "subclass SequencePlugin",
+            DeprecationWarning,
+            stacklevel=3,
+        )
+    if "recon" in declared:
+        warnings.warn(
+            f"{cls.__name__} sets recon, which has no effect: the reconstruction "
+            "is named by the reconstruction client or by the scan",
+            DeprecationWarning,
+            stacklevel=3,
+        )
+    if "follows" in declared:
+        warnings.warn(
+            f"{cls.__name__} sets follows, which has no effect: return an "
+            "RfLayout from evaluate",
+            DeprecationWarning,
+            stacklevel=3,
+        )
+
+
+def _keyed_entries(name: str, entries: Mapping[str, Entry]) -> dict[ProtocolKey, Entry]:
+    """Return ``entries`` by protocol key.
+
+    Raises
+    ------
+    ValueError
+        If a name is not a key the interpreter knows, or is a prescription
+        entry.
+    """
+    unknown = sorted(key for key in entries if key not in WIRE_NAMES)
+    if unknown:
+        names = {key.lower(): key for key in WIRE_NAMES}
+        close = sorted(
+            {
+                names[m]
+                for n in unknown
+                for m in difflib.get_close_matches(n.lower(), names)
+            }
+        )
+        hint = f"; did you mean {close}?" if close else ""
+        raise ValueError(
+            f"{name} declares entries the interpreter does not know: {unknown}{hint}"
+        )
+    keyed = {WIRE_NAMES[key]: entry for key, entry in entries.items()}
+    reserved = sorted(key.value for key in keyed if key in PRESCRIPTION)
+    if reserved:
+        raise ValueError(
+            f"{name} binds the prescription entries {reserved}, which "
+            "pulserver applies when it builds the IR"
+        )
+    return keyed
+
+
+def _option_entries(
+    name: str, keyed: Mapping[ProtocolKey, Entry], options: Mapping[str, Declared]
+) -> dict[ProtocolKey, Entry]:
+    """Return the name and value entries of each option, at its user entry.
+
+    Raises
+    ------
+    ValueError
+        If ``keyed`` holds another entry at the user entry of an option.
+    """
+    listed: dict[ProtocolKey, Entry] = {}
+    for option in options.values():
+        entries = {
+            UIParam.user_name(option.user): Description(_option_label(option)),
+            UIParam.user_value(option.user): OptionParam(
+                option.name, option.choices, option.value
+            ),
+        }
+        for key, entry in entries.items():
+            if keyed.get(key, entry) != entry:
+                raise ValueError(
+                    f"{name} declares {key}, which holds the option {option.name}"
+                )
+        listed |= entries
+    return listed
+
+
+def _option_label(option: Declared) -> str:
+    """Return the console name of an option: its label and the code of each choice, as ``Refocusing: 0 constant, 1 optimized``."""
+    if option.choices == (False, True):
+        codes = ["0 off", "1 on"]
+    else:
+        codes = [
+            f"{index} {str(choice).replace('_', ' ')}"
+            for index, choice in enumerate(option.choices)
+        ]
+    return f"{option.label}: {', '.join(codes)}"
 
 
 class SequencePlugin:
@@ -154,27 +252,7 @@ class SequencePlugin:
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
         declared = cls.__dict__
-        if any(base.__dict__.get("_deprecated_alias") for base in cls.__bases__):
-            warnings.warn(
-                f"{cls.__name__} subclasses ScannerSequence, which is deprecated; "
-                "subclass SequencePlugin",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-        if "recon" in declared:
-            warnings.warn(
-                f"{cls.__name__} sets recon, which has no effect: the reconstruction "
-                "is named by the reconstruction client or by the scan",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-        if "follows" in declared:
-            warnings.warn(
-                f"{cls.__name__} sets follows, which has no effect: return an "
-                "RfLayout from evaluate",
-                DeprecationWarning,
-                stacklevel=2,
-            )
+        _warn_deprecated(cls)
         app = declared.get("app")
         if inspect.isclass(app):
             raise TypeError(
@@ -203,42 +281,8 @@ class SequencePlugin:
             entries = cls.protocol
         else:
             return
-        unknown = sorted(name for name in entries if name not in WIRE_NAMES)
-        if unknown:
-            names = {name.lower(): name for name in WIRE_NAMES}
-            close = sorted(
-                {
-                    names[m]
-                    for n in unknown
-                    for m in difflib.get_close_matches(n.lower(), names)
-                }
-            )
-            hint = f"; did you mean {close}?" if close else ""
-            raise ValueError(
-                f"{cls.__name__} declares entries the interpreter does not know: "
-                f"{unknown}{hint}"
-            )
-        keyed = {WIRE_NAMES[name]: entry for name, entry in entries.items()}
-        reserved = sorted(key.value for key in keyed if key in PRESCRIPTION)
-        if reserved:
-            raise ValueError(
-                f"{cls.__name__} binds the prescription entries {reserved}, which "
-                "pulserver applies when it builds the IR"
-            )
-        for option in options.values():
-            listed = {
-                UIParam.user_name(option.user): Description(_option_label(option)),
-                UIParam.user_value(option.user): OptionParam(
-                    option.name, option.choices, option.value
-                ),
-            }
-            for key, entry in listed.items():
-                if keyed.get(key, entry) != entry:
-                    raise ValueError(
-                        f"{cls.__name__} declares {key}, which holds the option "
-                        f"{option.name}"
-                    )
-            keyed |= listed
+        keyed = _keyed_entries(cls.__name__, entries)
+        keyed |= _option_entries(cls.__name__, keyed, options)
         keyed.setdefault(UIParam.NEX, AveragesParam())
         cls.protocol = keyed
         if "ui" in declared:
@@ -500,18 +544,6 @@ class ScannerSequence(SequencePlugin):
     _deprecated_alias = True
 
 
-def _option_label(option: Declared) -> str:
-    """Return the console name of an option: its label and the code of each choice, as ``Refocusing: 0 constant, 1 optimized``."""
-    if option.choices == (False, True):
-        codes = ["0 off", "1 on"]
-    else:
-        codes = [
-            f"{index} {str(choice).replace('_', ' ')}"
-            for index, choice in enumerate(option.choices)
-        ]
-    return f"{option.label}: {', '.join(codes)}"
-
-
 def requested_options(
     protocol: Mapping[ProtocolKey, Entry], values: Mapping[ProtocolKey, Any]
 ) -> dict[str, OptionValue]:
@@ -529,13 +561,7 @@ def requested_options(
     found = {}
     for key, entry in protocol.items():
         if isinstance(entry, OptionParam) and key in values:
-            value = values[key]
-            index = float(value)
-            if index != round(index) or not 0 <= index < len(entry.choices):
-                raise ValueError(
-                    f"{key}: {entry.name} is 0 to {len(entry.choices) - 1}, not {value}"
-                )
-            found[entry.name] = entry.choices[int(index)]
+            found[entry.name] = _choice(key, entry, values[key])
     return found
 
 

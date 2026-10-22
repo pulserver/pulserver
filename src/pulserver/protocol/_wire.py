@@ -209,7 +209,7 @@ def parse_values(
     ValueError
         If a line names a parameter the listing does not declare and
         ``unlisted`` is ``"refuse"``, or carries a value that parameter cannot
-        take.
+        take, which the message names.
     """
     values = {}
     for name, value in _block_lines(text):
@@ -219,7 +219,10 @@ def parse_values(
             raise ValueError(f"{name!r} is not a parameter of this protocol")
         p = listing[name]
         if p.editable:
-            values[_key(name)] = p.coerce(value)
+            try:
+                values[_key(name)] = p.coerce(value)
+            except ValueError as error:
+                raise ValueError(f"{name}: {error}") from None
     return values
 
 

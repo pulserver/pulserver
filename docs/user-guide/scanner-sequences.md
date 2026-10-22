@@ -56,6 +56,7 @@ argument of the sequence function it sets.
 | {class}`~pulserver.design.ChoiceParam` | dropdown | the chosen member of a `StrEnum` |
 | {class}`~pulserver.design.ConfigParam` | not shown | none; a value declared to the interpreter |
 | {class}`~pulserver.design.Description` | read-only text | none |
+| {class}`~pulserver.design.OptionParam` | integer, the index of the option's choice ({ref}`plugin-options`) | none; {func}`~pulserver.design.option` declares it |
 
 The options of the four string-list parameters are
 {class}`~pulserver.protocol.SequenceType`,

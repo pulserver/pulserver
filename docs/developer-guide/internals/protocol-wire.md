@@ -96,8 +96,9 @@ imaging_mode: stringlist|1|2d|3d
 A value block carries `name: value` lines only, a string list as the index of
 its chosen option.
 
-An option ({ref}`plugin-options`) is an integer dropdown at a user entry whose
-options are the indices of its choices, `0|1` for a flag:
+An option ({ref}`plugin-options`) is an integer user entry, the index of its
+choice. Its mode, `dropdown` with the indices as options (`0|1` for a flag),
+marks it as an option; an interpreter shows it as a number, like any user entry:
 
 ```text
 user36_value: int|dropdown|0|0|1|1||0|1
@@ -107,8 +108,7 @@ user36_name: description|Navigator: 0 off, 1 on
 A `list` call reads only the option entries of the value block it is given, and
 lists the plugin at those options; `validate` and `generate` load the plugin at
 the options of their request before reading the rest of it against that
-listing. An interpreter lists the plugin again when a user entry listed as a
-dropdown changes.
+listing. An interpreter lists the plugin again when an option entry changes.
 
 The RF blocks follow a reply when the call asks for them, and no block follows
 where the evaluation is invalid or states no layout. They are lists of numbers:
