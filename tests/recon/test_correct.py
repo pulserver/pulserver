@@ -19,10 +19,6 @@ COIL = "\n".join(
     + ["DELTA 0.0"]
 )
 
-#: The same coil with a second-order term, which displaces voxels off axis.
-_UNUSED = COIL.replace("SCALEX2 0.000000000e+00", "SCALEX2 5.0e-02")
-
-
 #: A 16x16 axial slice; the coil table is inserted as a user parameter.
 HEADER_XML = """<?xml version="1.0"?>
 <ismrmrdHeader xmlns="http://www.ismrm.org/ISMRMRD">
@@ -101,7 +97,7 @@ def test_an_image_is_returned_untouched_where_the_unit_has_no_reference():
 class _Recording:
     """A correction standing in for bartorch's, recording what it was given."""
 
-    shape = (1, 16, 16)
+    shape = (4, 16, 16)
 
     def __init__(self):
         self.seen = None
@@ -122,30 +118,48 @@ def _patched(monkeypatch, correction):
     )
 
 
-def test_an_image_of_one_partition_is_corrected_on_the_encoding_matrix(monkeypatch):
-    """The plugin drops the partition axis; the correction works on it."""
-    pytest.importorskip("bartorch.tools")
-    recording = _Recording()
-    _patched(monkeypatch, recording)
-    image = np.zeros((16, 16), dtype=np.complex64)
-
-    out = gradient_unwarped(image, _Context(header(COIL)), _Data(acquisition()))
-
-    assert tuple(recording.seen.shape) == (1, 16, 16), "the axis must be restored"
-    assert out.shape == (16, 16), "and dropped again"
-    assert np.iscomplexobj(out), "a complex image must stay complex"
-    assert isinstance(out, np.ndarray), "a NumPy image must come back as one"
-
-
 def test_a_volume_is_passed_through_as_it_stands(monkeypatch):
     pytest.importorskip("bartorch.tools")
     recording = _Recording()
     _patched(monkeypatch, recording)
-    image = np.zeros((1, 16, 16), dtype=np.float32)
+    image = np.zeros((4, 16, 16), dtype=np.float32)
 
     gradient_unwarped(image, _Context(header(COIL)), _Data(acquisition()))
 
-    assert tuple(recording.seen.shape) == (1, 16, 16)
+    assert tuple(recording.seen.shape) == (4, 16, 16)
+
+
+#: A coil whose gradients fall off with the cube of the distance from
+#: isocentre, as a short head coil's do.
+CUBIC = "\n".join(
+    ["GRADWARPTYPE 1"]
+    + [
+        f"SCALE{axis}{order} {-1.0e-4 if order == 3 else 0.0:.9e}"
+        for axis in "XYZ"
+        for order in range(1, 11)
+    ]
+    + ["DELTA 0.0"]
+)
+
+
+@pytest.mark.parametrize("partition_axis", [False, True])
+def test_a_slice_far_off_isocentre_keeps_every_voxel(partition_axis):
+    """The displacement across a 5 mm slice exceeds half its thickness at 140 mm.
+
+    Corrected as a volume of one partition, the voxels displaced out of it
+    would be lost; in its plane, each is resampled from the slice.
+    """
+    pytest.importorskip("bartorch.tools")
+    reference = acquisition()
+    reference.position = (0.0, 0.0, 140.0)
+    image = np.ones((1, 16, 16) if partition_axis else (16, 16), dtype=np.float32)
+
+    out = gradient_unwarped(image, _Context(header(CUBIC)), _Data(reference))
+
+    assert out.shape == image.shape
+    inner = out[..., 4:12, 4:12]
+    assert np.all(inner > 0.5), "no voxel of the slice may be lost"
+    assert not np.allclose(inner, 1.0), "the slice must still be corrected"
 
 
 def test_a_correction_that_fails_returns_the_image_and_says_so(monkeypatch, caplog):
@@ -156,7 +170,7 @@ def test_a_correction_that_fails_returns_the_image_and_says_so(monkeypatch, capl
             raise RuntimeError("no coefficients for this coil")
 
     _patched(monkeypatch, _Failing())
-    image = np.zeros((16, 16), dtype=np.complex64)
+    image = np.zeros((4, 16, 16), dtype=np.complex64)
 
     with caplog.at_level("WARNING", logger="pulserver.recon"):
         out = gradient_unwarped(image, _Context(header(COIL)), _Data(acquisition()))

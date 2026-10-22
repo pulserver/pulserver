@@ -7,6 +7,8 @@ __all__ = ["gradient_unwarped", "states_gradient_coefficients"]
 import logging
 from typing import Any
 
+import numpy as np
+
 #: User parameters a gradient coil's spherical-harmonic table is stated in:
 #: ``gradient_coefficients`` is the name a scanner-side interpreter writes; the
 #: others are names bartorch also reads.
@@ -40,7 +42,9 @@ def gradient_unwarped(image: Any, context: Any, data: Any) -> Any:
     displaced positions; a complex image has its real and imaginary parts
     resampled separately. Geometry comes from the header's reconstruction space
     and the unit's reference acquisition, so the correction is in the frame the
-    series was acquired in, oblique prescriptions included.
+    series was acquired in, oblique prescriptions included. An encoding of one
+    partition, a 2D slice, is corrected in its plane: the displacement across
+    the slice moves the slice, which resampling cannot undo.
 
     Parameters
     ----------
@@ -77,18 +81,9 @@ def gradient_unwarped(image: Any, context: Any, data: Any) -> Any:
         from bartorch.tools import Gradunwarp
 
         correction = Gradunwarp.from_mrd(header, reference)
-        tensor = torch.as_tensor(image)
-        # The correction works on the encoding's own matrix, (partitions,
-        # lines, columns). A plugin that reconstructed one partition drops that
-        # axis, so it is restored for the resampling and dropped again after.
-        flattened = (
-            tensor.ndim == len(correction.shape) - 1 and correction.shape[0] == 1
-        )
-        if flattened:
-            tensor = tensor[None]
-        corrected = correction(tensor)
-        if flattened:
-            corrected = corrected[0]
+        if correction.shape[0] == 1:
+            correction = _in_plane(correction, header, reference)
+        corrected = correction(torch.as_tensor(image))
     except Exception as error:
         _log.warning("the image was not corrected for gradient nonlinearity: %s", error)
         return image
@@ -96,3 +91,33 @@ def gradient_unwarped(image: Any, context: Any, data: Any) -> Any:
     # NumPy arrays carry a ``device`` of their own under the array API, so the
     # type is asked for rather than duck-typed.
     return corrected if isinstance(image, torch.Tensor) else corrected.cpu().numpy()
+
+
+def _in_plane(correction: Any, header: Any, reference: Any) -> Any:
+    """Return ``correction``, of one partition, on the slice's ``(lines, columns)`` grid.
+
+    Same table, matrix, field of view and centre, with ``position`` the centre
+    of voxel ``n // 2`` as :meth:`bartorch.tools.Gradunwarp.from_mrd` reads it.
+    """
+    from bartorch.tools import Gradunwarp
+
+    space = header.encoding[int(getattr(reference, "encoding_space_ref", 0) or 0)]
+    matrix, extent = space.reconSpace.matrixSize, space.reconSpace.fieldOfView_mm
+    shape = np.array([int(matrix.y), int(matrix.x)])
+    fov_mm = np.array([float(extent.y), float(extent.x)])
+    orientation = np.stack(
+        [np.asarray(reference.phase_dir, float), np.asarray(reference.read_dir, float)],
+        axis=1,
+    )
+    offset = (shape - 1) / 2 - shape // 2
+    centre = np.asarray(reference.position, float) + orientation @ (
+        offset * fov_mm / shape
+    )
+    return Gradunwarp(
+        correction.coefficients,
+        tuple(shape),
+        tuple(fov_mm),
+        orientation,
+        tuple(centre),
+        jacobian=correction.jacobian,
+    )
