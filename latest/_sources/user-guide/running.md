@@ -350,9 +350,9 @@ determine when it is reconstructed. The server receives a config file message
 naming the series' reconstruction plugin, which a reconstruction server runs,
 or the `--forward-config` name, such as the configuration by which a Gadgetron
 or FIRE server selects its pipeline. The client's config text is not
-forwarded. What the server returns is relayed to the client; a message type the
-proxy cannot read ends the relay, and the client receives a `pulserver:` text
-naming the type.
+forwarded. What the server returns is relayed to the client once the client's
+stream has ended whole, as from a worker; a message type the proxy cannot read
+ends the relay, and the client receives a `pulserver:` text naming the type.
 
 ### Sequence description
 

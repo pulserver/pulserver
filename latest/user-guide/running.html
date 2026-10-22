@@ -972,9 +972,9 @@ determine when it is reconstructed. The server receives a config file message
 naming the series’ reconstruction plugin, which a reconstruction server runs,
 or the <code class="docutils literal notranslate"><span class="pre">--forward-config</span></code> name, such as the configuration by which a Gadgetron
 or FIRE server selects its pipeline. The client’s config text is not
-forwarded. What the server returns is relayed to the client; a message type the
-proxy cannot read ends the relay, and the client receives a <code class="docutils literal notranslate"><span class="pre">pulserver:</span></code> text
-naming the type.</p>
+forwarded. What the server returns is relayed to the client once the client’s
+stream has ended whole, as from a worker; a message type the proxy cannot read
+ends the relay, and the client receives a <code class="docutils literal notranslate"><span class="pre">pulserver:</span></code> text naming the type.</p>
 </section>
 <section id="sequence-description">
 <h3>Sequence description<a class="headerlink" href="#sequence-description" title="Link to this heading">#</a></h3>

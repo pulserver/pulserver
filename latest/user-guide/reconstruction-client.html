@@ -556,12 +556,18 @@ names none, or that sends no config, unless it forwards with a
 <code class="docutils literal notranslate"><span class="pre">--forward-config</span></code>. A path ending in <code class="docutils literal notranslate"><span class="pre">.py</span></code> names the plugin by the file’s stem;
 the proxy searches its own <code class="docutils literal notranslate"><span class="pre">--plugins</span></code> directories for that name, whatever the
 path’s directory.</p>
-<p>The client then reads until the proxy’s <code class="docutils literal notranslate"><span class="pre">CLOSE</span></code>: images (<code class="docutils literal notranslate"><span class="pre">IMAGE</span></code>, 1022),
-DICOM datasets (<code class="docutils literal notranslate"><span class="pre">DICOM_WITHNAME</span></code>, 1018) and texts (<code class="docutils literal notranslate"><span class="pre">TEXT</span></code>, 5), in the order the
-reconstruction produces them. A text beginning <code class="docutils literal notranslate"><span class="pre">pulserver:</span></code> reports a series
-that failed. A refused series receives that text and a <code class="docutils literal notranslate"><span class="pre">CLOSE</span></code> at once; the
-proxy then discards what the client still sends until it closes the
-connection, so the client can finish sending and read the reason.</p>
+<p>The client then reads until the proxy’s <code class="docutils literal notranslate"><span class="pre">CLOSE</span></code>: images (<code class="docutils literal notranslate"><span class="pre">IMAGE</span></code>, 1022), DICOM
+datasets (<code class="docutils literal notranslate"><span class="pre">DICOM_WITHNAME</span></code>, 1018) and texts (<code class="docutils literal notranslate"><span class="pre">TEXT</span></code>, 5), in the order the
+reconstruction produces them. Nothing is returned before the series has ended
+whole, with the client’s <code class="docutils literal notranslate"><span class="pre">CLOSE</span></code> or a last acquisition flagged
+<code class="docutils literal notranslate"><span class="pre">LAST_IN_MEASUREMENT</span></code>: a reconstruction may finish on the last readout, and
+what it produces then is held until that end. A text beginning <code class="docutils literal notranslate"><span class="pre">pulserver:</span></code>
+reports a series that failed. A refused series receives that text and a <code class="docutils literal notranslate"><span class="pre">CLOSE</span></code>
+at once; the proxy then discards what the client still sends until it closes
+the connection, so the client can finish sending and read the reason.</p>
+<p>A client ends a scan the scanner stopped by shutting its side of the connection
+for writing without a <code class="docutils literal notranslate"><span class="pre">CLOSE</span></code>, then reading the reply as usual. The series is
+refused and nothing it produced is returned, even when every readout arrived.</p>
 </section>
 <section id="header">
 <h2>Header<a class="headerlink" href="#header" title="Link to this heading">#</a></h2>
@@ -736,8 +742,10 @@ noise scans and navigators included, and no other.</p>
 </div>
 <p>A series is refused, and its reconstruction stopped, when an acquisition has a
 sample count other than its readout’s, when the scan counters skip or repeat
-one, when an acquisition before the last is flagged <code class="docutils literal notranslate"><span class="pre">LAST_IN_MEASUREMENT</span></code>, or
-when the stream carries more or fewer acquisitions than the chain plays.</p>
+one, when an acquisition before the last is flagged <code class="docutils literal notranslate"><span class="pre">LAST_IN_MEASUREMENT</span></code>,
+when the stream carries more or fewer acquisitions than the chain plays, or
+when it ends without a <code class="docutils literal notranslate"><span class="pre">CLOSE</span></code> or a last acquisition flagged
+<code class="docutils literal notranslate"><span class="pre">LAST_IN_MEASUREMENT</span></code>.</p>
 </section>
 <section id="see-also">
 <h2>See also<a class="headerlink" href="#see-also" title="Link to this heading">#</a></h2>
