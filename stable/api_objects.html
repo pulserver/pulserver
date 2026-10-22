@@ -45,7 +45,7 @@
   <link rel="preload" as="script" href="_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="_static/documentation_options.js?v=d6d95e65"></script>
+    <script src="_static/documentation_options.js?v=c1adde03"></script>
     <script src="_static/doctools.js?v=fd6eb6e6"></script>
     <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="_static/clipboard.min.js?v=a7894cd8"></script>
@@ -56,7 +56,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.1';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.2';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -68,7 +68,7 @@
     <link rel="search" title="Search" href="search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.4.1" />
+  <meta name="docsearch:version" content="v0.4.2" />
   
     
     <script src="_static/searchtools.js"></script>
@@ -515,13 +515,13 @@ from.</p>
 <td><p>Return the cache of the exam whose directory a design hook was given.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.design.option.html#pulserver.design.option" title="pulserver.design.option"><code class="xref py py-obj docutils literal notranslate"><span class="pre">option</span></code></a></p></td>
-<td><p>Return the value of a plugin option: the parameter file's where it sets <code class="docutils literal notranslate"><span class="pre">name</span></code>, else <code class="docutils literal notranslate"><span class="pre">default</span></code>.</p></td>
+<td><p>Declare a plugin option at user entry <code class="docutils literal notranslate"><span class="pre">user</span></code> and return the value the plugin is loaded with.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.design.read_options.html#pulserver.design.read_options" title="pulserver.design.read_options"><code class="xref py py-obj docutils literal notranslate"><span class="pre">read_options</span></code></a></p></td>
-<td><p>Return the options a parameter file sets, a TOML table of option names and values.</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.design.OptionParam.html#pulserver.design.OptionParam" title="pulserver.design.OptionParam"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OptionParam</span></code></a></p></td>
+<td><p>A plugin option at a user entry, as <a class="reference internal" href="generated/pulserver.design.option.html#pulserver.design.option" title="pulserver.design.option"><code class="xref py py-func docutils literal notranslate"><span class="pre">option()</span></code></a> declares it; binds no argument.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.design.OptionError.html#pulserver.design.OptionError" title="pulserver.design.OptionError"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OptionError</span></code></a></p></td>
-<td><p>An option a parameter file sets that the plugin does not declare or take.</p></td>
+<td><p>An option a plugin is loaded with that it does not declare or take, or a declaration it cannot list.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.design.RfLayout.html#pulserver.design.RfLayout" title="pulserver.design.RfLayout"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RfLayout</span></code></a></p></td>
 <td><p>The RF definitions a plugin plays and the instances of one TR.</p></td>
@@ -644,13 +644,16 @@ from.</p>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.ir.Prescan.html#pulserver.ir.Prescan" title="pulserver.ir.Prescan"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Prescan</span></code></a></p></td>
 <td><p>The receive-gain calibration a playout plays instead of the scan.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.ir.repetition_gradients.html#pulserver.ir.repetition_gradients" title="pulserver.ir.repetition_gradients"><code class="xref py py-obj docutils literal notranslate"><span class="pre">repetition_gradients</span></code></a></p></td>
-<td><p>Return the gradients of a subsequence's repetition of most gradient energy.</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.ir.prescan_tour.html#pulserver.ir.prescan_tour" title="pulserver.ir.prescan_tour"><code class="xref py py-obj docutils literal notranslate"><span class="pre">prescan_tour</span></code></a></p></td>
+<td><p>List the pTx prescan tour of the cache beside a sequence file.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.ir.chain.html#pulserver.ir.chain" title="pulserver.ir.chain"><code class="xref py py-obj docutils literal notranslate"><span class="pre">chain</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.ir.gradient_stretch.html#pulserver.ir.gradient_stretch" title="pulserver.ir.gradient_stretch"><code class="xref py py-obj docutils literal notranslate"><span class="pre">gradient_stretch</span></code></a></p></td>
+<td><p>Return the gradients of one of a subsequence's stretches.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.ir.chain.html#pulserver.ir.chain" title="pulserver.ir.chain"><code class="xref py py-obj docutils literal notranslate"><span class="pre">chain</span></code></a></p></td>
 <td><p>Return the files of the <code class="docutils literal notranslate"><span class="pre">NextSequence</span></code> chain starting at a sequence file, in play order.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.ir.cache_path.html#pulserver.ir.cache_path" title="pulserver.ir.cache_path"><code class="xref py py-obj docutils literal notranslate"><span class="pre">cache_path</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.ir.cache_path.html#pulserver.ir.cache_path" title="pulserver.ir.cache_path"><code class="xref py py-obj docutils literal notranslate"><span class="pre">cache_path</span></code></a></p></td>
 <td><p>Return the cache file of a sequence: its last suffix replaced by <code class="docutils literal notranslate"><span class="pre">cache_ext</span></code>.</p></td>
 </tr>
 </tbody>

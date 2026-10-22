@@ -45,7 +45,7 @@
   <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../_static/documentation_options.js?v=d6d95e65"></script>
+    <script src="../_static/documentation_options.js?v=c1adde03"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -56,7 +56,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.1';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.2';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -70,7 +70,7 @@
     <link rel="prev" title="User guide" href="index.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.4.1" />
+  <meta name="docsearch:version" content="v0.4.2" />
   
     
     <script src="../_static/searchtools.js"></script>
@@ -537,7 +537,7 @@ there and the proxy forwards each series to it. The services and the design
 store are described in <a class="reference internal" href="../explanations/architecture.html"><span class="doc">Architecture</span></a>.</p>
 <section id="design-calls">
 <h2>Design calls<a class="headerlink" href="#design-calls" title="Link to this heading">#</a></h2>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pulserver<span class="w"> </span>design<span class="w"> </span>list<span class="w">     </span>--plugins<span class="w"> </span>DIR<span class="w"> </span>--plugin<span class="w"> </span>NAME<span class="w"> </span><span class="o">[</span>--limits<span class="w"> </span>FILE<span class="w"> </span>--rf-definitions<span class="o">]</span><span class="w"> </span><span class="o">[</span>--socket<span class="w"> </span>PATH<span class="o">]</span>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pulserver<span class="w"> </span>design<span class="w"> </span>list<span class="w">     </span>--plugins<span class="w"> </span>DIR<span class="w"> </span>--plugin<span class="w"> </span>NAME<span class="w"> </span><span class="o">[</span>--values<span class="w"> </span>FILE<span class="o">]</span><span class="w"> </span><span class="o">[</span>--limits<span class="w"> </span>FILE<span class="w"> </span>--rf-definitions<span class="o">]</span><span class="w"> </span><span class="o">[</span>--socket<span class="w"> </span>PATH<span class="o">]</span>
 pulserver<span class="w"> </span>design<span class="w"> </span>validate<span class="w"> </span>--plugins<span class="w"> </span>DIR<span class="w"> </span>--plugin<span class="w"> </span>NAME<span class="w"> </span>--limits<span class="w"> </span>FILE<span class="w"> </span><span class="o">[</span>--rf-layout<span class="o">]</span><span class="w"> </span><span class="o">[</span>--exam<span class="w"> </span>DIR<span class="o">]</span><span class="w"> </span><span class="o">[</span>--socket<span class="w"> </span>PATH<span class="o">]</span><span class="w"> </span>&lt;<span class="w"> </span>VALUES
 pulserver<span class="w"> </span>design<span class="w"> </span>generate<span class="w"> </span>--plugins<span class="w"> </span>DIR<span class="w"> </span>--plugin<span class="w"> </span>NAME<span class="w"> </span>--limits<span class="w"> </span>FILE<span class="w"> </span>--store<span class="w"> </span>DIR<span class="w"> </span>--scan<span class="w"> </span>NAME<span class="w"> </span><span class="o">[</span>--exam<span class="w"> </span>DIR<span class="o">]</span><span class="w"> </span><span class="o">[</span>--push<span class="w"> </span>URL<span class="o">]</span><span class="w"> </span><span class="o">[</span>--socket<span class="w"> </span>PATH<span class="o">]</span><span class="w"> </span>&lt;<span class="w"> </span>VALUES
 pulserver<span class="w"> </span>design<span class="w"> </span>import<span class="w">   </span>--limits<span class="w"> </span>FILE<span class="w"> </span>--store<span class="w"> </span>DIR<span class="w"> </span>--scan<span class="w"> </span>NAME<span class="w"> </span><span class="o">[</span>--push<span class="w"> </span>URL<span class="o">]</span><span class="w"> </span><span class="o">[</span>--socket<span class="w"> </span>PATH<span class="o">]</span><span class="w"> </span>&lt;<span class="w"> </span>IMPORT
@@ -561,7 +561,7 @@ directory name, not starting with <code class="docutils literal notranslate"><sp
 </thead>
 <tbody>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">list</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">PROTOCOL</span></code> and the plugin’s listing block; with <code class="docutils literal notranslate"><span class="pre">--rf-definitions</span></code>, the <code class="docutils literal notranslate"><span class="pre">[RfDefinitions]</span></code> block</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">PROTOCOL</span></code> and the plugin’s listing block at the options of the value block in <code class="docutils literal notranslate"><span class="pre">--values</span></code> (<a class="reference internal" href="scanner-sequences.html#plugin-options"><span class="std std-ref">Options</span></a>); with <code class="docutils literal notranslate"><span class="pre">--rf-definitions</span></code>, the <code class="docutils literal notranslate"><span class="pre">[RfDefinitions]</span></code> block</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">validate</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">VALID</span> <span class="pre">&lt;seconds&gt;</span></code> or <code class="docutils literal notranslate"><span class="pre">INVALID</span></code>, an <code class="docutils literal notranslate"><span class="pre">INFO</span></code> line and the value block of the resolved protocol; with <code class="docutils literal notranslate"><span class="pre">--rf-layout</span></code>, a valid reply ends with the <code class="docutils literal notranslate"><span class="pre">[RfLayout]</span></code> block</p></td>
@@ -590,9 +590,9 @@ evaluation states an RF layout (<a class="reference internal" href="scanner-sequ
 <code class="docutils literal notranslate"><span class="pre">--rf-definitions</span></code> evaluates the plugin at its default protocol under
 <code class="docutils literal notranslate"><span class="pre">--limits</span></code>, which it then requires. <code class="docutils literal notranslate"><span class="pre">--rf-layout</span></code> follows a valid reply with the
 RF layout of the evaluated request, its amplitudes relative to the peaks the
-listing states. Without <code class="docutils literal notranslate"><span class="pre">--rf-definitions</span></code>, <code class="docutils literal notranslate"><span class="pre">list</span></code> depends on the plugin file
-and the installed packages only, so its reply can be written once at
-installation and read without a call.</p>
+listing states. Without <code class="docutils literal notranslate"><span class="pre">--rf-definitions</span></code>, <code class="docutils literal notranslate"><span class="pre">list</span></code> depends on the plugin file,
+its options and the installed packages only, so its reply can be written once
+at installation and read without a call.</p>
 <p><code class="docutils literal notranslate"><span class="pre">--exam</span></code> names the directory of the current exam’s cache, which is passed to
 the plugin hooks that take <code class="docutils literal notranslate"><span class="pre">exam</span></code> (<a class="reference internal" href="scanner-sequences.html#exam-cache"><span class="std std-ref">Exam cache</span></a>); for such a plugin the
 files of that directory are part of the design’s identity.</p>
@@ -636,11 +636,19 @@ design_max_slew: 86.603
 </pre></div>
 </div>
 <p>The lines without a prefix are keyword arguments of <code class="docutils literal notranslate"><span class="pre">pypulseqpp.Opts</span></code>, of which
-<code class="docutils literal notranslate"><span class="pre">B0</span></code>, the field in T, is required: ppm offsets are resolved at it. The limits
-are the <code class="docutils literal notranslate"><span class="pre">system</span></code> the plugin designs under and the checks hold the design to, so
-include the scanner’s RF and ADC dead times, RF ringdown time and ADC sample
+<code class="docutils literal notranslate"><span class="pre">B0</span></code>, the field in T, is required: ppm offsets are resolved at it. The limits,
+less a design margin, are the <code class="docutils literal notranslate"><span class="pre">system</span></code> the plugin designs under, and the checks
+hold the design to them as sent, so include the scanner’s RF and ADC dead times, RF ringdown time and ADC sample
 divisor; <code class="docutils literal notranslate"><span class="pre">pypulseqpp.Opts</span></code> sets the dead times to zero and the divisor to four
 when they are left out.</p>
+<p><code class="docutils literal notranslate"><span class="pre">max_b1</span></code> is the peak B1 the transmit chain allows, in µT, or in the <code class="docutils literal notranslate"><span class="pre">b1_unit</span></code>
+given beside it, as the scanner states it; left out, the pulses are not
+limited. The selective and non-selective excitation and refocusing modules of
+pypulseqpp keep their own duration while the pulse peaks within
+<code class="docutils literal notranslate"><span class="pre">pypulseqpp.MAX_B1_DERATE</span></code> of it, and are otherwise lengthened, flip
+angle and time-bandwidth product held, until it does; the shortest TE and TR a
+plugin reports follow. Spectral, adiabatic, two-dimensional and multiband
+pulses are designed as given.</p>
 <p><code class="docutils literal notranslate"><span class="pre">max_grad</span></code> and <code class="docutils literal notranslate"><span class="pre">max_slew</span></code> are the limits of the gradient coils, to which the
 checks hold every physical axis. Logical axes played together add on one
 physical axis, so under an oblique prescription a design held to <code class="docutils literal notranslate"><span class="pre">max_grad</span></code> and
@@ -664,7 +672,11 @@ scanner for the prescription’s rotation:</p>
 </table>
 </div>
 <p>A design limit above the scanner’s leaves the scanner’s, and one left out is the
-scanner’s. <code class="docutils literal notranslate"><span class="pre">validate</span></code> resolves a request under the same limits as <code class="docutils literal notranslate"><span class="pre">generate</span></code>.
+scanner’s. The plugin designs under these limits derated once by
+<code class="docutils literal notranslate"><span class="pre">pypulseqpp.apply_system_derates</span></code>: the gradient amplitude, slew rate and peak
+B1 scaled by <code class="docutils literal notranslate"><span class="pre">pypulseqpp.MAX_GRAD_DERATE</span></code>, <code class="docutils literal notranslate"><span class="pre">MAX_SLEW_DERATE</span></code> and
+<code class="docutils literal notranslate"><span class="pre">MAX_B1_DERATE</span></code>. The checks, the design’s identity and its manifest keep the
+limits as the scanner sent them. <code class="docutils literal notranslate"><span class="pre">validate</span></code> resolves a request under the same limits as <code class="docutils literal notranslate"><span class="pre">generate</span></code>.
 An imported chain is not designed, and is checked against <code class="docutils literal notranslate"><span class="pre">max_grad</span></code> and
 <code class="docutils literal notranslate"><span class="pre">max_slew</span></code> alone.</p>
 <p>Options prefixed <code class="docutils literal notranslate"><span class="pre">ir_</span></code> configure the IR conversion:</p>
@@ -893,7 +905,7 @@ pulserver<span class="w"> </span>proxy<span class="w"> </span>--store<span class
 <td><p>Convert each image to DICOM before it is relayed, whatever reconstructed it; for a client that reads DICOM only</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">--save-data</span></code></p></td>
-<td><p>Directory each series is kept in as the scanner sends it; kept nowhere when unset</p></td>
+<td><p>Directory each series is kept in, enriched; kept nowhere when unset</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">--idle-timeout</span></code></p></td>
 <td><p>Seconds without a client after which the proxy closes, never while a series is reconstructed. Unlimited when unset</p></td>
@@ -927,10 +939,10 @@ place of a new reconstruction.</p>
 <section id="saved-series">
 <h3>Saved series<a class="headerlink" href="#saved-series" title="Link to this heading">#</a></h3>
 <p>With <code class="docutils literal notranslate"><span class="pre">--save-data</span></code>, each series is also written to
-<code class="docutils literal notranslate"><span class="pre">&lt;save-data&gt;/mrd_&lt;timestamp&gt;.h5</span></code> as the scanner sends it, header first and each
-acquisition as it arrives, before it is enriched. <code class="docutils literal notranslate"><span class="pre">pulserver</span> <span class="pre">replay</span></code> runs a
-plugin on that file and reconstructs it offline as the proxy did
-(<a class="reference internal" href="#series-replay"><span class="std std-ref">Series replay</span></a>). The queue directory holds a series only until it is
+<code class="docutils literal notranslate"><span class="pre">&lt;save-data&gt;/mrd_&lt;timestamp&gt;.h5</span></code> as the proxy reconstructs it: header and
+acquisitions enriched, the header marked <code class="docutils literal notranslate"><span class="pre">pulserver_enriched</span></code>, each acquisition
+as it arrives. <code class="docutils literal notranslate"><span class="pre">pulserver</span> <span class="pre">replay</span></code> runs a plugin on that file as it stands and
+gives the image the proxy did (<a class="reference internal" href="#series-replay"><span class="std std-ref">Series replay</span></a>). The queue directory holds a series only until it is
 reconstructed.</p>
 </section>
 <section id="proxy-lifetime">
@@ -960,9 +972,9 @@ determine when it is reconstructed. The server receives a config file message
 naming the series’ reconstruction plugin, which a reconstruction server runs,
 or the <code class="docutils literal notranslate"><span class="pre">--forward-config</span></code> name, such as the configuration by which a Gadgetron
 or FIRE server selects its pipeline. The client’s config text is not
-forwarded. What the server returns is relayed to the client; a message type the
-proxy cannot read ends the relay, and the client receives a <code class="docutils literal notranslate"><span class="pre">pulserver:</span></code> text
-naming the type.</p>
+forwarded. What the server returns is relayed to the client once the client’s
+stream has ended whole, as from a worker; a message type the proxy cannot read
+ends the relay, and the client receives a <code class="docutils literal notranslate"><span class="pre">pulserver:</span></code> text naming the type.</p>
 </section>
 <section id="sequence-description">
 <h3>Sequence description<a class="headerlink" href="#sequence-description" title="Link to this heading">#</a></h3>

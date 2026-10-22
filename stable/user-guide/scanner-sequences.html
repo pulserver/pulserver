@@ -45,18 +45,20 @@
   <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../_static/documentation_options.js?v=d6d95e65"></script>
+    <script src="../_static/documentation_options.js?v=c1adde03"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
     <script src="../_static/copybutton.js?v=f281be69"></script>
     <script src="../_static/sg-tags.js?v=d80f6fa4"></script>
     <script src="../_static/scripts/sphinx-book-theme.js?v=fab101a9"></script>
+    <script>window.MathJax = {"options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+    <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'user-guide/scanner-sequences';</script>
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.1';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.2';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -70,7 +72,7 @@
     <link rel="prev" title="Services" href="running.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.4.1" />
+  <meta name="docsearch:version" content="v0.4.2" />
   
     
     <script src="../_static/searchtools.js"></script>
@@ -492,6 +494,7 @@
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#protocol-evaluation">Protocol evaluation</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#exam-cache">Exam cache</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#rf-layout">RF layout</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#rf-phase-convention">RF phase convention</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#shipped-sequences">Shipped sequences</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#shared-user-entries">Shared user entries</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#console-controls">Console controls</a></li>
@@ -593,6 +596,10 @@ argument of the sequence function it sets.</p>
 <tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.design.Description.html#pulserver.design.Description" title="pulserver.design.Description"><code class="xref py py-class docutils literal notranslate"><span class="pre">Description</span></code></a></p></td>
 <td><p>read-only text</p></td>
 <td><p>none</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.design.OptionParam.html#pulserver.design.OptionParam" title="pulserver.design.OptionParam"><code class="xref py py-class docutils literal notranslate"><span class="pre">OptionParam</span></code></a></p></td>
+<td><p>integer, the index of the option’s choice (<a class="reference internal" href="#plugin-options"><span class="std std-ref">Options</span></a>)</p></td>
+<td><p>none; <a class="reference internal" href="../generated/pulserver.design.option.html#pulserver.design.option" title="pulserver.design.option"><code class="xref py py-func docutils literal notranslate"><span class="pre">option()</span></code></a> declares it</p></td>
 </tr>
 </tbody>
 </table>
@@ -855,6 +862,35 @@ value in the evaluated protocol, is invalid. What the scanner checks before the
 scan is the stored design, not the layout. The blocks that carry the layout are
 described in <a class="reference internal" href="../explanations/protocol.html"><span class="doc">Protocol resolution</span></a>.</p>
 </section>
+<section id="rf-phase-convention">
+<span id="transmit-phase-convention"></span><h2>RF phase convention<a class="headerlink" href="#rf-phase-convention" title="Link to this heading">#</a></h2>
+<p>Phases and frequencies keep Pulseq’s units: an RF phase shape holds cycles, RF
+and ADC phase offsets and RF shim phases are in radians, and frequency offsets
+are in hertz. The ppm offsets are resolved to hertz and radians at the
+scanner’s Larmor frequency when the IR is built.</p>
+<p>An RF waveform <span class="math notranslate nohighlight">\(b_c(t)\)</span> and an RF shim weight <span class="math notranslate nohighlight">\(w_c\)</span> are the complex drive of
+transmit channel <span class="math notranslate nohighlight">\(c\)</span>, the envelope of a carrier <span class="math notranslate nohighlight">\(e^{+i\omega_0 t}\)</span>. Protons
+precess clockwise about the static field, and the part of the field that turns
+them is the conjugate of the drive times the channel’s transmit sensitivity
+<span class="math notranslate nohighlight">\(s^+_c\)</span>, the rotating field of a unit drive:</p>
+<div class="math notranslate nohighlight">
+\[
+b^+(\mathbf{r}, t) = \sum_c \overline{w_c\, b_c(t)}\; s^+_c(\mathbf{r}).
+\]</div>
+<p>A drive of phase <span class="math notranslate nohighlight">\(+\phi\)</span>, on one channel through its shim weight or its
+waveform, or on every channel through the pulse’s phase offset, turns the
+excited magnetization and the reconstructed image by <span class="math notranslate nohighlight">\(-\phi\)</span>; an ADC phase
+offset of <span class="math notranslate nohighlight">\(+\theta\)</span> turns them by <span class="math notranslate nohighlight">\(+\theta\)</span>, so a receiver that follows the
+pulse’s phase offset cancels it. A pulse of phase zero tips <span class="math notranslate nohighlight">\(+z\)</span> towards <span class="math notranslate nohighlight">\(+y\)</span>.
+On the scanner, a channel driven at <span class="math notranslate nohighlight">\(+\phi\)</span> relative to another appears at
+<span class="math notranslate nohighlight">\(-\phi\)</span> in the reconstructed images, for RF shims and per-channel waveforms
+alike. The virtual scanner follows the same convention, and the VOP check
+takes the drives as they are written: the SAR of a pulse is <span class="math notranslate nohighlight">\(v^H Q\, v\)</span> for
+<span class="math notranslate nohighlight">\(v_c = d\, w_c\, b_c(t)\)</span>, with <span class="math notranslate nohighlight">\(d\)</span> the drive per hertz of RF amplitude.</p>
+<p>A per-channel image of a small-angle excitation has the phase of <span class="math notranslate nohighlight">\(s^+_c\)</span> plus
+the receive phase and a constant. A shim fitted to such maps under the model
+<span class="math notranslate nohighlight">\(\sum_c w_c\, s^+_c\)</span> is written as <span class="math notranslate nohighlight">\(\overline{w_c}\)</span>.</p>
+</section>
 <section id="shipped-sequences">
 <span id="id3"></span><h2>Shipped sequences<a class="headerlink" href="#shipped-sequences" title="Link to this heading">#</a></h2>
 <p>pulserver ships a plugin for each of these pypulseqpp sequences, searched after
@@ -920,7 +956,7 @@ function takes, at the same user entry in every plugin, each as a
 <td><p>Readout oversampling</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">user7</span></code></p></td>
-<td><p>Echo spacing, in ms; 0 the shortest</p></td>
+<td><p>Echo spacing, in ms; 0 the shortest. In the MPRAGE plugins, the line spacing (inner TR) of the gradient-echo train</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">user8</span></code></p></td>
 <td><p>Refocusing flip angle, in degrees</p></td>
@@ -978,82 +1014,106 @@ from the isocentre along that normal, and its thickness, in mm. The
 field-of-view offset and rotation leave a band where it was placed.</p>
 </section>
 <section id="options">
-<h3>Options<a class="headerlink" href="#options" title="Link to this heading">#</a></h3>
+<span id="plugin-options"></span><h3>Options<a class="headerlink" href="#options" title="Link to this heading">#</a></h3>
 <p>Choices that set what a sequence is, rather than a value an operator tunes from
-scan to scan, are options: module constants a plugin reads through
-<a class="reference internal" href="../generated/pulserver.design.option.html#pulserver.design.option" title="pulserver.design.option"><code class="xref py py-func docutils literal notranslate"><span class="pre">option()</span></code></a>. A numbered parameter set selects them. Set
-<code class="docutils literal notranslate"><span class="pre">N</span></code> of a plugin whose file is <code class="docutils literal notranslate"><span class="pre">&lt;script&gt;.py</span></code> is the TOML file
-<code class="docutils literal notranslate"><span class="pre">parameters/&lt;script&gt;/&lt;NN&gt;.toml</span></code> beside the plugin directory, its number in two
-digits; a slot linked to a script, such as <code class="docutils literal notranslate"><span class="pre">sequence3.py</span></code> linked to
-<code class="docutils literal notranslate"><span class="pre">src/fse3d.py</span></code>, reads that script’s directory. Set 0 plays every option at its
-default. A file names only the options it changes:</p>
-<div class="highlight-toml notranslate"><div class="highlight"><pre><span></span><span class="c1"># parameters/fse3d/01.toml</span>
-<span class="n">refocusing</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"dual_region"</span>
-<span class="n">navigator</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span>
+scan to scan, are options: module constants a plugin declares with
+<a class="reference internal" href="../generated/pulserver.design.option.html#pulserver.design.option" title="pulserver.design.option"><code class="xref py py-func docutils literal notranslate"><span class="pre">option()</span></code></a> at module level, before its class, so that
+they shape its sequence function and the protocol it declares. Each option is a
+user entry: the plugin lists it in <code class="docutils literal notranslate"><span class="pre">user&lt;n&gt;_value</span></code> as the index of its value
+among its choices, 0 or 1 for a flag, and names it and the code of each choice
+in <code class="docutils literal notranslate"><span class="pre">user&lt;n&gt;_name</span></code>. A design call loads the plugin at the options its request
+holds in those entries, and <code class="docutils literal notranslate"><span class="pre">list</span></code> at those of the value block it is given, so
+a protocol carries its options as it carries every other entry. A console lists
+the plugin again when an option entry changes. An option shows or hides user
+entries; it never gives one another meaning.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pulserver.design</span><span class="w"> </span><span class="kn">import</span> <span class="n">Description</span><span class="p">,</span> <span class="n">FloatParam</span><span class="p">,</span> <span class="n">SequencePlugin</span><span class="p">,</span> <span class="n">UIParam</span><span class="p">,</span> <span class="n">option</span>
+
+<span class="n">VARIABLE_DENSITY</span> <span class="o">=</span> <span class="n">option</span><span class="p">(</span><span class="s2">"variable_density"</span><span class="p">,</span> <span class="kc">False</span><span class="p">,</span> <span class="n">user</span><span class="o">=</span><span class="mi">42</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s2">"Variable density"</span><span class="p">)</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">Spiral</span><span class="p">(</span><span class="n">SequencePlugin</span><span class="p">):</span>
+    <span class="n">app</span> <span class="o">=</span> <span class="n">spiral</span>
+    <span class="n">protocol</span> <span class="o">=</span> <span class="p">{</span><span class="o">...</span><span class="p">}</span>
+    <span class="k">if</span> <span class="n">VARIABLE_DENSITY</span><span class="p">:</span>
+        <span class="n">protocol</span> <span class="o">|=</span> <span class="p">{</span>
+            <span class="n">UIParam</span><span class="o">.</span><span class="n">user_name</span><span class="p">(</span><span class="mi">12</span><span class="p">):</span> <span class="n">Description</span><span class="p">(</span><span class="s2">"Periphery undersampling"</span><span class="p">),</span>
+            <span class="n">UIParam</span><span class="o">.</span><span class="n">user_value</span><span class="p">(</span><span class="mi">12</span><span class="p">):</span> <span class="n">FloatParam</span><span class="p">(</span><span class="s2">"undersampling"</span><span class="p">,</span> <span class="n">range_min</span><span class="o">=</span><span class="mf">1.0</span><span class="p">),</span>
+        <span class="p">}</span>
 </pre></div>
 </div>
-<p>A file naming an option the plugin does not declare, or giving one a value it
-does not take, is refused. The options join the design’s identity and its
-manifest, so a design is a function of the set’s contents, not of its number.
-<code class="docutils literal notranslate"><span class="pre">pulserver</span> <span class="pre">design</span></code> takes the set as <code class="docutils literal notranslate"><span class="pre">--parameter-set</span></code> and the directory as
-<code class="docutils literal notranslate"><span class="pre">--parameters</span></code>; <code class="docutils literal notranslate"><span class="pre">src/pulserver/_zoo/parameters/</span></code> ships a file for each choice
-below.</p>
+<p>An option that is not a flag names its choices, at most five. A request whose
+option entry holds no index of a choice is refused, and so is one stating an
+entry its options hide. The options join the design’s identity and its
+manifest.</p>
+<p>The shipped plugins declare their options at <code class="docutils literal notranslate"><span class="pre">user36</span></code> to <code class="docutils literal notranslate"><span class="pre">user44</span></code>, each at the
+same user entry in every plugin:</p>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
 <tr class="row-odd"><th class="head"><p>Plugin</p></th>
 <th class="head"><p>Option</p></th>
-<th class="head"><p>Choice</p></th>
+<th class="head"><p>User entry</p></th>
+<th class="head"><p>Choices</p></th>
 <th class="head"><p>Entries added</p></th>
 </tr>
 </thead>
 <tbody>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">fse3d</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">refocusing</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">user38</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">&quot;constant&quot;</span></code>; <code class="docutils literal notranslate"><span class="pre">&quot;optimized&quot;</span></code>, a train designed with blochsim and shared by every shot; or <code class="docutils literal notranslate"><span class="pre">&quot;dual_region&quot;</span></code>, trains designed for the centre and the periphery of k-space, each shot’s train a cubic step between them, <code class="docutils literal notranslate"><span class="pre">TR</span></code> and <code class="docutils literal notranslate"><span class="pre">ETL</span></code> being the centre’s</p></td>
 <td><p>Flip angle: the refocusing angle at the TE echo; <code class="docutils literal notranslate"><span class="pre">&quot;dual_region&quot;</span></code> also adds <code class="docutils literal notranslate"><span class="pre">user12</span></code> and <code class="docutils literal notranslate"><span class="pre">user13</span></code>, TR and ETL at the periphery</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">fse3d</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">ordering</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">user39</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">&quot;radial&quot;</span></code>, or <code class="docutils literal notranslate"><span class="pre">&quot;shuffling&quot;</span></code>: Poisson-disc views in random order</p></td>
 <td><p>None</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">mprage3d</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">ordering</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">user39</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">&quot;radial&quot;</span></code>, each partition’s lines centre-out, or <code class="docutils literal notranslate"><span class="pre">&quot;shuffling&quot;</span></code>: Poisson-disc lines in random order, for a time-resolved reconstruction</p></td>
 <td><p>None</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">fse3d</span></code>, <code class="docutils literal notranslate"><span class="pre">mprage3d</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">navigator</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">user36</span></code></p></td>
 <td><p>Three-plane navigators; the design sets <code class="docutils literal notranslate"><span class="pre">EnablePmc</span></code>, and <code class="docutils literal notranslate"><span class="pre">pmc</span></code> publishes each pose to the scan</p></td>
 <td><p>None</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">gre3d</span></code>, <code class="docutils literal notranslate"><span class="pre">gre_multiecho3d</span></code>, <code class="docutils literal notranslate"><span class="pre">mprage3d</span></code>, <code class="docutils literal notranslate"><span class="pre">fse3d</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">wave</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">user37</span></code></p></td>
 <td><p>Wave-CAIPI; the calibration region is acquired first without the wave, and <code class="docutils literal notranslate"><span class="pre">pics</span></code> and <code class="docutils literal notranslate"><span class="pre">pmc</span></code> reconstruct the wave-encoded volume</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">user10</span></code> and <code class="docutils literal notranslate"><span class="pre">user11</span></code>: wave amplitude and cycles</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">gre3d</span></code>, <code class="docutils literal notranslate"><span class="pre">se3d</span></code>, <code class="docutils literal notranslate"><span class="pre">gre_multiecho3d</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">elliptical</span></code></p></td>
-<td><p>Only the phase encodes inside the ky-kz ellipse; <code class="docutils literal notranslate"><span class="pre">true</span></code> by default</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">user40</span></code></p></td>
+<td><p>Only the phase encodes inside the ky-kz ellipse; on by default</p></td>
 <td><p>None</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">gre_multiecho2d</span></code>, <code class="docutils literal notranslate"><span class="pre">gre_multiecho3d</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">flyback</span></code></p></td>
-<td><p>Monopolar echoes; <code class="docutils literal notranslate"><span class="pre">false</span></code> reads even echoes reversed</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">user41</span></code></p></td>
+<td><p>Monopolar echoes, on by default; off reads even echoes reversed</p></td>
 <td><p>None</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">zte3d</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">scheme</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">user43</span></code></p></td>
 <td><p>Spokes ordered <code class="docutils literal notranslate"><span class="pre">&quot;spiral&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;meridian&quot;</span></code></p></td>
 <td><p>None</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">bssfp2d</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">retrospective</span></code></p></td>
-<td><p>ECG gating: <code class="docutils literal notranslate"><span class="pre">false</span></code>, prospective, each heartbeat triggered and acquired once per cardiac phase; <code class="docutils literal notranslate"><span class="pre">true</span></code>, retrospective, each segment cycled over a heartbeat and binned into cardiac phases by the reconstruction</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">user44</span></code></p></td>
+<td><p>ECG gating: off, prospective, each heartbeat triggered and acquired once per cardiac phase; on, retrospective, each segment cycled over a heartbeat and binned into cardiac phases by the reconstruction</p></td>
 <td><p>None</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">gre_spiral2d</span></code>, <code class="docutils literal notranslate"><span class="pre">se_spiral2d</span></code>, <code class="docutils literal notranslate"><span class="pre">gre_stack_of_spirals3d</span></code>, <code class="docutils literal notranslate"><span class="pre">se_stack_of_spirals3d</span></code>, <code class="docutils literal notranslate"><span class="pre">mprage_stack_of_spirals3d</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">variable_density</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">user42</span></code></p></td>
 <td><p>Variable-density spirals</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">user12</span></code>: periphery undersampling</p></td>
 </tr>
@@ -1217,6 +1277,7 @@ request names under <code class="docutils literal notranslate"><span class="pre"
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#protocol-evaluation">Protocol evaluation</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#exam-cache">Exam cache</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#rf-layout">RF layout</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#rf-phase-convention">RF phase convention</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#shipped-sequences">Shipped sequences</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#shared-user-entries">Shared user entries</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#console-controls">Console controls</a></li>

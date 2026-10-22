@@ -95,8 +95,8 @@ the chain is read. RF and ADC frequency and phase offsets are stored absolute:
 the ppm offsets are resolved on the host, at the gamma and B0 of the call's
 limits, by pypulseqpp's `SequenceLibraries.absolute_offsets`. The labels
 and flags in force at each block, with `PMC` in force from the first, are
-pypulseqpp's `Sequence.evaluate_labels`, and a `TRID` group starts at each block
-`Sequence.label_blocks` lists as setting it; the rotation and RF shim a block
+pypulseqpp's `Sequence.evaluate_labels`, and the blocks that set `TRID` are
+those `Sequence.label_blocks` lists; the rotation and RF shim a block
 plays are `Sequence.block_rotations` and `Sequence.block_shims`. A segment
 position records whether the scanner may move its excitation at run time by a
 carrier offset alone: every instance plays its RF pulse under one gradient,
@@ -200,10 +200,35 @@ instance.
 
 The receive-gain calibration prescan plays one subsequence from its start to
 the segment instance that completes the readouts its sequence declares
-(`NumGainCalibrationReadouts`, at least one). It waits for no trigger and
+(`NumGainCalibrationReadouts`). A readout whose block carries the `NOPRESCAN`
+label plays without being acquired and is not counted, so a multi-echo
+sequence calibrates on its first echo. The count ends with a repetition, so the gain
+is set on whole repetitions of the scan; the conversion refuses one that ends
+inside a repetition, and takes the readouts through the first repetition that
+acquires when the sequence declares none. It waits for no trigger and
 drives no digital output, and every gradient whose amplitude varies across
 repetitions, a phase encoding for instance, plays at zero, as does a wave any
-of whose logical axes varies.
+of whose logical axes varies. An RF pulse whose frequency offset varies across
+repetitions, the slices of a stack, plays at the mean offset over them, as a
+scanner calibrates on one slice. Both are kept per position within the
+repetition, as the gradient flags are, and reported on the block instance
+(`rf_freq_variable` and `rf_freq_mean_hz`). The offsets are those of the
+cache, the field-of-view offset included, so the mean is the centre of the
+positioned stack.
+
+A parallel-transmit sequence can open its prescan with the pTx tour
+(`pulseg_get_prescan_tour`): for every channel of every parallel-transmit RF
+definition of every subsequence, the segment instance holding the largest
+drive that channel receives, the RF amplitude times the channel's shim
+magnitude, or the amplitude alone for a pulse with a waveform per channel.
+Each instance is visited once, under the prescan's rules, whether or not it
+reads out; the tour either acquires its readouts, counted on top of the
+calibration's, or plays them unacquired. A playout reaches each visit by
+seeking the cursor to its first block (`pulseg_cursor_seek`). A visit plays
+part of one occurrence of its subsequence's repetition, each pulse at its
+largest, so resting after it until it has lasted the time per occurrence the
+scan's RF is costed at keeps its average power within the scan's; the rest is
+the interpreter's, from the visit's duration.
 
 Waveform memory holds samples of the type and scale a scanner build defines
 before it includes the library: `PULSEG_WAVE_SAMPLE`, the type;
@@ -229,29 +254,43 @@ to that type.
 
 ## Heaviest repetition
 
-A scanner evaluates its gradient-heating model on the gradients of a
-repetition, and the host's sound pressure check
-(`pypulseqpp.safety.check_spl`) chooses the same one. For each subsequence,
-the conversion finds the repetition, of those the execution stream holds from
-its first block, over which
+A scanner evaluates its gradient-heating model on the gradients of two
+stretches of each subsequence, each as if played without end against its own
+duration ({func}`~pulserver.ir.gradient_stretch`,
+`pulseg_get_gradient_stretch`). A stretch is the run of whole segment instances
+from one instance's start until they last the subsequence's hyper-repetition,
+or `PULSEG_STRETCH_US`, 10 s, where that is shorter, or to the subsequence's end
+where it comes first, each block at its played duration, a pure delay at its
+instance's. The hyper-repetition is the shortest run of repetitions whose
+durations repeat over the whole subsequence, a last run cut short allowed
+(`hyper_copies` and `hyper_us` of `pulseg_get_tr_timing`, from the prefix
+function of the repetitions' durations in us): one repetition where all last
+the same, five for a five-slice packet whose last slice carries the pad, all of
+them where they do not repeat. Where it is one repetition, the second stretch
+is the heaviest repetition itself.
+
+| Stretch | Start |
+|---|---|
+| `PULSEG_STRETCH_HEAVIEST` | Of the instance starts whose stretch lasts that long, the one of largest $E$, the earliest on a tie; the subsequence's start where none does |
+| `PULSEG_STRETCH_HEAVIEST_REPETITION` | The instance holding the start of the repetition of largest $E$, of those the execution stream holds from its first block, the earliest on a tie |
 
 $$
 E = \int \lVert \mathbf{g}(t) \rVert^2 \, dt
 $$
 
-is largest, the earliest on a tie, or the whole subsequence where it does not
-repeat, and the cache carries its gradients
-({func}`~pulserver.ir.repetition_gradients`, `pulseg_get_tr_corner_points`).
-$E$ sums, over the blocks and their gradient events, the square of each
-event's amplitude times the integral of its normalised waveform's square, which a rotation leaves unchanged, so the choice
-does not depend on the blocks' rotations. The repetition is one the scanner
-plays, each block at its own amplitudes and with its own shapes and rotation,
-or through its wave: a waveform that plays, not an envelope of
-several. Its gradients are joined over its blocks as corner points on one
-timeline, along the logical axes and linear in between; the prescription's
-rotation takes them to the physical axes, and a model that needs them on a
-raster samples them at the centres of its intervals
-(`pulseg_sample_corner_points`).
+sums, over the blocks and their gradient events, the square of each event's
+amplitude times the integral of its normalised waveform's square, which a
+rotation leaves unchanged, so neither choice depends on the blocks' rotations.
+The first stretch is found by sliding its end ahead of its start over the
+instances, each walk passing over the stream once. The second holds a short
+burst the first averages out; the host's sound pressure check
+(`pypulseqpp.safety.check_spl`) chooses the same repetition. Each block plays
+at its own amplitudes and with its own shapes and rotation, or through its
+wave: a waveform that plays, not an envelope of several. The gradients are
+joined over the blocks as corner points on one timeline, along the logical
+axes and linear in between; the prescription's rotation takes them to the
+physical axes, and a model that needs them on a raster samples them at the
+centres of its intervals (`pulseg_sample_corner_points`).
 
 ## Cache file
 
@@ -259,7 +298,7 @@ The cache has the name of the first sequence file with its extension replaced,
 `.pseg` by default. It is divided into sections that a consumer loads
 independently. The pulse-generation stage of a playout reads the
 definitions, their waveforms, the waves and their layout, and the gradients of
-each subsequence's heaviest repetition; the scan loop also reads
+each subsequence's stretches; the scan loop also reads
 the per-block instances, the rotations and the execution stream, whose size
 scales with the scan length. Integer and float fields are 4 bytes. The byte
 order is recorded in the file, and a reader on a machine of the other byte order swaps on load. A
@@ -289,7 +328,7 @@ playout to the cursor's, bit for bit.
 
 The IR is built by C++ passes in `src/cpp/ir/`, which run only on the host:
 the segmentation, the waves, their layout in a playout's waveform memory and
-each subsequence's heaviest repetition. The cache reader and writer, the
+each subsequence's stretches. The cache reader and writer, the
 accessors a playout uses to walk the loaded collection, and the two stages of a
 playout are compiled into the interpreter, whose vendor toolchains accept ANSI
 C. They are therefore C89, in `src/c/`, and call nothing in `src/cpp/`. The

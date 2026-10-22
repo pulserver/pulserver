@@ -177,7 +177,7 @@ Two offsets give two caches, and two designs.
 | Aspect | PulSeg 2.1-alpha | pulserver |
 | --- | --- | --- |
 | Segment-instance boundaries | Marked by the sequence designer with `TRID` labels (§4.2) | Found within the repetition under the {class}`~pulserver.ir.Grouping` |
-| `TRID` | Identifies the virtual segment an instance plays | A sticky group, reported to the interpreter's checks with the duration of each occurrence; it places no segment boundary |
+| `TRID` | Identifies the virtual segment an instance plays | Carried with each block; it places no segment boundary |
 | Periodicity | Not part of the model | Taken from pypulseqpp when present, and used to encode the stream |
 | Multishot gradient variants | One base block with shot variants, chosen per instance by the optional `gradient_shot_index` | No shot index: a gradient that differs between instances is played as a wave from waveform memory, or the run is a variant of its virtual segment |
 

@@ -45,7 +45,7 @@
   <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../_static/documentation_options.js?v=d6d95e65"></script>
+    <script src="../_static/documentation_options.js?v=c1adde03"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -56,7 +56,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.1';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.2';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -68,7 +68,7 @@
     <link rel="search" title="Search" href="../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.4.1" />
+  <meta name="docsearch:version" content="v0.4.2" />
   
     
     <script src="../_static/searchtools.js"></script>
@@ -541,6 +541,12 @@ steady from the pulse’s first sample to its last as
 carries no rotation, so the scanner may move the excitation by a
 carrier offset; and <code class="docutils literal notranslate"><span class="pre">(blocks,</span> <span class="pre">3)</span></code>, that gradient along x, y and z
 over the amplitude of the event playing it there;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">rf_freq_variable</span></code>, <code class="docutils literal notranslate"><span class="pre">rf_freq_mean_hz</span></code>: 1 where the repetitions
+play the RF pulse at the block’s position within the repetition at
+more than one frequency offset, the slices of a stack, more than
+0.5 Hz apart; and the mean offset over them, in Hz, the
+field-of-view offset included: the centre of the positioned stack,
+at which the receive-gain prescan plays the pulse. 0 without RF;</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">gradient_hz_per_m</span></code>: <code class="docutils literal notranslate"><span class="pre">(blocks,</span> <span class="pre">3)</span></code>, the amplitude along the
 logical x, y and z axes: the factor on the shape of the gradient
 event, or on the wave, the block plays there, each normalised to a

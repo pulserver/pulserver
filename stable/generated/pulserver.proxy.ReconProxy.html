@@ -45,7 +45,7 @@
   <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../_static/documentation_options.js?v=d6d95e65"></script>
+    <script src="../_static/documentation_options.js?v=c1adde03"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -56,7 +56,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.1';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.2';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -68,7 +68,7 @@
     <link rel="search" title="Search" href="../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.4.1" />
+  <meta name="docsearch:version" content="v0.4.2" />
   
     
     <script src="../_static/searchtools.js"></script>
@@ -514,19 +514,21 @@ chain’s sequence description as a text message, after the header and
 before the first acquisition
 (<code class="xref py py-func docutils literal notranslate"><span class="pre">message()</span></code>); the message is not sent back
 to the client. The reconstruction plugin is the one the client’s config
-text names. A series that breaks these rules is refused with a text naming
-the reason and a <code class="docutils literal notranslate"><span class="pre">CLOSE</span></code>, and what the client still sends is discarded
-until it closes the connection.</p>
+text names. A series that breaks these rules, or whose stream ends without
+its <code class="docutils literal notranslate"><span class="pre">CLOSE</span></code> or an acquisition flagged <code class="docutils literal notranslate"><span class="pre">LAST_IN_MEASUREMENT</span></code>, is refused
+with a text naming the reason and a <code class="docutils literal notranslate"><span class="pre">CLOSE</span></code>, and what the client still
+sends is discarded until it closes the connection.</p>
 <p>The series is reconstructed by a local worker or, with <code class="docutils literal notranslate"><span class="pre">forward</span></code>, by the
 MRD server at that address, which is sent a config file message naming
 <code class="docutils literal notranslate"><span class="pre">forward_config</span></code> or else the series’ plugin (the client’s config text is
 not forwarded) and decides by its own slots and queue when the series
-runs. Images, DICOM and text go back to the client as they arrive. The
-client’s close closes the reconstruction’s stream, and the
-reconstruction’s close closes the client. A message the proxy has no reader
-for ends what goes back, with a text naming its type. Once the client’s
-stream ends, the proxy waits for the reconstruction to close unless
-<code class="docutils literal notranslate"><span class="pre">recon_timeout</span></code> caps it.</p>
+runs. Images, DICOM and text go back to the client as they arrive, once
+the client’s stream has ended whole: what arrives before is held until
+then, and dropped with a series that is refused. The client’s close closes
+the reconstruction’s stream, and the reconstruction’s close closes the
+client. A message the proxy has no reader for ends what goes back, with a
+text naming its type. Once the client’s stream ends, the proxy waits for
+the reconstruction to close unless <code class="docutils literal notranslate"><span class="pre">recon_timeout</span></code> caps it.</p>
 <p>A local series holds a slot while it runs. On a host with GPUs, found
 through <code class="docutils literal notranslate"><span class="pre">CUDA_VISIBLE_DEVICES</span></code> or <code class="docutils literal notranslate"><span class="pre">nvidia-smi</span></code>, each slot holds one GPU,
 <code class="docutils literal notranslate"><span class="pre">gpu_slots</span></code> slots per GPU, and the reconstruction reads it as

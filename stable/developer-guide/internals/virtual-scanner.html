@@ -45,7 +45,7 @@
   <link rel="preload" as="script" href="../../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../../_static/documentation_options.js?v=d6d95e65"></script>
+    <script src="../../_static/documentation_options.js?v=c1adde03"></script>
     <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -58,7 +58,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.1';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.2';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -72,7 +72,7 @@
     <link rel="prev" title="SAR ratios against a reference pulse" href="sar-ratios.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.4.1" />
+  <meta name="docsearch:version" content="v0.4.2" />
   
     
     <script src="../../_static/searchtools.js"></script>
@@ -610,9 +610,9 @@ gradient <span class="math notranslate nohighlight">\(\mathbf{g}\)</span>, in Hz
 \[
 \alpha_j = \alpha\,|b^+(\mathbf{r}_j)|\,P(\mathbf{g}\cdot\mathbf{r}_j + f_j - f_\mathrm{rf}),
 \]</div>
-<p>about its axis turned by the phase of the transmit field <span class="math notranslate nohighlight">\(b^+\)</span>, relative to
-the pulse’s nominal amplitude. A pulse played under a gradient that changes
-along one direction <span class="math notranslate nohighlight">\(\hat{\mathbf{n}}\)</span>, as a spectral-spatial pulse’s
+<p>with <span class="math notranslate nohighlight">\(b^+\)</span> relative to the pulse’s nominal amplitude, about its axis turned as
+a pulse phase of <span class="math notranslate nohighlight">\(-\arg b^+\)</span> turns it (<a class="reference internal" href="../../user-guide/scanner-sequences.html#transmit-phase-convention"><span class="std std-ref">RF phase convention</span></a>). A
+pulse played under a gradient that changes along one direction <span class="math notranslate nohighlight">\(\hat{\mathbf{n}}\)</span>, as a spectral-spatial pulse’s
 alternating lobes do, has a profile in both the field and the position along
 it, <span class="math notranslate nohighlight">\(P(f_j - f_\mathrm{rf}, \hat{\mathbf{n}}\cdot\mathbf{r}_j)\)</span>, simulated
 from its samples under that gradient; a pulse played under no gradient, or
@@ -745,7 +745,8 @@ the head.</p>
 the weights of magnitude <span class="math notranslate nohighlight">\(1/\sqrt{N}\)</span> for <span class="math notranslate nohighlight">\(N\)</span> channels that bring the channels
 into phase at the isocentre, where the pulse then has its nominal amplitude:
 each cube sees the transmit field
-<span class="math notranslate nohighlight">\(b^+(\mathbf{r}) = \sum_c w_c\,s^+_c(\mathbf{r})\)</span>, for the weights <span class="math notranslate nohighlight">\(w_c\)</span>. The
+<span class="math notranslate nohighlight">\(b^+(\mathbf{r}) = \sum_c \overline{w_c}\,s^+_c(\mathbf{r})\)</span>, for the weights
+<span class="math notranslate nohighlight">\(w_c\)</span>, which drive the channels. The
 squares of the weights sum to 1, so the channels together carry the power of
 one channel at the pulse’s amplitude, and an RF shim is written in the same
 normalisation: a circularly polarised shim of <span class="math notranslate nohighlight">\(N\)</span> channels has weights of

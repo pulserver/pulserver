@@ -40,7 +40,8 @@ the cache layout in {doc}`../developer-guide/internals/ir-cache`.
 | {obj}`~pulserver.ir.Format` | Whether a quantity is stored as a float in its SI unit or as an integer. |
 | {obj}`~pulserver.ir.sample_wave` | A cache's wave on a playout's gradient raster, as loaded into a region of its waveform memory. |
 | {obj}`~pulserver.ir.playout` | Both stages of a segmented playout of a cache, the scan or its receive-gain prescan, recorded: what each position prepares, the registers of each block, what each wave reads from waveform memory and, on request, the waveforms each block plays. |
-| {obj}`~pulserver.ir.Prescan` | The receive-gain calibration a playout plays instead of the scan: one subsequence, to the instance completing its readouts. |
-| {obj}`~pulserver.ir.repetition_gradients` | The gradients of a subsequence's repetition of most gradient energy, as corner points and on a raster: what a scanner's heating and acoustic models are evaluated on. |
+| {obj}`~pulserver.ir.Prescan` | The receive-gain calibration a playout plays instead of the scan: one subsequence, to the instance completing its readouts, opened by the pTx tour on request. |
+| {obj}`~pulserver.ir.prescan_tour` | The pTx prescan tour of a cache: the segment instance holding each channel's largest drive of every parallel-transmit RF definition. |
+| {obj}`~pulserver.ir.gradient_stretch` | The gradients of a subsequence's hyper-repetition-long stretch of most gradient energy, or of the one from its heaviest repetition, as corner points and on a raster: what a scanner's heating model is evaluated on. |
 | {obj}`~pulserver.ir.chain` | Files of the `NextSequence` chain starting at a sequence file, in play order. |
 | {obj}`~pulserver.ir.cache_path` | Cache file of a sequence file. |

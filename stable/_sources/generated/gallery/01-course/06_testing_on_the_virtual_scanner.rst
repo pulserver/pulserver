@@ -294,10 +294,10 @@ reconstructed by ``my_pics``.
 
  .. code-block:: none
 
-     5°: TE 3.40 ms, scan time 12.6 s
-    15°: TE 3.40 ms, scan time 9.8 s
-    30°: TE 3.40 ms, scan time 7.7 s
-    60°: TE 3.40 ms, scan time 6.8 s
+     5°: TE 3.44 ms, scan time 12.6 s
+    15°: TE 3.44 ms, scan time 9.8 s
+    30°: TE 3.44 ms, scan time 7.7 s
+    60°: TE 3.44 ms, scan time 6.8 s
 
 
 
@@ -399,7 +399,7 @@ What this lesson did, stated the way you would ask an agent for it:
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 46.732 seconds)
+   **Total running time of the script:** (0 minutes 34.571 seconds)
 
 
 .. _sphx_glr_download_generated_gallery_01-course_06_testing_on_the_virtual_scanner.py:

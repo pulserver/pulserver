@@ -44,7 +44,7 @@
   <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../../../_static/documentation_options.js?v=d6d95e65"></script>
+    <script src="../../../_static/documentation_options.js?v=c1adde03"></script>
     <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -55,7 +55,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.1';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.2';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -67,7 +67,7 @@
     <link rel="search" title="Search" href="../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.4.1" />
+  <meta name="docsearch:version" content="v0.4.2" />
   
     
     <script src="../../../_static/searchtools.js"></script>
@@ -617,9 +617,11 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">_kept</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">header</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">items</span><span class="p">:</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Any</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">"""Return a series, written where it can be received again.</span>
 
-<span class="sd">        The header is written as this is called, before anything enriches it,</span>
-<span class="sd">        so replaying the file offline puts this server back where the scan put</span>
-<span class="sd">        it.</span>
+<span class="sd">        The proxy keeps the series as it reconstructs it, header and</span>
+<span class="sd">        acquisitions enriched (the header marked ``pulserver_enriched``); a</span>
+<span class="sd">        replay plays such a file as it is. A server keeps a forwarded series</span>
+<span class="sd">        as the proxy sent it, enriched too. The header is written as this is</span>
+<span class="sd">        called.</span>
 <span class="sd">        """</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">save_to</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">return</span> <span class="n">items</span>
@@ -646,20 +648,22 @@
 <span class="sd">    before the first acquisition</span>
 <span class="sd">    (:func:`~pulserver.proxy._seqdesc.message`); the message is not sent back</span>
 <span class="sd">    to the client. The reconstruction plugin is the one the client's config</span>
-<span class="sd">    text names. A series that breaks these rules is refused with a text naming</span>
-<span class="sd">    the reason and a ``CLOSE``, and what the client still sends is discarded</span>
-<span class="sd">    until it closes the connection.</span>
+<span class="sd">    text names. A series that breaks these rules, or whose stream ends without</span>
+<span class="sd">    its ``CLOSE`` or an acquisition flagged ``LAST_IN_MEASUREMENT``, is refused</span>
+<span class="sd">    with a text naming the reason and a ``CLOSE``, and what the client still</span>
+<span class="sd">    sends is discarded until it closes the connection.</span>
 
 <span class="sd">    The series is reconstructed by a local worker or, with ``forward``, by the</span>
 <span class="sd">    MRD server at that address, which is sent a config file message naming</span>
 <span class="sd">    ``forward_config`` or else the series' plugin (the client's config text is</span>
 <span class="sd">    not forwarded) and decides by its own slots and queue when the series</span>
-<span class="sd">    runs. Images, DICOM and text go back to the client as they arrive. The</span>
-<span class="sd">    client's close closes the reconstruction's stream, and the</span>
-<span class="sd">    reconstruction's close closes the client. A message the proxy has no reader</span>
-<span class="sd">    for ends what goes back, with a text naming its type. Once the client's</span>
-<span class="sd">    stream ends, the proxy waits for the reconstruction to close unless</span>
-<span class="sd">    ``recon_timeout`` caps it.</span>
+<span class="sd">    runs. Images, DICOM and text go back to the client as they arrive, once</span>
+<span class="sd">    the client's stream has ended whole: what arrives before is held until</span>
+<span class="sd">    then, and dropped with a series that is refused. The client's close closes</span>
+<span class="sd">    the reconstruction's stream, and the reconstruction's close closes the</span>
+<span class="sd">    client. A message the proxy has no reader for ends what goes back, with a</span>
+<span class="sd">    text naming its type. Once the client's stream ends, the proxy waits for</span>
+<span class="sd">    the reconstruction to close unless ``recon_timeout`` caps it.</span>
 
 <span class="sd">    A local series holds a slot while it runs. On a host with GPUs, found</span>
 <span class="sd">    through ``CUDA_VISIBLE_DEVICES`` or ``nvidia-smi``, each slot holds one GPU,</span>
@@ -811,8 +815,10 @@
             <span class="k">return</span>
         <span class="n">design</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">designs</span><span class="o">.</span><span class="n">resolve</span><span class="p">(</span><span class="n">header</span><span class="p">)</span>
         <span class="n">plugin</span> <span class="o">=</span> <span class="n">_config_plugin</span><span class="p">(</span><span class="n">config</span><span class="p">)</span>
-        <span class="n">received</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_kept</span><span class="p">(</span><span class="n">header</span><span class="p">,</span> <span class="n">_received</span><span class="p">(</span><span class="n">client</span><span class="p">))</span>
         <span class="n">enrich_header</span><span class="p">(</span><span class="n">header</span><span class="p">,</span> <span class="n">design</span><span class="o">.</span><span class="n">table</span><span class="p">)</span>
+        <span class="n">enriched</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_kept</span><span class="p">(</span>
+            <span class="n">header</span><span class="p">,</span> <span class="n">_enriched</span><span class="p">(</span><span class="n">_received</span><span class="p">(</span><span class="n">client</span><span class="p">),</span> <span class="n">design</span><span class="p">,</span> <span class="n">header_fov_offset_m</span><span class="p">(</span><span class="n">header</span><span class="p">))</span>
+        <span class="p">)</span>
         <span class="n">_log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
             <span class="s2">"series on </span><span class="si">%s</span><span class="s2">: </span><span class="si">%s</span><span class="s2">, </span><span class="si">%d</span><span class="s2"> readouts"</span><span class="p">,</span>
             <span class="n">design</span><span class="o">.</span><span class="n">directory</span><span class="p">,</span>
@@ -825,10 +831,7 @@
                 <span class="n">config</span><span class="p">,</span>
                 <span class="n">header</span><span class="p">,</span>
                 <span class="n">plugin</span><span class="p">,</span>
-                <span class="n">itertools</span><span class="o">.</span><span class="n">chain</span><span class="p">(</span>
-                    <span class="p">(</span><span class="n">design</span><span class="o">.</span><span class="n">description</span><span class="p">,),</span>
-                    <span class="n">_enriched</span><span class="p">(</span><span class="n">received</span><span class="p">,</span> <span class="n">design</span><span class="p">,</span> <span class="n">header_fov_offset_m</span><span class="p">(</span><span class="n">header</span><span class="p">)),</span>
-                <span class="p">),</span>
+                <span class="n">itertools</span><span class="o">.</span><span class="n">chain</span><span class="p">((</span><span class="n">design</span><span class="o">.</span><span class="n">description</span><span class="p">,),</span> <span class="n">enriched</span><span class="p">),</span>
                 <span class="n">motion</span><span class="o">=</span><span class="n">design</span><span class="o">.</span><span class="n">directory</span><span class="o">.</span><span class="n">parent</span> <span class="o">/</span> <span class="n">FILENAME</span>
                 <span class="k">if</span> <span class="n">design</span><span class="o">.</span><span class="n">prospective_motion</span>
                 <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
@@ -846,8 +849,8 @@
 <span class="sd">    plugin, the header, the acquisitions and a ``CLOSE``. The config is a</span>
 <span class="sd">    config file message, whose name is the plugin, or a config text naming it</span>
 <span class="sd">    as a bare name or under ``parameters.config``. Nothing is enriched. Workers,</span>
-<span class="sd">    slots, the queue and the exam directories are those of</span>
-<span class="sd">    :class:`ReconProxy`.</span>
+<span class="sd">    slots, the queue, the exam directories and the refusal of a stream that</span>
+<span class="sd">    ends without its ``CLOSE`` are those of :class:`ReconProxy`.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
@@ -1218,20 +1221,24 @@
 <span class="sd">    still running ``timeout`` seconds after the series ended. ``poses`` is</span>
 <span class="sd">    :func:`_relay`'s.</span>
 <span class="sd">    """</span>
+    <span class="n">whole</span> <span class="o">=</span> <span class="n">_Verdict</span><span class="p">()</span>
     <span class="n">relay</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Thread</span><span class="p">(</span>
         <span class="n">target</span><span class="o">=</span><span class="n">_relay</span><span class="p">,</span>
-        <span class="n">args</span><span class="o">=</span><span class="p">(</span><span class="n">reconstruction</span><span class="p">,</span> <span class="n">client</span><span class="p">,</span> <span class="n">convert</span><span class="p">,</span> <span class="n">poses</span><span class="p">),</span>
+        <span class="n">args</span><span class="o">=</span><span class="p">(</span><span class="n">reconstruction</span><span class="p">,</span> <span class="n">client</span><span class="p">,</span> <span class="n">whole</span><span class="p">,</span> <span class="n">convert</span><span class="p">,</span> <span class="n">poses</span><span class="p">),</span>
         <span class="n">daemon</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
         <span class="n">name</span><span class="o">=</span><span class="s2">"relay"</span><span class="p">,</span>
     <span class="p">)</span>
     <span class="n">relay</span><span class="o">.</span><span class="n">start</span><span class="p">()</span>
     <span class="k">try</span><span class="p">:</span>
         <span class="n">feed</span><span class="p">(</span><span class="n">reconstruction</span><span class="p">)</span>
-    <span class="k">except</span> <span class="ne">BaseException</span><span class="p">:</span>
-        <span class="c1"># A series that cannot be fed whole is not reconstructed.</span>
+    <span class="k">except</span> <span class="ne">BaseException</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
+        <span class="c1"># A series that cannot be fed whole is not reconstructed; what a</span>
+        <span class="c1"># reconstruction that stopped reading said about why still goes back.</span>
+        <span class="n">whole</span><span class="o">.</span><span class="n">decide</span><span class="p">(</span><span class="nb">isinstance</span><span class="p">(</span><span class="n">error</span><span class="p">,</span> <span class="n">_StoppedReading</span><span class="p">))</span>
         <span class="n">channel</span><span class="o">.</span><span class="n">terminate</span><span class="p">()</span>
         <span class="n">relay</span><span class="o">.</span><span class="n">join</span><span class="p">()</span>
         <span class="k">raise</span>
+    <span class="n">whole</span><span class="o">.</span><span class="n">decide</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span>
     <span class="n">reconstruction</span><span class="o">.</span><span class="n">send_close</span><span class="p">()</span>
     <span class="n">relay</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="n">timeout</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">relay</span><span class="o">.</span><span class="n">is_alive</span><span class="p">():</span>
@@ -1501,17 +1508,64 @@
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_received</span><span class="p">(</span><span class="n">client</span><span class="p">:</span> <span class="n">Connection</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Any</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">"""Yield the client's stream up to its close, as received."""</span>
+<span class="w">    </span><span class="sd">"""Yield the client's stream up to its CLOSE, as received.</span>
+
+<span class="sd">    A stream also ends whole at an acquisition flagged</span>
+<span class="sd">    ``LAST_IN_MEASUREMENT``, where :class:`Connection` stops reading.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If the stream ends otherwise: a message the proxy cannot read, or the</span>
+<span class="sd">        client's connection shut or lost, which is how a client ends a scan</span>
+<span class="sd">        the scanner stopped.</span>
+<span class="sd">    """</span>
     <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">client</span><span class="p">:</span>
         <span class="k">if</span> <span class="n">_is_close_marker</span><span class="p">(</span><span class="n">item</span><span class="p">):</span>
-            <span class="k">break</span>
+            <span class="k">return</span>
+        <span class="c1"># Read before the item is yielded: enrichment flags it in place.</span>
+        <span class="n">last</span> <span class="o">=</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="n">ismrmrd</span><span class="o">.</span><span class="n">Acquisition</span><span class="p">)</span> <span class="ow">and</span> <span class="n">item</span><span class="o">.</span><span class="n">isFlagSet</span><span class="p">(</span>
+            <span class="n">ismrmrd</span><span class="o">.</span><span class="n">ACQ_LAST_IN_MEASUREMENT</span>
+        <span class="p">)</span>
         <span class="k">yield</span> <span class="n">item</span>
+        <span class="k">if</span> <span class="n">last</span><span class="p">:</span>
+            <span class="k">return</span>
+    <span class="k">if</span> <span class="n">client</span><span class="o">.</span><span class="n">unreadable</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"the stream carries a message of type </span><span class="si">{</span><span class="n">client</span><span class="o">.</span><span class="n">unreadable</span><span class="si">}</span><span class="s2">, which "</span>
+            <span class="s2">"the proxy cannot read"</span>
+        <span class="p">)</span>
+    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+        <span class="s2">"the stream ended without a CLOSE: the scan was not finished, and is not "</span>
+        <span class="s2">"reconstructed"</span>
+    <span class="p">)</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">_StoppedReading</span><span class="p">(</span><span class="ne">ConnectionError</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""A reconstruction that stopped reading a series the client sent whole."""</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_send</span><span class="p">(</span><span class="n">items</span><span class="p">:</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Any</span><span class="p">],</span> <span class="n">destination</span><span class="p">:</span> <span class="n">Connection</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Send a series to the reconstruction as it arrives."""</span>
+<span class="w">    </span><span class="sd">"""Send a series to the reconstruction as it arrives.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    _StoppedReading</span>
+<span class="sd">        If ``destination`` stops reading, once the rest of ``items`` is read</span>
+<span class="sd">        and dropped: an error the stream raises meanwhile is raised instead.</span>
+<span class="sd">    """</span>
+    <span class="n">stopped</span><span class="p">:</span> <span class="ne">OSError</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">items</span><span class="p">:</span>
-        <span class="n">destination</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">item</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">stopped</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">continue</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">destination</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">item</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">OSError</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
+            <span class="n">stopped</span> <span class="o">=</span> <span class="n">error</span>
+    <span class="k">if</span> <span class="n">stopped</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">_StoppedReading</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"the reconstruction stopped reading the series: </span><span class="si">{</span><span class="n">stopped</span><span class="si">}</span><span class="s2">"</span>
+        <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">stopped</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_record</span><span class="p">(</span><span class="n">items</span><span class="p">:</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Any</span><span class="p">],</span> <span class="n">header</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">queued</span><span class="p">:</span> <span class="n">QueueFile</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">Any</span><span class="p">]:</span>
@@ -1530,10 +1584,8 @@
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_replay</span><span class="p">(</span><span class="n">queued</span><span class="p">:</span> <span class="n">QueueFile</span><span class="p">,</span> <span class="n">others</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Any</span><span class="p">],</span> <span class="n">worker</span><span class="p">:</span> <span class="n">Connection</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-    <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">others</span><span class="p">:</span>
-        <span class="n">worker</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">item</span><span class="p">)</span>
-    <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">queued</span><span class="p">:</span>
-        <span class="n">worker</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">item</span><span class="p">)</span>
+<span class="w">    </span><span class="sd">"""Send a queued series, read whole already, to ``worker``; see :func:`_send`."""</span>
+    <span class="n">_send</span><span class="p">(</span><span class="n">itertools</span><span class="o">.</span><span class="n">chain</span><span class="p">(</span><span class="n">others</span><span class="p">,</span> <span class="n">queued</span><span class="p">),</span> <span class="n">worker</span><span class="p">)</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_publisher</span><span class="p">(</span><span class="n">writer</span><span class="p">:</span> <span class="n">MotionWriter</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Pose</span><span class="p">],</span> <span class="kc">None</span><span class="p">]:</span>
@@ -1545,21 +1597,58 @@
     <span class="k">return</span> <span class="n">publish</span>
 
 
+<span class="k">class</span><span class="w"> </span><span class="nc">_Verdict</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Whether a client's stream ended whole; undecided until :meth:`decide`."""</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_decided</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Event</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_whole</span> <span class="o">=</span> <span class="kc">False</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">decide</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">whole</span><span class="p">:</span> <span class="nb">bool</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_whole</span> <span class="o">=</span> <span class="n">whole</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_decided</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">decided</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_decided</span><span class="o">.</span><span class="n">is_set</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">wait</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Block until decided; return whether the stream ended whole."""</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_decided</span><span class="o">.</span><span class="n">wait</span><span class="p">()</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_whole</span>
+
+
 <span class="k">def</span><span class="w"> </span><span class="nf">_relay</span><span class="p">(</span>
     <span class="n">source</span><span class="p">:</span> <span class="n">Connection</span><span class="p">,</span>
     <span class="n">client</span><span class="p">:</span> <span class="n">Connection</span><span class="p">,</span>
+    <span class="n">whole</span><span class="p">:</span> <span class="n">_Verdict</span><span class="p">,</span>
     <span class="n">convert</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Any</span><span class="p">],</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">poses</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Pose</span><span class="p">],</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Send everything a reconstruction emits back to the client, until its close.</span>
 
-<span class="sd">    ``convert`` turns each image into what is sent in its place. ``poses``</span>
-<span class="sd">    takes each pose the reconstruction states, which is not sent on: a pose is</span>
-<span class="sd">    addressed to the scan, not to whoever asked for the images; nor is the</span>
-<span class="sd">    sequence description, which a reconstruction may echo. A message</span>
-<span class="sd">    ``source`` has no reader for ends the relay, and the client is told its</span>
-<span class="sd">    type, because what followed it in the stream cannot be read.</span>
+<span class="sd">    What is emitted before ``whole`` is decided is held, sent once the stream</span>
+<span class="sd">    is decided whole and dropped otherwise: a scan the scanner stopped after</span>
+<span class="sd">    its last readout has its units reconstructed before its client ends the</span>
+<span class="sd">    stream. ``convert`` turns each image into what is sent in its place.</span>
+<span class="sd">    ``poses`` takes each pose the reconstruction states, at once and whatever</span>
+<span class="sd">    the verdict, which is not sent on: a pose is addressed to the scan, not to</span>
+<span class="sd">    whoever asked for the images; nor is the sequence description, which a</span>
+<span class="sd">    reconstruction may echo. A message ``source`` has no reader for ends the</span>
+<span class="sd">    relay, and the client is told its type, because what followed it in the</span>
+<span class="sd">    stream cannot be read.</span>
 <span class="sd">    """</span>
+    <span class="n">held</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">send</span><span class="p">(</span><span class="n">item</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">whole</span><span class="o">.</span><span class="n">decided</span><span class="p">():</span>
+            <span class="n">held</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">item</span><span class="p">)</span>
+            <span class="k">return</span>
+        <span class="k">if</span> <span class="n">whole</span><span class="o">.</span><span class="n">wait</span><span class="p">():</span>
+            <span class="k">for</span> <span class="n">kept</span> <span class="ow">in</span> <span class="n">held</span><span class="p">:</span>
+                <span class="n">client</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">kept</span><span class="p">)</span>
+            <span class="n">held</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+            <span class="n">client</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">item</span><span class="p">)</span>
+
     <span class="k">try</span><span class="p">:</span>
         <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">source</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">_is_close_marker</span><span class="p">(</span><span class="n">item</span><span class="p">):</span>
@@ -1574,13 +1663,16 @@
                     <span class="k">continue</span>
             <span class="k">if</span> <span class="n">convert</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="n">ismrmrd</span><span class="o">.</span><span class="n">Image</span><span class="p">):</span>
                 <span class="n">item</span> <span class="o">=</span> <span class="n">convert</span><span class="p">(</span><span class="n">item</span><span class="p">)</span>
-            <span class="n">client</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">item</span><span class="p">)</span>
+            <span class="n">send</span><span class="p">(</span><span class="n">item</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">source</span><span class="o">.</span><span class="n">unreadable</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">client</span><span class="o">.</span><span class="n">send</span><span class="p">(</span>
+            <span class="n">send</span><span class="p">(</span>
                 <span class="sa">f</span><span class="s2">"pulserver: the reconstruction sent a message of type "</span>
                 <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">source</span><span class="o">.</span><span class="n">unreadable</span><span class="si">}</span><span class="s2">, which the proxy cannot read; the rest of "</span>
                 <span class="s2">"its output is lost"</span>
             <span class="p">)</span>
+        <span class="k">if</span> <span class="n">whole</span><span class="o">.</span><span class="n">wait</span><span class="p">():</span>
+            <span class="k">for</span> <span class="n">kept</span> <span class="ow">in</span> <span class="n">held</span><span class="p">:</span>
+                <span class="n">client</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">kept</span><span class="p">)</span>
     <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
         <span class="n">_log</span><span class="o">.</span><span class="n">exception</span><span class="p">(</span><span class="s2">"relaying a reconstruction's output failed"</span><span class="p">)</span>
 </pre></div>

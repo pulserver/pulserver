@@ -44,7 +44,7 @@
   <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../../../_static/documentation_options.js?v=d6d95e65"></script>
+    <script src="../../../_static/documentation_options.js?v=c1adde03"></script>
     <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -55,7 +55,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.1';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.2';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -67,7 +67,7 @@
     <link rel="search" title="Search" href="../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.4.1" />
+  <meta name="docsearch:version" content="v0.4.2" />
   
     
     <script src="../../../_static/searchtools.js"></script>
@@ -432,6 +432,8 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
 
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+
 <span class="c1">#: User parameters a gradient coil's spherical-harmonic table is stated in:</span>
 <span class="c1">#: ``gradient_coefficients`` is the name a scanner-side interpreter writes; the</span>
 <span class="c1">#: others are names bartorch also reads.</span>
@@ -467,7 +469,9 @@
 <span class="sd">    displaced positions; a complex image has its real and imaginary parts</span>
 <span class="sd">    resampled separately. Geometry comes from the header's reconstruction space</span>
 <span class="sd">    and the unit's reference acquisition, so the correction is in the frame the</span>
-<span class="sd">    series was acquired in, oblique prescriptions included.</span>
+<span class="sd">    series was acquired in, oblique prescriptions included. An encoding of one</span>
+<span class="sd">    partition, a 2D slice, is corrected in its plane: the displacement across</span>
+<span class="sd">    the slice moves the slice, which resampling cannot undo.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
@@ -504,18 +508,9 @@
         <span class="kn">from</span><span class="w"> </span><span class="nn">bartorch.tools</span><span class="w"> </span><span class="kn">import</span> <span class="n">Gradunwarp</span>
 
         <span class="n">correction</span> <span class="o">=</span> <span class="n">Gradunwarp</span><span class="o">.</span><span class="n">from_mrd</span><span class="p">(</span><span class="n">header</span><span class="p">,</span> <span class="n">reference</span><span class="p">)</span>
-        <span class="n">tensor</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">image</span><span class="p">)</span>
-        <span class="c1"># The correction works on the encoding's own matrix, (partitions,</span>
-        <span class="c1"># lines, columns). A plugin that reconstructed one partition drops that</span>
-        <span class="c1"># axis, so it is restored for the resampling and dropped again after.</span>
-        <span class="n">flattened</span> <span class="o">=</span> <span class="p">(</span>
-            <span class="n">tensor</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="nb">len</span><span class="p">(</span><span class="n">correction</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span> <span class="ow">and</span> <span class="n">correction</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="mi">1</span>
-        <span class="p">)</span>
-        <span class="k">if</span> <span class="n">flattened</span><span class="p">:</span>
-            <span class="n">tensor</span> <span class="o">=</span> <span class="n">tensor</span><span class="p">[</span><span class="kc">None</span><span class="p">]</span>
-        <span class="n">corrected</span> <span class="o">=</span> <span class="n">correction</span><span class="p">(</span><span class="n">tensor</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">flattened</span><span class="p">:</span>
-            <span class="n">corrected</span> <span class="o">=</span> <span class="n">corrected</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">correction</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">correction</span> <span class="o">=</span> <span class="n">_in_plane</span><span class="p">(</span><span class="n">correction</span><span class="p">,</span> <span class="n">header</span><span class="p">,</span> <span class="n">reference</span><span class="p">)</span>
+        <span class="n">corrected</span> <span class="o">=</span> <span class="n">correction</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">image</span><span class="p">))</span>
     <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
         <span class="n">_log</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">"the image was not corrected for gradient nonlinearity: </span><span class="si">%s</span><span class="s2">"</span><span class="p">,</span> <span class="n">error</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">image</span>
@@ -524,6 +519,36 @@
     <span class="c1"># type is asked for rather than duck-typed.</span>
     <span class="k">return</span> <span class="n">corrected</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">image</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="k">else</span> <span class="n">corrected</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span></div>
 
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_in_plane</span><span class="p">(</span><span class="n">correction</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">header</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">reference</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return ``correction``, of one partition, on the slice's ``(lines, columns)`` grid.</span>
+
+<span class="sd">    Same table, matrix, field of view and centre, with ``position`` the centre</span>
+<span class="sd">    of voxel ``n // 2`` as :meth:`bartorch.tools.Gradunwarp.from_mrd` reads it.</span>
+<span class="sd">    """</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">bartorch.tools</span><span class="w"> </span><span class="kn">import</span> <span class="n">Gradunwarp</span>
+
+    <span class="n">space</span> <span class="o">=</span> <span class="n">header</span><span class="o">.</span><span class="n">encoding</span><span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">reference</span><span class="p">,</span> <span class="s2">"encoding_space_ref"</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="ow">or</span> <span class="mi">0</span><span class="p">)]</span>
+    <span class="n">matrix</span><span class="p">,</span> <span class="n">extent</span> <span class="o">=</span> <span class="n">space</span><span class="o">.</span><span class="n">reconSpace</span><span class="o">.</span><span class="n">matrixSize</span><span class="p">,</span> <span class="n">space</span><span class="o">.</span><span class="n">reconSpace</span><span class="o">.</span><span class="n">fieldOfView_mm</span>
+    <span class="n">shape</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="nb">int</span><span class="p">(</span><span class="n">matrix</span><span class="o">.</span><span class="n">y</span><span class="p">),</span> <span class="nb">int</span><span class="p">(</span><span class="n">matrix</span><span class="o">.</span><span class="n">x</span><span class="p">)])</span>
+    <span class="n">fov_mm</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="nb">float</span><span class="p">(</span><span class="n">extent</span><span class="o">.</span><span class="n">y</span><span class="p">),</span> <span class="nb">float</span><span class="p">(</span><span class="n">extent</span><span class="o">.</span><span class="n">x</span><span class="p">)])</span>
+    <span class="n">orientation</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span>
+        <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">reference</span><span class="o">.</span><span class="n">phase_dir</span><span class="p">,</span> <span class="nb">float</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">reference</span><span class="o">.</span><span class="n">read_dir</span><span class="p">,</span> <span class="nb">float</span><span class="p">)],</span>
+        <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">offset</span> <span class="o">=</span> <span class="p">(</span><span class="n">shape</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">/</span> <span class="mi">2</span> <span class="o">-</span> <span class="n">shape</span> <span class="o">//</span> <span class="mi">2</span>
+    <span class="n">centre</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">reference</span><span class="o">.</span><span class="n">position</span><span class="p">,</span> <span class="nb">float</span><span class="p">)</span> <span class="o">+</span> <span class="n">orientation</span> <span class="o">@</span> <span class="p">(</span>
+        <span class="n">offset</span> <span class="o">*</span> <span class="n">fov_mm</span> <span class="o">/</span> <span class="n">shape</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">Gradunwarp</span><span class="p">(</span>
+        <span class="n">correction</span><span class="o">.</span><span class="n">coefficients</span><span class="p">,</span>
+        <span class="nb">tuple</span><span class="p">(</span><span class="n">shape</span><span class="p">),</span>
+        <span class="nb">tuple</span><span class="p">(</span><span class="n">fov_mm</span><span class="p">),</span>
+        <span class="n">orientation</span><span class="p">,</span>
+        <span class="nb">tuple</span><span class="p">(</span><span class="n">centre</span><span class="p">),</span>
+        <span class="n">jacobian</span><span class="o">=</span><span class="n">correction</span><span class="o">.</span><span class="n">jacobian</span><span class="p">,</span>
+    <span class="p">)</span>
 </pre></div>
 
                 </article>

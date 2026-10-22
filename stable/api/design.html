@@ -45,7 +45,7 @@
   <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../_static/documentation_options.js?v=d6d95e65"></script>
+    <script src="../_static/documentation_options.js?v=c1adde03"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -56,7 +56,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.1';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.2';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -70,7 +70,7 @@
     <link rel="prev" title="Protocol" href="protocol.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.4.1" />
+  <meta name="docsearch:version" content="v0.4.2" />
   
     
     <script src="../_static/searchtools.js"></script>
@@ -545,11 +545,10 @@ control variable, are described in <a class="reference internal" href="../explan
 </section>
 <section id="options">
 <h2>Options<a class="headerlink" href="#options" title="Link to this heading">#</a></h2>
-<p>A plugin’s options are module constants a parameter file sets when the plugin
-is loaded, so that they shape its sequence function and the protocol it
-declares. A design call selects the file by number: set <code class="docutils literal notranslate"><span class="pre">N</span></code> of a plugin whose
-file is <code class="docutils literal notranslate"><span class="pre">&lt;script&gt;.py</span></code> is <code class="docutils literal notranslate"><span class="pre">parameters/&lt;script&gt;/&lt;NN&gt;.toml</span></code>, and set 0 loads the
-plugin with its defaults.</p>
+<p>A plugin’s options are module constants that shape its sequence function and
+the protocol it declares. Each is a user entry holding the index of its value
+among its choices, and a design call loads the plugin at the options its
+request states (<a class="reference internal" href="../user-guide/scanner-sequences.html#plugin-options"><span class="std std-ref">Options</span></a>).</p>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
 <tr class="row-odd"><th class="head"><p>Object</p></th>
@@ -558,13 +557,13 @@ plugin with its defaults.</p>
 </thead>
 <tbody>
 <tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.design.option.html#pulserver.design.option" title="pulserver.design.option"><code class="xref py py-obj docutils literal notranslate"><span class="pre">option</span></code></a></p></td>
-<td><p>The value of an option: the parameter file’s, else its default.</p></td>
+<td><p>Declare an option at a user entry; the value the plugin is loaded with.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.design.read_options.html#pulserver.design.read_options" title="pulserver.design.read_options"><code class="xref py py-obj docutils literal notranslate"><span class="pre">read_options</span></code></a></p></td>
-<td><p>The options a parameter file sets.</p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.design.OptionParam.html#pulserver.design.OptionParam" title="pulserver.design.OptionParam"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OptionParam</span></code></a></p></td>
+<td><p>The entry an option is listed as: the index of its value among its choices.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.design.OptionError.html#pulserver.design.OptionError" title="pulserver.design.OptionError"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OptionError</span></code></a></p></td>
-<td><p>An option a parameter file sets that the plugin does not declare or take.</p></td>
+<td><p>An option a plugin is loaded with that it does not declare or take, or a declaration the console cannot list.</p></td>
 </tr>
 </tbody>
 </table>

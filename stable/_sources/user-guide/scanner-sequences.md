@@ -56,6 +56,7 @@ argument of the sequence function it sets.
 | {class}`~pulserver.design.ChoiceParam` | dropdown | the chosen member of a `StrEnum` |
 | {class}`~pulserver.design.ConfigParam` | not shown | none; a value declared to the interpreter |
 | {class}`~pulserver.design.Description` | read-only text | none |
+| {class}`~pulserver.design.OptionParam` | integer, the index of the option's choice ({ref}`plugin-options`) | none; {func}`~pulserver.design.option` declares it |
 
 The options of the four string-list parameters are
 {class}`~pulserver.protocol.SequenceType`,
@@ -342,6 +343,39 @@ value in the evaluated protocol, is invalid. What the scanner checks before the
 scan is the stored design, not the layout. The blocks that carry the layout are
 described in {doc}`../explanations/protocol`.
 
+(transmit-phase-convention)=
+## RF phase convention
+
+Phases and frequencies keep Pulseq's units: an RF phase shape holds cycles, RF
+and ADC phase offsets and RF shim phases are in radians, and frequency offsets
+are in hertz. The ppm offsets are resolved to hertz and radians at the
+scanner's Larmor frequency when the IR is built.
+
+An RF waveform $b_c(t)$ and an RF shim weight $w_c$ are the complex drive of
+transmit channel $c$, the envelope of a carrier $e^{+i\omega_0 t}$. Protons
+precess clockwise about the static field, and the part of the field that turns
+them is the conjugate of the drive times the channel's transmit sensitivity
+$s^+_c$, the rotating field of a unit drive:
+
+$$
+b^+(\mathbf{r}, t) = \sum_c \overline{w_c\, b_c(t)}\; s^+_c(\mathbf{r}).
+$$
+
+A drive of phase $+\phi$, on one channel through its shim weight or its
+waveform, or on every channel through the pulse's phase offset, turns the
+excited magnetization and the reconstructed image by $-\phi$; an ADC phase
+offset of $+\theta$ turns them by $+\theta$, so a receiver that follows the
+pulse's phase offset cancels it. A pulse of phase zero tips $+z$ towards $+y$.
+On the scanner, a channel driven at $+\phi$ relative to another appears at
+$-\phi$ in the reconstructed images, for RF shims and per-channel waveforms
+alike. The virtual scanner follows the same convention, and the VOP check
+takes the drives as they are written: the SAR of a pulse is $v^H Q\, v$ for
+$v_c = d\, w_c\, b_c(t)$, with $d$ the drive per hertz of RF amplitude.
+
+A per-channel image of a small-angle excitation has the phase of $s^+_c$ plus
+the receive phase and a constant. A shim fitted to such maps under the model
+$\sum_c w_c\, s^+_c$ is written as $\overline{w_c}$.
+
 (shipped-sequences)=
 ## Shipped sequences
 
@@ -376,7 +410,7 @@ function takes, at the same user entry in every plugin, each as a
 | `user2`, `user3` | Partial Fourier along the phase and the partition encodes |
 | `user4`, `user5` | Calibration (ACS) lines along the phase and the partition encodes |
 | `user6` | Readout oversampling |
-| `user7` | Echo spacing, in ms; 0 the shortest |
+| `user7` | Echo spacing, in ms; 0 the shortest. In the MPRAGE plugins, the line spacing (inner TR) of the gradient-echo train |
 | `user8` | Refocusing flip angle, in degrees |
 | `user9` | CAIPIRINHA shift, in partitions per acquired line |
 | `user10`, `user11` | Wave-encoding amplitude, in mT/m, and cycles per readout, shown while the `wave` option is on |
@@ -405,42 +439,57 @@ give each band's normal along the physical axes, the distance of its centre
 from the isocentre along that normal, and its thickness, in mm. The
 field-of-view offset and rotation leave a band where it was placed.
 
+(plugin-options)=
 ### Options
 
 Choices that set what a sequence is, rather than a value an operator tunes from
-scan to scan, are options: module constants a plugin reads through
-{func}`~pulserver.design.option`. A numbered parameter set selects them. Set
-`N` of a plugin whose file is `<script>.py` is the TOML file
-`parameters/<script>/<NN>.toml` beside the plugin directory, its number in two
-digits; a slot linked to a script, such as `sequence3.py` linked to
-`src/fse3d.py`, reads that script's directory. Set 0 plays every option at its
-default. A file names only the options it changes:
+scan to scan, are options: module constants a plugin declares with
+{func}`~pulserver.design.option` at module level, before its class, so that
+they shape its sequence function and the protocol it declares. Each option is a
+user entry: the plugin lists it in `user<n>_value` as the index of its value
+among its choices, 0 or 1 for a flag, and names it and the code of each choice
+in `user<n>_name`. A design call loads the plugin at the options its request
+holds in those entries, and `list` at those of the value block it is given, so
+a protocol carries its options as it carries every other entry. A console lists
+the plugin again when an option entry changes. An option shows or hides user
+entries; it never gives one another meaning.
 
-```toml
-# parameters/fse3d/01.toml
-refocusing = "dual_region"
-navigator = true
+```python
+from pulserver.design import Description, FloatParam, SequencePlugin, UIParam, option
+
+VARIABLE_DENSITY = option("variable_density", False, user=42, label="Variable density")
+
+
+class Spiral(SequencePlugin):
+    app = spiral
+    protocol = {...}
+    if VARIABLE_DENSITY:
+        protocol |= {
+            UIParam.user_name(12): Description("Periphery undersampling"),
+            UIParam.user_value(12): FloatParam("undersampling", range_min=1.0),
+        }
 ```
 
-A file naming an option the plugin does not declare, or giving one a value it
-does not take, is refused. The options join the design's identity and its
-manifest, so a design is a function of the set's contents, not of its number.
-`pulserver design` takes the set as `--parameter-set` and the directory as
-`--parameters`; `src/pulserver/_zoo/parameters/` ships a file for each choice
-below.
+An option that is not a flag names its choices, at most five. A request whose
+option entry holds no index of a choice is refused, and so is one stating an
+entry its options hide. The options join the design's identity and its
+manifest.
 
-| Plugin | Option | Choice | Entries added |
-| --- | --- | --- | --- |
-| `fse3d` | `refocusing` | `"constant"`; `"optimized"`, a train designed with blochsim and shared by every shot; or `"dual_region"`, trains designed for the centre and the periphery of k-space, each shot's train a cubic step between them, `TR` and `ETL` being the centre's | Flip angle: the refocusing angle at the TE echo; `"dual_region"` also adds `user12` and `user13`, TR and ETL at the periphery |
-| `fse3d` | `ordering` | `"radial"`, or `"shuffling"`: Poisson-disc views in random order | None |
-| `mprage3d` | `ordering` | `"radial"`, each partition's lines centre-out, or `"shuffling"`: Poisson-disc lines in random order, for a time-resolved reconstruction | None |
-| `fse3d`, `mprage3d` | `navigator` | Three-plane navigators; the design sets `EnablePmc`, and `pmc` publishes each pose to the scan | None |
-| `gre3d`, `gre_multiecho3d`, `mprage3d`, `fse3d` | `wave` | Wave-CAIPI; the calibration region is acquired first without the wave, and `pics` and `pmc` reconstruct the wave-encoded volume | `user10` and `user11`: wave amplitude and cycles |
-| `gre3d`, `se3d`, `gre_multiecho3d` | `elliptical` | Only the phase encodes inside the ky-kz ellipse; `true` by default | None |
-| `gre_multiecho2d`, `gre_multiecho3d` | `flyback` | Monopolar echoes; `false` reads even echoes reversed | None |
-| `zte3d` | `scheme` | Spokes ordered `"spiral"` or `"meridian"` | None |
-| `bssfp2d` | `retrospective` | ECG gating: `false`, prospective, each heartbeat triggered and acquired once per cardiac phase; `true`, retrospective, each segment cycled over a heartbeat and binned into cardiac phases by the reconstruction | None |
-| `gre_spiral2d`, `se_spiral2d`, `gre_stack_of_spirals3d`, `se_stack_of_spirals3d`, `mprage_stack_of_spirals3d` | `variable_density` | Variable-density spirals | `user12`: periphery undersampling |
+The shipped plugins declare their options at `user36` to `user44`, each at the
+same user entry in every plugin:
+
+| Plugin | Option | User entry | Choices | Entries added |
+| --- | --- | --- | --- | --- |
+| `fse3d` | `refocusing` | `user38` | `"constant"`; `"optimized"`, a train designed with blochsim and shared by every shot; or `"dual_region"`, trains designed for the centre and the periphery of k-space, each shot's train a cubic step between them, `TR` and `ETL` being the centre's | Flip angle: the refocusing angle at the TE echo; `"dual_region"` also adds `user12` and `user13`, TR and ETL at the periphery |
+| `fse3d` | `ordering` | `user39` | `"radial"`, or `"shuffling"`: Poisson-disc views in random order | None |
+| `mprage3d` | `ordering` | `user39` | `"radial"`, each partition's lines centre-out, or `"shuffling"`: Poisson-disc lines in random order, for a time-resolved reconstruction | None |
+| `fse3d`, `mprage3d` | `navigator` | `user36` | Three-plane navigators; the design sets `EnablePmc`, and `pmc` publishes each pose to the scan | None |
+| `gre3d`, `gre_multiecho3d`, `mprage3d`, `fse3d` | `wave` | `user37` | Wave-CAIPI; the calibration region is acquired first without the wave, and `pics` and `pmc` reconstruct the wave-encoded volume | `user10` and `user11`: wave amplitude and cycles |
+| `gre3d`, `se3d`, `gre_multiecho3d` | `elliptical` | `user40` | Only the phase encodes inside the ky-kz ellipse; on by default | None |
+| `gre_multiecho2d`, `gre_multiecho3d` | `flyback` | `user41` | Monopolar echoes, on by default; off reads even echoes reversed | None |
+| `zte3d` | `scheme` | `user43` | Spokes ordered `"spiral"` or `"meridian"` | None |
+| `bssfp2d` | `retrospective` | `user44` | ECG gating: off, prospective, each heartbeat triggered and acquired once per cardiac phase; on, retrospective, each segment cycled over a heartbeat and binned into cardiac phases by the reconstruction | None |
+| `gre_spiral2d`, `se_spiral2d`, `gre_stack_of_spirals3d`, `se_stack_of_spirals3d`, `mprage_stack_of_spirals3d` | `variable_density` | `user42` | Variable-density spirals | `user12`: periphery undersampling |
 
 ### Diffusion tables
 

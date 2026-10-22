@@ -44,7 +44,7 @@
   <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../../../_static/documentation_options.js?v=d6d95e65"></script>
+    <script src="../../../_static/documentation_options.js?v=c1adde03"></script>
     <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -55,7 +55,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.1';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.2';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -67,7 +67,7 @@
     <link rel="search" title="Search" href="../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.4.1" />
+  <meta name="docsearch:version" content="v0.4.2" />
   
     
     <script src="../../../_static/searchtools.js"></script>
@@ -443,7 +443,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Mapping</span><span class="p">,</span> <span class="n">Sequence</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span><span class="p">,</span> <span class="n">field</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">types</span><span class="w"> </span><span class="kn">import</span> <span class="n">SimpleNamespace</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">TYPE_CHECKING</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">TYPE_CHECKING</span><span class="p">,</span> <span class="n">Literal</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 
@@ -632,27 +632,36 @@
 <div class="viewcode-block" id="parse_values">
 <a class="viewcode-back" href="../../../generated/pulserver.protocol.parse_values.html#pulserver.protocol.parse_values">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">parse_values</span><span class="p">(</span>
-    <span class="n">text</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">listing</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="n">Parameter</span><span class="p">]</span>
+    <span class="n">text</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">listing</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="n">Parameter</span><span class="p">],</span>
+    <span class="n">unlisted</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">"refuse"</span><span class="p">,</span> <span class="s2">"skip"</span><span class="p">]</span> <span class="o">=</span> <span class="s2">"refuse"</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="nb">float</span> <span class="o">|</span> <span class="nb">int</span> <span class="o">|</span> <span class="nb">bool</span> <span class="o">|</span> <span class="nb">str</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">"""Read a value block against the listing it was edited from.</span>
 
-<span class="sd">    Lines for read-only entries are ignored. A stringlist's value is the</span>
-<span class="sd">    option object the listing holds, which is a member of the choices' enum</span>
-<span class="sd">    where the listing comes from a scanner sequence.</span>
+<span class="sd">    Lines for read-only entries are ignored, and with ``unlisted="skip"`` so</span>
+<span class="sd">    are lines naming a parameter the listing does not declare. A stringlist's</span>
+<span class="sd">    value is the option object the listing holds, which is a member of the</span>
+<span class="sd">    choices' enum where the listing comes from a scanner sequence.</span>
 
 <span class="sd">    Raises</span>
 <span class="sd">    ------</span>
 <span class="sd">    ValueError</span>
-<span class="sd">        If a line names a parameter the listing does not declare, or carries a</span>
-<span class="sd">        value that parameter cannot take.</span>
+<span class="sd">        If a line names a parameter the listing does not declare and</span>
+<span class="sd">        ``unlisted`` is ``"refuse"``, or carries a value that parameter cannot</span>
+<span class="sd">        take, which the message names.</span>
 <span class="sd">    """</span>
     <span class="n">values</span> <span class="o">=</span> <span class="p">{}</span>
     <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">_block_lines</span><span class="p">(</span><span class="n">text</span><span class="p">):</span>
         <span class="k">if</span> <span class="n">name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">listing</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">unlisted</span> <span class="o">==</span> <span class="s2">"skip"</span><span class="p">:</span>
+                <span class="k">continue</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">name</span><span class="si">!r}</span><span class="s2"> is not a parameter of this protocol"</span><span class="p">)</span>
         <span class="n">p</span> <span class="o">=</span> <span class="n">listing</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
         <span class="k">if</span> <span class="n">p</span><span class="o">.</span><span class="n">editable</span><span class="p">:</span>
-            <span class="n">values</span><span class="p">[</span><span class="n">_key</span><span class="p">(</span><span class="n">name</span><span class="p">)]</span> <span class="o">=</span> <span class="n">p</span><span class="o">.</span><span class="n">coerce</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">values</span><span class="p">[</span><span class="n">_key</span><span class="p">(</span><span class="n">name</span><span class="p">)]</span> <span class="o">=</span> <span class="n">p</span><span class="o">.</span><span class="n">coerce</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">ValueError</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">error</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="kc">None</span>
     <span class="k">return</span> <span class="n">values</span></div>
 
 

@@ -17,7 +17,7 @@ store are described in {doc}`../explanations/architecture`.
 ## Design calls
 
 ```bash
-pulserver design list     --plugins DIR --plugin NAME [--limits FILE --rf-definitions] [--socket PATH]
+pulserver design list     --plugins DIR --plugin NAME [--values FILE] [--limits FILE --rf-definitions] [--socket PATH]
 pulserver design validate --plugins DIR --plugin NAME --limits FILE [--rf-layout] [--exam DIR] [--socket PATH] < VALUES
 pulserver design generate --plugins DIR --plugin NAME --limits FILE --store DIR --scan NAME [--exam DIR] [--push URL] [--socket PATH] < VALUES
 pulserver design import   --limits FILE --store DIR --scan NAME [--push URL] [--socket PATH] < IMPORT
@@ -36,7 +36,7 @@ directory name, not starting with `.`.
 
 | Call | Reply |
 | --- | --- |
-| `list` | `PROTOCOL` and the plugin's listing block; with `--rf-definitions`, the `[RfDefinitions]` block |
+| `list` | `PROTOCOL` and the plugin's listing block at the options of the value block in `--values` ({ref}`plugin-options`); with `--rf-definitions`, the `[RfDefinitions]` block |
 | `validate` | `VALID <seconds>` or `INVALID`, an `INFO` line and the value block of the resolved protocol; with `--rf-layout`, a valid reply ends with the `[RfLayout]` block |
 | `generate` | `GENERATED <id>`, the identifier of the design in the scan's directory |
 | `import` | `IMPORTED <id>` |
@@ -53,9 +53,9 @@ evaluation states an RF layout ({ref}`stating-the-rf-layout`).
 `--rf-definitions` evaluates the plugin at its default protocol under
 `--limits`, which it then requires. `--rf-layout` follows a valid reply with the
 RF layout of the evaluated request, its amplitudes relative to the peaks the
-listing states. Without `--rf-definitions`, `list` depends on the plugin file
-and the installed packages only, so its reply can be written once at
-installation and read without a call.
+listing states. Without `--rf-definitions`, `list` depends on the plugin file,
+its options and the installed packages only, so its reply can be written once
+at installation and read without a call.
 
 `--exam` names the directory of the current exam's cache, which is passed to
 the plugin hooks that take `exam` ({ref}`exam-cache`); for such a plugin the
@@ -107,11 +107,20 @@ design_max_slew: 86.603
 ```
 
 The lines without a prefix are keyword arguments of `pypulseqpp.Opts`, of which
-`B0`, the field in T, is required: ppm offsets are resolved at it. The limits
-are the `system` the plugin designs under and the checks hold the design to, so
-include the scanner's RF and ADC dead times, RF ringdown time and ADC sample
+`B0`, the field in T, is required: ppm offsets are resolved at it. The limits,
+less a design margin, are the `system` the plugin designs under, and the checks
+hold the design to them as sent, so include the scanner's RF and ADC dead times, RF ringdown time and ADC sample
 divisor; `pypulseqpp.Opts` sets the dead times to zero and the divisor to four
 when they are left out.
+
+`max_b1` is the peak B1 the transmit chain allows, in µT, or in the `b1_unit`
+given beside it, as the scanner states it; left out, the pulses are not
+limited. The selective and non-selective excitation and refocusing modules of
+pypulseqpp keep their own duration while the pulse peaks within
+`pypulseqpp.MAX_B1_DERATE` of it, and are otherwise lengthened, flip
+angle and time-bandwidth product held, until it does; the shortest TE and TR a
+plugin reports follow. Spectral, adiabatic, two-dimensional and multiband
+pulses are designed as given.
 
 `max_grad` and `max_slew` are the limits of the gradient coils, to which the
 checks hold every physical axis. Logical axes played together add on one
@@ -126,7 +135,11 @@ scanner for the prescription's rotation:
 | `design_max_slew` | Slew rate each logical axis is designed under, in the `slew_unit` of `max_slew` |
 
 A design limit above the scanner's leaves the scanner's, and one left out is the
-scanner's. `validate` resolves a request under the same limits as `generate`.
+scanner's. The plugin designs under these limits derated once by
+`pypulseqpp.apply_system_derates`: the gradient amplitude, slew rate and peak
+B1 scaled by `pypulseqpp.MAX_GRAD_DERATE`, `MAX_SLEW_DERATE` and
+`MAX_B1_DERATE`. The checks, the design's identity and its manifest keep the
+limits as the scanner sent them. `validate` resolves a request under the same limits as `generate`.
 An imported chain is not designed, and is checked against `max_grad` and
 `max_slew` alone.
 
@@ -277,7 +290,7 @@ pulserver proxy --store DIR --port N --forward HOST:PORT [--forward-config NAME]
 | `--forward` | `HOST:PORT` of the MRD server that reconstructs every series, instead of local workers |
 | `--forward-config` | Config name sent to the `--forward` server; the series' reconstruction plugin when unset |
 | `--dicom` | Convert each image to DICOM before it is relayed, whatever reconstructed it; for a client that reads DICOM only |
-| `--save-data` | Directory each series is kept in as the scanner sends it; kept nowhere when unset |
+| `--save-data` | Directory each series is kept in, enriched; kept nowhere when unset |
 | `--idle-timeout` | Seconds without a client after which the proxy closes, never while a series is reconstructed. Unlimited when unset |
 | `--logfile` | File the log is appended to, together with the standard output and error of the proxy and its workers, so whatever a reconstruction plugin logs, prints or warns lands there too; standard error when unset |
 | `--log-level` | `DEBUG`, `INFO`, `WARNING` or `ERROR`; `INFO` when unset |
@@ -304,10 +317,10 @@ place of a new reconstruction.
 ### Saved series
 
 With `--save-data`, each series is also written to
-`<save-data>/mrd_<timestamp>.h5` as the scanner sends it, header first and each
-acquisition as it arrives, before it is enriched. `pulserver replay` runs a
-plugin on that file and reconstructs it offline as the proxy did
-({ref}`series-replay`). The queue directory holds a series only until it is
+`<save-data>/mrd_<timestamp>.h5` as the proxy reconstructs it: header and
+acquisitions enriched, the header marked `pulserver_enriched`, each acquisition
+as it arrives. `pulserver replay` runs a plugin on that file as it stands and
+gives the image the proxy did ({ref}`series-replay`). The queue directory holds a series only until it is
 reconstructed.
 
 ### Proxy lifetime
@@ -337,9 +350,9 @@ determine when it is reconstructed. The server receives a config file message
 naming the series' reconstruction plugin, which a reconstruction server runs,
 or the `--forward-config` name, such as the configuration by which a Gadgetron
 or FIRE server selects its pipeline. The client's config text is not
-forwarded. What the server returns is relayed to the client; a message type the
-proxy cannot read ends the relay, and the client receives a `pulserver:` text
-naming the type.
+forwarded. What the server returns is relayed to the client once the client's
+stream has ended whole, as from a worker; a message type the proxy cannot read
+ends the relay, and the client receives a `pulserver:` text naming the type.
 
 ### Sequence description
 

@@ -45,7 +45,7 @@
   <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../_static/documentation_options.js?v=d6d95e65"></script>
+    <script src="../_static/documentation_options.js?v=c1adde03"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -56,7 +56,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.1';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.2';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -70,7 +70,7 @@
     <link rel="prev" title="Documentation" href="documentation.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.4.1" />
+  <meta name="docsearch:version" content="v0.4.2" />
   
     
     <script src="../_static/searchtools.js"></script>
@@ -637,8 +637,8 @@ every block. The <em>repetition</em> of a subsequence is the period
 <code class="docutils literal notranslate"><span class="pre">pypulseqpp.Sequence.repetition()</span></code> reports, the whole subsequence where it
 does not repeat; the conversion finds virtual segments within it. Do not write
 “repeating unit”, which implies that every sequence is periodic, nor “segment
-definition” for a virtual segment. A <code class="docutils literal notranslate"><span class="pre">TRID</span></code> label marks a <em>safety group</em> here,
-not a segment boundary. The <em>IR cache</em> is the file; the <em>collection</em> is what a
+definition” for a virtual segment. A <code class="docutils literal notranslate"><span class="pre">TRID</span></code> label is carried with each block
+and places no segment boundary. The <em>IR cache</em> is the file; the <em>collection</em> is what a
 reader loads from it.</p>
 <p><strong>Virtual scanner.</strong> The stand-ins for the scanner in tests: the <em>virtual
 interpreter</em>, which plays a cache with the C library’s cursor, the <em>phantom</em>

@@ -45,7 +45,7 @@
   <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../_static/documentation_options.js?v=d6d95e65"></script>
+    <script src="../_static/documentation_options.js?v=c1adde03"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -56,7 +56,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.1';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.2';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -68,7 +68,7 @@
     <link rel="search" title="Search" href="../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.4.1" />
+  <meta name="docsearch:version" content="v0.4.2" />
   
     
     <script src="../_static/searchtools.js"></script>
@@ -533,18 +533,18 @@ names, which are the members of
 entry is stored as its member. Empty by default. An entry that states
 its <code class="docutils literal notranslate"><span class="pre">default</span></code> may bind a name the app does not take; it is then read
 by the plugin’s own <a class="reference internal" href="pulserver.design.SequencePlugin.evaluate.html#pulserver.design.SequencePlugin.evaluate" title="pulserver.design.SequencePlugin.evaluate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">evaluate()</span></code></a> and <a class="reference internal" href="pulserver.design.SequencePlugin.generate.html#pulserver.design.SequencePlugin.generate" title="pulserver.design.SequencePlugin.generate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">generate()</span></code></a>, which do
-not pass it to the app.</p></li>
-<li><p><strong>options</strong> (<em>mapping</em>) – The plugin’s options, by name, at the values
-<a class="reference internal" href="pulserver.design.load_plugin.html#pulserver.design.load_plugin" title="pulserver.design.load_plugin"><code class="xref py py-func docutils literal notranslate"><span class="pre">load_plugin()</span></code></a> loaded it with; empty for an
-instance made otherwise.</p></li>
+not pass it to the app. The options the plugin module declares with
+<a class="reference internal" href="pulserver.design.option.html#pulserver.design.option" title="pulserver.design.option"><code class="xref py py-func docutils literal notranslate"><span class="pre">option()</span></code></a> are added, each an
+<a class="reference internal" href="pulserver.design.OptionParam.html#pulserver.design.OptionParam" title="pulserver.design.OptionParam"><code class="xref py py-class docutils literal notranslate"><span class="pre">OptionParam</span></code></a> at its user entry, named in the user entry’s
+name.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Raises<span class="colon">:</span></dt>
 <dd class="field-even"><ul class="simple">
 <li><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.15)"><strong>ValueError</strong></a> – When a subclass is defined with a <code class="docutils literal notranslate"><span class="pre">protocol</span></code> key the interpreter does
-    not know, which its parser would drop, or with one of the prescription
-    entries, which pulserver applies itself; or with both <code class="docutils literal notranslate"><span class="pre">protocol</span></code> and
-    <code class="docutils literal notranslate"><span class="pre">ui</span></code>.</p></li>
+    not know, which its parser would drop, with one of the prescription
+    entries, which pulserver applies itself, or with an entry at the user
+    entry of an option; or with both <code class="docutils literal notranslate"><span class="pre">protocol</span></code> and <code class="docutils literal notranslate"><span class="pre">ui</span></code>.</p></li>
 <li><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#TypeError" title="(in Python v3.15)"><strong>TypeError</strong></a> – When a subclass is defined with a class as <code class="docutils literal notranslate"><span class="pre">app</span></code>.</p></li>
 </ul>
 </dd>
@@ -584,7 +584,7 @@ subclasses <a class="reference internal" href="pulserver.design.ScannerSequence.
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table">
 <tbody>
 <tr class="row-odd"><td><p><a class="reference internal" href="pulserver.design.SequencePlugin.options.html#pulserver.design.SequencePlugin.options" title="pulserver.design.SequencePlugin.options"><code class="xref py py-obj docutils literal notranslate"><span class="pre">options</span></code></a></p></td>
-<td><p></p></td>
+<td><p>The plugin's options, by name, at the values it was loaded with.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="pulserver.design.SequencePlugin.protocol.html#pulserver.design.SequencePlugin.protocol" title="pulserver.design.SequencePlugin.protocol"><code class="xref py py-obj docutils literal notranslate"><span class="pre">protocol</span></code></a></p></td>
 <td><p></p></td>

@@ -21,7 +21,7 @@ from.
    load_plugin
    load_exam
    option
-   read_options
+   OptionParam
    OptionError
    RfLayout
    RfControl
@@ -74,7 +74,8 @@ from.
    sample_wave
    playout
    Prescan
-   repetition_gradients
+   prescan_tour
+   gradient_stretch
    chain
    cache_path
 
