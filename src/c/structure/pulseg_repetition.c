@@ -1,10 +1,9 @@
 /**
  * @file pulseg_repetition.c
- * @brief The gradients of the repetition of a subsequence that carries the
- *        most gradient energy, as the cache carries them, and their samples
- *        on a raster.
+ * @brief The gradients of a subsequence's stretches, as the cache carries
+ *        them, and their samples on a raster.
  *
- * See pulseg_get_tr_corner_points().
+ * See pulseg_get_gradient_stretch().
  */
 
 #include <stdlib.h>
@@ -52,11 +51,12 @@ static int copy_stream(const pulseg_corner_point_stream *from, pulseg_corner_poi
     return PULSEG_ERR_ALLOC_FAILED;
 }
 
-int pulseg_get_tr_corner_points(
+int pulseg_get_gradient_stretch(
     const pulseg_collection *coll,
     pulseg_corner_point_stream *out,
     pulseg_diagnostic *diag,
-    int subseq_idx)
+    int subseq_idx,
+    int stretch)
 {
     static const pulseg_corner_point_stream empty = PULSEG_CORNER_POINT_STREAM_INIT;
     const pulseg_corner_point_stream *stored;
@@ -64,14 +64,16 @@ int pulseg_get_tr_corner_points(
     if (!coll || !out)
         return PULSEG_ERR_NULL_POINTER;
     *out = empty;
-    if (subseq_idx < 0 || subseq_idx >= coll->num_subsequences)
+    if (subseq_idx < 0 || subseq_idx >= coll->num_subsequences || stretch < 0 ||
+        stretch >= PULSEG_NUM_STRETCHES)
         return PULSEG_ERR_INVALID_ARGUMENT;
-    stored = &coll->descriptors[subseq_idx].repetition;
+    stored = &coll->descriptors[subseq_idx].stretches[stretch];
     if (stored->num_points <= 0)
     {
         if (diag)
             pulseg__diag_printf(
-                diag, "subsequence %d: the collection carries no repetition gradients", subseq_idx);
+                diag, "subsequence %d: the collection carries no gradients of stretch %d",
+                subseq_idx, stretch);
         return PULSEG_ERR_INVALID_ARGUMENT;
     }
     return copy_stream(stored, out);

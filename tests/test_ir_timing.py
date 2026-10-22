@@ -92,6 +92,37 @@ def test_a_dense_stretch_is_found_wherever_it_plays(tmp_path):
     assert w["start_us"] == pytest.approx(12 * 1.0e6)
 
 
+def _played(path, waits):
+    """One pulse and one pure delay per entry of ``waits``."""
+    return packets(path, waits, 1)
+
+
+@pytest.mark.parametrize(
+    ("waits", "copies"),
+    [
+        ([4e-5] * 10, 1),
+        (([4e-5] * 4 + [0.3]) * 8, 5),
+        ([4e-5, 0.3] * 6, 2),
+        ([0.01, 0.02, 0.03, 0.04], 4),
+        (([4e-5] * 4 + [0.3]) * 3 + [4e-5] * 2, 5),
+    ],
+    ids=[
+        "uniform",
+        "pad-on-last-of-5",
+        "alternating",
+        "aperiodic",
+        "last-period-cut-short",
+    ],
+)
+def test_the_hyper_repetition_is_the_shortest_period_of_the_copies(
+    tmp_path, waits, copies
+):
+    t = subsequence(_played(tmp_path / "hyper.seq", waits))["tr_timing"]
+    assert t["num_copies"] == len(waits)
+    assert t["hyper_copies"] == copies
+    assert t["hyper_us"] == pytest.approx(sum(1000.0 + 1e6 * w for w in waits[:copies]))
+
+
 @pytest.mark.parametrize("name", sorted(p.name for p in FIXTURES.glob("*.seq")))
 def test_every_fixture_plays_for_its_copies(name):
     t = subsequence(FIXTURES / name)["tr_timing"]

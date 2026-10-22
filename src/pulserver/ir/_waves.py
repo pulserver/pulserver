@@ -1,9 +1,9 @@
-"""Waves and heaviest repetition of a cache's gradients, as a playout plays them."""
+"""Waves and heaviest stretches of a cache's gradients, as a playout plays them."""
 
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import numpy as np
 
@@ -136,22 +136,32 @@ def sample_wave(
     )
 
 
-def repetition_gradients(
+_STRETCHES = {"heaviest": 0, "heaviest_repetition": 1}
+
+
+def gradient_stretch(
     seq_path: Path | str,
     subsequence: int = 0,
+    stretch: Literal["heaviest", "heaviest_repetition"] = "heaviest",
     *,
     raster_us: float | None = None,
     cache_ext: str = ".pseg",
 ) -> dict[str, Any]:
-    """Return the gradients of a subsequence's repetition of most gradient energy.
+    """Return the gradients of one of a subsequence's stretches.
 
-    The C library's choice (``pulseg_get_tr_corner_points``): of the
-    repetitions the cache's execution stream holds, from its first block,
-    the one over which the squared gradient summed over the axes integrates
-    to the most, the earliest on a tie; the whole subsequence where it does
-    not repeat. The repetition is one the scanner plays, with its blocks'
-    own amplitudes, shapes and rotations. A scanner evaluates its
-    gradient-heating and acoustic models on it.
+    The C library's choice (``pulseg_get_gradient_stretch``). A stretch is the
+    run of whole segment instances from one instance's start until they last
+    the subsequence's hyper-repetition (``hyper_us`` of the summary's
+    ``tr_timing``), or 10 s (``PULSEG_STRETCH_US``) where that is shorter, or
+    to the subsequence's end where it comes first, each block at its played
+    duration. ``"heaviest"`` is, of those lasting that long, the one over
+    which the squared gradient summed over the axes integrates to the most,
+    the earliest on a tie, and the whole subsequence where none does.
+    ``"heaviest_repetition"`` starts at
+    the instance holding the start of the repetition of most gradient energy,
+    of the repetitions the execution stream holds from its first block. A
+    scanner evaluates its gradient-heating model on both, each as if played
+    without end.
 
     Parameters
     ----------
@@ -159,6 +169,8 @@ def repetition_gradients(
         The first file of the chain; the cache is the file beside it.
     subsequence : int, default=0
         Index of the subsequence, in chain order.
+    stretch : {'heaviest', 'heaviest_repetition'}, default='heaviest'
+        Which stretch.
     raster_us : float, default=None
         Gradient raster in µs for ``samples_hz_per_m``; None omits it.
     cache_ext : str, default='.pseg'
@@ -167,8 +179,9 @@ def repetition_gradients(
     Returns
     -------
     dict of str to Any
-        - ``first_position``: execution-stream position of its first block;
-        - ``duration_us``: its duration, in µs;
+        - ``first_position``, ``num_positions``: execution-stream position of
+          its first block, and the positions it spans;
+        - ``duration_us``: its played duration, in µs;
         - ``energy``: that integral, in (Hz/m)² s;
         - ``time_us``, ``gradient_hz_per_m``: ``(points,)`` and
           ``(points, 3)``, its corner points from its start, along the logical
@@ -180,12 +193,18 @@ def repetition_gradients(
     Raises
     ------
     ValueError
-        If the cache cannot be loaded or holds no such subsequence.
+        If the cache cannot be loaded, holds no such subsequence, or
+        ``stretch`` is neither name.
     """
+    if stretch not in _STRETCHES:
+        raise ValueError(
+            f"stretch is 'heaviest' or 'heaviest_repetition', not {stretch!r}"
+        )
     seq_path = Path(seq_path)
-    return require("repetition_gradients_from_cache")(
+    return require("gradient_stretch_from_cache")(
         str(cache_path(seq_path, cache_ext)),
         seq_path.stat().st_size,
         subsequence,
+        _STRETCHES[stretch],
         0.0 if raster_us is None else raster_us,
     )

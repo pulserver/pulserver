@@ -1,8 +1,8 @@
 /*
  * Print a cache's summary as a scanner build of the library loads it: one
  * "key value" line per quantity, in the order pulserver.ir.summary returns
- * them, and each subsequence's heaviest repetition, as
- * pulserver.ir.repetition_gradients returns it; and, given a waveform memory
+ * them, and each subsequence's stretches, as pulserver.ir.gradient_stretch
+ * returns them; and, given a waveform memory
  * and a raster, the layout of its waves the cache carries for them, as
  * pulserver.ir.plan_waves returns it, and what both stages of a playout set
  * with it, as pulserver.ir.playout records it.  Compiled by tests/test_ir.py
@@ -44,9 +44,9 @@ static void print_subsequence(const pulseg_collection *coll, int i)
         weights[n] = 1.0;
     plays = pulseg_get_rf_window(coll, i, 10.0e6, weights, num_rf, counts, &start_us);
     printf("timing %d num_copies %d played_us %g shortest_copy_us %g longest_copy_us %g "
-           "rf_window plays %d start_us %g\n",
+           "hyper_copies %d hyper_us %g rf_window plays %d start_us %g\n",
            i, t.num_copies, t.played_us, t.shortest_copy_us, t.longest_copy_us,
-           plays, start_us);
+           t.hyper_copies, t.hyper_us, plays, start_us);
     free(weights);
     free(counts);
     num_waves = pulseg_get_num_waves(coll, i);
@@ -61,14 +61,20 @@ static void print_subsequence(const pulseg_collection *coll, int i)
     }
 }
 
-static void print_repetition(const pulseg_collection *coll, int i)
+static void print_stretches(const pulseg_collection *coll, int i)
 {
-    pulseg_corner_point_stream stream = PULSEG_CORNER_POINT_STREAM_INIT;
-    const int rc = pulseg_get_tr_corner_points(coll, &stream, NULL, i);
+    int k;
 
-    printf("repetition %d rc %d first %d points %d duration_us %.1f\n", i, rc,
-           stream.first_position, stream.num_points, (double)stream.duration_us);
-    pulseg_corner_point_stream_free(&stream);
+    for (k = 0; k < PULSEG_NUM_STRETCHES; ++k)
+    {
+        pulseg_corner_point_stream stream = PULSEG_CORNER_POINT_STREAM_INIT;
+        const int rc = pulseg_get_gradient_stretch(coll, &stream, NULL, i, k);
+
+        printf("stretch %d %d rc %d first %d positions %d points %d duration_us %.1f\n", i, k,
+               rc, stream.first_position, stream.num_positions, stream.num_points,
+               (double)stream.duration_us);
+        pulseg_corner_point_stream_free(&stream);
+    }
 }
 
 static void print_region(const char *what, int i, int j, const pulseg_wave_region *region)
@@ -223,7 +229,7 @@ int main(int argc, char **argv)
                i, g.duration_us, g.num_blocks, g.start_block, g.is_nav);
     }
     for (i = 0; i < info.num_subsequences; ++i)
-        print_repetition(coll, i);
+        print_stretches(coll, i);
 
     if (argc == 5)
         print_waves(coll, atol(argv[3]), (float)atof(argv[4]));

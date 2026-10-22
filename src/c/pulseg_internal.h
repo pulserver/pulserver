@@ -625,9 +625,9 @@ typedef struct pulseg_sequence_descriptor
     pulseg_wave *waves;
     int *block_wave;
 
-    /* The gradients of the heaviest repetition, computed at conversion and
-     * serialized in COMMON.  See pulseg_get_tr_corner_points(). */
-    pulseg_corner_point_stream repetition;
+    /* The gradients of the stretches, computed at conversion and serialized
+     * in COMMON.  See pulseg_get_gradient_stretch(). */
+    pulseg_corner_point_stream stretches[PULSEG_NUM_STRETCHES];
 
     /* Copy of pulseg_opts.cache_ext at dedup time. Not part of the
      * cache payload itself (it only names the cache FILE, not its
@@ -657,7 +657,8 @@ typedef struct pulseg_sequence_descriptor
     /* hints */ 0, 0, /* tr_start anchor */ -1, NULL, /* rf freq */ NULL, NULL, 0, 0, NULL, \
     {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, \
     {0, 0}, {0, 0}, {0, 0}, {0, 0}}, NULL, /* waves */ 0, NULL, NULL, \
-    PULSEG_CORNER_POINT_STREAM_INIT, PULSEG_CACHE_EXT_DEFAULT, 0, 0 \
+    {PULSEG_CORNER_POINT_STREAM_INIT, PULSEG_CORNER_POINT_STREAM_INIT}, \
+    PULSEG_CACHE_EXT_DEFAULT, 0, 0 \
     }
 /* clang-format on */
 

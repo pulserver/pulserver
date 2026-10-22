@@ -243,7 +243,8 @@ void pulseg_sequence_descriptor_free(pulseg_sequence_descriptor *d)
         d->block_wave = NULL;
     }
     d->num_waves = 0;
-    pulseg_corner_point_stream_free(&d->repetition);
+    for (i = 0; i < PULSEG_NUM_STRETCHES; ++i)
+        pulseg_corner_point_stream_free(&d->stretches[i]);
 }
 
 void pulseg_collection_free(pulseg_collection *c)

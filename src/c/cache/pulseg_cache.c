@@ -33,7 +33,7 @@
 /* The full (major, minor, revision) triple must match exactly on read: a
  * cache at any other revision is rejected outright and the .seq is
  * re-parsed, never partially or heuristically read. */
-#define PULSEG_CACHE_VERSION_REVISION 5
+#define PULSEG_CACHE_VERSION_REVISION 6
 
 /* Per-consumer sections. Each carries its own distinct payload.
  * COMMON establishes the collection + descriptor framing; the others
@@ -296,26 +296,28 @@ static float *read_floats(FILE *f, int count, int do_swap)
     return values;
 }
 
-/* The heaviest repetition's gradients, in COMMON: the point count, the
- * scalars, then time and the three axes. */
-static int write_repetition(FILE *f, const pulseg_corner_point_stream *s)
+/* A stretch's gradients, in COMMON: the point count, the scalars, then time
+ * and the three axes. */
+static int write_stretch(FILE *f, const pulseg_corner_point_stream *s)
 {
     const int n = s->num_points > 0 ? s->num_points : 0;
 
     if (!pulseg__write4(f, &n, 1) || !pulseg__write4(f, &s->first_position, 1) ||
-        !pulseg__write4(f, &s->energy, 1) || !pulseg__write4(f, &s->duration_us, 1))
+        !pulseg__write4(f, &s->num_positions, 1) || !pulseg__write4(f, &s->energy, 1) ||
+        !pulseg__write4(f, &s->duration_us, 1))
         return 0;
     return n == 0 ||
         (pulseg__write4(f, s->time_us, n) && pulseg__write4(f, s->gx_hz_per_m, n) &&
          pulseg__write4(f, s->gy_hz_per_m, n) && pulseg__write4(f, s->gz_hz_per_m, n));
 }
 
-static int read_repetition(FILE *f, pulseg_corner_point_stream *s, int do_swap)
+static int read_stretch(FILE *f, pulseg_corner_point_stream *s, int do_swap)
 {
     int n;
 
     if (!read_int(f, &n, do_swap) || n < 0 || !read_int(f, &s->first_position, do_swap) ||
-        !read_float(f, &s->energy, do_swap) || !read_float(f, &s->duration_us, do_swap))
+        !read_int(f, &s->num_positions, do_swap) || !read_float(f, &s->energy, do_swap) ||
+        !read_float(f, &s->duration_us, do_swap))
         return 0;
     if (n == 0)
         return 1;
@@ -667,7 +669,10 @@ static int write_common(FILE *f, const pulseg_sequence_descriptor *d)
     /* exec_stream, variable_grad_flags and the RF frequency flags: emitted in
      * the SCANLOOP section (write_scanloop) */
 
-    return write_repetition(f, &d->repetition);
+    for (i = 0; i < PULSEG_NUM_STRETCHES; ++i)
+        if (!write_stretch(f, &d->stretches[i]))
+            return 0;
+    return 1;
 }
 
 /* ------ Serialize the ROTATIONS region of a descriptor ------ */
@@ -1375,7 +1380,10 @@ static int read_common(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
     /* exec_stream + variable_grad_flags: read from the SCANLOOP section
      * (read_scanloop) */
 
-    return read_repetition(f, &d->repetition, do_swap);
+    for (i = 0; i < PULSEG_NUM_STRETCHES; ++i)
+        if (!read_stretch(f, &d->stretches[i], do_swap))
+            return 0;
+    return 1;
 }
 
 /* ------ Deserialize the INSTANCES region into an existing descriptor ------ */

@@ -441,6 +441,11 @@ typedef struct pulseg_tr_timing
     double played_us;        /**< the subsequence played through, us */
     double shortest_copy_us; /**< the shortest whole repetition, us */
     double longest_copy_us;  /**< the longest whole repetition, us */
+    int hyper_copies;        /**< copies in the hyper-repetition: the smallest period of
+                                  the copies' durations, a last period cut short allowed;
+                                  1 when every copy lasts the same, num_copies when they
+                                  do not repeat */
+    double hyper_us;         /**< the hyper-repetition's duration, us */
 } pulseg_tr_timing;
 
 /* ================================================================== */
@@ -916,34 +921,49 @@ typedef struct pulseg_block_info
 /* clang-format on */
 
 /* ================================================================== */
-/*  Gradients of one repetition                                        */
+/*  Gradients of a stretch                                            */
 /* ================================================================== */
 
 /**
- * @brief The gradients of one repetition, as corner points on its timeline.
+ * @brief The gradients of a stretch of a subsequence, as corner points on its
+ * timeline.
  *
  * All three axes share @c time_us, and each is linear between consecutive
  * points, so this is the waveform itself, not a sampling of it: each block's
  * gradients at their own corners, a rotated block's through its wave, joined
- * from the repetition's start.  Along the logical axes: each block's own
- * rotation is in, the prescription's is not.
+ * from the stretch's start, each block at its played duration.  Along the
+ * logical axes: each block's own rotation is in, the prescription's is not.
  */
 typedef struct pulseg_corner_point_stream
 {
     int num_points;
-    float *time_us;     /**< [num_points] from the repetition's start       */
+    float *time_us;     /**< [num_points] from the stretch's start          */
     float *gx_hz_per_m; /**< [num_points]                                   */
     float *gy_hz_per_m; /**< [num_points]                                   */
     float *gz_hz_per_m; /**< [num_points]                                   */
-    float duration_us;  /**< the repetition's duration                      */
+    float duration_us;  /**< the stretch's played duration                  */
     int first_position; /**< execution-stream position of its first block   */
     float energy;       /**< integral of the squared gradient, summed over
-                             the axes, over the repetition: (Hz/m)^2 s      */
+                             the axes, over the stretch: (Hz/m)^2 s         */
+    int num_positions;  /**< execution-stream positions it spans            */
 } pulseg_corner_point_stream;
 
 /* clang-format off */
-#define PULSEG_CORNER_POINT_STREAM_INIT {0, NULL, NULL, NULL, NULL, 0.0f, -1, 0.0f}
+#define PULSEG_CORNER_POINT_STREAM_INIT {0, NULL, NULL, NULL, NULL, 0.0f, -1, 0.0f, 0}
 /* clang-format on */
+
+/* The stretches pulseg_get_gradient_stretch() returns.  A stretch is the run
+ * of whole segment instances from one instance's start until they last the
+ * subsequence's hyper-repetition (pulseg_tr_timing), or PULSEG_STRETCH_US
+ * where that is shorter, or to the subsequence's end where it comes first. */
+#define PULSEG_STRETCH_US 10.0e6 /**< the longest a stretch needs to last, us */
+#define PULSEG_STRETCH_HEAVIEST 0 /**< of those lasting that long, the one of most
+                                       gradient energy, the earliest on a tie; the
+                                       whole subsequence where none does */
+#define PULSEG_STRETCH_HEAVIEST_REPETITION 1 /**< from the instance holding the start of
+                                                  the repetition of most gradient
+                                                  energy */
+#define PULSEG_NUM_STRETCHES 2
 
 /* ================================================================== */
 /*  Waveform memory for waves                                         */

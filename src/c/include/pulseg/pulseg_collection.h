@@ -270,8 +270,13 @@ extern "C"
         int subseq_idx);
 
     /**
-     * @brief How long a subsequence plays, and its shortest and longest
-     * whole repetition, every block for its own duration.
+     * @brief How long a subsequence plays, its shortest and longest whole
+     * repetition and its hyper-repetition, every block for its own duration.
+     *
+     * The hyper-repetition is the shortest run of copies whose durations
+     * repeat over all of them, exactly in us: one copy where every copy lasts
+     * the same, five for a five-slice packet whose last slice carries the
+     * pad.  Linear in the execution stream; allocates two words per copy.
      *
      * @param[in]  coll        Loaded collection, with its execution stream.
      * @param[out] out         Overwritten.
@@ -599,41 +604,45 @@ extern "C"
     void pulseg_free_wave_plan(pulseg_wave_plan *plan);
 
     /* ================================================================== */
-    /*  Gradients of the heaviest repetition                              */
+    /*  Gradients of the heaviest stretches                               */
     /* ================================================================== */
 
     /**
-     * @brief Return the gradients of a subsequence's repetition of most
-     * gradient energy, as corner points.
+     * @brief Return the gradients of one of a subsequence's stretches, as
+     * corner points.
      *
-     * The repetition is one the scanner plays, with its blocks' own
-     * amplitudes, shapes and rotations: of the repetitions the execution
-     * stream holds, from its first block, the one over which the squared
-     * gradient summed over the axes integrates to the most, the earliest on
-     * a tie; the whole subsequence where it does not repeat.  That energy is
-     * the same whatever the rotations, so the choice does not depend on them.
-     * What a scanner's gradient-heating and acoustic models are evaluated on.
+     * The stretches are what a scanner's gradient-heating model is evaluated
+     * on, each as if played without end and against its own duration:
+     * PULSEG_STRETCH_HEAVIEST, and PULSEG_STRETCH_HEAVIEST_REPETITION, which
+     * holds a short burst the other averages out.  The repetition of most
+     * gradient energy is, of the repetitions the execution stream holds from
+     * its first block, the one over which the squared gradient summed over
+     * the axes integrates to the most, the earliest on a tie.  Energy is the
+     * same whatever the rotations, so neither choice depends on them.
      *
-     * The points run from 0, zero where no gradient plays at the
-     * repetition's start, to its duration, zero where none plays up to its
-     * end; where one block's gradient meets the next's, the later block's
-     * corner stands.  The conversion computes them, and the cache carries
-     * them.
+     * The blocks play with their own amplitudes, shapes, rotations and
+     * durations.  The points run from 0, zero where no gradient plays at the
+     * stretch's start, to its duration, zero where none plays up to its end;
+     * where one block's gradient meets the next's, the later block's corner
+     * stands.  The conversion computes them, and the cache carries them.
      *
      * @param[in]  coll        Loaded collection; COMMON suffices.
      * @param[out] out         Overwritten; release with
      *                         pulseg_corner_point_stream_free().
      * @param[out] diag        Diagnostic on failure; may be NULL.
      * @param[in]  subseq_idx  Subsequence index.
+     * @param[in]  stretch     PULSEG_STRETCH_HEAVIEST or
+     *                         PULSEG_STRETCH_HEAVIEST_REPETITION.
      * @return PULSEG_SUCCESS, or a negative error code.
      */
-    int pulseg_get_tr_corner_points(
+    int pulseg_get_gradient_stretch(
         const pulseg_collection *coll,
         pulseg_corner_point_stream *out,
         pulseg_diagnostic *diag,
-        int subseq_idx);
+        int subseq_idx,
+        int stretch);
 
-    /** @brief Release what pulseg_get_tr_corner_points() allocated and reset @p s. */
+    /** @brief Release what pulseg_get_gradient_stretch() allocated and reset @p s. */
     void pulseg_corner_point_stream_free(pulseg_corner_point_stream *s);
 
     /**
