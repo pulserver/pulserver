@@ -36,6 +36,9 @@ REFERENCE_DURATION = 1e-3
 #: than it drives a band less. The bands' default threshold is set for it.
 RESONANCE_WINDOW = 0.02
 
+#: Threshold (mT/m) of a forbidden band whose table states no amplitude.
+RESONANCE_FLOOR = 8.0
+
 
 @dataclass(frozen=True)
 class CheckLimits:
@@ -176,7 +179,9 @@ def check(
     gradient limits, dead times and ringdown time of ``system``; and with
     ``check_pns``, ``check_mech_resonance`` and ``check_spl`` where ``limits``
     carries a nerve model, forbidden bands or an acoustic transfer function;
-    the gradient spectrum is read over windows of ``RESONANCE_WINDOW``.
+    the gradient spectrum is read over windows of ``RESONANCE_WINDOW``, a
+    band stating no amplitude is held to ``RESONANCE_FLOOR``, and a stated
+    amplitude limits the axis's gradient while the band holds a line.
     The waveforms are timed by the file's own rasters. VOPs are not checked
     here: see :func:`sar_ratios`.
 
@@ -313,12 +318,23 @@ def _resonance(
     sequence: pp.Sequence, system: pp.Opts, limits: CheckLimits
 ) -> list[str]:
     _, found = safety.check_mech_resonance(
-        sequence, limits.bands, window_width=RESONANCE_WINDOW, system=system
+        sequence,
+        limits.bands,
+        window_width=RESONANCE_WINDOW,
+        min_threshold=RESONANCE_FLOOR,
+        tolerance_limits="gradient",
+        system=system,
     )
     return [
         f"{band.peak:.1f} mT/m at {band.frequency:.0f} Hz on {band.peak_axis} in "
-        f"the window at {band.window_start:.3f} s exceeds the {band.threshold:.1f} "
-        f"mT/m of the forbidden band {band.f_min:.0f}-{band.f_max:.0f} Hz"
+        f"the window at {band.window_start:.3f} s "
+        + (
+            f"with the gradient at {band.gradient:.1f} mT/m exceeds the "
+            f"{band.tolerance:.1f} mT/m"
+            if band.tolerance > 0.0
+            else f"exceeds the {band.threshold:.1f} mT/m"
+        )
+        + f" of the forbidden band {band.f_min:.0f}-{band.f_max:.0f} Hz"
         + ("" if band.axis is None else f" on {band.axis}")
         for band in found.bands
         if band.violations

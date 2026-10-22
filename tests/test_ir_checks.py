@@ -72,8 +72,9 @@ def test_a_gradient_train_in_a_forbidden_band_is_refused_on_the_axis_it_plays(tr
     # rounding; the window it names is not part of the claim.
     (problem,) = ir.check(train, SYSTEM, limits=ir.CheckLimits(bands=(BAND_X,)))
     assert re.fullmatch(
-        r"17\.9 mT/m at 1000 Hz on x in the window at \d+\.\d{3} s exceeds the "
-        r"5\.0 mT/m of the forbidden band 900-1100 Hz on x",
+        r"17\.9 mT/m at 1000 Hz on x in the window at \d+\.\d{3} s with the "
+        r"gradient at 15\.0 mT/m exceeds the 5\.0 mT/m of the forbidden band "
+        r"900-1100 Hz on x",
         problem,
     )
     assert ir.check(train, SYSTEM, limits=ir.CheckLimits(bands=(BAND_Y,))) == []
@@ -91,6 +92,33 @@ def test_a_train_drives_a_band_over_the_20_ms_memory_of_the_resonance(
     path = _written(tmp_path, lobes * pairs + [(pp.make_delay(0.1),)])
     floor_band = safety.ForbiddenBand("x", 900.0, 1100.0, 0.0)
     problems = ir.check(path, SYSTEM, limits=ir.CheckLimits(bands=(floor_band,)))
+    assert bool(problems) == refused
+
+
+@pytest.mark.parametrize(("pairs", "refused"), [(8, False), (10, True)])
+def test_a_band_stating_no_amplitude_is_held_to_8_mt_per_m(tmp_path, pairs, refused):
+    """An 8 ms burst at 1 kHz reads 5.5 mT/m in the band and passes; 10 ms reads 8.9 and is refused."""
+    lobes = [(_mT("x", sign * 15, 100e-6, 300e-6),) for sign in (1, -1)]
+    path = _written(tmp_path, lobes * pairs + [(pp.make_delay(0.1),)])
+    floor_band = safety.ForbiddenBand("x", 900.0, 1100.0, 0.0)
+    problems = ir.check(path, SYSTEM, limits=ir.CheckLimits(bands=(floor_band,)))
+    assert bool(problems) == refused
+
+
+@pytest.mark.parametrize(("spoiler", "refused"), [(False, False), (True, True)])
+def test_a_stated_amplitude_limits_the_gradient_while_the_band_holds_a_line(
+    tmp_path, spoiler, refused
+):
+    """A 1 kHz train of 8 mT/m lobes reads 9.5 mT/m in a band stating 12 mT/m.
+
+    The line alone stays under 12; a 30 mT/m spoiler in the same window takes
+    the gradient over it, as an echo-spacing lockout reads its amplitude.
+    """
+    lobes = [(_mT("x", sign * 8, 100e-6, 300e-6),) for sign in (1, -1)]
+    middle = [(_mT("x", 30, 300e-6),)] if spoiler else []
+    path = _written(tmp_path, lobes * 30 + middle + lobes * 30)
+    stated = safety.ForbiddenBand("x", 900.0, 1100.0, 12.0)
+    problems = ir.check(path, SYSTEM, limits=ir.CheckLimits(bands=(stated,)))
     assert bool(problems) == refused
 
 

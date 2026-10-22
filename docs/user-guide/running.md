@@ -176,7 +176,7 @@ gradient heating from it.
 | `pns_chronaxie`, `pns_rheobase`, `pns_alpha` | Chronaxie nerve model: chronaxie in s, rheobase in T/m/s, `alpha` 1 when left out. The rheobase and the alpha are one value or three separated by spaces, one per physical axis |
 | `pns_<axis>_<field>` | SAFE nerve model, for the axes `x`, `y` and `z` and the fields `a1` to `a3`, `tau1` to `tau3` in ms, `stim_limit` in T/m/s and `g_scale` |
 | `pns_limit` | Largest PNS response allowed, as a fraction of the model's threshold; 1 when left out |
-| `forbidden_band_<n>` | One forbidden band: its physical axis (`x`, `y`, `z` or `all`), its lowest and highest frequency in Hz and, optionally, the largest amplitude allowed in it in mT/m, separated by spaces. Without an amplitude, the `min_threshold` of `pypulseqpp.safety.check_mech_resonance` |
+| `forbidden_band_<n>` | One forbidden band: its physical axis (`x`, `y`, `z` or `all`), its lowest and highest frequency in Hz and, optionally, the readout gradient amplitude in mT/m above which it is locked, as an echo-spacing lockout table states it, separated by spaces. Without an amplitude, the band is held to 8 mT/m (`RESONANCE_FLOOR`) |
 | `vop_file` | `.mat` or `.npz` file of VOPs and the head SAR matrix of each body model, at a path the design calls can read; its `safety_factor` multiplies local SAR |
 | `vop_head_limit`, `vop_local_limit` | The scanner's head and local SAR limits in W/kg in its current operating mode |
 | `vop_drive_per_hz` | Channel drive per Hz of RF amplitude, one value or one per channel separated by spaces; a scale common to every channel cancels. Equal drives when left out |
