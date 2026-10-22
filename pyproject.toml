@@ -34,7 +34,6 @@ dependencies = [
   # The virtual scanner's BrainWeb phantom and its console's server.
   "brainweb-dl>=0.4.6",
   "websockets>=16.1.1",
-  "tomli>=2.0.1; python_version < \"3.11\"",
 ]
 
 [project.optional-dependencies]

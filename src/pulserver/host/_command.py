@@ -44,19 +44,6 @@ def _parser() -> argparse.ArgumentParser:
                 help="directory of <plugin>.py, repeatable; the first holding it is used",
             )
             sub.add_argument("--plugin", required=True, help="scanner-sequence plugin")
-            sub.add_argument(
-                "--parameter-set",
-                type=int,
-                default=0,
-                help="load the plugin with the options of parameters/<script>/<NN>.toml; "
-                "0, the default, loads it with its own",
-            )
-            sub.add_argument(
-                "--parameters",
-                type=Path,
-                help="directory of the parameter files, by default the parameters "
-                "directory beside the plugin directory",
-            )
         if limits:
             sub.add_argument(
                 "--limits",
@@ -102,6 +89,12 @@ def _parser() -> argparse.ArgumentParser:
         "--limits",
         type=Path,
         help="file holding the [Limits] block, which --rf-definitions evaluates under",
+    )
+    listed.add_argument(
+        "--values",
+        type=Path,
+        help="file holding a value block; the plugin is listed at the options "
+        "its option entries hold, its defaults for the others",
     )
     listed.add_argument(
         "--rf-definitions",
@@ -186,16 +179,12 @@ def request(args: argparse.Namespace, block: str) -> dict[str, Any]:
     Raises
     ------
     OSError
-        If the limits file cannot be read.
+        If the limits or values file cannot be read.
     """
     found: dict[str, Any] = {"call": args.call}
     if getattr(args, "plugin", None) is not None:
         found["plugins"] = [str(path.absolute()) for path in args.plugins]
         found["plugin"] = args.plugin
-        if args.parameter_set:
-            found["parameter_set"] = args.parameter_set
-        if args.parameters is not None:
-            found["parameters"] = str(args.parameters.absolute())
     if getattr(args, "limits", None) is not None:
         found["limits"] = args.limits.read_text()
     if getattr(args, "store", None) is not None:
@@ -209,6 +198,8 @@ def request(args: argparse.Namespace, block: str) -> dict[str, Any]:
         found["rf_layout"] = True
     if args.call in ("validate", "generate", "import"):
         found["input"] = block
+    if getattr(args, "values", None) is not None:
+        found["input"] = args.values.read_text()
     if args.call in ("generate", "import"):
         push = args.push or os.environ.get(PUSH_VARIABLE)
         if push:

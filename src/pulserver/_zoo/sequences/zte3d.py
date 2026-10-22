@@ -14,7 +14,7 @@ from pypulseqpp.sequences.sequence.zte3D_sequence import (
 )
 
 from pulserver._zoo._evaluation import achieved, arguments, rf_layout
-from pulserver._zoo._user import user_entries
+from pulserver._zoo._user import OPTIONS, user_entries
 from pulserver.design import (
     Evaluation,
     FloatParam,
@@ -27,7 +27,7 @@ from pulserver.design import (
 from pulserver.protocol import ImagingMode, TRPreset, UIParam
 
 #: Order of the spokes over the sphere, ``"spiral"`` or ``"meridian"``.
-SCHEME = option("scheme", "spiral", choices=("spiral", "meridian"))
+SCHEME = option("scheme", "spiral", choices=("spiral", "meridian"), **OPTIONS["scheme"])
 
 
 class Zte3D(SequencePlugin):

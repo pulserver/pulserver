@@ -8,7 +8,7 @@ from pypulseqpp.sequences.sequence.se_stack_of_spirals3D_sequence import (
 
 from pulserver._zoo._evaluation import evaluation, stack_of_spirals
 from pulserver._zoo._slab import slab
-from pulserver._zoo._user import OWN, user_entries
+from pulserver._zoo._user import OPTIONS, OWN, user_entries
 from pulserver.design import (
     ChoiceParam,
     Description,
@@ -23,7 +23,7 @@ from pulserver.protocol import Excitation, ImagingMode, TEPreset, TRPreset, UIPa
 
 #: Variable-density spirals: adds how much sparser the periphery is sampled
 #: than the centre as a user entry.
-VARIABLE_DENSITY = option("variable_density", False)
+VARIABLE_DENSITY = option("variable_density", False, **OPTIONS["variable_density"])
 
 
 class SeStackOfSpirals3D(SequencePlugin):

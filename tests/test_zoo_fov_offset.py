@@ -1,4 +1,4 @@
-"""Every shipped sequence, in every parameter set, prescribed off the isocentre along each axis.
+"""Every shipped sequence, at every choice of each option, prescribed off the isocentre along each axis.
 
 A spin at ``r + d`` under the prescription to ``d`` sees what a spin at ``r``
 sees under the design when every pulse and every receiver sample is played at
@@ -11,24 +11,20 @@ the slice or slab (the RF frequency under the selection gradient) and every
 phase-encoded and non-Cartesian readout by exactly ``d``.
 """
 
-import importlib.util
 import warnings
 from pathlib import Path
 
 import numpy as np
 import pypulseqpp as pp
 import pytest
-from _host import LIMITS, SMALL, SMALLER
+from _host import LIMITS, OPTION_VARIANTS, SMALL, SMALLER, needs_blochsim
 
 from pulserver import _plugins, ir, virtual
-from pulserver.design import load_plugin, read_options
+from pulserver.design import load_plugin
 from pulserver.mrd._sequence import read_chain
 from pulserver.proxy import SequenceTable
 
 SYSTEM = pp.Opts(**LIMITS)
-PARAMETERS = _plugins.SEQUENCES.parent / "parameters"
-#: The parameter sets whose refocusing trains blochsim designs.
-WITH_BLOCHSIM = {("fse3d", "optimized"), ("fse3d", "dual_region")}
 #: Prescriptions that excite more than one slice: in a slice group, and two
 #: slices at once.
 SLICES = {"gre2d": {"nslices": 3}, "epi2d": {"nslices": 4, "multiband": 2}}
@@ -37,14 +33,10 @@ VARIANTS = (
     + [(name, None, changes) for name, changes in SLICES.items()]
     + [
         pytest.param(
-            (toml.parent.name, toml.stem),
-            marks=pytest.mark.skipif(
-                (toml.parent.name, toml.stem) in WITH_BLOCHSIM
-                and importlib.util.find_spec("blochsim") is None,
-                reason="needs blochsim",
-            ),
+            (name, variant),
+            marks=pytest.mark.skipif(needs_blochsim(options), reason="needs blochsim"),
         )
-        for toml in sorted(PARAMETERS.glob("*/*.toml"))
+        for variant, (name, options) in OPTION_VARIANTS.items()
     ]
 )
 #: An offset along the logical readout, phase and slice axes, in metres.
@@ -147,13 +139,9 @@ def _played(first, offset, directory):
     return expanded.waveforms.rf, expanded.adc.t, receiver
 
 
-def _designed(name, parameters, directory, changes=None):
-    """A small design of a shipped sequence in a parameter set, with the wire values ``changes``: its first file, moment, positioned blocks and what it plays at the isocentre."""
-    options = (
-        None
-        if parameters is None
-        else read_options(PARAMETERS / name / f"{parameters}.toml")
-    )
+def _designed(name, variant, directory, changes=None):
+    """A small design of a shipped sequence at the options of ``variant``, a key of ``OPTION_VARIANTS``, with the wire values ``changes``: its first file, moment, positioned blocks and what it plays at the isocentre."""
+    options = None if variant is None else OPTION_VARIANTS[variant][1]
     plugin = load_plugin(_plugins.SEQUENCES / f"{name}.py", options)
     validation, paths = plugin.design(
         SYSTEM,
@@ -172,16 +160,16 @@ def _designed(name, parameters, directory, changes=None):
 
 
 def _id(variant):
-    name, parameters, *changes = variant
+    name, options, *changes = variant
     if changes:
         return f"{name}-" + "-".join(f"{k}{v}" for k, v in changes[0].items())
-    return name if parameters is None else f"{name}+{parameters}"
+    return name if options is None else options
 
 
 @pytest.fixture(scope="module", params=VARIANTS, ids=_id)
 def design(request, tmp_path_factory):
-    name, parameters, *changes = request.param
-    return _designed(name, parameters, tmp_path_factory.mktemp(name), *changes)
+    name, options, *changes = request.param
+    return _designed(name, options, tmp_path_factory.mktemp(name), *changes)
 
 
 def _misplacement(design, offset, directory, judged_at=None):

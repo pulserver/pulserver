@@ -92,6 +92,27 @@ WAVE = 10
 #: The first user CV a plugin's own controls take, after the shared ones.
 OWN = 12
 
+#: The user CV and console name of each option the shipped sequences declare,
+#: the same in every plugin, as the keyword arguments of
+#: :func:`~pulserver.design.option`: ``option("wave", False, **OPTIONS["wave"])``.
+OPTIONS = {
+    name: {"user": user, "label": label}
+    for user, (name, label) in enumerate(
+        (
+            ("navigator", "Navigator"),
+            ("wave", "Wave-CAIPI"),
+            ("refocusing", "Refocusing train"),
+            ("ordering", "View order"),
+            ("elliptical", "Elliptical sampling"),
+            ("flyback", "Flyback"),
+            ("variable_density", "Variable density"),
+            ("scheme", "Spoke order"),
+            ("retrospective", "Retrospective gating"),
+        ),
+        start=36,
+    )
+}
+
 
 def wave_entries() -> dict[ProtocolKey, Entry]:
     """Return the wave-CAIPI controls: the peak amplitude asked of the wave gradients and the wave periods across a readout."""

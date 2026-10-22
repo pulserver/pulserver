@@ -10,6 +10,7 @@ from pulserver._zoo._pmc import navigated
 from pulserver._zoo._slab import slab
 from pulserver._zoo._user import (
     LINE_SPACING,
+    OPTIONS,
     shortest_at_zero,
     user_entries,
     wave_entries,
@@ -28,17 +29,17 @@ from pulserver.protocol import Excitation, ImagingMode, TEPreset, TRPreset, UIPa
 
 #: Three-plane navigators after each train, whose pose the ``pmc``
 #: reconstruction states to the scan.
-NAVIGATOR = option("navigator", False)
+NAVIGATOR = option("navigator", False, **OPTIONS["navigator"])
 
 #: Wave-CAIPI: sinusoidal gradients on the phase- and partition-encoding axes
 #: during each readout, the calibration region acquired first without them;
 #: adds their amplitude and cycles as user entries.
-WAVE = option("wave", False)
+WAVE = option("wave", False, **OPTIONS["wave"])
 
 #: Order of the views in the trains: ``"radial"``, angular wedges of the
 #: CAIPIRINHA lattice read centre-out, or ``"shuffling"``, Poisson-disc views
 #: in random order for a time-resolved reconstruction.
-ORDERING = option("ordering", "radial", choices=ORDERINGS)
+ORDERING = option("ordering", "radial", choices=ORDERINGS, **OPTIONS["ordering"])
 
 
 class Mprage3D(SequencePlugin):

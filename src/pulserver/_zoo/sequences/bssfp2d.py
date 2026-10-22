@@ -6,7 +6,7 @@ import pypulseqpp as pp
 from pypulseqpp.sequences.sequence.bssfp2D_sequence import MAX_SLICE_DURATION, bssfp2d
 
 from pulserver._zoo._evaluation import achieved, arguments, cartesian_2d, rf_layout
-from pulserver._zoo._user import user_entries
+from pulserver._zoo._user import OPTIONS, user_entries
 from pulserver.design import (
     ChoiceParam,
     Evaluation,
@@ -22,7 +22,7 @@ from pulserver.protocol import ImagingMode, TriggerType, TRPreset, UIParam
 #: ECG gating is retrospective: each segment cycled over a heartbeat, binned
 #: into cardiac phases by the reconstruction. Prospective otherwise: each
 #: heartbeat triggered and acquired once per cardiac phase.
-RETROSPECTIVE = option("retrospective", False)
+RETROSPECTIVE = option("retrospective", False, **OPTIONS["retrospective"])
 
 
 class Bssfp2D(SequencePlugin):

@@ -1,8 +1,11 @@
-"""Limits and plugins the design tests share, and a design generated in-process."""
+"""Limits and plugins the design tests share, the shipped plugins' option choices, and a design generated in-process."""
 
+import importlib.util
 import math
 from pathlib import Path
 
+from pulserver import _plugins
+from pulserver.design import OptionParam, load_plugin
 from pulserver.host import DesignStore, call
 from pulserver.protocol import PROTOCOL_BEGIN, PROTOCOL_END
 
@@ -78,6 +81,35 @@ def value_block(values):
     return "\n".join([PROTOCOL_BEGIN, *lines, PROTOCOL_END]) + "\n"
 
 
+def shipped_options(name):
+    """The option entries of the shipped plugin ``name`` at its defaults, by key."""
+    plugin = load_plugin(_plugins.SEQUENCES / f"{name}.py")
+    return {
+        key: entry
+        for key, entry in plugin.protocol.items()
+        if isinstance(entry, OptionParam)
+    }
+
+
+#: Each shipped plugin with every other choice of each of its options, one
+#: option at a time, by ``<plugin>/<option>=<choice>``.
+OPTION_VARIANTS = {
+    f"{name}/{entry.name}={choice}": (name, {entry.name: choice})
+    for name in sorted(path.stem for path in _plugins.SEQUENCES.glob("*.py"))
+    for entry in shipped_options(name).values()
+    for choice in entry.choices
+    if choice != entry.value
+}
+
+
+def needs_blochsim(options):
+    """Whether a shipped plugin loaded with ``options`` designs its refocusing trains with blochsim, and blochsim is missing."""
+    return (
+        options.get("refocusing", "constant") != "constant"
+        and importlib.util.find_spec("blochsim") is None
+    )
+
+
 def generate(
     store: DesignStore,
     plugin: str,
@@ -85,9 +117,8 @@ def generate(
     limits=LIMITS,
     plugins=PLUGINS,
     push=None,
-    parameter_set=0,
 ):
-    """Return the identifier of the design a request generates, pushed to ``push``, in the plugin's ``parameter_set``.
+    """Return the identifier of the design a request generates, pushed to ``push``.
 
     Raises
     ------
@@ -102,7 +133,6 @@ def generate(
         block=value_block(values),
         store=store,
         push=push,
-        parameter_set=parameter_set,
     )
     assert status == 0, reply
     return reply.split()[1]

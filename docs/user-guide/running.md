@@ -17,7 +17,7 @@ store are described in {doc}`../explanations/architecture`.
 ## Design calls
 
 ```bash
-pulserver design list     --plugins DIR --plugin NAME [--limits FILE --rf-definitions] [--socket PATH]
+pulserver design list     --plugins DIR --plugin NAME [--values FILE] [--limits FILE --rf-definitions] [--socket PATH]
 pulserver design validate --plugins DIR --plugin NAME --limits FILE [--rf-layout] [--exam DIR] [--socket PATH] < VALUES
 pulserver design generate --plugins DIR --plugin NAME --limits FILE --store DIR --scan NAME [--exam DIR] [--push URL] [--socket PATH] < VALUES
 pulserver design import   --limits FILE --store DIR --scan NAME [--push URL] [--socket PATH] < IMPORT
@@ -36,7 +36,7 @@ directory name, not starting with `.`.
 
 | Call | Reply |
 | --- | --- |
-| `list` | `PROTOCOL` and the plugin's listing block; with `--rf-definitions`, the `[RfDefinitions]` block |
+| `list` | `PROTOCOL` and the plugin's listing block at the options of the value block in `--values` ({ref}`plugin-options`); with `--rf-definitions`, the `[RfDefinitions]` block |
 | `validate` | `VALID <seconds>` or `INVALID`, an `INFO` line and the value block of the resolved protocol; with `--rf-layout`, a valid reply ends with the `[RfLayout]` block |
 | `generate` | `GENERATED <id>`, the identifier of the design in the scan's directory |
 | `import` | `IMPORTED <id>` |
@@ -53,9 +53,9 @@ evaluation states an RF layout ({ref}`stating-the-rf-layout`).
 `--rf-definitions` evaluates the plugin at its default protocol under
 `--limits`, which it then requires. `--rf-layout` follows a valid reply with the
 RF layout of the evaluated request, its amplitudes relative to the peaks the
-listing states. Without `--rf-definitions`, `list` depends on the plugin file
-and the installed packages only, so its reply can be written once at
-installation and read without a call.
+listing states. Without `--rf-definitions`, `list` depends on the plugin file,
+its options and the installed packages only, so its reply can be written once
+at installation and read without a call.
 
 `--exam` names the directory of the current exam's cache, which is passed to
 the plugin hooks that take `exam` ({ref}`exam-cache`); for such a plugin the

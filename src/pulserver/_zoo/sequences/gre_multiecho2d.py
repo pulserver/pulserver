@@ -5,7 +5,7 @@ import functools
 from pypulseqpp.sequences.sequence.gre_multiecho2D_sequence import gre_multiecho2d
 
 from pulserver._zoo._evaluation import cartesian_2d, evaluation
-from pulserver._zoo._user import shortest_at_zero, user_entries
+from pulserver._zoo._user import OPTIONS, shortest_at_zero, user_entries
 from pulserver.design import (
     FloatParam,
     IntParam,
@@ -18,7 +18,7 @@ from pulserver.protocol import ImagingMode, TEPreset, TRPreset, UIParam
 
 #: Monopolar echo train, each echo rewound; bipolar, with even echoes read
 #: backwards, otherwise.
-FLYBACK = option("flyback", True)
+FLYBACK = option("flyback", True, **OPTIONS["flyback"])
 
 
 class GreMultiecho2D(SequencePlugin):

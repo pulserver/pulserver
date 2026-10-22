@@ -6,7 +6,7 @@ from pypulseqpp.sequences.sequence.se3D_sequence import se3d
 
 from pulserver._zoo._evaluation import cartesian_3d, evaluation
 from pulserver._zoo._slab import slab
-from pulserver._zoo._user import user_entries
+from pulserver._zoo._user import OPTIONS, user_entries
 from pulserver.design import (
     ChoiceParam,
     FloatParam,
@@ -19,7 +19,7 @@ from pulserver.design import (
 from pulserver.protocol import Excitation, ImagingMode, TEPreset, TRPreset, UIParam
 
 #: Sample only the phase encodes inside the ky-kz ellipse.
-ELLIPTICAL = option("elliptical", True)
+ELLIPTICAL = option("elliptical", True, **OPTIONS["elliptical"])
 
 
 class Se3D(SequencePlugin):

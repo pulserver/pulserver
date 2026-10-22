@@ -27,7 +27,7 @@ DESIGN_CALLS = ("list", "validate", "generate", "import")
 
 #: What each design call takes, as ``pulserver design`` passes it.
 _CALL_INPUTS = {
-    "list": ("plugins", "plugin"),
+    "list": ("plugins", "plugin", "input"),
     "validate": ("plugins", "plugin", "limits", "input"),
     "generate": ("plugins", "plugin", "limits", "input", "store", "scan", "push"),
     "import": ("limits", "input", "store", "scan", "push"),

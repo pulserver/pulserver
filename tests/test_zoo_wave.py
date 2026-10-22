@@ -10,6 +10,7 @@ from conftest import play
 
 from pulserver import _plugins, virtual
 from pulserver._zoo import ZOO_PAIRS
+from pulserver._zoo._user import OPTIONS
 from pulserver.host import DesignStore
 from pulserver.proxy._designs import DesignCache
 from pulserver.proxy._enrich import enrich_header
@@ -63,12 +64,9 @@ def _reconstructed(directory, wave, device):
     plugins = directory / "plugins"
     plugins.mkdir()
     (plugins / "gre3d.py").write_text((_plugins.SEQUENCES / "gre3d.py").read_text())
-    (directory / "parameters" / "gre3d").mkdir(parents=True)
-    (directory / "parameters" / "gre3d" / "01.toml").write_text("wave = true\n")
     store = DesignStore(directory / "designs", "scan")
-    design = generate(
-        store, "gre3d", PROTOCOL, plugins=plugins, parameter_set=1 if wave else 0
-    )
+    wave = {f"user{OPTIONS['wave']['user']}_value": int(wave)}
+    design = generate(store, "gre3d", PROTOCOL | wave, plugins=plugins)
     acquired = acquire(store.directory(design) / "sequence.seq", _slab())
     virtual.record(directory / "raw.h5", store.scan, design, acquired)
 

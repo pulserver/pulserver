@@ -1,26 +1,38 @@
-"""Options of a plugin: the module constants a parameter file sets when the plugin is loaded."""
+"""Options of a plugin: module constants a user entry of the protocol sets when the plugin is loaded."""
 
 from __future__ import annotations
 
 import contextlib
 import contextvars
-import sys
+import inspect
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any
 
-if sys.version_info >= (3, 11):
-    import tomllib
-else:
-    import tomli as tomllib
+from ..protocol._keys import NUM_USER_ENTRIES
+from ..protocol._schema import MAX_DROPDOWN_OPTIONS
 
-#: The scalar types an option holds; a TOML file states each of them.
+#: The scalar types an option holds.
 OptionValue = bool | int | float | str
+
+#: The module global holding the options a plugin module declares, by name.
+_DECLARED = "__pulserver_options__"
 
 
 class OptionError(ValueError):
-    """An option a parameter file sets that the plugin does not declare or take."""
+    """An option a plugin is loaded with that it does not declare or take, or a declaration it cannot list."""
+
+
+@dataclass(frozen=True)
+class Declared:
+    """An option as a plugin module declares it, and the value the module was loaded with."""
+
+    name: str
+    choices: tuple[OptionValue, ...]
+    default: OptionValue
+    user: int
+    label: str
+    value: OptionValue
 
 
 @dataclass
@@ -35,63 +47,99 @@ _loading: contextvars.ContextVar[_Loading | None] = contextvars.ContextVar(
 
 
 def option(
-    name: str, default: OptionValue, choices: tuple[OptionValue, ...] = ()
+    name: str,
+    default: OptionValue,
+    choices: tuple[OptionValue, ...] = (),
+    *,
+    user: int,
+    label: str,
 ) -> OptionValue:
-    """Return the value of a plugin option: the parameter file's where it sets ``name``, else ``default``.
+    """Declare a plugin option at user entry ``user`` and return the value the plugin is loaded with.
 
-    A plugin assigns it to a module constant, which its class body reads, so
-    the option shapes the sequence function and the protocol the plugin
-    declares. Outside :func:`~pulserver.design.load_plugin` it returns
-    ``default``.
+    A plugin assigns it to a module constant at module level, before its
+    :class:`~pulserver.design.SequencePlugin` subclass, whose class body reads
+    it, so the option shapes the sequence function and the protocol the plugin
+    declares. The subclass lists the option as ``user<user>_value``, the index
+    of its value among ``choices`` (0 or 1 for a flag), named ``label`` and
+    the code of each choice in ``user<user>_name``. A design call loads the
+    plugin at the options its request holds in those entries; outside
+    :func:`~pulserver.design.load_plugin` the value is ``default``.
 
     Parameters
     ----------
     name : str
-        The option's name in a parameter file.
+        The option's name, which a design's manifest records it by.
     default : bool, int, float or str
-        Its value where the file does not set it. Its type is the option's:
-        an int is taken for a float, and nothing else is converted.
+        Its value where the request does not state it.
     choices : tuple, default=()
-        The values it takes, ``default`` among them; any value of its type
-        when empty.
+        Its values, ``default`` among them, at most five; a flag, whose default
+        is a bool, takes none and chooses between ``False`` and ``True``.
+    user : int
+        The user entry it is listed at.
+    label : str
+        The option's name on the console.
 
     Raises
     ------
-    ValueError
-        If ``default`` is not among ``choices``.
     OptionError
-        If ``name`` is declared twice in one plugin, or the file's value is
-        not of the option's type or not among ``choices``.
+        If a flag is given choices, any other option is not, ``default`` is
+        not among them, there are more than five or ``user`` is not a user
+        entry; or, while a plugin loads, if ``name`` or ``user`` is declared
+        twice or the value it is loaded with is not among the choices.
     """
-    if choices and default not in choices:
-        raise ValueError(f"option {name}: default {default!r} is not one of {choices}")
+    if isinstance(default, bool):
+        if choices:
+            raise OptionError(f"option {name}: a flag takes no choices")
+        choices = (False, True)
+    elif not choices:
+        raise OptionError(
+            f"option {name}: an option that is not a flag names its choices"
+        )
+    if default not in choices:
+        raise OptionError(f"option {name}: default {default!r} is not one of {choices}")
+    if len(choices) > MAX_DROPDOWN_OPTIONS:
+        raise OptionError(
+            f"option {name}: {len(choices)} choices; an option offers at most "
+            f"{MAX_DROPDOWN_OPTIONS}"
+        )
+    if not 0 <= user < NUM_USER_ENTRIES:
+        raise OptionError(
+            f"option {name}: user{user} is not a user entry, user0 to "
+            f"user{NUM_USER_ENTRIES - 1}"
+        )
+    declared: dict[str, Declared] = inspect.currentframe().f_back.f_globals.setdefault(
+        _DECLARED, {}
+    )
+    value = default
     loading = _loading.get()
-    if loading is None:
-        return default
-    if name in loading.resolved:
-        raise OptionError(f"option {name} is declared twice")
-    value = loading.given.get(name, default)
-    if not _same_type(value, default):
-        raise OptionError(f"option {name} is a {type(default).__name__}, not {value!r}")
-    if choices and value not in choices:
-        raise OptionError(f"option {name} is one of {choices}, not {value!r}")
-    if isinstance(default, float):
-        value = float(value)
-    loading.resolved[name] = value
+    if loading is not None:
+        if name in loading.resolved:
+            raise OptionError(f"option {name} is declared twice")
+        taken = next(
+            (d.name for d in declared.values() if d.user == user and d.name != name),
+            None,
+        )
+        if taken is not None:
+            raise OptionError(f"options {taken} and {name} are both at user{user}")
+        value = loading.given.get(name, default)
+        if value not in choices or type(value) is not type(
+            choices[choices.index(value)]
+        ):
+            raise OptionError(f"option {name} is one of {choices}, not {value!r}")
+        value = choices[choices.index(value)]
+        loading.resolved[name] = value
+    declared[name] = Declared(name, tuple(choices), default, user, label, value)
     return value
 
 
-def _same_type(value: Any, default: OptionValue) -> bool:
-    if isinstance(default, bool) or isinstance(value, bool):
-        return isinstance(value, bool) and isinstance(default, bool)
-    if isinstance(default, float):
-        return isinstance(value, int | float)
-    return isinstance(value, type(default))
+def declared_options(module: Mapping[str, Any]) -> dict[str, Declared]:
+    """Return the options the module whose globals are ``module`` declares, by name."""
+    return dict(module.get(_DECLARED, {}))
 
 
 @contextlib.contextmanager
 def loading_options(given: Mapping[str, Any]) -> Iterator[dict[str, OptionValue]]:
-    """Make :func:`option` read ``given`` while a plugin module executes; yield the options it resolves.
+    """Make :func:`option` take ``given`` while a plugin module executes; yield the options it resolves.
 
     Raises
     ------
@@ -110,24 +158,3 @@ def loading_options(given: Mapping[str, Any]) -> Iterator[dict[str, OptionValue]
         raise OptionError(
             f"the plugin does not declare the options {unknown}; it declares {declared}"
         )
-
-
-def read_options(path: Path | str) -> dict[str, OptionValue]:
-    """Return the options a parameter file sets, a TOML table of option names and values.
-
-    Raises
-    ------
-    OptionError
-        If the file is not TOML, or a value is not a bool, int, float or string.
-    """
-    try:
-        table = tomllib.loads(Path(path).read_text())
-    except tomllib.TOMLDecodeError as error:
-        raise OptionError(f"not TOML: {error}") from None
-    for name, value in table.items():
-        if not isinstance(value, OptionValue):
-            raise OptionError(
-                f"option {name} is {value!r}; an option is a bool, an "
-                "int, a float or a string"
-            )
-    return table

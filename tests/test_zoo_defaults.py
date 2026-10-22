@@ -1,30 +1,22 @@
-"""Every shipped sequence, in every parameter set, is feasible at its default protocol on realistic scanners."""
+"""Every shipped sequence, at every choice of each option, is feasible at its default protocol on realistic scanners."""
 
+import itertools
 import math
-import sys
 
 import pypulseqpp as pp
 import pytest
+from _host import OPTION_VARIANTS, needs_blochsim, shipped_options
 
 from pulserver import _plugins
 from pulserver.design import Protocol, load_plugin
 from pulserver.host._limits import design_system
 from pulserver.protocol import TRPreset
 
-if sys.version_info >= (3, 11):
-    import tomllib
-else:
-    import tomli as tomllib
-
 SHIPPED = sorted(path.stem for path in _plugins.SEQUENCES.glob("*.py"))
-PARAMETERS = _plugins.SEQUENCES.parent / "parameters"
 
-#: Each plugin with its shipped parameter sets, by ``<plugin>/<set>``.
-VARIANTS = {f"{name}/default": (name, {}) for name in SHIPPED} | {
-    f"{name}/{path.stem}": (name, tomllib.loads(path.read_text()))
-    for name in SHIPPED
-    for path in sorted((PARAMETERS / name).glob("*.toml"))
-}
+#: Each plugin at its defaults and at each other choice of each option, by
+#: ``<plugin>/default`` and ``<plugin>/<option>=<choice>``.
+VARIANTS = {f"{name}/default": (name, {}) for name in SHIPPED} | OPTION_VARIANTS
 
 
 def _oblique(limits):
@@ -72,6 +64,8 @@ SCANNERS = {
 )
 def test_the_default_protocol_of_every_variant_is_feasible(variant, scanner):
     name, options = VARIANTS[variant]
+    if needs_blochsim(options):
+        pytest.skip("needs blochsim")
     plugin = load_plugin(_plugins.SEQUENCES / f"{name}.py", options)
 
     validation = plugin.validate(design_system(SCANNERS[scanner]), {})
@@ -96,3 +90,27 @@ def test_a_navigated_scan_at_its_shortest_tr_plays_its_navigators(name):
         return sum(uses[n] == "excitation" for n in instances.definition)
 
     assert excitations({"navigator": True}) > excitations({})
+
+
+@pytest.mark.parametrize("name", [n for n in SHIPPED if shipped_options(n)])
+def test_a_user_entry_means_the_same_in_every_combination_of_options(name):
+    """An option shows or hides a user entry, and never gives one another meaning."""
+    entries = shipped_options(name).values()
+    meanings = {}
+    for combination in itertools.product(*(entry.choices for entry in entries)):
+        options = {
+            entry.name: choice
+            for entry, choice in zip(entries, combination, strict=True)
+        }
+        if needs_blochsim(options):
+            continue
+        plugin = load_plugin(_plugins.SEQUENCES / f"{name}.py", options)
+        for key, entry in plugin.protocol.items():
+            if key.value.startswith("user"):
+                meaning = getattr(entry, "argument", None) or getattr(
+                    entry, "name", None
+                )
+                if meaning is not None:
+                    meanings.setdefault(key, set()).add(meaning)
+
+    assert {key: m for key, m in meanings.items() if len(m) > 1} == {}

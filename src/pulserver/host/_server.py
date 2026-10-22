@@ -34,10 +34,10 @@ def answer(request: Mapping[str, Any]) -> tuple[int, str]:
     (the plugin directories, in search order), ``plugin``, ``limits`` (the
     text of a ``[Limits]`` block), ``store`` and ``scan`` (the store root
     and the scan's directory in it), ``push`` and ``input`` (the block the
-    command reads from standard input). ``store`` and ``scan`` are passed to
-    ``generate`` and ``import`` only, and ignored by the other calls.
-    ``parameter_set`` and ``parameters``, for the calls that take a plugin,
-    select the plugin's parameter file and its directory. ``exam``, for
+    command reads from standard input, and for ``list`` the value block whose
+    option entries the plugin is listed at). ``store`` and ``scan`` are passed
+    to ``generate`` and ``import`` only, and ignored by the other calls.
+    ``exam``, for
     ``validate`` and ``generate``, is the directory of the current exam's
     cache. ``rf_definitions``, for ``list``, and
     ``rf_layout``, for ``validate``, ask when true for the RF block of the
@@ -52,15 +52,13 @@ def answer(request: Mapping[str, Any]) -> tuple[int, str]:
     if request.get("plugin") is not None:
         inputs["plugins"] = directories(request["plugins"])
         inputs["plugin"] = str(request["plugin"])
-        if request.get("parameter_set"):
-            inputs["parameter_set"] = int(request["parameter_set"])
-        if request.get("parameters"):
-            inputs["parameters"] = str(request["parameters"])
     if request.get("limits") is not None:
         inputs["limits"] = parse_limits(str(request["limits"]))
     if request.get("store") is not None and call in ("generate", "import"):
         inputs["store"] = DesignStore(request["store"], str(request.get("scan", "")))
-    if call in ("validate", "generate", "import"):
+    if call in ("validate", "generate", "import") or (
+        call == "list" and request.get("input")
+    ):
         inputs["block"] = str(request.get("input", ""))
     if request.get("push"):
         inputs["push"] = str(request["push"])
