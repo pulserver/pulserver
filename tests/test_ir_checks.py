@@ -115,7 +115,8 @@ def test_a_reflected_prescription_is_checked_as_it_plays(train):
 def test_pns_is_refused_from_the_fraction_of_threshold_the_limits_allow(
     tmp_path, pns_limit, refused
 ):
-    # 150 T/m/s for 200 us: 84% of the threshold, sampled at the raster centres.
+    # 150 T/m/s for 200 us: 87% of the threshold, read at the raster interval
+    # ends, where a ramp's response peaks.
     path = _written(tmp_path, [(_mT("x", 30, 200e-6),), (pp.make_delay(5e-3),)])
     nerve = safety.ChronaxieModel(chronaxie=360e-6, rheobase=20.0, alpha=0.324)
     problems = ir.check(
@@ -123,7 +124,7 @@ def test_pns_is_refused_from_the_fraction_of_threshold_the_limits_allow(
     )
     assert problems == (
         [
-            "PNS of 84% of the chronaxie threshold, largest on x, at 0.0002 s in "
+            "PNS of 87% of the chronaxie threshold, largest on x, at 0.0002 s in "
             "block 1 reaches 80%"
         ]
         if refused
