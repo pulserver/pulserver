@@ -29,7 +29,10 @@ on the other end refuses a series it cannot serve, enriches it from its design
   Code: {class}`~pulserver.proxy.DesignCache`, {class}`~pulserver.proxy.DesignIntake`. Tests: *a design pushed to the intake is reconstructed from its store*; *a series naming no stored design is refused* (`test_proxy.py`).
 - **Refuses a malformed stream with a text the console shows.**
 
-  Code: {class}`~pulserver.proxy.ReconProxy`. Tests: *a series carrying no header or two is refused*; *a series that ends before its last readout is refused*; *a message the proxy cannot read ends the output with its type* (`test_proxy.py`).
+  Code: {class}`~pulserver.proxy.ReconProxy`. Tests: *a series carrying no header or two is refused*; *a series that ends before its last readout is refused*; *a message the proxy cannot read ends the output with its type*; *a series carrying a message the proxy cannot read is refused* (`test_proxy.py`).
+- **Returns nothing of a scan whose client ends the stream without a `CLOSE`, though its images were already made.**
+
+  Code: {class}`~pulserver.proxy.ReconProxy`. Tests: *a scan stopped after its last readout exports nothing* (`test_proxy.py`).
 - **Reconstructs each series in a fresh worker process, with spares that have already imported the engine.**
 
   Code: {class}`~pulserver.proxy.ReconProxy`. Tests: *the spare worker is replaced after each series*; *the proxy process does not import the reconstruction engine*; *a crashing plugin closes its series and frees the slot* (`test_proxy.py`).
