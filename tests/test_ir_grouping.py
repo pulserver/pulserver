@@ -31,7 +31,7 @@ def _grouped(path, grouping):
     convert(path, SYSTEM, grouping=grouping, cache_ext=".pseg")
     return (
         summary(path, SYSTEM, cache_ext=".pseg")["num_segments"],
-        gradient_stretch(path, cache_ext=".pseg"),
+        gradient_stretch(path, 0, "heaviest_repetition", cache_ext=".pseg"),
     )
 
 
@@ -82,8 +82,8 @@ def test_a_machine_that_may_begin_a_unit_under_a_gradient_gets_more_units(tmp_pa
 def test_a_grouping_moves_the_boundaries_and_not_the_gradient(name, grouping, tmp_path):
     """Grouping is where a unit begins; the scan it plays is the same scan.
 
-    Checked on the repetition of most gradient energy, which is the one a
-    scanner costs its gradient heating and its acoustics from.
+    Checked on the stretch from the repetition of most gradient energy, which
+    starts where the repetition does whatever the grouping.
     """
     path = _copied(name, tmp_path)
     _, resting = _grouped(path, Grouping())

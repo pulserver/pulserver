@@ -258,13 +258,20 @@ A scanner evaluates its gradient-heating model on the gradients of two
 stretches of each subsequence, each as if played without end against its own
 duration ({func}`~pulserver.ir.gradient_stretch`,
 `pulseg_get_gradient_stretch`). A stretch is the run of whole segment instances
-from one instance's start until they last `PULSEG_STRETCH_US`, 10 s, or to the
-subsequence's end where it comes first, each block at its played duration, a
-pure delay at its instance's.
+from one instance's start until they last the subsequence's hyper-repetition,
+or `PULSEG_STRETCH_US`, 10 s, where that is shorter, or to the subsequence's end
+where it comes first, each block at its played duration, a pure delay at its
+instance's. The hyper-repetition is the shortest run of repetitions whose
+durations repeat over the whole subsequence, a last run cut short allowed
+(`hyper_copies` and `hyper_us` of `pulseg_get_tr_timing`, from the prefix
+function of the repetitions' durations in us): one repetition where all last
+the same, five for a five-slice packet whose last slice carries the pad, all of
+them where they do not repeat. Where it is one repetition, the second stretch
+is the heaviest repetition itself.
 
 | Stretch | Start |
 |---|---|
-| `PULSEG_STRETCH_HEAVIEST` | Of the instance starts whose stretch lasts 10 s, the one of largest $E$, the earliest on a tie; the subsequence's start where none does |
+| `PULSEG_STRETCH_HEAVIEST` | Of the instance starts whose stretch lasts that long, the one of largest $E$, the earliest on a tie; the subsequence's start where none does |
 | `PULSEG_STRETCH_HEAVIEST_REPETITION` | The instance holding the start of the repetition of largest $E$, of those the execution stream holds from its first block, the earliest on a tie |
 
 $$

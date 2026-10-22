@@ -441,6 +441,11 @@ typedef struct pulseg_tr_timing
     double played_us;        /**< the subsequence played through, us */
     double shortest_copy_us; /**< the shortest whole repetition, us */
     double longest_copy_us;  /**< the longest whole repetition, us */
+    int hyper_copies;        /**< copies in the hyper-repetition: the smallest period of
+                                  the copies' durations, a last period cut short allowed;
+                                  1 when every copy lasts the same, num_copies when they
+                                  do not repeat */
+    double hyper_us;         /**< the hyper-repetition's duration, us */
 } pulseg_tr_timing;
 
 /* ================================================================== */
@@ -948,12 +953,13 @@ typedef struct pulseg_corner_point_stream
 /* clang-format on */
 
 /* The stretches pulseg_get_gradient_stretch() returns.  A stretch is the run
- * of whole segment instances from one instance's start until they last
- * PULSEG_STRETCH_US, or to the subsequence's end where it comes first. */
-#define PULSEG_STRETCH_US 10.0e6 /**< the length a stretch reaches, us */
-#define PULSEG_STRETCH_HEAVIEST 0 /**< of those reaching PULSEG_STRETCH_US, the one of
-                                       most gradient energy, the earliest on a tie;
-                                       the whole subsequence where none does */
+ * of whole segment instances from one instance's start until they last the
+ * subsequence's hyper-repetition (pulseg_tr_timing), or PULSEG_STRETCH_US
+ * where that is shorter, or to the subsequence's end where it comes first. */
+#define PULSEG_STRETCH_US 10.0e6 /**< the longest a stretch needs to last, us */
+#define PULSEG_STRETCH_HEAVIEST 0 /**< of those lasting that long, the one of most
+                                       gradient energy, the earliest on a tie; the
+                                       whole subsequence where none does */
 #define PULSEG_STRETCH_HEAVIEST_REPETITION 1 /**< from the instance holding the start of
                                                   the repetition of most gradient
                                                   energy */

@@ -270,8 +270,13 @@ extern "C"
         int subseq_idx);
 
     /**
-     * @brief How long a subsequence plays, and its shortest and longest
-     * whole repetition, every block for its own duration.
+     * @brief How long a subsequence plays, its shortest and longest whole
+     * repetition and its hyper-repetition, every block for its own duration.
+     *
+     * The hyper-repetition is the shortest run of copies whose durations
+     * repeat over all of them, exactly in us: one copy where every copy lasts
+     * the same, five for a five-slice packet whose last slice carries the
+     * pad.  Linear in the execution stream; allocates two words per copy.
      *
      * @param[in]  coll        Loaded collection, with its execution stream.
      * @param[out] out         Overwritten.

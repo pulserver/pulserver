@@ -44,9 +44,9 @@ static void print_subsequence(const pulseg_collection *coll, int i)
         weights[n] = 1.0;
     plays = pulseg_get_rf_window(coll, i, 10.0e6, weights, num_rf, counts, &start_us);
     printf("timing %d num_copies %d played_us %g shortest_copy_us %g longest_copy_us %g "
-           "rf_window plays %d start_us %g\n",
+           "hyper_copies %d hyper_us %g rf_window plays %d start_us %g\n",
            i, t.num_copies, t.played_us, t.shortest_copy_us, t.longest_copy_us,
-           plays, start_us);
+           t.hyper_copies, t.hyper_us, plays, start_us);
     free(weights);
     free(counts);
     num_waves = pulseg_get_num_waves(coll, i);

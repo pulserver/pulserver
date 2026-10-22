@@ -151,11 +151,13 @@ def gradient_stretch(
 
     The C library's choice (``pulseg_get_gradient_stretch``). A stretch is the
     run of whole segment instances from one instance's start until they last
-    10 s (``PULSEG_STRETCH_US``), or to the subsequence's end where it comes
-    first, each block at its played duration. ``"heaviest"`` is, of those
-    lasting 10 s, the one over which the squared gradient summed over the
-    axes integrates to the most, the earliest on a tie, and the whole
-    subsequence where none lasts 10 s. ``"heaviest_repetition"`` starts at
+    the subsequence's hyper-repetition (``hyper_us`` of the summary's
+    ``tr_timing``), or 10 s (``PULSEG_STRETCH_US``) where that is shorter, or
+    to the subsequence's end where it comes first, each block at its played
+    duration. ``"heaviest"`` is, of those lasting that long, the one over
+    which the squared gradient summed over the axes integrates to the most,
+    the earliest on a tie, and the whole subsequence where none does.
+    ``"heaviest_repetition"`` starts at
     the instance holding the start of the repetition of most gradient energy,
     of the repetitions the execution stream holds from its first block. A
     scanner evaluates its gradient-heating model on both, each as if played

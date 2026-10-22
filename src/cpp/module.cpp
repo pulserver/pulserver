@@ -124,6 +124,8 @@ py::dict tr_timing(const pulseg_collection *coll, int subseq_idx)
     out["played_us"] = timing.played_us;
     out["shortest_copy_us"] = timing.shortest_copy_us;
     out["longest_copy_us"] = timing.longest_copy_us;
+    out["hyper_copies"] = timing.hyper_copies;
+    out["hyper_us"] = timing.hyper_us;
     return out;
 }
 

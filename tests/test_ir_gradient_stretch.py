@@ -87,13 +87,13 @@ def _played(seq):
     return energies, durations, starts
 
 
-def _reference(energies, durations, starts):
+def _reference(energies, durations, starts, window_us=WINDOW_US):
     """The heaviest stretch, every start tried in turn."""
     ends = [*starts[1:], len(energies)]
     best, first = -1.0, 0
     for i, start in enumerate(starts):
         j = i
-        while j < len(starts) and durations[start : ends[j]].sum() < WINDOW_US:
+        while j < len(starts) and durations[start : ends[j]].sum() < window_us:
             j += 1
         if j == len(starts):
             break
@@ -185,11 +185,11 @@ def test_a_rotation_changes_neither_the_energy_nor_the_repetition_returned(tmp_p
     seq.write(str(path))
     ir.convert(path, SYSTEM)
     stretch = ir.gradient_stretch(path, 0, "heaviest_repetition")
-    # The second and the third tie; the earlier stands, and the stretch runs
-    # to the end.
-    assert (stretch["first_position"], stretch["num_positions"]) == (2, 4)
+    # The second and the third tie; the earlier stands, and it lasts as long
+    # as every other.
+    assert (stretch["first_position"], stretch["num_positions"]) == (2, 2)
     rise, flat = 1e-6 * round(GX.rise_time * 1e6), 1e-6 * round(GX.flat_time * 1e6)
-    expected = 2.0 * (1.2 * GX.amplitude) ** 2 * (2.0 * rise / 3.0 + flat)
+    expected = (1.2 * GX.amplitude) ** 2 * (2.0 * rise / 3.0 + flat)
     assert stretch["energy"] == pytest.approx(expected, rel=1e-5)
     turned = stretch["gradient_hz_per_m"]
     peak = np.linalg.norm(turned, axis=1).max()
@@ -197,35 +197,60 @@ def test_a_rotation_changes_neither_the_energy_nor_the_repetition_returned(tmp_p
     assert np.abs(turned[:, 1]).max() > 0.5 * peak
 
 
-def test_a_periodic_subsequence_is_costed_per_repetition_as_its_heaviest(tmp_path):
-    """Identical repetitions: both stretches hold whole ones, each as heavy as the heaviest."""
-    path = _written(tmp_path / "periodic.seq", [(1.0, 0.1)] * 200)
+def _timing(path):
+    return ir.summary(path, SYSTEM)["subsequences"][0]["tr_timing"]
+
+
+@pytest.mark.parametrize("name", ONE_FILE)
+def test_a_repetition_that_repeats_alone_is_its_own_stretch(name, tmp_path):
+    """Where every repetition lasts the same, the stretch from the heaviest is that repetition."""
+    seq = _converted(name, tmp_path)
+    x = ir.summary(seq, SYSTEM, cache_ext=".pseg")["subsequences"][0]
+    if x["tr_timing"]["hyper_copies"] != 1:
+        pytest.skip("its repetitions differ in length")
+    stretch = ir.gradient_stretch(seq, 0, "heaviest_repetition")
+    assert stretch["num_positions"] == x["tr_size"]
+    assert stretch["duration_us"] == pytest.approx(x["tr_timing"]["hyper_us"])
+
+
+def test_repetitions_of_one_length_are_costed_one_at_a_time(tmp_path):
+    """The heaviest stretch may start at the delay before the heaviest repetition: the same waveform, turned."""
+    repetitions = [(1.0, 0.1)] * 200
+    repetitions[7] = (1.5, 0.1)
+    path = _written(tmp_path / "periodic.seq", repetitions)
     energies, durations, _ = _played(path)
-    _, heaviest = _heaviest_repetition(energies, 2)
-    repetition_us = durations[:2].sum()
+    first, heaviest = _heaviest_repetition(energies, 2)
+    assert _timing(path)["hyper_copies"] == 1
     for name in STRETCHES:
         stretch = ir.gradient_stretch(path, 0, name)
-        repetitions = stretch["num_positions"] / 2
-        assert repetitions == math.ceil(WINDOW_US / repetition_us)
-        assert stretch["duration_us"] == pytest.approx(repetitions * repetition_us)
-        assert stretch["energy"] / repetitions == pytest.approx(heaviest, rel=1e-5)
+        assert stretch["num_positions"] == 2
+        assert stretch["duration_us"] == pytest.approx(durations[:2].sum())
+        assert stretch["energy"] == pytest.approx(heaviest, rel=1e-5)
+    assert (
+        ir.gradient_stretch(path, 0, "heaviest_repetition")["first_position"] == first
+    )
 
 
 def test_a_pad_on_the_last_slice_is_played_at_its_own_length(tmp_path):
-    """Five slices 40 µs apart and a 0.3 s pad: a stretch spans packets as they play."""
+    """Five slices 40 µs apart and a 0.3 s pad: a stretch spans one packet as it plays."""
     packet = [(1.0, 4e-5)] * 4 + [(1.0, 0.3)]
     path = _written(tmp_path / "packets.seq", packet * 40)
     energies, durations, starts = _played(path)
+    timing = _timing(path)
     assert ir.summary(path, SYSTEM)["subsequences"][0]["tr_size"] == 2
+    assert timing["hyper_copies"] == 5
+    assert timing["hyper_us"] == pytest.approx(durations[:10].sum())
     for name in STRETCHES:
         stretch = ir.gradient_stretch(path, 0, name)
         first, count = stretch["first_position"], stretch["num_positions"]
         assert first in starts
         played = durations[first : first + count]
         assert stretch["duration_us"] == pytest.approx(played.sum())
-        assert played.sum() >= WINDOW_US > played[:-2].sum()
+        assert played.sum() >= timing["hyper_us"] > played[:-1].sum()
     heaviest = ir.gradient_stretch(path, 0, "heaviest")
-    assert heaviest["first_position"] == _reference(energies, durations, starts)
+    assert heaviest["first_position"] == _reference(
+        energies, durations, starts, timing["hyper_us"]
+    )
 
 
 def test_a_burst_in_a_sparse_stretch_is_costed_from_where_it_plays(tmp_path):
@@ -248,15 +273,17 @@ def test_a_burst_in_a_sparse_stretch_is_costed_from_where_it_plays(tmp_path):
 
 
 def test_a_subsequence_shorter_than_the_window_is_its_own_stretch(tmp_path):
-    repetitions = [(1.0, 0.1)] * 20
-    repetitions[7] = (1.5, 0.1)
-    path = _written(tmp_path / "short.seq", repetitions)
-    played_us = ir.summary(path, SYSTEM)["subsequences"][0]["tr_timing"]["played_us"]
+    """Four repetitions of lengths that never repeat, 2 s in all."""
+    path = _written(
+        tmp_path / "short.seq", [(1.0, 0.5), (1.5, 0.6), (1.0, 0.7), (1.0, 0.1)]
+    )
+    timing = _timing(path)
+    assert timing["hyper_copies"] == timing["num_copies"] == 4
     whole = ir.gradient_stretch(path, 0, "heaviest")
-    assert (whole["first_position"], whole["num_positions"]) == (0, 40)
-    assert whole["duration_us"] == pytest.approx(played_us)
+    assert (whole["first_position"], whole["num_positions"]) == (0, 8)
+    assert whole["duration_us"] == pytest.approx(timing["played_us"])
     tail = ir.gradient_stretch(path, 0, "heaviest_repetition")
-    assert (tail["first_position"], tail["num_positions"]) == (14, 26)
+    assert (tail["first_position"], tail["num_positions"]) == (2, 6)
 
 
 def test_an_unknown_stretch_is_refused(tmp_path):

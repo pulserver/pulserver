@@ -280,22 +280,29 @@ int join(const pulseg_sequence_descriptor *desc, const Stretch &s, pulseg_corner
     return rc;
 }
 
-/* The stretches of @p desc, whose execution stream is built, into
- * @p out[PULSEG_NUM_STRETCHES]. */
-int store_stretches(const pulseg_sequence_descriptor *desc, pulseg_corner_point_stream *out)
+/* The stretches of subsequence @p s, whose execution stream is built, into
+ * @p out[PULSEG_NUM_STRETCHES]: as long as its hyper-repetition, or
+ * PULSEG_STRETCH_US where that is shorter. */
+int store_stretches(const pulseg_collection *coll, int s, pulseg_corner_point_stream *out)
 {
     static const pulseg_corner_point_stream empty = PULSEG_CORNER_POINT_STREAM_INIT;
+    const pulseg_sequence_descriptor *desc = &coll->descriptors[s];
 
     for (int k = 0; k < PULSEG_NUM_STRETCHES; ++k)
         out[k] = empty;
     if (desc->exec_stream_len <= 0 || !desc->block_table)
         return PULSEG_ERR_INVALID_ARGUMENT;
+    pulseg_tr_timing timing;
+    int rc = pulseg_get_tr_timing(coll, &timing, s);
+    if (PULSEG_FAILED(rc))
+        return rc;
+    const double window_us =
+        timing.hyper_copies > 0 ? std::min(timing.hyper_us, PULSEG_STRETCH_US) : PULSEG_STRETCH_US;
 
     const Stretch chosen[PULSEG_NUM_STRETCHES] = {
-        heaviest_stretch(desc, PULSEG_STRETCH_US),
-        stretch_from(desc, instance_holding(desc, heaviest_repetition(desc)), PULSEG_STRETCH_US),
+        heaviest_stretch(desc, window_us),
+        stretch_from(desc, instance_holding(desc, heaviest_repetition(desc)), window_us),
     };
-    int rc = PULSEG_SUCCESS;
     for (int k = 0; k < PULSEG_NUM_STRETCHES && PULSEG_SUCCEEDED(rc); ++k)
         rc = join(desc, chosen[k], &out[k]);
     if (PULSEG_FAILED(rc))
@@ -317,7 +324,7 @@ int pulseg_store_gradient_stretches(pulseg_collection *coll)
             pulseg_corner_point_stream_free(&stretch);
         if (desc->structure_only)
             continue;
-        const int rc = store_stretches(desc, desc->stretches);
+        const int rc = store_stretches(coll, s, desc->stretches);
         if (PULSEG_FAILED(rc))
             return rc;
     }
