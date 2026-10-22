@@ -21,7 +21,7 @@ from.
    load_plugin
    load_exam
    option
-   read_options
+   OptionParam
    OptionError
    RfLayout
    RfControl

@@ -501,27 +501,31 @@
 <dl class="py function">
 <dt class="sig sig-object py" id="pulserver.design.option">
 <span class="sig-prename descclassname"><span class="pre">pulserver.design.</span></span><span class="sig-name descname"><span class="pre">option</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pulserver/design/_options.html#option"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.design.option" title="Link to this definition">#</a></dt>
-<dd><p>Return the value of a plugin option: the parameter file’s where it sets <code class="docutils literal notranslate"><span class="pre">name</span></code>, else <code class="docutils literal notranslate"><span class="pre">default</span></code>.</p>
-<p>A plugin assigns it to a module constant, which its class body reads, so
-the option shapes the sequence function and the protocol the plugin
-declares. Outside <a class="reference internal" href="pulserver.design.load_plugin.html#pulserver.design.load_plugin" title="pulserver.design.load_plugin"><code class="xref py py-func docutils literal notranslate"><span class="pre">load_plugin()</span></code></a> it returns
-<code class="docutils literal notranslate"><span class="pre">default</span></code>.</p>
+<dd><p>Declare a plugin option at user entry <code class="docutils literal notranslate"><span class="pre">user</span></code> and return the value the plugin is loaded with.</p>
+<p>A plugin assigns it to a module constant at module level, before its
+<a class="reference internal" href="pulserver.design.SequencePlugin.html#pulserver.design.SequencePlugin" title="pulserver.design.SequencePlugin"><code class="xref py py-class docutils literal notranslate"><span class="pre">SequencePlugin</span></code></a> subclass, whose class body reads
+it, so the option shapes the sequence function and the protocol the plugin
+declares. The subclass lists the option as <code class="docutils literal notranslate"><span class="pre">user&lt;user&gt;_value</span></code>, the index
+of its value among <code class="docutils literal notranslate"><span class="pre">choices</span></code> (0 or 1 for a flag), named <code class="docutils literal notranslate"><span class="pre">label</span></code> and
+the code of each choice in <code class="docutils literal notranslate"><span class="pre">user&lt;user&gt;_name</span></code>. A design call loads the
+plugin at the options its request holds in those entries; outside
+<a class="reference internal" href="pulserver.design.load_plugin.html#pulserver.design.load_plugin" title="pulserver.design.load_plugin"><code class="xref py py-func docutils literal notranslate"><span class="pre">load_plugin()</span></code></a> the value is <code class="docutils literal notranslate"><span class="pre">default</span></code>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>name</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a>) – The option’s name in a parameter file.</p></li>
-<li><p><strong>default</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><em>float</em></a><em> or </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a>) – Its value where the file does not set it. Its type is the option’s:
-an int is taken for a float, and nothing else is converted.</p></li>
-<li><p><strong>choices</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.15)"><em>tuple</em></a><em>, </em><em>default=</em><em>(</em><em>)</em>) – The values it takes, <code class="docutils literal notranslate"><span class="pre">default</span></code> among them; any value of its type
-when empty.</p></li>
+<li><p><strong>name</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a>) – The option’s name, which a design’s manifest records it by.</p></li>
+<li><p><strong>default</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><em>float</em></a><em> or </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a>) – Its value where the request does not state it.</p></li>
+<li><p><strong>choices</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.15)"><em>tuple</em></a><em>, </em><em>default=</em><em>(</em><em>)</em>) – Its values, <code class="docutils literal notranslate"><span class="pre">default</span></code> among them, at most five; a flag, whose default
+is a bool, takes none and chooses between <code class="docutils literal notranslate"><span class="pre">False</span></code> and <code class="docutils literal notranslate"><span class="pre">True</span></code>.</p></li>
+<li><p><strong>user</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a>) – The user entry it is listed at.</p></li>
+<li><p><strong>label</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a>) – The option’s name on the console.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Raises<span class="colon">:</span></dt>
-<dd class="field-even"><ul class="simple">
-<li><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.15)"><strong>ValueError</strong></a> – If <code class="docutils literal notranslate"><span class="pre">default</span></code> is not among <code class="docutils literal notranslate"><span class="pre">choices</span></code>.</p></li>
-<li><p><a class="reference internal" href="pulserver.design.OptionError.html#pulserver.design.OptionError" title="pulserver.design.OptionError"><strong>OptionError</strong></a> – If <code class="docutils literal notranslate"><span class="pre">name</span></code> is declared twice in one plugin, or the file’s value is
-    not of the option’s type or not among <code class="docutils literal notranslate"><span class="pre">choices</span></code>.</p></li>
-</ul>
+<dd class="field-even"><p><a class="reference internal" href="pulserver.design.OptionError.html#pulserver.design.OptionError" title="pulserver.design.OptionError"><strong>OptionError</strong></a> – If a flag is given choices, any other option is not, <code class="docutils literal notranslate"><span class="pre">default</span></code> is
+    not among them, there are more than five or <code class="docutils literal notranslate"><span class="pre">user</span></code> is not a user
+    entry; or, while a plugin loads, if <code class="docutils literal notranslate"><span class="pre">name</span></code> or <code class="docutils literal notranslate"><span class="pre">user</span></code> is declared
+    twice or the value it is loaded with is not among the choices.</p>
 </dd>
 </dl>
 </dd></dl>

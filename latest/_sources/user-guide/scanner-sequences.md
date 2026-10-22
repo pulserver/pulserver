@@ -56,6 +56,7 @@ argument of the sequence function it sets.
 | {class}`~pulserver.design.ChoiceParam` | dropdown | the chosen member of a `StrEnum` |
 | {class}`~pulserver.design.ConfigParam` | not shown | none; a value declared to the interpreter |
 | {class}`~pulserver.design.Description` | read-only text | none |
+| {class}`~pulserver.design.OptionParam` | integer, the index of the option's choice ({ref}`plugin-options`) | none; {func}`~pulserver.design.option` declares it |
 
 The options of the four string-list parameters are
 {class}`~pulserver.protocol.SequenceType`,
@@ -438,48 +439,57 @@ give each band's normal along the physical axes, the distance of its centre
 from the isocentre along that normal, and its thickness, in mm. The
 field-of-view offset and rotation leave a band where it was placed.
 
+(plugin-options)=
 ### Options
 
 Choices that set what a sequence is, rather than a value an operator tunes from
-scan to scan, are options: module constants a plugin reads through
-{func}`~pulserver.design.option`. A numbered parameter set selects them. Set
-`N` of a plugin whose file is `<script>.py` is the TOML file
-`parameters/<script>/<NN>.toml` beside the plugin directory, its number in two
-digits; a slot linked to a script, such as `sequence3.py` linked to
-`src/fse3d.py`, reads that script's directory. Set 0 plays every option at its
-default. A file names only the options it changes:
+scan to scan, are options: module constants a plugin declares with
+{func}`~pulserver.design.option` at module level, before its class, so that
+they shape its sequence function and the protocol it declares. Each option is a
+user entry: the plugin lists it in `user<n>_value` as the index of its value
+among its choices, 0 or 1 for a flag, and names it and the code of each choice
+in `user<n>_name`. A design call loads the plugin at the options its request
+holds in those entries, and `list` at those of the value block it is given, so
+a protocol carries its options as it carries every other entry. A console lists
+the plugin again when an option entry changes. An option shows or hides user
+entries; it never gives one another meaning.
 
-```toml
-# parameters/fse3d/01.toml
-refocusing = "dual_region"
-navigator = true
+```python
+from pulserver.design import Description, FloatParam, SequencePlugin, UIParam, option
+
+VARIABLE_DENSITY = option("variable_density", False, user=42, label="Variable density")
+
+
+class Spiral(SequencePlugin):
+    app = spiral
+    protocol = {...}
+    if VARIABLE_DENSITY:
+        protocol |= {
+            UIParam.user_name(12): Description("Periphery undersampling"),
+            UIParam.user_value(12): FloatParam("undersampling", range_min=1.0),
+        }
 ```
 
-A file naming an option the plugin does not declare, or giving one a value it
-does not take, is refused. The options join the design's identity and its
-manifest, so a design is a function of the set's contents, not of its number.
+An option that is not a flag names its choices, at most five. A request whose
+option entry holds no index of a choice is refused, and so is one stating an
+entry its options hide. The options join the design's identity and its
+manifest.
 
-One key is not an option of the plugin, and any set may state it:
-`field_camera = true` has the series' manual prescan play the interpreter's
-field-camera trigger train instead of the sequence. It reaches the interpreter
-as `sfc_enable 1` in `psd.cvs` beside the design, and joins the design's
-identity and its manifest (`psd`).
-`pulserver design` takes the set as `--parameter-set` and the directory as
-`--parameters`; `src/pulserver/_zoo/parameters/` ships a file for each choice
-below.
+The shipped plugins declare their options at `user36` to `user44`, each at the
+same user entry in every plugin:
 
-| Plugin | Option | Choice | Entries added |
-| --- | --- | --- | --- |
-| `fse3d` | `refocusing` | `"constant"`; `"optimized"`, a train designed with blochsim and shared by every shot; or `"dual_region"`, trains designed for the centre and the periphery of k-space, each shot's train a cubic step between them, `TR` and `ETL` being the centre's | Flip angle: the refocusing angle at the TE echo; `"dual_region"` also adds `user12` and `user13`, TR and ETL at the periphery |
-| `fse3d` | `ordering` | `"radial"`, or `"shuffling"`: Poisson-disc views in random order | None |
-| `mprage3d` | `ordering` | `"radial"`, each partition's lines centre-out, or `"shuffling"`: Poisson-disc lines in random order, for a time-resolved reconstruction | None |
-| `fse3d`, `mprage3d` | `navigator` | Three-plane navigators; the design sets `EnablePmc`, and `pmc` publishes each pose to the scan | None |
-| `gre3d`, `gre_multiecho3d`, `mprage3d`, `fse3d` | `wave` | Wave-CAIPI; the calibration region is acquired first without the wave, and `pics` and `pmc` reconstruct the wave-encoded volume | `user10` and `user11`: wave amplitude and cycles |
-| `gre3d`, `se3d`, `gre_multiecho3d` | `elliptical` | Only the phase encodes inside the ky-kz ellipse; `true` by default | None |
-| `gre_multiecho2d`, `gre_multiecho3d` | `flyback` | Monopolar echoes; `false` reads even echoes reversed | None |
-| `zte3d` | `scheme` | Spokes ordered `"spiral"` or `"meridian"` | None |
-| `bssfp2d` | `retrospective` | ECG gating: `false`, prospective, each heartbeat triggered and acquired once per cardiac phase; `true`, retrospective, each segment cycled over a heartbeat and binned into cardiac phases by the reconstruction | None |
-| `gre_spiral2d`, `se_spiral2d`, `gre_stack_of_spirals3d`, `se_stack_of_spirals3d`, `mprage_stack_of_spirals3d` | `variable_density` | Variable-density spirals | `user12`: periphery undersampling |
+| Plugin | Option | User entry | Choices | Entries added |
+| --- | --- | --- | --- | --- |
+| `fse3d` | `refocusing` | `user38` | `"constant"`; `"optimized"`, a train designed with blochsim and shared by every shot; or `"dual_region"`, trains designed for the centre and the periphery of k-space, each shot's train a cubic step between them, `TR` and `ETL` being the centre's | Flip angle: the refocusing angle at the TE echo; `"dual_region"` also adds `user12` and `user13`, TR and ETL at the periphery |
+| `fse3d` | `ordering` | `user39` | `"radial"`, or `"shuffling"`: Poisson-disc views in random order | None |
+| `mprage3d` | `ordering` | `user39` | `"radial"`, each partition's lines centre-out, or `"shuffling"`: Poisson-disc lines in random order, for a time-resolved reconstruction | None |
+| `fse3d`, `mprage3d` | `navigator` | `user36` | Three-plane navigators; the design sets `EnablePmc`, and `pmc` publishes each pose to the scan | None |
+| `gre3d`, `gre_multiecho3d`, `mprage3d`, `fse3d` | `wave` | `user37` | Wave-CAIPI; the calibration region is acquired first without the wave, and `pics` and `pmc` reconstruct the wave-encoded volume | `user10` and `user11`: wave amplitude and cycles |
+| `gre3d`, `se3d`, `gre_multiecho3d` | `elliptical` | `user40` | Only the phase encodes inside the ky-kz ellipse; on by default | None |
+| `gre_multiecho2d`, `gre_multiecho3d` | `flyback` | `user41` | Monopolar echoes, on by default; off reads even echoes reversed | None |
+| `zte3d` | `scheme` | `user43` | Spokes ordered `"spiral"` or `"meridian"` | None |
+| `bssfp2d` | `retrospective` | `user44` | ECG gating: off, prospective, each heartbeat triggered and acquired once per cardiac phase; on, retrospective, each segment cycled over a heartbeat and binned into cardiac phases by the reconstruction | None |
+| `gre_spiral2d`, `se_spiral2d`, `gre_stack_of_spirals3d`, `se_stack_of_spirals3d`, `mprage_stack_of_spirals3d` | `variable_density` | `user42` | Variable-density spirals | `user12`: periphery undersampling |
 
 ### Diffusion tables
 

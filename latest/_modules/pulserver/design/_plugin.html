@@ -456,8 +456,16 @@
     <span class="n">prescribed_rotation</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..protocol._keys</span><span class="w"> </span><span class="kn">import</span> <span class="n">WIRE_NAMES</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">._entries</span><span class="w"> </span><span class="kn">import</span> <span class="n">AveragesParam</span><span class="p">,</span> <span class="n">Entry</span><span class="p">,</span> <span class="n">Protocol</span><span class="p">,</span> <span class="n">_parameter</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">._options</span><span class="w"> </span><span class="kn">import</span> <span class="n">OptionValue</span><span class="p">,</span> <span class="n">loading_options</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">._entries</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">AveragesParam</span><span class="p">,</span>
+    <span class="n">Description</span><span class="p">,</span>
+    <span class="n">Entry</span><span class="p">,</span>
+    <span class="n">OptionParam</span><span class="p">,</span>
+    <span class="n">Protocol</span><span class="p">,</span>
+    <span class="n">_choice</span><span class="p">,</span>
+    <span class="n">_parameter</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">._options</span><span class="w"> </span><span class="kn">import</span> <span class="n">Declared</span><span class="p">,</span> <span class="n">OptionValue</span><span class="p">,</span> <span class="n">declared_options</span><span class="p">,</span> <span class="n">loading_options</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._rf</span><span class="w"> </span><span class="kn">import</span> <span class="n">RfLayout</span>
 
 <span class="n">_log</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="s2">"pulserver.design"</span><span class="p">)</span>
@@ -505,6 +513,103 @@
 
 
 
+<span class="k">def</span><span class="w"> </span><span class="nf">_warn_deprecated</span><span class="p">(</span><span class="bp">cls</span><span class="p">:</span> <span class="nb">type</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="n">declared</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="vm">__dict__</span>
+    <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">base</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"_deprecated_alias"</span><span class="p">)</span> <span class="k">for</span> <span class="n">base</span> <span class="ow">in</span> <span class="bp">cls</span><span class="o">.</span><span class="vm">__bases__</span><span class="p">):</span>
+        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="bp">cls</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> subclasses ScannerSequence, which is deprecated; "</span>
+            <span class="s2">"subclass SequencePlugin"</span><span class="p">,</span>
+            <span class="ne">DeprecationWarning</span><span class="p">,</span>
+            <span class="n">stacklevel</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="s2">"recon"</span> <span class="ow">in</span> <span class="n">declared</span><span class="p">:</span>
+        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="bp">cls</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> sets recon, which has no effect: the reconstruction "</span>
+            <span class="s2">"is named by the reconstruction client or by the scan"</span><span class="p">,</span>
+            <span class="ne">DeprecationWarning</span><span class="p">,</span>
+            <span class="n">stacklevel</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="s2">"follows"</span> <span class="ow">in</span> <span class="n">declared</span><span class="p">:</span>
+        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="bp">cls</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> sets follows, which has no effect: return an "</span>
+            <span class="s2">"RfLayout from evaluate"</span><span class="p">,</span>
+            <span class="ne">DeprecationWarning</span><span class="p">,</span>
+            <span class="n">stacklevel</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+        <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_keyed_entries</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">entries</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Entry</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="n">Entry</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Return ``entries`` by protocol key.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If a name is not a key the interpreter knows, or is a prescription</span>
+<span class="sd">        entry.</span>
+<span class="sd">    """</span>
+    <span class="n">unknown</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">key</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">entries</span> <span class="k">if</span> <span class="n">key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">WIRE_NAMES</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">unknown</span><span class="p">:</span>
+        <span class="n">names</span> <span class="o">=</span> <span class="p">{</span><span class="n">key</span><span class="o">.</span><span class="n">lower</span><span class="p">():</span> <span class="n">key</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">WIRE_NAMES</span><span class="p">}</span>
+        <span class="n">close</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span>
+            <span class="p">{</span>
+                <span class="n">names</span><span class="p">[</span><span class="n">m</span><span class="p">]</span>
+                <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">unknown</span>
+                <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">difflib</span><span class="o">.</span><span class="n">get_close_matches</span><span class="p">(</span><span class="n">n</span><span class="o">.</span><span class="n">lower</span><span class="p">(),</span> <span class="n">names</span><span class="p">)</span>
+            <span class="p">}</span>
+        <span class="p">)</span>
+        <span class="n">hint</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"; did you mean </span><span class="si">{</span><span class="n">close</span><span class="si">}</span><span class="s2">?"</span> <span class="k">if</span> <span class="n">close</span> <span class="k">else</span> <span class="s2">""</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> declares entries the interpreter does not know: </span><span class="si">{</span><span class="n">unknown</span><span class="si">}{</span><span class="n">hint</span><span class="si">}</span><span class="s2">"</span>
+        <span class="p">)</span>
+    <span class="n">keyed</span> <span class="o">=</span> <span class="p">{</span><span class="n">WIRE_NAMES</span><span class="p">[</span><span class="n">key</span><span class="p">]:</span> <span class="n">entry</span> <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">entry</span> <span class="ow">in</span> <span class="n">entries</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
+    <span class="n">reserved</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">key</span><span class="o">.</span><span class="n">value</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">keyed</span> <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">PRESCRIPTION</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">reserved</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> binds the prescription entries </span><span class="si">{</span><span class="n">reserved</span><span class="si">}</span><span class="s2">, which "</span>
+            <span class="s2">"pulserver applies when it builds the IR"</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="n">keyed</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_option_entries</span><span class="p">(</span>
+    <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">keyed</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="n">Entry</span><span class="p">],</span> <span class="n">options</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Declared</span><span class="p">]</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="n">Entry</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Return the name and value entries of each option, at its user entry.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If ``keyed`` holds another entry at the user entry of an option.</span>
+<span class="sd">    """</span>
+    <span class="n">listed</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="n">Entry</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">option</span> <span class="ow">in</span> <span class="n">options</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+        <span class="n">entries</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="n">UIParam</span><span class="o">.</span><span class="n">user_name</span><span class="p">(</span><span class="n">option</span><span class="o">.</span><span class="n">user</span><span class="p">):</span> <span class="n">Description</span><span class="p">(</span><span class="n">_option_label</span><span class="p">(</span><span class="n">option</span><span class="p">)),</span>
+            <span class="n">UIParam</span><span class="o">.</span><span class="n">user_value</span><span class="p">(</span><span class="n">option</span><span class="o">.</span><span class="n">user</span><span class="p">):</span> <span class="n">OptionParam</span><span class="p">(</span>
+                <span class="n">option</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">option</span><span class="o">.</span><span class="n">choices</span><span class="p">,</span> <span class="n">option</span><span class="o">.</span><span class="n">value</span>
+            <span class="p">),</span>
+        <span class="p">}</span>
+        <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">entry</span> <span class="ow">in</span> <span class="n">entries</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">keyed</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">entry</span><span class="p">)</span> <span class="o">!=</span> <span class="n">entry</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> declares </span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">, which holds the option </span><span class="si">{</span><span class="n">option</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">"</span>
+                <span class="p">)</span>
+        <span class="n">listed</span> <span class="o">|=</span> <span class="n">entries</span>
+    <span class="k">return</span> <span class="n">listed</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_option_label</span><span class="p">(</span><span class="n">option</span><span class="p">:</span> <span class="n">Declared</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the console name of an option: its label and the code of each choice, as ``Refocusing: 0 constant, 1 optimized``."""</span>
+    <span class="k">if</span> <span class="n">option</span><span class="o">.</span><span class="n">choices</span> <span class="o">==</span> <span class="p">(</span><span class="kc">False</span><span class="p">,</span> <span class="kc">True</span><span class="p">):</span>
+        <span class="n">codes</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"0 off"</span><span class="p">,</span> <span class="s2">"1 on"</span><span class="p">]</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">codes</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">index</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">choice</span><span class="p">)</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s1">'_'</span><span class="p">,</span><span class="w"> </span><span class="s1">' '</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span>
+            <span class="k">for</span> <span class="n">index</span><span class="p">,</span> <span class="n">choice</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">option</span><span class="o">.</span><span class="n">choices</span><span class="p">)</span>
+        <span class="p">]</span>
+    <span class="k">return</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">option</span><span class="o">.</span><span class="n">label</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="s1">', '</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">codes</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span>
+
+
 <div class="viewcode-block" id="SequencePlugin">
 <a class="viewcode-back" href="../../../generated/pulserver.design.SequencePlugin.html#pulserver.design.SequencePlugin">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">SequencePlugin</span><span class="p">:</span>
@@ -543,19 +648,18 @@
 <span class="sd">        entry is stored as its member. Empty by default. An entry that states</span>
 <span class="sd">        its ``default`` may bind a name the app does not take; it is then read</span>
 <span class="sd">        by the plugin's own :meth:`evaluate` and :meth:`generate`, which do</span>
-<span class="sd">        not pass it to the app.</span>
-<span class="sd">    options : mapping</span>
-<span class="sd">        The plugin's options, by name, at the values</span>
-<span class="sd">        :func:`~pulserver.design.load_plugin` loaded it with; empty for an</span>
-<span class="sd">        instance made otherwise.</span>
+<span class="sd">        not pass it to the app. The options the plugin module declares with</span>
+<span class="sd">        :func:`~pulserver.design.option` are added, each an</span>
+<span class="sd">        :class:`OptionParam` at its user entry, named in the user entry's</span>
+<span class="sd">        name.</span>
 
 <span class="sd">    Raises</span>
 <span class="sd">    ------</span>
 <span class="sd">    ValueError</span>
 <span class="sd">        When a subclass is defined with a ``protocol`` key the interpreter does</span>
-<span class="sd">        not know, which its parser would drop, or with one of the prescription</span>
-<span class="sd">        entries, which pulserver applies itself; or with both ``protocol`` and</span>
-<span class="sd">        ``ui``.</span>
+<span class="sd">        not know, which its parser would drop, with one of the prescription</span>
+<span class="sd">        entries, which pulserver applies itself, or with an entry at the user</span>
+<span class="sd">        entry of an option; or with both ``protocol`` and ``ui``.</span>
 <span class="sd">    TypeError</span>
 <span class="sd">        When a subclass is defined with a class as ``app``.</span>
 
@@ -572,34 +676,13 @@
 
     <span class="n">app</span><span class="p">:</span> <span class="n">ClassVar</span><span class="p">[</span><span class="n">Callable</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span>
     <span class="n">protocol</span><span class="p">:</span> <span class="n">ClassVar</span><span class="p">[</span><span class="n">Mapping</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="n">Entry</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{}</span>
-    <span class="n">options</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">OptionValue</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
 
     <span class="n">_deprecated_alias</span><span class="p">:</span> <span class="n">ClassVar</span><span class="p">[</span><span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">__init_subclass__</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">__init_subclass__</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
         <span class="n">declared</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="vm">__dict__</span>
-        <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">base</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"_deprecated_alias"</span><span class="p">)</span> <span class="k">for</span> <span class="n">base</span> <span class="ow">in</span> <span class="bp">cls</span><span class="o">.</span><span class="vm">__bases__</span><span class="p">):</span>
-            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="bp">cls</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> subclasses ScannerSequence, which is deprecated; "</span>
-                <span class="s2">"subclass SequencePlugin"</span><span class="p">,</span>
-                <span class="ne">DeprecationWarning</span><span class="p">,</span>
-                <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
-            <span class="p">)</span>
-        <span class="k">if</span> <span class="s2">"recon"</span> <span class="ow">in</span> <span class="n">declared</span><span class="p">:</span>
-            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="bp">cls</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> sets recon, which has no effect: the reconstruction "</span>
-                <span class="s2">"is named by the reconstruction client or by the scan"</span><span class="p">,</span>
-                <span class="ne">DeprecationWarning</span><span class="p">,</span>
-                <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
-            <span class="p">)</span>
-        <span class="k">if</span> <span class="s2">"follows"</span> <span class="ow">in</span> <span class="n">declared</span><span class="p">:</span>
-            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="bp">cls</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> sets follows, which has no effect: return an "</span>
-                <span class="s2">"RfLayout from evaluate"</span><span class="p">,</span>
-                <span class="ne">DeprecationWarning</span><span class="p">,</span>
-                <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
-            <span class="p">)</span>
+        <span class="n">_warn_deprecated</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span>
         <span class="n">app</span> <span class="o">=</span> <span class="n">declared</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"app"</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">inspect</span><span class="o">.</span><span class="n">isclass</span><span class="p">(</span><span class="n">app</span><span class="p">):</span>
             <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
@@ -608,6 +691,8 @@
             <span class="p">)</span>
         <span class="k">if</span> <span class="n">inspect</span><span class="o">.</span><span class="n">isfunction</span><span class="p">(</span><span class="n">app</span><span class="p">)</span> <span class="ow">or</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">app</span><span class="p">,</span> <span class="n">functools</span><span class="o">.</span><span class="n">partial</span><span class="p">):</span>
             <span class="bp">cls</span><span class="o">.</span><span class="n">app</span> <span class="o">=</span> <span class="nb">staticmethod</span><span class="p">(</span><span class="n">app</span><span class="p">)</span>
+        <span class="n">module</span> <span class="o">=</span> <span class="n">sys</span><span class="o">.</span><span class="n">modules</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="bp">cls</span><span class="o">.</span><span class="vm">__module__</span><span class="p">)</span>
+        <span class="n">options</span> <span class="o">=</span> <span class="n">declared_options</span><span class="p">(</span><span class="nb">vars</span><span class="p">(</span><span class="n">module</span><span class="p">))</span> <span class="k">if</span> <span class="n">module</span> <span class="k">else</span> <span class="p">{}</span>
         <span class="k">if</span> <span class="s2">"ui"</span> <span class="ow">in</span> <span class="n">declared</span><span class="p">:</span>
             <span class="k">if</span> <span class="s2">"protocol"</span> <span class="ow">in</span> <span class="n">declared</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
@@ -622,34 +707,25 @@
             <span class="n">entries</span> <span class="o">=</span> <span class="n">declared</span><span class="p">[</span><span class="s2">"ui"</span><span class="p">]</span>
         <span class="k">elif</span> <span class="s2">"protocol"</span> <span class="ow">in</span> <span class="n">declared</span><span class="p">:</span>
             <span class="n">entries</span> <span class="o">=</span> <span class="n">declared</span><span class="p">[</span><span class="s2">"protocol"</span><span class="p">]</span>
+        <span class="k">elif</span> <span class="n">options</span><span class="p">:</span>
+            <span class="n">entries</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">protocol</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="k">return</span>
-        <span class="n">unknown</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">name</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">entries</span> <span class="k">if</span> <span class="n">name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">WIRE_NAMES</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">unknown</span><span class="p">:</span>
-            <span class="n">names</span> <span class="o">=</span> <span class="p">{</span><span class="n">name</span><span class="o">.</span><span class="n">lower</span><span class="p">():</span> <span class="n">name</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">WIRE_NAMES</span><span class="p">}</span>
-            <span class="n">close</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span>
-                <span class="p">{</span>
-                    <span class="n">names</span><span class="p">[</span><span class="n">m</span><span class="p">]</span>
-                    <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">unknown</span>
-                    <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">difflib</span><span class="o">.</span><span class="n">get_close_matches</span><span class="p">(</span><span class="n">n</span><span class="o">.</span><span class="n">lower</span><span class="p">(),</span> <span class="n">names</span><span class="p">)</span>
-                <span class="p">}</span>
-            <span class="p">)</span>
-            <span class="n">hint</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"; did you mean </span><span class="si">{</span><span class="n">close</span><span class="si">}</span><span class="s2">?"</span> <span class="k">if</span> <span class="n">close</span> <span class="k">else</span> <span class="s2">""</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="bp">cls</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> declares entries the interpreter does not know: "</span>
-                <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">unknown</span><span class="si">}{</span><span class="n">hint</span><span class="si">}</span><span class="s2">"</span>
-            <span class="p">)</span>
-        <span class="n">keyed</span> <span class="o">=</span> <span class="p">{</span><span class="n">WIRE_NAMES</span><span class="p">[</span><span class="n">name</span><span class="p">]:</span> <span class="n">entry</span> <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">entry</span> <span class="ow">in</span> <span class="n">entries</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
-        <span class="n">reserved</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">key</span><span class="o">.</span><span class="n">value</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">keyed</span> <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">PRESCRIPTION</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">reserved</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="bp">cls</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> binds the prescription entries </span><span class="si">{</span><span class="n">reserved</span><span class="si">}</span><span class="s2">, which "</span>
-                <span class="s2">"pulserver applies when it builds the IR"</span>
-            <span class="p">)</span>
+        <span class="n">keyed</span> <span class="o">=</span> <span class="n">_keyed_entries</span><span class="p">(</span><span class="bp">cls</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span> <span class="n">entries</span><span class="p">)</span>
+        <span class="n">keyed</span> <span class="o">|=</span> <span class="n">_option_entries</span><span class="p">(</span><span class="bp">cls</span><span class="o">.</span><span class="vm">__name__</span><span class="p">,</span> <span class="n">keyed</span><span class="p">,</span> <span class="n">options</span><span class="p">)</span>
         <span class="n">keyed</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="n">UIParam</span><span class="o">.</span><span class="n">NEX</span><span class="p">,</span> <span class="n">AveragesParam</span><span class="p">())</span>
         <span class="bp">cls</span><span class="o">.</span><span class="n">protocol</span> <span class="o">=</span> <span class="n">keyed</span>
         <span class="k">if</span> <span class="s2">"ui"</span> <span class="ow">in</span> <span class="n">declared</span><span class="p">:</span>
             <span class="bp">cls</span><span class="o">.</span><span class="n">ui</span> <span class="o">=</span> <span class="n">keyed</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">options</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">OptionValue</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""The plugin's options, by name, at the values it was loaded with."""</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="n">entry</span><span class="o">.</span><span class="n">name</span><span class="p">:</span> <span class="n">entry</span><span class="o">.</span><span class="n">value</span>
+            <span class="k">for</span> <span class="n">entry</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">protocol</span><span class="o">.</span><span class="n">values</span><span class="p">()</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">entry</span><span class="p">,</span> <span class="n">OptionParam</span><span class="p">)</span>
+        <span class="p">}</span>
 
 <div class="viewcode-block" id="SequencePlugin.listing">
 <a class="viewcode-back" href="../../../generated/pulserver.design.SequencePlugin.listing.html#pulserver.design.SequencePlugin.listing">[docs]</a>
@@ -917,6 +993,27 @@
 
 
 
+<span class="k">def</span><span class="w"> </span><span class="nf">requested_options</span><span class="p">(</span>
+    <span class="n">protocol</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="n">Entry</span><span class="p">],</span> <span class="n">values</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">OptionValue</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Return the options wire values state at the option entries of ``protocol``, by name.</span>
+
+<span class="sd">    An option entry ``values`` does not hold is left out. ``protocol`` is</span>
+<span class="sd">    the protocol of any load of the plugin: an option is at the same user</span>
+<span class="sd">    entry in all of them.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If a value is not the index of one of the option's choices.</span>
+<span class="sd">    """</span>
+    <span class="n">found</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">entry</span> <span class="ow">in</span> <span class="n">protocol</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">entry</span><span class="p">,</span> <span class="n">OptionParam</span><span class="p">)</span> <span class="ow">and</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">values</span><span class="p">:</span>
+            <span class="n">found</span><span class="p">[</span><span class="n">entry</span><span class="o">.</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">_choice</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">entry</span><span class="p">,</span> <span class="n">values</span><span class="p">[</span><span class="n">key</span><span class="p">])</span>
+    <span class="k">return</span> <span class="n">found</span>
+
+
 <span class="k">def</span><span class="w"> </span><span class="nf">_takes_exam</span><span class="p">(</span><span class="n">hook</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
     <span class="k">return</span> <span class="s2">"exam"</span> <span class="ow">in</span> <span class="n">inspect</span><span class="o">.</span><span class="n">signature</span><span class="p">(</span><span class="n">hook</span><span class="p">)</span><span class="o">.</span><span class="n">parameters</span>
 
@@ -1036,9 +1133,8 @@
 <span class="sd">    another file with the same stem replaces it. A subclass of</span>
 <span class="sd">    :class:`ScannerSequence` is a plugin too. ``options`` are the values the</span>
 <span class="sd">    plugin's :func:`~pulserver.design.option` calls return in place of their</span>
-<span class="sd">    defaults, as a parameter file states them. The instance's ``options``</span>
-<span class="sd">    attribute holds every option the plugin declares, at the value it was</span>
-<span class="sd">    loaded with.</span>
+<span class="sd">    defaults, by option name; the module is executed again for each load, so</span>
+<span class="sd">    each combination of options is a plugin of its own.</span>
 
 <span class="sd">    Raises</span>
 <span class="sd">    ------</span>
@@ -1053,7 +1149,7 @@
     <span class="n">spec</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">spec_from_file_location</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">path</span><span class="p">)</span>
     <span class="n">module</span> <span class="o">=</span> <span class="n">importlib</span><span class="o">.</span><span class="n">util</span><span class="o">.</span><span class="n">module_from_spec</span><span class="p">(</span><span class="n">spec</span><span class="p">)</span>
     <span class="n">sys</span><span class="o">.</span><span class="n">modules</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">module</span>
-    <span class="k">with</span> <span class="n">loading_options</span><span class="p">(</span><span class="n">options</span> <span class="ow">or</span> <span class="p">{})</span> <span class="k">as</span> <span class="n">resolved</span><span class="p">:</span>
+    <span class="k">with</span> <span class="n">loading_options</span><span class="p">(</span><span class="n">options</span> <span class="ow">or</span> <span class="p">{}):</span>
         <span class="n">spec</span><span class="o">.</span><span class="n">loader</span><span class="o">.</span><span class="n">exec_module</span><span class="p">(</span><span class="n">module</span><span class="p">)</span>
     <span class="n">found</span> <span class="o">=</span> <span class="p">[</span>
         <span class="n">obj</span>
@@ -1066,9 +1162,7 @@
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
             <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">path</span><span class="si">}</span><span class="s2"> defines </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">found</span><span class="p">)</span><span class="si">}</span><span class="s2"> SequencePlugin subclasses; a plugin defines one"</span>
         <span class="p">)</span>
-    <span class="n">plugin</span> <span class="o">=</span> <span class="n">found</span><span class="p">[</span><span class="mi">0</span><span class="p">]()</span>
-    <span class="n">plugin</span><span class="o">.</span><span class="n">options</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">resolved</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">plugin</span></div>
+    <span class="k">return</span> <span class="n">found</span><span class="p">[</span><span class="mi">0</span><span class="p">]()</span></div>
 
 </pre></div>
 

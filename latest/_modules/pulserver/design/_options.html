@@ -423,32 +423,44 @@
                 <article class="bd-article">
                   
   <h1>Source code for pulserver.design._options</h1><div class="highlight"><pre>
-<span></span><span class="sd">"""Options of a plugin: the module constants a parameter file sets when the plugin is loaded."""</span>
+<span></span><span class="sd">"""Options of a plugin: module constants a user entry of the protocol sets when the plugin is loaded."""</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">contextlib</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">contextvars</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">sys</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">inspect</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Iterator</span><span class="p">,</span> <span class="n">Mapping</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span><span class="p">,</span> <span class="n">field</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
 
-<span class="k">if</span> <span class="n">sys</span><span class="o">.</span><span class="n">version_info</span> <span class="o">&gt;=</span> <span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">11</span><span class="p">):</span>
-    <span class="kn">import</span><span class="w"> </span><span class="nn">tomllib</span>
-<span class="k">else</span><span class="p">:</span>
-    <span class="kn">import</span><span class="w"> </span><span class="nn">tomli</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">tomllib</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..protocol._keys</span><span class="w"> </span><span class="kn">import</span> <span class="n">NUM_USER_ENTRIES</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..protocol._schema</span><span class="w"> </span><span class="kn">import</span> <span class="n">MAX_DROPDOWN_OPTIONS</span>
 
-<span class="c1">#: The scalar types an option holds; a TOML file states each of them.</span>
+<span class="c1">#: The scalar types an option holds.</span>
 <span class="n">OptionValue</span> <span class="o">=</span> <span class="nb">bool</span> <span class="o">|</span> <span class="nb">int</span> <span class="o">|</span> <span class="nb">float</span> <span class="o">|</span> <span class="nb">str</span>
+
+<span class="c1">#: The module global holding the options a plugin module declares, by name.</span>
+<span class="n">_DECLARED</span> <span class="o">=</span> <span class="s2">"__pulserver_options__"</span>
 
 
 <div class="viewcode-block" id="OptionError">
 <a class="viewcode-back" href="../../../generated/pulserver.design.OptionError.html#pulserver.design.OptionError">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">OptionError</span><span class="p">(</span><span class="ne">ValueError</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">"""An option a parameter file sets that the plugin does not declare or take."""</span></div>
+<span class="w">    </span><span class="sd">"""An option a plugin is loaded with that it does not declare or take, or a declaration it cannot list."""</span></div>
 
+
+
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">Declared</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""An option as a plugin module declares it, and the value the module was loaded with."""</span>
+
+    <span class="n">name</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">choices</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">OptionValue</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span>
+    <span class="n">default</span><span class="p">:</span> <span class="n">OptionValue</span>
+    <span class="n">user</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">label</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">value</span><span class="p">:</span> <span class="n">OptionValue</span>
 
 
 <span class="nd">@dataclass</span>
@@ -465,64 +477,100 @@
 <div class="viewcode-block" id="option">
 <a class="viewcode-back" href="../../../generated/pulserver.design.option.html#pulserver.design.option">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">option</span><span class="p">(</span>
-    <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">default</span><span class="p">:</span> <span class="n">OptionValue</span><span class="p">,</span> <span class="n">choices</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">OptionValue</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="p">()</span>
+    <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">default</span><span class="p">:</span> <span class="n">OptionValue</span><span class="p">,</span>
+    <span class="n">choices</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">OptionValue</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="p">(),</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">user</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">label</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">OptionValue</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Return the value of a plugin option: the parameter file's where it sets ``name``, else ``default``.</span>
+<span class="w">    </span><span class="sd">"""Declare a plugin option at user entry ``user`` and return the value the plugin is loaded with.</span>
 
-<span class="sd">    A plugin assigns it to a module constant, which its class body reads, so</span>
-<span class="sd">    the option shapes the sequence function and the protocol the plugin</span>
-<span class="sd">    declares. Outside :func:`~pulserver.design.load_plugin` it returns</span>
-<span class="sd">    ``default``.</span>
+<span class="sd">    A plugin assigns it to a module constant at module level, before its</span>
+<span class="sd">    :class:`~pulserver.design.SequencePlugin` subclass, whose class body reads</span>
+<span class="sd">    it, so the option shapes the sequence function and the protocol the plugin</span>
+<span class="sd">    declares. The subclass lists the option as ``user&lt;user&gt;_value``, the index</span>
+<span class="sd">    of its value among ``choices`` (0 or 1 for a flag), named ``label`` and</span>
+<span class="sd">    the code of each choice in ``user&lt;user&gt;_name``. A design call loads the</span>
+<span class="sd">    plugin at the options its request holds in those entries; outside</span>
+<span class="sd">    :func:`~pulserver.design.load_plugin` the value is ``default``.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
 <span class="sd">    name : str</span>
-<span class="sd">        The option's name in a parameter file.</span>
+<span class="sd">        The option's name, which a design's manifest records it by.</span>
 <span class="sd">    default : bool, int, float or str</span>
-<span class="sd">        Its value where the file does not set it. Its type is the option's:</span>
-<span class="sd">        an int is taken for a float, and nothing else is converted.</span>
+<span class="sd">        Its value where the request does not state it.</span>
 <span class="sd">    choices : tuple, default=()</span>
-<span class="sd">        The values it takes, ``default`` among them; any value of its type</span>
-<span class="sd">        when empty.</span>
+<span class="sd">        Its values, ``default`` among them, at most five; a flag, whose default</span>
+<span class="sd">        is a bool, takes none and chooses between ``False`` and ``True``.</span>
+<span class="sd">    user : int</span>
+<span class="sd">        The user entry it is listed at.</span>
+<span class="sd">    label : str</span>
+<span class="sd">        The option's name on the console.</span>
 
 <span class="sd">    Raises</span>
 <span class="sd">    ------</span>
-<span class="sd">    ValueError</span>
-<span class="sd">        If ``default`` is not among ``choices``.</span>
 <span class="sd">    OptionError</span>
-<span class="sd">        If ``name`` is declared twice in one plugin, or the file's value is</span>
-<span class="sd">        not of the option's type or not among ``choices``.</span>
+<span class="sd">        If a flag is given choices, any other option is not, ``default`` is</span>
+<span class="sd">        not among them, there are more than five or ``user`` is not a user</span>
+<span class="sd">        entry; or, while a plugin loads, if ``name`` or ``user`` is declared</span>
+<span class="sd">        twice or the value it is loaded with is not among the choices.</span>
 <span class="sd">    """</span>
-    <span class="k">if</span> <span class="n">choices</span> <span class="ow">and</span> <span class="n">default</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">choices</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"option </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">: default </span><span class="si">{</span><span class="n">default</span><span class="si">!r}</span><span class="s2"> is not one of </span><span class="si">{</span><span class="n">choices</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">default</span><span class="p">,</span> <span class="nb">bool</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">choices</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">OptionError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"option </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">: a flag takes no choices"</span><span class="p">)</span>
+        <span class="n">choices</span> <span class="o">=</span> <span class="p">(</span><span class="kc">False</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="ow">not</span> <span class="n">choices</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">OptionError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"option </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">: an option that is not a flag names its choices"</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="n">default</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">choices</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">OptionError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"option </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">: default </span><span class="si">{</span><span class="n">default</span><span class="si">!r}</span><span class="s2"> is not one of </span><span class="si">{</span><span class="n">choices</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">choices</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">MAX_DROPDOWN_OPTIONS</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">OptionError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"option </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">choices</span><span class="p">)</span><span class="si">}</span><span class="s2"> choices; an option offers at most "</span>
+            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">MAX_DROPDOWN_OPTIONS</span><span class="si">}</span><span class="s2">"</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">user</span> <span class="o">&lt;</span> <span class="n">NUM_USER_ENTRIES</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">OptionError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"option </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">: user</span><span class="si">{</span><span class="n">user</span><span class="si">}</span><span class="s2"> is not a user entry, user0 to "</span>
+            <span class="sa">f</span><span class="s2">"user</span><span class="si">{</span><span class="n">NUM_USER_ENTRIES</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mi">1</span><span class="si">}</span><span class="s2">"</span>
+        <span class="p">)</span>
+    <span class="n">declared</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Declared</span><span class="p">]</span> <span class="o">=</span> <span class="n">inspect</span><span class="o">.</span><span class="n">currentframe</span><span class="p">()</span><span class="o">.</span><span class="n">f_back</span><span class="o">.</span><span class="n">f_globals</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span>
+        <span class="n">_DECLARED</span><span class="p">,</span> <span class="p">{}</span>
+    <span class="p">)</span>
+    <span class="n">value</span> <span class="o">=</span> <span class="n">default</span>
     <span class="n">loading</span> <span class="o">=</span> <span class="n">_loading</span><span class="o">.</span><span class="n">get</span><span class="p">()</span>
-    <span class="k">if</span> <span class="n">loading</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">default</span>
-    <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">loading</span><span class="o">.</span><span class="n">resolved</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="n">OptionError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"option </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> is declared twice"</span><span class="p">)</span>
-    <span class="n">value</span> <span class="o">=</span> <span class="n">loading</span><span class="o">.</span><span class="n">given</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">default</span><span class="p">)</span>
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">_same_type</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">default</span><span class="p">):</span>
-        <span class="k">raise</span> <span class="n">OptionError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"option </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> is a </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">default</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">, not </span><span class="si">{</span><span class="n">value</span><span class="si">!r}</span><span class="s2">"</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">choices</span> <span class="ow">and</span> <span class="n">value</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">choices</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="n">OptionError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"option </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> is one of </span><span class="si">{</span><span class="n">choices</span><span class="si">}</span><span class="s2">, not </span><span class="si">{</span><span class="n">value</span><span class="si">!r}</span><span class="s2">"</span><span class="p">)</span>
-    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">default</span><span class="p">,</span> <span class="nb">float</span><span class="p">):</span>
-        <span class="n">value</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
-    <span class="n">loading</span><span class="o">.</span><span class="n">resolved</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
+    <span class="k">if</span> <span class="n">loading</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">loading</span><span class="o">.</span><span class="n">resolved</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">OptionError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"option </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> is declared twice"</span><span class="p">)</span>
+        <span class="n">taken</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span>
+            <span class="p">(</span><span class="n">d</span><span class="o">.</span><span class="n">name</span> <span class="k">for</span> <span class="n">d</span> <span class="ow">in</span> <span class="n">declared</span><span class="o">.</span><span class="n">values</span><span class="p">()</span> <span class="k">if</span> <span class="n">d</span><span class="o">.</span><span class="n">user</span> <span class="o">==</span> <span class="n">user</span> <span class="ow">and</span> <span class="n">d</span><span class="o">.</span><span class="n">name</span> <span class="o">!=</span> <span class="n">name</span><span class="p">),</span>
+            <span class="kc">None</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">taken</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">OptionError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"options </span><span class="si">{</span><span class="n">taken</span><span class="si">}</span><span class="s2"> and </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> are both at user</span><span class="si">{</span><span class="n">user</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+        <span class="n">value</span> <span class="o">=</span> <span class="n">loading</span><span class="o">.</span><span class="n">given</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">default</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">value</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">choices</span> <span class="ow">or</span> <span class="nb">type</span><span class="p">(</span><span class="n">value</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="nb">type</span><span class="p">(</span>
+            <span class="n">choices</span><span class="p">[</span><span class="n">choices</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">value</span><span class="p">)]</span>
+        <span class="p">):</span>
+            <span class="k">raise</span> <span class="n">OptionError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"option </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> is one of </span><span class="si">{</span><span class="n">choices</span><span class="si">}</span><span class="s2">, not </span><span class="si">{</span><span class="n">value</span><span class="si">!r}</span><span class="s2">"</span><span class="p">)</span>
+        <span class="n">value</span> <span class="o">=</span> <span class="n">choices</span><span class="p">[</span><span class="n">choices</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">value</span><span class="p">)]</span>
+        <span class="n">loading</span><span class="o">.</span><span class="n">resolved</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
+    <span class="n">declared</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">Declared</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">choices</span><span class="p">),</span> <span class="n">default</span><span class="p">,</span> <span class="n">user</span><span class="p">,</span> <span class="n">label</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">value</span></div>
 
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_same_type</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">default</span><span class="p">:</span> <span class="n">OptionValue</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
-    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">default</span><span class="p">,</span> <span class="nb">bool</span><span class="p">)</span> <span class="ow">or</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="nb">bool</span><span class="p">):</span>
-        <span class="k">return</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="nb">bool</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">default</span><span class="p">,</span> <span class="nb">bool</span><span class="p">)</span>
-    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">default</span><span class="p">,</span> <span class="nb">float</span><span class="p">):</span>
-        <span class="k">return</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="nb">int</span> <span class="o">|</span> <span class="nb">float</span><span class="p">)</span>
-    <span class="k">return</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="nb">type</span><span class="p">(</span><span class="n">default</span><span class="p">))</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">declared_options</span><span class="p">(</span><span class="n">module</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Declared</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Return the options the module whose globals are ``module`` declares, by name."""</span>
+    <span class="k">return</span> <span class="nb">dict</span><span class="p">(</span><span class="n">module</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">_DECLARED</span><span class="p">,</span> <span class="p">{}))</span>
 
 
 <span class="nd">@contextlib</span><span class="o">.</span><span class="n">contextmanager</span>
 <span class="k">def</span><span class="w"> </span><span class="nf">loading_options</span><span class="p">(</span><span class="n">given</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">OptionValue</span><span class="p">]]:</span>
-<span class="w">    </span><span class="sd">"""Make :func:`option` read ``given`` while a plugin module executes; yield the options it resolves.</span>
+<span class="w">    </span><span class="sd">"""Make :func:`option` take ``given`` while a plugin module executes; yield the options it resolves.</span>
 
 <span class="sd">    Raises</span>
 <span class="sd">    ------</span>
@@ -541,30 +589,6 @@
         <span class="k">raise</span> <span class="n">OptionError</span><span class="p">(</span>
             <span class="sa">f</span><span class="s2">"the plugin does not declare the options </span><span class="si">{</span><span class="n">unknown</span><span class="si">}</span><span class="s2">; it declares </span><span class="si">{</span><span class="n">declared</span><span class="si">}</span><span class="s2">"</span>
         <span class="p">)</span>
-
-
-<div class="viewcode-block" id="read_options">
-<a class="viewcode-back" href="../../../generated/pulserver.design.read_options.html#pulserver.design.read_options">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">read_options</span><span class="p">(</span><span class="n">path</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">OptionValue</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">"""Return the options a parameter file sets, a TOML table of option names and values.</span>
-
-<span class="sd">    Raises</span>
-<span class="sd">    ------</span>
-<span class="sd">    OptionError</span>
-<span class="sd">        If the file is not TOML, or a value is not a bool, int, float or string.</span>
-<span class="sd">    """</span>
-    <span class="k">try</span><span class="p">:</span>
-        <span class="n">table</span> <span class="o">=</span> <span class="n">tomllib</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="n">path</span><span class="p">)</span><span class="o">.</span><span class="n">read_text</span><span class="p">())</span>
-    <span class="k">except</span> <span class="n">tomllib</span><span class="o">.</span><span class="n">TOMLDecodeError</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="n">OptionError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"not TOML: </span><span class="si">{</span><span class="n">error</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="kc">None</span>
-    <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">table</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">OptionValue</span><span class="p">):</span>
-            <span class="k">raise</span> <span class="n">OptionError</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">"option </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> is </span><span class="si">{</span><span class="n">value</span><span class="si">!r}</span><span class="s2">; an option is a bool, an "</span>
-                <span class="s2">"int, a float or a string"</span>
-            <span class="p">)</span>
-    <span class="k">return</span> <span class="n">table</span></div>
-
 </pre></div>
 
                 </article>

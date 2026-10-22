@@ -515,13 +515,13 @@ from.</p>
 <td><p>Return the cache of the exam whose directory a design hook was given.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.design.option.html#pulserver.design.option" title="pulserver.design.option"><code class="xref py py-obj docutils literal notranslate"><span class="pre">option</span></code></a></p></td>
-<td><p>Return the value of a plugin option: the parameter file's where it sets <code class="docutils literal notranslate"><span class="pre">name</span></code>, else <code class="docutils literal notranslate"><span class="pre">default</span></code>.</p></td>
+<td><p>Declare a plugin option at user entry <code class="docutils literal notranslate"><span class="pre">user</span></code> and return the value the plugin is loaded with.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.design.read_options.html#pulserver.design.read_options" title="pulserver.design.read_options"><code class="xref py py-obj docutils literal notranslate"><span class="pre">read_options</span></code></a></p></td>
-<td><p>Return the options a parameter file sets, a TOML table of option names and values.</p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.design.OptionParam.html#pulserver.design.OptionParam" title="pulserver.design.OptionParam"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OptionParam</span></code></a></p></td>
+<td><p>A plugin option at a user entry, as <a class="reference internal" href="generated/pulserver.design.option.html#pulserver.design.option" title="pulserver.design.option"><code class="xref py py-func docutils literal notranslate"><span class="pre">option()</span></code></a> declares it; binds no argument.</p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.design.OptionError.html#pulserver.design.OptionError" title="pulserver.design.OptionError"><code class="xref py py-obj docutils literal notranslate"><span class="pre">OptionError</span></code></a></p></td>
-<td><p>An option a parameter file sets that the plugin does not declare or take.</p></td>
+<td><p>An option a plugin is loaded with that it does not declare or take, or a declaration it cannot list.</p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.design.RfLayout.html#pulserver.design.RfLayout" title="pulserver.design.RfLayout"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RfLayout</span></code></a></p></td>
 <td><p>The RF definitions a plugin plays and the instances of one TR.</p></td>

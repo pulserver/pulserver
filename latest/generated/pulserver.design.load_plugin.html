@@ -506,9 +506,8 @@
 another file with the same stem replaces it. A subclass of
 <a class="reference internal" href="pulserver.design.ScannerSequence.html#pulserver.design.ScannerSequence" title="pulserver.design.ScannerSequence"><code class="xref py py-class docutils literal notranslate"><span class="pre">ScannerSequence</span></code></a> is a plugin too. <code class="docutils literal notranslate"><span class="pre">options</span></code> are the values the
 plugin’s <a class="reference internal" href="pulserver.design.option.html#pulserver.design.option" title="pulserver.design.option"><code class="xref py py-func docutils literal notranslate"><span class="pre">option()</span></code></a> calls return in place of their
-defaults, as a parameter file states them. The instance’s <code class="docutils literal notranslate"><span class="pre">options</span></code>
-attribute holds every option the plugin declares, at the value it was
-loaded with.</p>
+defaults, by option name; the module is executed again for each load, so
+each combination of options is a plugin of its own.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Raises<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">

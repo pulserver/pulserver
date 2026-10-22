@@ -585,6 +585,17 @@ chosen option and the options:</p>
 </div>
 <p>A value block carries <code class="docutils literal notranslate"><span class="pre">name:</span> <span class="pre">value</span></code> lines only, a string list as the index of
 its chosen option.</p>
+<p>An option (<a class="reference internal" href="../../user-guide/scanner-sequences.html#plugin-options"><span class="std std-ref">Options</span></a>) is an integer user entry, the index of its
+choice. Its mode, <code class="docutils literal notranslate"><span class="pre">dropdown</span></code> with the indices as options (<code class="docutils literal notranslate"><span class="pre">0|1</span></code> for a flag),
+marks it as an option; an interpreter shows it as a number, like any user entry:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>user36_value: int|dropdown|0|0|1|1||0|1
+user36_name: description|Navigator: 0 off, 1 on
+</pre></div>
+</div>
+<p>A <code class="docutils literal notranslate"><span class="pre">list</span></code> call reads only the option entries of the value block it is given, and
+lists the plugin at those options; <code class="docutils literal notranslate"><span class="pre">validate</span></code> and <code class="docutils literal notranslate"><span class="pre">generate</span></code> load the plugin at
+the options of their request before reading the rest of it against that
+listing. An interpreter lists the plugin again when an option entry changes.</p>
 <p>The RF blocks follow a reply when the call asks for them, and no block follows
 where the evaluation is invalid or states no layout. They are lists of numbers:
 each number is ASCII decimal with nine significant digits, the numbers of a list
