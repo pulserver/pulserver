@@ -254,29 +254,36 @@ to that type.
 
 ## Heaviest repetition
 
-A scanner evaluates its gradient-heating model on the gradients of a
-repetition, and the host's sound pressure check
-(`pypulseqpp.safety.check_spl`) chooses the same one. For each subsequence,
-the conversion finds the repetition, of those the execution stream holds from
-its first block, over which
+A scanner evaluates its gradient-heating model on the gradients of two
+stretches of each subsequence, each as if played without end against its own
+duration ({func}`~pulserver.ir.gradient_stretch`,
+`pulseg_get_gradient_stretch`). A stretch is the run of whole segment instances
+from one instance's start until they last `PULSEG_STRETCH_US`, 10 s, or to the
+subsequence's end where it comes first, each block at its played duration, a
+pure delay at its instance's.
+
+| Stretch | Start |
+|---|---|
+| `PULSEG_STRETCH_HEAVIEST` | Of the instance starts whose stretch lasts 10 s, the one of largest $E$, the earliest on a tie; the subsequence's start where none does |
+| `PULSEG_STRETCH_HEAVIEST_REPETITION` | The instance holding the start of the repetition of largest $E$, of those the execution stream holds from its first block, the earliest on a tie |
 
 $$
 E = \int \lVert \mathbf{g}(t) \rVert^2 \, dt
 $$
 
-is largest, the earliest on a tie, or the whole subsequence where it does not
-repeat, and the cache carries its gradients
-({func}`~pulserver.ir.repetition_gradients`, `pulseg_get_tr_corner_points`).
-$E$ sums, over the blocks and their gradient events, the square of each
-event's amplitude times the integral of its normalised waveform's square, which a rotation leaves unchanged, so the choice
-does not depend on the blocks' rotations. The repetition is one the scanner
-plays, each block at its own amplitudes and with its own shapes and rotation,
-or through its wave: a waveform that plays, not an envelope of
-several. Its gradients are joined over its blocks as corner points on one
-timeline, along the logical axes and linear in between; the prescription's
-rotation takes them to the physical axes, and a model that needs them on a
-raster samples them at the centres of its intervals
-(`pulseg_sample_corner_points`).
+sums, over the blocks and their gradient events, the square of each event's
+amplitude times the integral of its normalised waveform's square, which a
+rotation leaves unchanged, so neither choice depends on the blocks' rotations.
+The first stretch is found by sliding its end ahead of its start over the
+instances, each walk passing over the stream once. The second holds a short
+burst the first averages out; the host's sound pressure check
+(`pypulseqpp.safety.check_spl`) chooses the same repetition. Each block plays
+at its own amplitudes and with its own shapes and rotation, or through its
+wave: a waveform that plays, not an envelope of several. The gradients are
+joined over the blocks as corner points on one timeline, along the logical
+axes and linear in between; the prescription's rotation takes them to the
+physical axes, and a model that needs them on a raster samples them at the
+centres of its intervals (`pulseg_sample_corner_points`).
 
 ## Cache file
 
@@ -284,7 +291,7 @@ The cache has the name of the first sequence file with its extension replaced,
 `.pseg` by default. It is divided into sections that a consumer loads
 independently. The pulse-generation stage of a playout reads the
 definitions, their waveforms, the waves and their layout, and the gradients of
-each subsequence's heaviest repetition; the scan loop also reads
+each subsequence's stretches; the scan loop also reads
 the per-block instances, the rotations and the execution stream, whose size
 scales with the scan length. Integer and float fields are 4 bytes. The byte
 order is recorded in the file, and a reader on a machine of the other byte order swaps on load. A
@@ -314,7 +321,7 @@ playout to the cursor's, bit for bit.
 
 The IR is built by C++ passes in `src/cpp/ir/`, which run only on the host:
 the segmentation, the waves, their layout in a playout's waveform memory and
-each subsequence's heaviest repetition. The cache reader and writer, the
+each subsequence's stretches. The cache reader and writer, the
 accessors a playout uses to walk the loaded collection, and the two stages of a
 playout are compiled into the interpreter, whose vendor toolchains accept ANSI
 C. They are therefore C89, in `src/c/`, and call nothing in `src/cpp/`. The

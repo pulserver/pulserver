@@ -7,7 +7,7 @@ import numpy as np
 import pypulseqpp as pp
 import pytest
 
-from pulserver.ir import Grouping, convert, repetition_gradients, summary
+from pulserver.ir import Grouping, convert, gradient_stretch, summary
 
 SYSTEM = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
 FIXTURES = Path(__file__).parent / "fixtures" / "sequences"
@@ -31,7 +31,7 @@ def _grouped(path, grouping):
     convert(path, SYSTEM, grouping=grouping, cache_ext=".pseg")
     return (
         summary(path, SYSTEM, cache_ext=".pseg")["num_segments"],
-        repetition_gradients(path, cache_ext=".pseg"),
+        gradient_stretch(path, cache_ext=".pseg"),
     )
 
 

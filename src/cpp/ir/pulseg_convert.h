@@ -86,15 +86,15 @@ extern "C"
         pulseg_diagnostic *diag);
 
     /* ================================================================== */
-    /*  Gradients of the heaviest repetition                              */
+    /*  Gradients of the heaviest stretches                               */
     /* ================================================================== */
 
     /**
-     * @brief Find the heaviest repetition of every subsequence of a converted
-     * collection and keep its gradients, which its cache then carries, as
-     * pulseg_get_tr_corner_points() describes them.
+     * @brief Find the stretches of every subsequence of a converted
+     * collection and keep their gradients, which its cache then carries, as
+     * pulseg_get_gradient_stretch() describes them.
      */
-    int pulseg_store_repetitions(pulseg_collection *coll);
+    int pulseg_store_gradient_stretches(pulseg_collection *coll);
 
 #ifdef __cplusplus
 }

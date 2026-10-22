@@ -28,7 +28,7 @@ pybind11_add_module(_ext
     ${CMAKE_SOURCE_DIR}/src/cpp/ir/collection.cpp
     ${CMAKE_SOURCE_DIR}/src/cpp/ir/waves.cpp
     ${CMAKE_SOURCE_DIR}/src/cpp/ir/wave_plan.cpp
-    ${CMAKE_SOURCE_DIR}/src/cpp/ir/repetition.cpp
+    ${CMAKE_SOURCE_DIR}/src/cpp/ir/gradient_stretch.cpp
     ${CMAKE_SOURCE_DIR}/src/cpp/fourier/bindings.cpp
     ${CMAKE_SOURCE_DIR}/src/cpp/fourier/timeline.cpp
 )

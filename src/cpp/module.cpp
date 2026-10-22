@@ -582,14 +582,15 @@ struct CornerPoints
     ~CornerPoints() { pulseg_corner_point_stream_free(&stream); }
 };
 
-/* The gradients of subsequence @p subsequence's heaviest repetition, and,
+/* The gradients of stretch @p stretch of subsequence @p subsequence, and,
  * with a positive @p raster_us, its samples on that raster. */
-py::dict repetition_gradients(const pulseg_collection *coll, int subsequence, float raster_us)
+py::dict gradient_stretch(const pulseg_collection *coll, int subsequence, int stretch, float raster_us)
 {
     CornerPoints corners;
     const pulseg_corner_point_stream &s = corners.stream;
     pulseg_diagnostic diag = PULSEG_DIAGNOSTIC_INIT;
-    const int rc = pulseg_get_tr_corner_points(coll, &corners.stream, &diag, subsequence);
+    const int rc =
+        pulseg_get_gradient_stretch(coll, &corners.stream, &diag, subsequence, stretch);
     if (PULSEG_FAILED(rc))
         native::raise_diagnosed(rc, diag);
 
@@ -604,6 +605,7 @@ py::dict repetition_gradients(const pulseg_collection *coll, int subsequence, fl
     }
     py::dict out;
     out["first_position"] = s.first_position;
+    out["num_positions"] = s.num_positions;
     out["duration_us"] = s.duration_us;
     out["energy"] = s.energy;
     out["time_us"] = as_array(std::vector<float>(s.time_us, s.time_us + n), {n});
@@ -616,7 +618,7 @@ py::dict repetition_gradients(const pulseg_collection *coll, int subsequence, fl
         require(
             pulseg_sample_corner_points(
                 &s, axis, raster_us, m, samples.data() + static_cast<size_t>(axis * m)),
-            "repetition sampling");
+            "stretch sampling");
     out["samples_hz_per_m"] = as_array(samples, {3, static_cast<py::ssize_t>(m > 0 ? m : 0)});
     return out;
 }
@@ -817,8 +819,8 @@ PYBIND11_MODULE(_ext, module)
             if (PULSEG_FAILED(rc))
                 native::raise_diagnosed(rc, diag);
             require(
-                unlocked([&] { return pulseg_store_repetitions(coll.get()); }),
-                "heaviest repetitions");
+                unlocked([&] { return pulseg_store_gradient_stretches(coll.get()); }),
+                "gradient stretches");
             if (PULSEG_FAILED(
                     unlocked([&] { return pulseg_save_cache(coll.get(), seq_path.c_str(), &opts); })))
                 throw std::invalid_argument("cannot write the cache beside " + seq_path);
@@ -1018,10 +1020,17 @@ PYBIND11_MODULE(_ext, module)
         "List the pTx prescan tour of a written cache.");
 
     module.def(
-        "repetition_gradients_from_cache",
-        [](const std::string &cache_path, int source_size, int subsequence, float raster_us)
-        { return repetition_gradients(load(cache_path, source_size).get(), subsequence, raster_us); },
-        "The gradients of a written cache's heaviest repetition of one subsequence.");
+        "gradient_stretch_from_cache",
+        [](const std::string &cache_path,
+           int source_size,
+           int subsequence,
+           int stretch,
+           float raster_us)
+        {
+            return gradient_stretch(
+                load(cache_path, source_size).get(), subsequence, stretch, raster_us);
+        },
+        "The gradients of one stretch of one subsequence of a written cache.");
 
     module.def(
         "sample_wave_from_cache",

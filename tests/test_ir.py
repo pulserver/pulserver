@@ -412,14 +412,16 @@ def _reader_lines(s):
     return lines
 
 
-def _repetition_lines(seq, count):
+def _stretch_lines(seq, count):
     lines = []
     for i in range(count):
-        r = ir.repetition_gradients(seq, i)
-        lines.append(
-            f"repetition {i} rc 1 first {r['first_position']} "
-            f"points {r['time_us'].size} duration_us {r['duration_us']:.1f}"
-        )
+        for k, stretch in enumerate(("heaviest", "heaviest_repetition")):
+            r = ir.gradient_stretch(seq, i, stretch)
+            lines.append(
+                f"stretch {i} {k} rc 1 first {r['first_position']} "
+                f"positions {r['num_positions']} points {r['time_us'].size} "
+                f"duration_us {r['duration_us']:.1f}"
+            )
     return lines
 
 
@@ -471,7 +473,7 @@ def test_a_vendor_cache_written_here_loads_in_the_scanner_reader(
     expected = summary(seq, SYSTEM, label_column_map=LABELS)
     # This build loads vendor-neutral caches alone.
     convert(seq, SYSTEM)
-    assert printed.splitlines() == _reader_lines(expected) + _repetition_lines(
+    assert printed.splitlines() == _reader_lines(expected) + _stretch_lines(
         seq, expected["num_subsequences"]
     )
 

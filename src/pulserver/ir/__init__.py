@@ -17,7 +17,7 @@ from ._convert import (
 from ._playout import Prescan, playout, prescan_tour
 from ._source import played_rf
 from ._vendor import read_vendor
-from ._waves import plan_waves, repetition_gradients, sample_wave
+from ._waves import gradient_stretch, plan_waves, sample_wave
 
 __all__ = [
     "CheckLimits",
@@ -33,6 +33,7 @@ __all__ = [
     "chain",
     "check",
     "convert",
+    "gradient_stretch",
     "plan_waves",
     "play",
     "played_rf",
@@ -40,7 +41,6 @@ __all__ = [
     "prescan_tour",
     "prescribe",
     "read_vendor",
-    "repetition_gradients",
     "sample_wave",
     "sar_ratios",
     "spl_levels",
