@@ -794,9 +794,10 @@ def _drive(
     relay.start()
     try:
         feed(reconstruction)
-    except BaseException:
-        # A series that cannot be fed whole is not reconstructed.
-        whole.decide(False)
+    except BaseException as error:
+        # A series that cannot be fed whole is not reconstructed; what a
+        # reconstruction that stopped reading said about why still goes back.
+        whole.decide(isinstance(error, _StoppedReading))
         channel.terminate()
         relay.join()
         raise
@@ -1103,10 +1104,31 @@ def _received(client: Connection) -> Iterator[Any]:
     )
 
 
+class _StoppedReading(ConnectionError):
+    """A reconstruction that stopped reading a series the client sent whole."""
+
+
 def _send(items: Iterator[Any], destination: Connection) -> None:
-    """Send a series to the reconstruction as it arrives."""
+    """Send a series to the reconstruction as it arrives.
+
+    Raises
+    ------
+    _StoppedReading
+        If ``destination`` stops reading, once the rest of ``items`` is read
+        and dropped: an error the stream raises meanwhile is raised instead.
+    """
+    stopped: OSError | None = None
     for item in items:
-        destination.send(item)
+        if stopped is not None:
+            continue
+        try:
+            destination.send(item)
+        except OSError as error:
+            stopped = error
+    if stopped is not None:
+        raise _StoppedReading(
+            f"the reconstruction stopped reading the series: {stopped}"
+        ) from stopped
 
 
 def _record(items: Iterator[Any], header: Any, queued: QueueFile) -> list[Any]:
@@ -1125,10 +1147,8 @@ def _record(items: Iterator[Any], header: Any, queued: QueueFile) -> list[Any]:
 
 
 def _replay(queued: QueueFile, others: list[Any], worker: Connection) -> None:
-    for item in others:
-        worker.send(item)
-    for item in queued:
-        worker.send(item)
+    """Send a queued series, read whole already, to ``worker``; see :func:`_send`."""
+    _send(itertools.chain(others, queued), worker)
 
 
 def _publisher(writer: MotionWriter) -> Callable[[Pose], None]:

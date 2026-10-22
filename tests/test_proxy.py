@@ -495,6 +495,27 @@ def test_a_crashing_plugin_closes_its_series_and_frees_the_slot(start_proxy, buc
     assert len(images(stream(proxy.port, series["gre2d"]))) == 1
 
 
+def test_a_plugin_crashing_while_its_series_still_arrives_reports_why(
+    start_proxy, bucket
+):
+    """The worker has exited before the readouts after its first are sent to it."""
+    _, series = bucket
+    proxy = start_proxy(slots=1)
+    # A spare that has imported its engine takes the series at once.
+    assert len(images(stream(proxy.port, series["gre2d"]))) == 1
+
+    def slow(table, index):
+        if index:
+            time.sleep(0.5)
+        return flat(table, index)
+
+    crashed = stream(proxy.port, series["gre2d_raw"], config="crash", data=slow)
+
+    assert closed(crashed)
+    assert not images(crashed)
+    assert any(isinstance(item, str) and "always fails" in item for item in crashed)
+
+
 def test_the_spare_worker_is_replaced_after_each_series(start_proxy, bucket):
     _, series = bucket
     proxy = start_proxy(slots=1, spares=1)

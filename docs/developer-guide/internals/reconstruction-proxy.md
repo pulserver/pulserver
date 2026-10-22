@@ -192,7 +192,9 @@ client as they are produced once the client's stream has ended whole, with its
 `CLOSE` or a last acquisition flagged `LAST_IN_MEASUREMENT`; what the worker
 produces before, such as a unit that closes on the last readout, is held until
 then. A stream that ends otherwise is refused and the held output dropped, so a
-scan the scanner stopped after its last readout returns nothing. Closing either
+scan the scanner stopped after its last readout returns nothing. A worker that
+stops reading, as one whose plugin failed, has the rest of the stream read and
+dropped, so what it said reaches the client of a whole stream. Closing either
 connection closes the other. Once the client's stream ends, the proxy waits for
 the worker to close however long the reconstruction takes, unless it was
 started with a reconstruction timeout, past which the worker is terminated and
