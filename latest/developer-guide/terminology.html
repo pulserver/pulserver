@@ -637,8 +637,8 @@ every block. The <em>repetition</em> of a subsequence is the period
 <code class="docutils literal notranslate"><span class="pre">pypulseqpp.Sequence.repetition()</span></code> reports, the whole subsequence where it
 does not repeat; the conversion finds virtual segments within it. Do not write
 “repeating unit”, which implies that every sequence is periodic, nor “segment
-definition” for a virtual segment. A <code class="docutils literal notranslate"><span class="pre">TRID</span></code> label marks a <em>safety group</em> here,
-not a segment boundary. The <em>IR cache</em> is the file; the <em>collection</em> is what a
+definition” for a virtual segment. A <code class="docutils literal notranslate"><span class="pre">TRID</span></code> label is carried with each block
+and places no segment boundary. The <em>IR cache</em> is the file; the <em>collection</em> is what a
 reader loads from it.</p>
 <p><strong>Virtual scanner.</strong> The stand-ins for the scanner in tests: the <em>virtual
 interpreter</em>, which plays a cache with the C library’s cursor, the <em>phantom</em>

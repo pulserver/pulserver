@@ -628,8 +628,8 @@ the chain is read. RF and ADC frequency and phase offsets are stored absolute:
 the ppm offsets are resolved on the host, at the gamma and B0 of the call’s
 limits, by pypulseqpp’s <code class="docutils literal notranslate"><span class="pre">SequenceLibraries.absolute_offsets</span></code>. The labels
 and flags in force at each block, with <code class="docutils literal notranslate"><span class="pre">PMC</span></code> in force from the first, are
-pypulseqpp’s <code class="docutils literal notranslate"><span class="pre">Sequence.evaluate_labels</span></code>, and a <code class="docutils literal notranslate"><span class="pre">TRID</span></code> group starts at each block
-<code class="docutils literal notranslate"><span class="pre">Sequence.label_blocks</span></code> lists as setting it; the rotation and RF shim a block
+pypulseqpp’s <code class="docutils literal notranslate"><span class="pre">Sequence.evaluate_labels</span></code>, and the blocks that set <code class="docutils literal notranslate"><span class="pre">TRID</span></code> are
+those <code class="docutils literal notranslate"><span class="pre">Sequence.label_blocks</span></code> lists; the rotation and RF shim a block
 plays are <code class="docutils literal notranslate"><span class="pre">Sequence.block_rotations</span></code> and <code class="docutils literal notranslate"><span class="pre">Sequence.block_shims</span></code>. A segment
 position records whether the scanner may move its excitation at run time by a
 carrier offset alone: every instance plays its RF pulse under one gradient,
