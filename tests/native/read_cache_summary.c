@@ -19,8 +19,11 @@
 static void print_subsequence(const pulseg_collection *coll, int i)
 {
     pulseg_subseq_info s = PULSEG_SUBSEQ_INFO_INIT;
-    pulseg_tr_group *groups = NULL;
-    int n, num_groups, num_waves;
+    pulseg_tr_timing t;
+    pulseg_rf_stats *pulses = NULL;
+    double *weights, start_us = 0.0;
+    int *counts;
+    int n, num_rf, plays, num_waves;
 
     pulseg_get_subseq_info(coll, &s, i);
     printf("subsequence %d num_trs %d tr_size %d num_unique_adcs %d num_unique_rf %d "
@@ -29,13 +32,23 @@ static void print_subsequence(const pulseg_collection *coll, int i)
            i, s.num_trs, s.tr_size, s.num_unique_adcs, s.num_unique_rf,
            (double)s.vop_sar_ratio, (double)s.vop_global_sar_ratio,
            (double)s.spl_peak_db, (double)s.spl_average_dba);
-    num_groups = pulseg_get_tr_groups(coll, &groups, i);
-    for (n = 0; n < num_groups; ++n)
-        printf("group %d %d trid %d num_instances %d one_instance_duration_us %d\n",
-               i, n, groups[n].trid, groups[n].num_instances,
-               groups[n].one_instance_duration_us);
-    if (groups)
-        free(groups);
+    pulseg_get_tr_timing(coll, &t, i);
+    num_rf = pulseg_get_rf_array(coll, &pulses, i);
+    if (pulses)
+        free(pulses);
+    if (num_rf < 0)
+        num_rf = 0;
+    weights = (double *)malloc((size_t)(num_rf + 1) * sizeof(double));
+    counts = (int *)malloc((size_t)(num_rf + 1) * sizeof(int));
+    for (n = 0; n < num_rf; ++n)
+        weights[n] = 1.0;
+    plays = pulseg_get_rf_window(coll, i, 10.0e6, weights, num_rf, counts, &start_us);
+    printf("timing %d num_copies %d played_us %g shortest_copy_us %g longest_copy_us %g "
+           "rf_window plays %d start_us %g\n",
+           i, t.num_copies, t.played_us, t.shortest_copy_us, t.longest_copy_us,
+           plays, start_us);
+    free(weights);
+    free(counts);
     num_waves = pulseg_get_num_waves(coll, i);
     for (n = 0; n < num_waves; ++n)
     {

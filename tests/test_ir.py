@@ -392,11 +392,13 @@ def _reader_lines(s):
             f"vop_global_sar_ratio {x['vop_global_sar_ratio']:g} "
             f"spl_peak_db {x['spl_peak_db']:g} spl_average_dba {x['spl_average_dba']:g}"
         )
-        lines += [
-            f"group {i} {n} trid {g['trid']} num_instances {g['num_instances']} "
-            f"one_instance_duration_us {g['one_instance_duration_us']}"
-            for n, g in enumerate(x["tr_groups"])
-        ]
+        t, w = x["tr_timing"], x["rf_window"]
+        lines.append(
+            f"timing {i} num_copies {t['num_copies']} played_us {t['played_us']:g} "
+            f"shortest_copy_us {t['shortest_copy_us']:g} "
+            f"longest_copy_us {t['longest_copy_us']:g} "
+            f"rf_window plays {w['plays']} start_us {w['start_us']:g}"
+        )
         lines += [
             f"wave {i} {n} points {w['points']} peak "
             + " ".join(f"{v:.4f}" for v in w["peak"])
