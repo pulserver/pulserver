@@ -253,6 +253,8 @@ typedef struct pulseg_block_table_element
     int rf_shim_id; /* index into rf_shim_definitions, or -1 */
     int trid;       /* sticky pulseq TRID, 0 = ungrouped (default) */
     int trid_set;   /* 1 where the block carries the TRID label itself */
+    int noprescan_flag; /* 1 where the receive-gain prescan does not acquire
+                           the block's readout */
 } pulseg_block_table_element;
 
 /* NOTE: digitalout_id occupies the former trigger_id position */
@@ -596,6 +598,16 @@ typedef struct pulseg_sequence_descriptor
      * pulseg_get_block_info() as gx_variable, gy_variable and gz_variable. */
     int *variable_grad_flags;
 
+    /* Per-position RF frequency offset across TR instances [tr_size], over
+     * the instances that play RF at a nonzero amplitude, by the same
+     * position rule as variable_grad_flags: 1 where their least and greatest
+     * offset differ by more than PULSEG_RF_FREQ_TOL_HZ, and their mean in Hz.
+     * The offsets are the converted ones, the field-of-view offset included.
+     * Reported on the block instance as rf_freq_variable and
+     * rf_freq_mean_hz.  NULL with no TR. */
+    int *rf_freq_variable;
+    float *rf_freq_mean_hz;
+
     /* label table (populated by dry-run if parse_labels is set) */
     int label_num_columns;
     int label_num_entries;
@@ -642,7 +654,7 @@ typedef struct pulseg_sequence_descriptor
     0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, NULL, \
     PULSEG_TR_DESCRIPTOR_INIT, 0, NULL, PULSEG_SEGMENT_TABLE_RESULT_INIT, 0, NULL, NULL, \
     NULL, /* exec_runs */ 0, NULL, /* seg runs */ 0, 0, NULL, NULL, \
-    /* hints */ 0, 0, /* tr_start anchor */ -1, NULL, 0, 0, NULL, \
+    /* hints */ 0, 0, /* tr_start anchor */ -1, NULL, /* rf freq */ NULL, NULL, 0, 0, NULL, \
     {{0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, \
     {0, 0}, {0, 0}, {0, 0}, {0, 0}}, NULL, /* waves */ 0, NULL, NULL, \
     PULSEG_CORNER_POINT_STREAM_INIT, PULSEG_CACHE_EXT_DEFAULT, 0, 0 \
@@ -992,6 +1004,7 @@ void pulseg__compute_exec_stream_tr_start(pulseg_sequence_descriptor *desc);
  * exec_stream_* arrays (see pulseg_exec_run). */
 int pulseg__exec_block_idx(const pulseg_sequence_descriptor *desc, int n);
 int pulseg__exec_seg_id(const pulseg_sequence_descriptor *desc, int n);
+int pulseg__exec_seg_run_start(const pulseg_sequence_descriptor *desc, int n);
 int pulseg__exec_tr_start(const pulseg_sequence_descriptor *desc, int n);
 int pulseg__build_seg_runs(pulseg_sequence_descriptor *desc);
 long pulseg__verify_exec_runs(const pulseg_sequence_descriptor *desc);
@@ -1009,6 +1022,12 @@ int pulseg__build_waves(pulseg_sequence_descriptor *desc);
  * across TR instances. Allocates desc->variable_grad_flags (tr_size * 3 ints)
  * and runs after pulseg__get_tr_in_sequence. */
 int pulseg__compute_variable_grad_flags(pulseg_sequence_descriptor *desc);
+
+/* Per position within the TR, whether the RF frequency offset varies across
+ * TR instances, and its mean over them.  Allocates desc->rf_freq_variable and
+ * desc->rf_freq_mean_hz (tr_size each), by the position rule of
+ * pulseg__compute_variable_grad_flags, and runs where it does. */
+int pulseg__compute_rf_freq_flags(pulseg_sequence_descriptor *desc);
 
 /* --- pulseg_core.c (continued) --- */
 /* pulseg__get_collection_descriptors was promoted+renamed to the public

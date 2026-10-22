@@ -15,9 +15,10 @@ from pulserver._zoo import ZOO_PAIRS
 from pulserver._zoo._evaluation import achieved, rf_layout
 from pulserver._zoo._saturation import explicit_bands
 from pulserver._zoo._slab import slab
-from pulserver._zoo._user import SHARED
+from pulserver._zoo._user import LINE_SPACING, SHARED
 from pulserver.design import Protocol, StatedParam, load_plugin
 from pulserver.host import call
+from pulserver.host._limits import design_system
 from pulserver.protocol import (
     ImagingMode,
     TEPreset,
@@ -27,7 +28,8 @@ from pulserver.protocol import (
     parse_rf_layout,
 )
 
-SYSTEM = pp.Opts(**LIMITS)
+#: The limits the service designs under: the scanner's, less the design margin.
+SYSTEM = design_system(LIMITS)
 SHIPPED = sorted(path.stem for path in _plugins.SEQUENCES.glob("*.py"))
 # The spin-echo sequences fix their flip angles; the others take one.
 SPIN_ECHO = [name for name in SHIPPED if name.startswith(("se", "fse"))]
@@ -1206,6 +1208,8 @@ def test_every_shared_control_a_sequence_takes_is_named_at_its_own_user_cv(name,
                 entry, "automatic", None
             ):
                 label = label.split(",")[0]
+            if name.startswith("mprage"):
+                label = LINE_SPACING.get(free[0], label)
             assert plugin.protocol[UIParam.user_name(index)].text == label
 
 

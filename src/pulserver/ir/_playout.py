@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from .._accelerators import require
 from ._convert import WaveBudget, _held, cache_path
@@ -21,11 +21,19 @@ class Prescan:
     readouts
         The readouts after which it ends, with the segment instance that
         completes them; 0 takes the number its sequence declares
-        (``NumGainCalibrationReadouts``), at least one.
+        (``NumGainCalibrationReadouts``), whole repetitions of it.
+    tour
+        Whether it first plays the pTx tour of :func:`prescan_tour`, each
+        visit once: ``"played"`` acquires none of the tour's readouts,
+        ``"acquired"`` acquires them and adds them to ``readouts``.
     """
 
     subsequence: int = 0
     readouts: int = 0
+    tour: Literal["none", "played", "acquired"] = "none"
+
+
+_TOURS = {"none": 0, "played": 1, "acquired": 2}
 
 
 def playout(
@@ -48,8 +56,10 @@ def playout(
     them out for ``budget``, or, without one, as the cache lays them out.
 
     With ``prescan``, the scan loop plays that receive-gain calibration
-    instead. It waits for no trigger, drives no digital output, and plays at
-    zero every gradient whose amplitude varies across repetitions.
+    instead. It waits for no trigger, drives no digital output, plays at
+    zero every gradient whose amplitude varies across repetitions, and plays
+    an RF pulse whose frequency offset varies across repetitions at their
+    mean, ``rf_freq_mean_hz`` of :func:`play`.
 
     Parameters
     ----------
@@ -86,14 +96,16 @@ def playout(
         - ``blocks``: per played block, in play order, ``subsequence``,
           ``segment``, ``position``, ``instance`` (instances of its segment
           played before its own), ``slot`` (of its position's ring, -1 unless
-          the waves are streamed), ``rotate`` (0 where NOROT keeps the prescription
+          the waves are streamed), ``visit`` (of the prescan's tour, -1
+          outside it), ``rotate`` (0 where NOROT keeps the prescription
           rotation out), ``await_trigger``, ``first_position`` (the
           execution-stream position of its instance's first block) and
           ``duration_us``; the registers ``rf_amp_hz``, ``rf_phase_rad``,
           ``rf_freq_hz``, ``rf_shim``, ``rf_use``, ``gradient_hz_per_m``
           ``(blocks, 3)``, ``adc``, ``adc_freq_hz``, ``adc_phase_rad`` and
-          ``digitalout``, and ``gradient_variable``, where the amplitude of
-          that gradient varies across repetitions; and its wave, ``wave`` (-1
+          ``digitalout``, ``gradient_variable``, where the amplitude of
+          that gradient varies across repetitions, and ``rf_freq_variable``,
+          where the frequency offset of its RF pulse does; and its wave, ``wave`` (-1
           without one) at ``wave_amp_hz_per_m``, from the region
           ``wave_offset``, ``wave_samples`` and ``wave_start_us``, with the
           samples it reads there in ``wave_read``, ``wave_read_span``
@@ -123,7 +135,9 @@ def playout(
     """
     seq_path = Path(seq_path)
     calibration = (
-        (-1, 0) if prescan is None else (prescan.subsequence, prescan.readouts)
+        (-1, 0, 0)
+        if prescan is None
+        else (prescan.subsequence, prescan.readouts, _TOURS[prescan.tour])
     )
     return require("playout_from_cache")(
         str(cache_path(seq_path, cache_ext)),
@@ -132,4 +146,29 @@ def playout(
         calibration,
         waveforms,
         pulses,
+    )
+
+
+def prescan_tour(seq_path: Path | str, cache_ext: str = ".pseg") -> dict[str, Any]:
+    """List the pTx prescan tour of the cache beside a sequence file.
+
+    One visit per segment instance holding the largest drive one channel of a
+    parallel-transmit RF definition receives in its subsequence: the RF
+    amplitude times the channel's shim magnitude, or the amplitude alone for
+    a pulse with a waveform per channel. An instance that holds several is
+    listed once. A sequence without parallel-transmit RF has no visit.
+
+    Returns
+    -------
+    dict of str to numpy.ndarray
+        Per visit, by subsequence and then stream position: ``subsequence``,
+        ``segment`` (global), ``first_position`` and ``num_blocks`` of its
+        instance, ``rf_definition`` (local to the subsequence), ``channels``
+        whose largest drive it plays, the largest of them ``drive_hz``,
+        ``duration_us``, ``rf_pulses`` and ``readouts``: those the scan
+        acquires that NOPRESCAN does not exempt.
+    """
+    seq_path = Path(seq_path)
+    return require("prescan_tour_from_cache")(
+        str(cache_path(seq_path, cache_ext)), seq_path.stat().st_size
     )

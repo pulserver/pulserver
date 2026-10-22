@@ -209,6 +209,16 @@ void pulseg_sequence_descriptor_free(pulseg_sequence_descriptor *d)
         PULSEG_FREE(d->variable_grad_flags);
         d->variable_grad_flags = NULL;
     }
+    if (d->rf_freq_variable)
+    {
+        PULSEG_FREE(d->rf_freq_variable);
+        d->rf_freq_variable = NULL;
+    }
+    if (d->rf_freq_mean_hz)
+    {
+        PULSEG_FREE(d->rf_freq_mean_hz);
+        d->rf_freq_mean_hz = NULL;
+    }
 
     if (d->label_table)
     {

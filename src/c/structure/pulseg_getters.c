@@ -2825,6 +2825,19 @@ void pulseg_cursor_reset(pulseg_collection *coll)
     coll->block_cursor.from_last_reset = 0;
 }
 
+int pulseg_cursor_seek(pulseg_collection *coll, int subseq_idx, int exec_stream_position)
+{
+    if (!coll)
+        return PULSEG_ERR_NULL_POINTER;
+    if (subseq_idx < 0 || subseq_idx >= coll->num_subsequences || exec_stream_position < 0 ||
+        exec_stream_position >= coll->descriptors[subseq_idx].exec_stream_len)
+        return PULSEG_ERR_INDEX;
+    coll->block_cursor.sequence_index = subseq_idx;
+    coll->block_cursor.exec_stream_position = exec_stream_position - 1;
+    coll->block_cursor.from_last_reset = 0;
+    return PULSEG_SUCCESS;
+}
+
 void pulseg_cursor_mark(pulseg_collection *coll)
 {
     if (!coll)
@@ -2869,7 +2882,7 @@ int pulseg_cursor_get_info(const pulseg_collection *coll, pulseg_cursor_info *in
      * phase-encoding readout lines in MPRAGE within one TR).
      * A new instance begins when the seg_id changes, or when enough
      * blocks have elapsed to complete one full instance of the segment
-     * (detected by counting back to the start of the same-seg_id run). */
+     * (counted from the start of the same-seg_id run). */
     {
         int new_inst;
         if (pos == 0 || pulseg__exec_seg_id(desc, pos) != pulseg__exec_seg_id(desc, pos - 1))
@@ -2879,11 +2892,9 @@ int pulseg_cursor_get_info(const pulseg_collection *coll, pulseg_cursor_info *in
         else if (seg_id >= 0 && seg_id < desc->num_unique_segments)
         {
             int nb = desc->segment_definitions[seg_id].num_blocks;
-            int run_start = pos;
+            int run_start = pulseg__exec_seg_run_start(desc, pos);
             if (nb <= 0)
                 nb = 1;
-            while (run_start > 0 && pulseg__exec_seg_id(desc, run_start - 1) == seg_id)
-                run_start--;
             new_inst = (((pos - run_start) % nb) == 0) ? 1 : 0;
         }
         else
@@ -2902,11 +2913,9 @@ int pulseg_cursor_get_info(const pulseg_collection *coll, pulseg_cursor_info *in
         else if (seg_id >= 0 && seg_id < desc->num_unique_segments)
         {
             int nb = desc->segment_definitions[seg_id].num_blocks;
-            int run_start = pos;
+            int run_start = pulseg__exec_seg_run_start(desc, pos);
             if (nb <= 0)
                 nb = 1;
-            while (run_start > 0 && pulseg__exec_seg_id(desc, run_start - 1) == seg_id)
-                run_start--;
             last_inst = ((((pos - run_start) + 1) % nb) == 0) ? 1 : 0;
         }
         else
@@ -3036,6 +3045,7 @@ static int resolve_block_instance(
     /* Flags */
     inst->norot_flag = bte->norot_flag;
     inst->nopos_flag = bte->nopos_flag;
+    inst->noprescan_flag = bte->noprescan_flag;
 
     /* Digital output: a trigger event of output type.  An input trigger is
      * its segment's, which the segment reports. */
@@ -3084,6 +3094,15 @@ static int resolve_block_instance(
             inst->gx_variable = 0;
             inst->gy_variable = 0;
             inst->gz_variable = 0;
+        }
+        inst->rf_freq_variable = 0;
+        inst->rf_freq_mean_hz = 0.0f;
+        if (vg_tr_size > 0 && desc->rf_freq_variable && desc->rf_freq_mean_hz &&
+            inst->rf_amp_hz != 0.0f)
+        {
+            vg_pos = exec_stream_position % vg_tr_size;
+            inst->rf_freq_variable = desc->rf_freq_variable[vg_pos];
+            inst->rf_freq_mean_hz = desc->rf_freq_mean_hz[vg_pos];
         }
     }
 

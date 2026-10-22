@@ -549,7 +549,13 @@ class MrdDicomBuilder:
         rows, columns = values.shape
         row_spacing = float(mrdImg.field_of_view[1]) / rows
         column_spacing = float(mrdImg.field_of_view[0]) / columns
-        centre = np.asarray(mrdImg.position, dtype=float)
+        # MRD places an image from the isocentre and states the table's offset
+        # apart; a patient's frame moves with the table. A scanner that shifts
+        # the prescription along the table by moving the table (or the scan
+        # centre) leaves the move out of the position and in the offset.
+        centre = np.asarray(mrdImg.position, dtype=float) - np.asarray(
+            mrdImg.patient_table_position, dtype=float
+        )
         first_pixel = (
             centre
             - (columns // 2) * column_spacing * read

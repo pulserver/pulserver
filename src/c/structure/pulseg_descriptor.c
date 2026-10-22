@@ -120,30 +120,19 @@ int pulseg__exec_block_idx(const pulseg_sequence_descriptor *desc, int n)
     return r ? r->block_start + (n - r->emit_start) : -1;
 }
 
-int pulseg__exec_seg_id(const pulseg_sequence_descriptor *desc, int n)
+/* Index of the stored run holding period position m (0 <= m < period). */
+static int seg_run_index(const pulseg_sequence_descriptor *desc, int m)
 {
-    const int *start;
-    int lo, hi, h, m;
+    const int *start = desc->seg_run_start;
+    int lo, hi, h;
 
-    if (!desc || !desc->seg_run_start || desc->num_seg_runs <= 0)
-        return -1;
-    if (n < 0 || n >= desc->exec_stream_len)
-        return -1;
-
-    /* Reduce into the stored period. When seg_period == exec_stream_len
-     * (no periodicity verified) this is a no-op and the encoding is plain
-     * RLE, so the division never runs. */
-    m = (desc->seg_period > 0 && desc->seg_period < desc->exec_stream_len) ? (n % desc->seg_period)
-                                                                           : n;
-
-    start = desc->seg_run_start;
     h = desc->seg_run_hint;
     if (h >= 0 && h < desc->num_seg_runs && m >= start[h] && m < start[h + 1])
-        return desc->seg_run_id[h];
+        return h;
     if (h + 1 < desc->num_seg_runs && m >= start[h + 1] && m < start[h + 2])
     {
         ((pulseg_sequence_descriptor *)desc)->seg_run_hint = h + 1;
-        return desc->seg_run_id[h + 1];
+        return h + 1;
     }
 
     lo = 0;
@@ -157,7 +146,48 @@ int pulseg__exec_seg_id(const pulseg_sequence_descriptor *desc, int n)
             hi = mid - 1;
     }
     ((pulseg_sequence_descriptor *)desc)->seg_run_hint = lo;
-    return desc->seg_run_id[lo];
+    return lo;
+}
+
+/* Reduce n into the stored period. When seg_period == exec_stream_len (no
+ * periodicity verified) this is a no-op and the encoding is plain RLE. */
+static int seg_period_base(const pulseg_sequence_descriptor *desc, int n)
+{
+    if (desc->seg_period > 0 && desc->seg_period < desc->exec_stream_len)
+        return n - n % desc->seg_period;
+    return 0;
+}
+
+int pulseg__exec_seg_id(const pulseg_sequence_descriptor *desc, int n)
+{
+    if (!desc || !desc->seg_run_start || desc->num_seg_runs <= 0)
+        return -1;
+    if (n < 0 || n >= desc->exec_stream_len)
+        return -1;
+    return desc->seg_run_id[seg_run_index(desc, n - seg_period_base(desc, n))];
+}
+
+/* First stream position of the maximal one-segment run holding n.  The
+ * period's runs are maximal, so a run only continues across a period
+ * boundary, when the period ends on the segment it starts with. */
+int pulseg__exec_seg_run_start(const pulseg_sequence_descriptor *desc, int n)
+{
+    int base, h, last;
+
+    if (!desc || !desc->seg_run_start || desc->num_seg_runs <= 0)
+        return n;
+    if (n < 0 || n >= desc->exec_stream_len)
+        return n;
+    base = seg_period_base(desc, n);
+    h = seg_run_index(desc, n - base);
+    if (h > 0 || base == 0)
+        return base + desc->seg_run_start[h];
+    last = desc->num_seg_runs - 1;
+    if (last == 0)
+        return 0; /* one segment throughout */
+    if (desc->seg_run_id[last] != desc->seg_run_id[0])
+        return base;
+    return base - desc->seg_period + desc->seg_run_start[last];
 }
 
 /* 1 at the first block of each TR.  Mirrors

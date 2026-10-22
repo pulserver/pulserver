@@ -42,7 +42,7 @@ MAX_BANDS = 8
 
 #: Flags the IR keeps per block, in the order of the payload's block_flags
 #: columns.
-_BLOCK_FLAGS = ("NOROT", "NOPOS", "PMC", "NAV", "TRID")
+_BLOCK_FLAGS = ("NOROT", "NOPOS", "PMC", "NAV", "TRID", "NOPRESCAN")
 
 #: Labels the IR records per readout, in the order of the converter's label
 #: state, which label_column_map indexes.
@@ -297,8 +297,9 @@ def conversion_payload(sequence: Any, system: pp.Opts) -> dict[str, Any]:
     ------
     ValueError
         If pypulseqpp exports its tables in another layout, an ADC's phase
-        modulation has not one phase per sample, or the repetition does not
-        start at the first block.
+        modulation has not one phase per sample, the repetition does not
+        start at the first block, or ``NumGainCalibrationReadouts`` ends
+        inside a repetition.
     """
     tables = _tables(sequence)
     events = tables.blocks
@@ -315,6 +316,13 @@ def conversion_payload(sequence: Any, system: pp.Opts) -> dict[str, Any]:
     interned = sequence.event_definitions()
     specifications = _specification_libraries(tables)
     declared = sequence.definitions
+    repetition = _repetition_size(sequence)
+    states = _block_states(sequence)
+    calibrates = np.asarray(events)[:, 4] > 0
+    calibrates &= np.broadcast_to(
+        np.asarray(states["flag_labels"][_BLOCK_FLAGS.index("NOPRESCAN")]) == 0,
+        calibrates.shape,
+    )
 
     return {
         "version": [
@@ -335,8 +343,8 @@ def conversion_payload(sequence: Any, system: pp.Opts) -> dict[str, Any]:
             "nav_matrix": _numbers(declared, "NavMatrix", 3),
             "total_duration": _numbers(declared, "TotalDuration", 1)[0],
             "enable_pmc": int(_numbers(declared, "EnablePmc", 1)[0]),
-            "num_gain_cal_readouts": int(
-                _numbers(declared, "NumGainCalibrationReadouts", 1)[0]
+            "num_gain_cal_readouts": _gain_calibration_readouts(
+                declared, calibrates, repetition
             ),
             "enable_sar_burst_mode": int(
                 _numbers(declared, "EnableSarBurstMode", 1)[0]
@@ -345,7 +353,7 @@ def conversion_payload(sequence: Any, system: pp.Opts) -> dict[str, Any]:
             "vop_global_sar_ratio": 0.0,
             "spl_peak_db": -1.0,
             "spl_average_dba": -1.0,
-            "repetition_size": _repetition_size(sequence),
+            "repetition_size": repetition,
             "name": str(declared.get("Name", "")),
             "next_sequence": str(declared.get("NextSequence", "")),
         },
@@ -385,7 +393,7 @@ def conversion_payload(sequence: Any, system: pp.Opts) -> dict[str, Any]:
         "labelinc": specifications.labelinc,
         "soft_delays": specifications.soft_delays,
         "rf_shims": list(specifications.rf_shims),
-        **_block_states(sequence),
+        **states,
     }
 
 
@@ -733,6 +741,45 @@ def _repetition_size(sequence: Any) -> int:
             "repetition that starts at the first block"
         )
     return int(size)
+
+
+def _gain_calibration_readouts(
+    declared: dict[str, Any], calibrates: NDArray[np.bool_], repetition: int
+) -> int:
+    """Return the readouts the receive-gain prescan acquires.
+
+    ``calibrates`` marks, per block, a readout the prescan acquires: one its
+    NOPRESCAN label does not exempt. The count is
+    ``NumGainCalibrationReadouts``, which must end with a repetition: the
+    prescan plays from the first block, and stopping inside a repetition sets
+    the gain on part of one. A sequence that states none plays through the
+    first repetition that acquires. A sequence with no such readout is not
+    checked.
+
+    Raises
+    ------
+    ValueError
+        If the stated count is not a whole number of at least one, or ends
+        inside a repetition.
+    """
+    stated = declared.get("NumGainCalibrationReadouts")
+    acquires = np.cumsum(calibrates)
+    if not acquires.size or not acquires[-1]:
+        return int(_numbers(declared, "NumGainCalibrationReadouts", 1)[0])
+    ends = np.unique(np.append(acquires[repetition - 1 :: repetition], acquires[-1]))
+    ends = ends[ends > 0]
+    if stated is None:
+        return int(ends[0])
+    count = _numbers(declared, "NumGainCalibrationReadouts", 1)[0]
+    if count in ends:
+        return int(count)
+    shown = ", ".join(str(int(end)) for end in ends[:4])
+    raise ValueError(
+        f"NumGainCalibrationReadouts={count:g} ends inside a repetition: the "
+        f"sequence's repetitions of {repetition} blocks end after {shown}"
+        f"{', ...' if ends.size > 4 else ''} readouts, and its first repetition "
+        f"that acquires holds {int(ends[0])}; state a whole number of repetitions"
+    )
 
 
 def _densified(

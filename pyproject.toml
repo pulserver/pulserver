@@ -24,13 +24,13 @@ classifiers = [
 ]
 
 dependencies = [
-  "pypulseqpp>=0.0.43",
+  "pypulseqpp>=0.0.46",
   "numpy>=2.2.6",
   "ismrmrd>=1.15.0",
   "pydicom>=3.0.2",
   "torch>=2.4",
   "blochsim>=0.0.12",
-  "bartorch>=0.0.16",
+  "bartorch>=0.0.17",
   # The virtual scanner's BrainWeb phantom and its console's server.
   "brainweb-dl>=0.4.6",
   "websockets>=16.1.1",

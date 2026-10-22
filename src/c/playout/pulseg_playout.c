@@ -249,6 +249,218 @@ int pulseg_playout_prepare(
 }
 
 /* ================================================================== */
+/*  The pTx prescan tour                                              */
+/* ================================================================== */
+
+/* The largest drive one channel of one RF definition receives, and the
+ * instance holding it: first position -1 while none is known. */
+typedef struct tour_best
+{
+    float drive;
+    int first;
+    int num_blocks;
+} tour_best;
+
+/* The channels one RF occurrence drives, and the shim it plays under, NULL
+ * for none: its shim's, or its waveform's. */
+static int occurrence_channels(
+    const pulseg_sequence_descriptor *desc,
+    const pulseg_block_table_element *bte,
+    const pulseg_rf_definition *def,
+    const pulseg_rf_shim_definition **shim)
+{
+    int channels;
+
+    *shim = (bte->rf_shim_id >= 0 && bte->rf_shim_id < desc->num_rf_shims)
+        ? &desc->rf_shim_definitions[bte->rf_shim_id]
+        : NULL;
+    channels = *shim ? (*shim)->num_channels : def->num_channels;
+    return channels > PULSEG_MAX_RF_SHIM_CHANNELS ? PULSEG_MAX_RF_SHIM_CHANNELS : channels;
+}
+
+/* Record, for every channel of every parallel-transmit RF definition of
+ * subsequence @p s, the instance holding its largest drive.  Instances start
+ * where the segment changes, and every num_blocks entries into a run of one
+ * segment, as the cursor reads them. */
+static void tour_survey(const pulseg_sequence_descriptor *desc, tour_best *best)
+{
+    int n, run_segment = -2, run_start = 0, k;
+
+    for (n = 0; n < desc->exec_stream_len; ++n)
+    {
+        const int local = pulseg__exec_seg_id(desc, n);
+        const int block = pulseg__exec_block_idx(desc, n);
+        const pulseg_block_table_element *bte;
+        const pulseg_rf_table_element *rte;
+        const pulseg_rf_shim_definition *shim;
+        int blocks, first, channels;
+        float amplitude;
+
+        if (local != run_segment)
+        {
+            run_segment = local;
+            run_start = n;
+        }
+        if (local < 0 || local >= desc->num_unique_segments || block < 0 || block >= desc->num_blocks)
+            continue;
+        bte = &desc->block_table[block];
+        if (bte->rf_id < 0 || bte->rf_id >= desc->rf_table_size)
+            continue;
+        rte = &desc->rf_table[bte->rf_id];
+        if (rte->id < 0 || rte->id >= desc->num_unique_rfs)
+            continue;
+        channels = occurrence_channels(desc, bte, &desc->rf_definitions[rte->id], &shim);
+        if (channels <= 1)
+            continue;
+        blocks = desc->segment_definitions[local].num_blocks > 0
+            ? desc->segment_definitions[local].num_blocks
+            : 1;
+        first = n - (n - run_start) % blocks;
+        amplitude = (float)fabs((double)rte->amplitude);
+        for (k = 0; k < channels; ++k)
+        {
+            tour_best *b = &best[rte->id * PULSEG_MAX_RF_SHIM_CHANNELS + k];
+            const float drive = shim ? amplitude * shim->magnitudes[k] : amplitude;
+
+            if (drive > b->drive)
+            {
+                b->drive = drive;
+                b->first = first;
+                b->num_blocks = blocks;
+            }
+        }
+    }
+}
+
+/* Duration, RF blocks and readouts of a visit, read off its blocks. */
+static int tour_measure(const pulseg_collection *coll, pulseg_prescan_visit *v)
+{
+    int k, rc = PULSEG_SUCCESS;
+
+    v->duration_us = 0;
+    v->rf_pulses = 0;
+    v->readouts = 0;
+    for (k = 0; k < v->num_blocks && PULSEG_SUCCEEDED(rc); ++k)
+    {
+        pulseg_block_instance inst = PULSEG_BLOCK_INSTANCE_INIT;
+
+        rc = pulseg_get_block_instance_at(coll, &inst, v->subsequence, v->first_position + k);
+        if (PULSEG_FAILED(rc))
+            break;
+        v->duration_us += inst.duration_us;
+        v->rf_pulses += inst.rf_amp_hz != 0.0f;
+        v->readouts += inst.adc_flag && !inst.noprescan_flag;
+    }
+    return rc;
+}
+
+/* Add the visits of subsequence @p s to @p visits, which holds @p count:
+ * one per instance a largest drive is held at, in stream order. */
+static int tour_collect(
+    const pulseg_collection *coll,
+    int s,
+    const tour_best *best,
+    int num_best,
+    pulseg_prescan_visit *visits,
+    int count)
+{
+    const int start = count;
+    int i, j, rc = PULSEG_SUCCESS;
+
+    for (i = 0; i < num_best; ++i)
+    {
+        pulseg_prescan_visit *v = NULL;
+
+        if (best[i].first < 0)
+            continue;
+        for (j = start; j < count; ++j)
+            if (visits[j].first_position == best[i].first)
+                v = &visits[j];
+        if (v)
+        {
+            v->channels += 1;
+            if (best[i].drive > v->drive_hz)
+                v->drive_hz = best[i].drive;
+            continue;
+        }
+        v = &visits[count++];
+        v->subsequence = s;
+        v->segment = pulseg__global_segment(
+            coll, s, pulseg__exec_seg_id(&coll->descriptors[s], best[i].first));
+        v->first_position = best[i].first;
+        v->num_blocks = best[i].num_blocks;
+        v->rf_definition = i / PULSEG_MAX_RF_SHIM_CHANNELS;
+        v->channels = 1;
+        v->drive_hz = best[i].drive;
+        rc = tour_measure(coll, v);
+        if (PULSEG_FAILED(rc))
+            return rc;
+    }
+
+    /* In stream order, so a playout seeks forward through each subsequence. */
+    for (i = start + 1; i < count; ++i)
+    {
+        const pulseg_prescan_visit key = visits[i];
+
+        for (j = i; j > start && visits[j - 1].first_position > key.first_position; --j)
+            visits[j] = visits[j - 1];
+        visits[j] = key;
+    }
+    return count;
+}
+
+int pulseg_get_prescan_tour(const pulseg_collection *coll, pulseg_prescan_visit **out_visits)
+{
+    pulseg_prescan_visit *visits = NULL;
+    tour_best *best = NULL;
+    int s, i, capacity = 0, count = 0;
+
+    if (!coll || !out_visits)
+        return PULSEG_ERR_NULL_POINTER;
+    *out_visits = NULL;
+    for (s = 0; s < coll->num_subsequences; ++s)
+        capacity += coll->descriptors[s].num_unique_rfs * PULSEG_MAX_RF_SHIM_CHANNELS;
+    if (capacity <= 0)
+        return 0;
+    visits = (pulseg_prescan_visit *)PULSEG_ALLOC((size_t)capacity * sizeof(pulseg_prescan_visit));
+    if (!visits)
+        return PULSEG_ERR_ALLOC_FAILED;
+
+    for (s = 0; s < coll->num_subsequences && count >= 0; ++s)
+    {
+        const pulseg_sequence_descriptor *desc = &coll->descriptors[s];
+        const int num_best = desc->num_unique_rfs * PULSEG_MAX_RF_SHIM_CHANNELS;
+
+        if (num_best <= 0)
+            continue;
+        best = (tour_best *)PULSEG_ALLOC((size_t)num_best * sizeof(tour_best));
+        if (!best)
+        {
+            count = PULSEG_ERR_ALLOC_FAILED;
+            break;
+        }
+        for (i = 0; i < num_best; ++i)
+        {
+            best[i].drive = -1.0f;
+            best[i].first = -1;
+            best[i].num_blocks = 0;
+        }
+        tour_survey(desc, best);
+        count = tour_collect(coll, s, best, num_best, visits, count);
+        PULSEG_FREE(best);
+        best = NULL;
+    }
+
+    if (count <= 0)
+    {
+        PULSEG_FREE(visits);
+        return count;
+    }
+    *out_visits = visits;
+    return count;
+}
+
+/* ================================================================== */
 /*  Second stage                                                      */
 /* ================================================================== */
 
@@ -258,6 +470,8 @@ typedef struct scan_walk
     const pulseg_wave_plan *plan;
     wave_loader loader;
     int prescan;       /* the subsequence the prescan plays, -1 in the scan */
+    int tour;          /* PULSEG_TOUR_* of the prescan                     */
+    int visit;         /* the tour's visit being played, -1 outside it     */
     int readouts_left; /* before the prescan ends                          */
     int done;          /* 1 once the prescan has its readouts              */
     int *instances;    /* [global segment] instances played so far         */
@@ -308,6 +522,8 @@ static int walk_open(
 
     w->plan = plan;
     w->prescan = -1;
+    w->tour = PULSEG_TOUR_NONE;
+    w->visit = -1;
     w->subsequence = -1;
     w->local = -1;
     if (options && options->prescan_subsequence >= 0)
@@ -316,6 +532,7 @@ static int walk_open(
             return PULSEG_ERR_INVALID_ARGUMENT;
         w->prescan = options->prescan_subsequence;
         w->readouts_left = prescan_readouts(coll, w->prescan, options);
+        w->tour = options->tour;
     }
     w->instances = (int *)PULSEG_ALLOC((size_t)segments * sizeof(int));
     if (!w->instances)
@@ -412,14 +629,21 @@ static int begin_instance(scan_walk *w, const pulseg_collection *coll, int s, in
     p->rotate = instance_rotates(desc, n);
     p->await_trigger = w->prescan < 0 && instance_awaits_trigger(desc, n, w->local);
     p->slot = (w->plan->mode == PULSEG_WAVES_STREAMED) ? p->instance % w->plan->budget.slots : -1;
+    p->visit = w->visit;
     return backend->begin_instance ? backend->begin_instance(backend->ctx, p) : PULSEG_SUCCESS;
 }
 
-/* The receive-gain calibration plays no digital output, and no gradient
- * whose amplitude varies across repetitions. */
+/* The receive-gain calibration plays no digital output, no gradient whose
+ * amplitude varies across repetitions, and acquires no readout NOPRESCAN
+ * marks.  An RF pulse whose frequency offset varies across repetitions, the
+ * slices of a stack, plays at their mean: the centre of the stack. */
 static void prescan_registers(pulseg_block_instance *b)
 {
+    if (b->rf_freq_variable)
+        b->rf_freq_hz = b->rf_freq_mean_hz;
     b->digitalout_flag = 0;
+    if (b->noprescan_flag)
+        b->adc_flag = 0;
     if (b->gx_variable)
         b->gx_amp_hz_per_m = 0.0f;
     if (b->gy_variable)
@@ -468,6 +692,8 @@ static int set_block(scan_walk *w, const pulseg_collection *coll, int s)
         return rc;
     if (w->prescan >= 0)
         prescan_registers(&block.instance);
+    if (w->visit >= 0 && w->tour != PULSEG_TOUR_ACQUIRED)
+        block.instance.adc_flag = 0;
     if (block.instance.wave_id >= 0)
         rc = place_wave(w, s, &block);
     if (PULSEG_SUCCEEDED(rc) && backend->set_block)
@@ -480,9 +706,11 @@ static int set_block(scan_walk *w, const pulseg_collection *coll, int s)
 static int end_instance(scan_walk *w, pulseg_collection *coll)
 {
     const pulseg_playout_backend *backend = w->loader.backend;
-    const int rc =
+    int rc =
         backend->play_instance ? backend->play_instance(backend->ctx, &w->segment) : PULSEG_SUCCESS;
 
+    if (rc == PULSEG_PLAYOUT_REPLAY && w->visit >= 0)
+        rc = PULSEG_SUCCESS; /* a visit is played once */
     if (rc == PULSEG_PLAYOUT_REPLAY)
     {
         /* The instance is asked for again, so it has not been played: the
@@ -532,6 +760,51 @@ static int play_entry(scan_walk *w, pulseg_collection *coll)
     return rc;
 }
 
+/* Play visit @p v of the tour: its instance, from its first block. */
+static int play_visit(scan_walk *w, pulseg_collection *coll, const pulseg_prescan_visit *v)
+{
+    const pulseg_sequence_descriptor *desc = &coll->descriptors[v->subsequence];
+    int k, rc = pulseg_cursor_seek(coll, v->subsequence, v->first_position);
+
+    w->subsequence = -1;
+    for (k = 0; k < v->num_blocks && PULSEG_SUCCEEDED(rc); ++k)
+    {
+        if (pulseg_cursor_next(coll) != PULSEG_CURSOR_BLOCK)
+            return PULSEG_ERR_INDEX;
+        track_position(w, desc, v->subsequence, v->first_position + k);
+        if (w->position == 0)
+            rc = begin_instance(w, coll, v->subsequence, v->first_position + k);
+        if (PULSEG_SUCCEEDED(rc))
+            rc = set_block(w, coll, v->subsequence);
+        if (PULSEG_SUCCEEDED(rc) && k == v->num_blocks - 1)
+            rc = end_instance(w, coll);
+    }
+    return rc;
+}
+
+/* Play the prescan's tour, readouts counted on top of the calibration's when
+ * it acquires them. */
+static int play_tour(scan_walk *w, pulseg_collection *coll)
+{
+    pulseg_prescan_visit *visits = NULL;
+    const int count = pulseg_get_prescan_tour(coll, &visits);
+    int i, rc = count < 0 ? count : PULSEG_SUCCESS;
+
+    for (i = 0; i < count && w->tour == PULSEG_TOUR_ACQUIRED; ++i)
+        w->readouts_left += visits[i].readouts;
+    for (i = 0; i < count && PULSEG_SUCCEEDED(rc); ++i)
+    {
+        w->visit = i;
+        rc = play_visit(w, coll, &visits[i]);
+    }
+    w->visit = -1;
+    w->subsequence = -1;
+    w->local = -1;
+    if (visits)
+        PULSEG_FREE(visits);
+    return rc;
+}
+
 int pulseg_playout_scan(
     pulseg_collection *coll,
     const pulseg_wave_plan *plan,
@@ -549,6 +822,8 @@ int pulseg_playout_scan(
         rc = loader_open(&walk.loader, coll, backend, plan);
     if (PULSEG_SUCCEEDED(rc))
         rc = walk_open(&walk, coll, plan, options);
+    if (PULSEG_SUCCEEDED(rc) && walk.prescan >= 0 && walk.tour != PULSEG_TOUR_NONE)
+        rc = play_tour(&walk, coll);
     if (PULSEG_SUCCEEDED(rc))
         pulseg_cursor_reset(coll);
     while (PULSEG_SUCCEEDED(rc) && !walk.done && pulseg_cursor_next(coll) == PULSEG_CURSOR_BLOCK)

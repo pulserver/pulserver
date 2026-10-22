@@ -8,7 +8,12 @@ from pypulseqpp.sequences.sequence.mprage3D_sequence import ORDERINGS, mprage3d
 from pulserver._zoo._evaluation import achieved, arguments, rf_layout, waved
 from pulserver._zoo._pmc import navigated
 from pulserver._zoo._slab import slab
-from pulserver._zoo._user import shortest_at_zero, user_entries, wave_entries
+from pulserver._zoo._user import (
+    LINE_SPACING,
+    shortest_at_zero,
+    user_entries,
+    wave_entries,
+)
 from pulserver.design import (
     ChoiceParam,
     Evaluation,
@@ -88,7 +93,7 @@ class Mprage3D(SequencePlugin):
     if WAVE:
         protocol |= wave_entries()
 
-    protocol |= user_entries(app, protocol)
+    protocol |= user_entries(app, protocol, LINE_SPACING)
 
     def evaluate(self, system, protocol):
         # A TR is one inversion shot: the inversion, then a train of one

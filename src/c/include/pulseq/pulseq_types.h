@@ -33,8 +33,9 @@
  * and widest band's bandwidth, then one offset per band. */
 #define PULSEQ_RF_SPECTRUM_MAX_BANDS 8
 #define PULSEQ_RF_SPECTRUM_WIDTH (3 + PULSEQ_RF_SPECTRUM_MAX_BANDS)
-/* Columns of pulseq_file.block_flags: NOROT, NOPOS, PMC, NAV, TRID. */
-#define PULSEQ_BLOCK_FLAG_WIDTH 5
+/* Columns of pulseq_file.block_flags: NOROT, NOPOS, PMC, NAV, TRID,
+ * NOPRESCAN. */
+#define PULSEQ_BLOCK_FLAG_WIDTH 6
 /* Columns of pulseq_file.adc_labels: SLC, PHS, REP, AVG, SEG, SET, ECO, PAR,
  * LIN, ACQ, OFF -- the label state a label_column_map indexes. */
 #define PULSEQ_ADC_LABEL_WIDTH 11

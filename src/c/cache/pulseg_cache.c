@@ -33,7 +33,7 @@
 /* The full (major, minor, revision) triple must match exactly on read: a
  * cache at any other revision is rejected outright and the .seq is
  * re-parsed, never partially or heuristically read. */
-#define PULSEG_CACHE_VERSION_REVISION 3
+#define PULSEG_CACHE_VERSION_REVISION 5
 
 /* Per-consumer sections. Each carries its own distinct payload.
  * COMMON establishes the collection + descriptor framing; the others
@@ -664,8 +664,8 @@ static int write_common(FILE *f, const pulseg_sequence_descriptor *d)
     if (!write_waves(f, d))
         return 0;
 
-    /* exec_stream + variable_grad_flags: emitted in the SCANLOOP section
-     * (write_scanloop) */
+    /* exec_stream, variable_grad_flags and the RF frequency flags: emitted in
+     * the SCANLOOP section (write_scanloop) */
 
     return write_repetition(f, &d->repetition);
 }
@@ -726,7 +726,7 @@ static int write_shapes(FILE *f, const pulseg_sequence_descriptor *d)
  * PULSEG_ASSERT_PACKED (below) is what keeps the premise true: adding a member
  * of another width, or reordering one, breaks the build rather than the file
  * format. read_instances() reads them back the same way. */
-PULSEG_ASSERT_PACKED(pulseg_block_table_element, 16);
+PULSEG_ASSERT_PACKED(pulseg_block_table_element, 17);
 PULSEG_ASSERT_PACKED(pulseg_rf_table_element, 5);
 PULSEG_ASSERT_PACKED(pulseg_grad_table_element, 3); /* id, shape_id, amplitude */
 PULSEG_ASSERT_PACKED(pulseg_adc_table_element, 4); /* id, freq, phase, phase_shape_id */
@@ -860,6 +860,22 @@ static int write_scanloop(FILE *f, const pulseg_sequence_descriptor *d)
         if (vgf_len > 0)
         {
             if (!pulseg__write4(f, d->variable_grad_flags, vgf_len))
+                return 0;
+        }
+    }
+
+    /* RF frequency flags and means, one each per TR position */
+    {
+        int rff_len = (d->rf_freq_variable && d->rf_freq_mean_hz && d->tr_descriptor.tr_size > 0)
+            ? d->tr_descriptor.tr_size
+            : 0;
+        if (!pulseg__write4(f, &rff_len, 1))
+            return 0;
+        if (rff_len > 0)
+        {
+            if (!pulseg__write4(f, d->rf_freq_variable, rff_len))
+                return 0;
+            if (!pulseg__write4(f, d->rf_freq_mean_hz, rff_len))
                 return 0;
         }
     }
@@ -1667,6 +1683,33 @@ static int read_scanloop(FILE *f, pulseg_sequence_descriptor *d, int do_swap)
         else
         {
             d->variable_grad_flags = NULL;
+        }
+    }
+
+    /* RF frequency flags and means */
+    {
+        int rff_len;
+        d->rf_freq_variable = NULL;
+        d->rf_freq_mean_hz = NULL;
+        if (fread(&rff_len, sizeof(int), 1, f) != 1)
+            return 0;
+        if (do_swap)
+            pulseg__swap4(&rff_len);
+        if (rff_len > 0)
+        {
+            d->rf_freq_variable = (int *)PULSEG_ALLOC((size_t)rff_len * sizeof(int));
+            d->rf_freq_mean_hz = (float *)PULSEG_ALLOC((size_t)rff_len * sizeof(float));
+            if (!d->rf_freq_variable || !d->rf_freq_mean_hz)
+                return 0;
+            if (fread(d->rf_freq_variable, sizeof(int), (size_t)rff_len, f) != (size_t)rff_len)
+                return 0;
+            if (fread(d->rf_freq_mean_hz, sizeof(float), (size_t)rff_len, f) != (size_t)rff_len)
+                return 0;
+            if (do_swap)
+            {
+                pulseg__swap4_array(d->rf_freq_variable, rff_len);
+                pulseg__swap4_array(d->rf_freq_mean_hz, rff_len);
+            }
         }
     }
 
