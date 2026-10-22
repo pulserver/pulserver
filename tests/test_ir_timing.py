@@ -62,7 +62,9 @@ def test_a_long_first_repetition_is_not_the_shortest(tmp_path):
 def test_the_window_counts_the_densest_ten_seconds(tmp_path):
     # Packets of five pulses every 0.30416 s: 33 packets start within 10 s,
     # the 33rd at 9.73 s, so the densest span holds 33 * 5 plays.
-    w = subsequence(packets(tmp_path / "packet.seq", [4e-5] * 4 + [0.3], 40))["rf_window"]
+    w = subsequence(packets(tmp_path / "packet.seq", [4e-5] * 4 + [0.3], 40))[
+        "rf_window"
+    ]
     assert w["plays"] == 33 * 5
     assert w["counts"] == [33 * 5]
 
