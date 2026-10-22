@@ -507,7 +507,9 @@ every voxel of the reconstruction matrix, and the image is resampled at the
 displaced positions; a complex image has its real and imaginary parts
 resampled separately. Geometry comes from the header’s reconstruction space
 and the unit’s reference acquisition, so the correction is in the frame the
-series was acquired in, oblique prescriptions included.</p>
+series was acquired in, oblique prescriptions included. An encoding of one
+partition, a 2D slice, is corrected in its plane: the displacement across
+the slice moves the slice, which resampling cannot undo.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
