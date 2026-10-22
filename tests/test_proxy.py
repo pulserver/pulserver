@@ -393,6 +393,61 @@ def test_a_series_that_ends_before_its_last_readout_is_refused(start_proxy, buck
     assert len(images(stream(proxy.port, series["gre2d"]))) == 1
 
 
+def _unfinished(port, series, config, end):
+    """Send every readout of a series, then ``end(socket)`` in place of a CLOSE; return the reply."""
+    sent = socket.create_connection(("127.0.0.1", port), timeout=DEADLINE)
+    connection = Connection(sent)
+    sent.settimeout(DEADLINE)
+    connection.send_config(config)
+    connection.send_header(header_xml(series))
+    for index in range(len(series.table)):
+        connection.send(ismrmrd.Acquisition.from_array(flat(series.table, index)))
+    end(sent)
+    received = list(connection)
+    sent.close()
+    return received
+
+
+def test_a_scan_stopped_after_its_last_readout_exports_nothing(
+    start_proxy, bucket, tmp_path
+):
+    """The image is reconstructed from the last readout, before the client ends the stream without a CLOSE."""
+    _, series = bucket
+    proxy = start_proxy(slots=1)
+    trace = tmp_path / "trace"
+    trace.mkdir()
+    config = json.dumps({"parameters": {"config": "gre2d", "trace": str(trace)}})
+
+    def stop(sent):
+        deadline = time.monotonic() + DEADLINE
+        while not any(trace.glob("*.json")) and time.monotonic() < deadline:
+            time.sleep(0.05)
+        time.sleep(0.5)
+        sent.shutdown(socket.SHUT_WR)
+
+    received = _unfinished(proxy.port, series["gre2d"], config, stop)
+
+    assert any(trace.glob("*.json"))
+    assert _refused(received, "the stream ended without a CLOSE")
+    assert closed(received)
+    assert len(images(stream(proxy.port, series["gre2d"]))) == 1
+
+
+def test_a_series_carrying_a_message_the_proxy_cannot_read_is_refused(
+    start_proxy, bucket
+):
+    _, series = bucket
+    proxy = start_proxy(slots=1)
+
+    def unreadable(sent):
+        sent.sendall(struct.pack("<H", 1030) + bytes(64))
+        sent.shutdown(socket.SHUT_WR)
+
+    received = _unfinished(proxy.port, series["gre2d"], "gre2d", unreadable)
+
+    assert _refused(received, "a message of type 1030, which the proxy cannot read")
+
+
 @pytest.mark.parametrize("position", ["middle", "end"])
 def test_only_the_last_readout_may_be_flagged_last_in_measurement(
     start_proxy, bucket, position
@@ -438,6 +493,27 @@ def test_a_crashing_plugin_closes_its_series_and_frees_the_slot(start_proxy, buc
     assert not images(crashed)
     assert any(isinstance(item, str) and "always fails" in item for item in crashed)
     assert len(images(stream(proxy.port, series["gre2d"]))) == 1
+
+
+def test_a_plugin_crashing_while_its_series_still_arrives_reports_why(
+    start_proxy, bucket
+):
+    """The worker has exited before the readouts after its first are sent to it."""
+    _, series = bucket
+    proxy = start_proxy(slots=1)
+    # A spare that has imported its engine takes the series at once.
+    assert len(images(stream(proxy.port, series["gre2d"]))) == 1
+
+    def slow(table, index):
+        if index:
+            time.sleep(0.5)
+        return flat(table, index)
+
+    crashed = stream(proxy.port, series["gre2d_raw"], config="crash", data=slow)
+
+    assert closed(crashed)
+    assert not images(crashed)
+    assert any(isinstance(item, str) and "always fails" in item for item in crashed)
 
 
 def test_the_spare_worker_is_replaced_after_each_series(start_proxy, bucket):

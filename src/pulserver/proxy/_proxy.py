@@ -221,20 +221,22 @@ class ReconProxy(_Listener):
     before the first acquisition
     (:func:`~pulserver.proxy._seqdesc.message`); the message is not sent back
     to the client. The reconstruction plugin is the one the client's config
-    text names. A series that breaks these rules is refused with a text naming
-    the reason and a ``CLOSE``, and what the client still sends is discarded
-    until it closes the connection.
+    text names. A series that breaks these rules, or whose stream ends without
+    its ``CLOSE`` or an acquisition flagged ``LAST_IN_MEASUREMENT``, is refused
+    with a text naming the reason and a ``CLOSE``, and what the client still
+    sends is discarded until it closes the connection.
 
     The series is reconstructed by a local worker or, with ``forward``, by the
     MRD server at that address, which is sent a config file message naming
     ``forward_config`` or else the series' plugin (the client's config text is
     not forwarded) and decides by its own slots and queue when the series
-    runs. Images, DICOM and text go back to the client as they arrive. The
-    client's close closes the reconstruction's stream, and the
-    reconstruction's close closes the client. A message the proxy has no reader
-    for ends what goes back, with a text naming its type. Once the client's
-    stream ends, the proxy waits for the reconstruction to close unless
-    ``recon_timeout`` caps it.
+    runs. Images, DICOM and text go back to the client as they arrive, once
+    the client's stream has ended whole: what arrives before is held until
+    then, and dropped with a series that is refused. The client's close closes
+    the reconstruction's stream, and the reconstruction's close closes the
+    client. A message the proxy has no reader for ends what goes back, with a
+    text naming its type. Once the client's stream ends, the proxy waits for
+    the reconstruction to close unless ``recon_timeout`` caps it.
 
     A local series holds a slot while it runs. On a host with GPUs, found
     through ``CUDA_VISIBLE_DEVICES`` or ``nvidia-smi``, each slot holds one GPU,
@@ -414,8 +416,8 @@ class ReconServer(_Listener):
     plugin, the header, the acquisitions and a ``CLOSE``. The config is a
     config file message, whose name is the plugin, or a config text naming it
     as a bare name or under ``parameters.config``. Nothing is enriched. Workers,
-    slots, the queue and the exam directories are those of
-    :class:`ReconProxy`.
+    slots, the queue, the exam directories and the refusal of a stream that
+    ends without its ``CLOSE`` are those of :class:`ReconProxy`.
 
     Parameters
     ----------
@@ -782,20 +784,24 @@ def _drive(
     still running ``timeout`` seconds after the series ended. ``poses`` is
     :func:`_relay`'s.
     """
+    whole = _Verdict()
     relay = threading.Thread(
         target=_relay,
-        args=(reconstruction, client, convert, poses),
+        args=(reconstruction, client, whole, convert, poses),
         daemon=True,
         name="relay",
     )
     relay.start()
     try:
         feed(reconstruction)
-    except BaseException:
-        # A series that cannot be fed whole is not reconstructed.
+    except BaseException as error:
+        # A series that cannot be fed whole is not reconstructed; what a
+        # reconstruction that stopped reading said about why still goes back.
+        whole.decide(isinstance(error, _StoppedReading))
         channel.terminate()
         relay.join()
         raise
+    whole.decide(True)
     reconstruction.send_close()
     relay.join(timeout=timeout)
     if relay.is_alive():
@@ -1065,17 +1071,64 @@ def _unkept_path(directory: Path) -> Path:
 
 
 def _received(client: Connection) -> Iterator[Any]:
-    """Yield the client's stream up to its close, as received."""
+    """Yield the client's stream up to its CLOSE, as received.
+
+    A stream also ends whole at an acquisition flagged
+    ``LAST_IN_MEASUREMENT``, where :class:`Connection` stops reading.
+
+    Raises
+    ------
+    ValueError
+        If the stream ends otherwise: a message the proxy cannot read, or the
+        client's connection shut or lost, which is how a client ends a scan
+        the scanner stopped.
+    """
     for item in client:
         if _is_close_marker(item):
-            break
+            return
+        # Read before the item is yielded: enrichment flags it in place.
+        last = isinstance(item, ismrmrd.Acquisition) and item.isFlagSet(
+            ismrmrd.ACQ_LAST_IN_MEASUREMENT
+        )
         yield item
+        if last:
+            return
+    if client.unreadable is not None:
+        raise ValueError(
+            f"the stream carries a message of type {client.unreadable}, which "
+            "the proxy cannot read"
+        )
+    raise ValueError(
+        "the stream ended without a CLOSE: the scan was not finished, and is not "
+        "reconstructed"
+    )
+
+
+class _StoppedReading(ConnectionError):
+    """A reconstruction that stopped reading a series the client sent whole."""
 
 
 def _send(items: Iterator[Any], destination: Connection) -> None:
-    """Send a series to the reconstruction as it arrives."""
+    """Send a series to the reconstruction as it arrives.
+
+    Raises
+    ------
+    _StoppedReading
+        If ``destination`` stops reading, once the rest of ``items`` is read
+        and dropped: an error the stream raises meanwhile is raised instead.
+    """
+    stopped: OSError | None = None
     for item in items:
-        destination.send(item)
+        if stopped is not None:
+            continue
+        try:
+            destination.send(item)
+        except OSError as error:
+            stopped = error
+    if stopped is not None:
+        raise _StoppedReading(
+            f"the reconstruction stopped reading the series: {stopped}"
+        ) from stopped
 
 
 def _record(items: Iterator[Any], header: Any, queued: QueueFile) -> list[Any]:
@@ -1094,10 +1147,8 @@ def _record(items: Iterator[Any], header: Any, queued: QueueFile) -> list[Any]:
 
 
 def _replay(queued: QueueFile, others: list[Any], worker: Connection) -> None:
-    for item in others:
-        worker.send(item)
-    for item in queued:
-        worker.send(item)
+    """Send a queued series, read whole already, to ``worker``; see :func:`_send`."""
+    _send(itertools.chain(others, queued), worker)
 
 
 def _publisher(writer: MotionWriter) -> Callable[[Pose], None]:
@@ -1109,21 +1160,58 @@ def _publisher(writer: MotionWriter) -> Callable[[Pose], None]:
     return publish
 
 
+class _Verdict:
+    """Whether a client's stream ended whole; undecided until :meth:`decide`."""
+
+    def __init__(self) -> None:
+        self._decided = threading.Event()
+        self._whole = False
+
+    def decide(self, whole: bool) -> None:
+        self._whole = whole
+        self._decided.set()
+
+    def decided(self) -> bool:
+        return self._decided.is_set()
+
+    def wait(self) -> bool:
+        """Block until decided; return whether the stream ended whole."""
+        self._decided.wait()
+        return self._whole
+
+
 def _relay(
     source: Connection,
     client: Connection,
+    whole: _Verdict,
     convert: Callable[[Any], Any] | None = None,
     poses: Callable[[Pose], None] | None = None,
 ) -> None:
     """Send everything a reconstruction emits back to the client, until its close.
 
-    ``convert`` turns each image into what is sent in its place. ``poses``
-    takes each pose the reconstruction states, which is not sent on: a pose is
-    addressed to the scan, not to whoever asked for the images; nor is the
-    sequence description, which a reconstruction may echo. A message
-    ``source`` has no reader for ends the relay, and the client is told its
-    type, because what followed it in the stream cannot be read.
+    What is emitted before ``whole`` is decided is held, sent once the stream
+    is decided whole and dropped otherwise: a scan the scanner stopped after
+    its last readout has its units reconstructed before its client ends the
+    stream. ``convert`` turns each image into what is sent in its place.
+    ``poses`` takes each pose the reconstruction states, at once and whatever
+    the verdict, which is not sent on: a pose is addressed to the scan, not to
+    whoever asked for the images; nor is the sequence description, which a
+    reconstruction may echo. A message ``source`` has no reader for ends the
+    relay, and the client is told its type, because what followed it in the
+    stream cannot be read.
     """
+    held: list[Any] = []
+
+    def send(item: Any) -> None:
+        if not whole.decided():
+            held.append(item)
+            return
+        if whole.wait():
+            for kept in held:
+                client.send(kept)
+            held.clear()
+            client.send(item)
+
     try:
         for item in source:
             if _is_close_marker(item):
@@ -1138,12 +1226,15 @@ def _relay(
                     continue
             if convert is not None and isinstance(item, ismrmrd.Image):
                 item = convert(item)
-            client.send(item)
+            send(item)
         if source.unreadable is not None:
-            client.send(
+            send(
                 f"pulserver: the reconstruction sent a message of type "
                 f"{source.unreadable}, which the proxy cannot read; the rest of "
                 "its output is lost"
             )
+        if whole.wait():
+            for kept in held:
+                client.send(kept)
     except Exception:
         _log.exception("relaying a reconstruction's output failed")
