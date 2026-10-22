@@ -85,8 +85,10 @@ A series is `CONFIG`, `HEADER`, the `ACQUISITION`s and optional `WAVEFORM`s,
 then `CLOSE`; what returns is `IMAGE`, `DICOM_WITHNAME` and `TEXT` messages,
 then `CLOSE`. These are the identifiers of Gadgetron's MRD streaming protocol.
 A refused series receives one `TEXT` beginning `pulserver:` and a `CLOSE` at
-once. An MRD message carries no length, so a message type the proxy cannot
-read ends the series.
+once. A stream that ends without its `CLOSE` is a scan that did not finish: it
+is refused, and what its reconstruction produced is not returned. An MRD
+message carries no length, so a message type the proxy cannot read ends the
+series.
 
 ### Workers and slots
 

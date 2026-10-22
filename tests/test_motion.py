@@ -182,7 +182,7 @@ def test_a_pose_reaches_the_scan_and_not_whoever_asked_for_the_images():
     import numpy as np
 
     from pulserver.proxy._motion import Pose, pose_waveform
-    from pulserver.proxy._proxy import _relay
+    from pulserver.proxy._proxy import _relay, _Verdict
 
     pose = Pose(rotation=TURNED)
     trace = ismrmrd.Waveform.from_array(np.zeros((1, 8), dtype=np.uint32))
@@ -190,7 +190,9 @@ def test_a_pose_reaches_the_scan_and_not_whoever_asked_for_the_images():
     source = _Stream([trace, pose_waveform(pose), trace])
     client = _Stream([])
     taken = []
-    _relay(source, client, poses=taken.append)
+    whole = _Verdict()
+    whole.decide(True)
+    _relay(source, client, whole, poses=taken.append)
 
     assert [p.rotation for p in taken] == [pytest.approx(TURNED)]
     assert len(client.sent) == 2, "the pose was sent on to the client"

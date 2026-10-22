@@ -31,12 +31,19 @@ names none, or that sends no config, unless it forwards with a
 the proxy searches its own `--plugins` directories for that name, whatever the
 path's directory.
 
-The client then reads until the proxy's `CLOSE`: images (`IMAGE`, 1022),
-DICOM datasets (`DICOM_WITHNAME`, 1018) and texts (`TEXT`, 5), in the order the
-reconstruction produces them. A text beginning `pulserver:` reports a series
-that failed. A refused series receives that text and a `CLOSE` at once; the
-proxy then discards what the client still sends until it closes the
-connection, so the client can finish sending and read the reason.
+The client then reads until the proxy's `CLOSE`: images (`IMAGE`, 1022), DICOM
+datasets (`DICOM_WITHNAME`, 1018) and texts (`TEXT`, 5), in the order the
+reconstruction produces them. Nothing is returned before the series has ended
+whole, with the client's `CLOSE` or a last acquisition flagged
+`LAST_IN_MEASUREMENT`: a reconstruction may finish on the last readout, and
+what it produces then is held until that end. A text beginning `pulserver:`
+reports a series that failed. A refused series receives that text and a `CLOSE`
+at once; the proxy then discards what the client still sends until it closes
+the connection, so the client can finish sending and read the reason.
+
+A client ends a scan the scanner stopped by shutting its side of the connection
+for writing without a `CLOSE`, then reading the reply as usual. The series is
+refused and nothing it produced is returned, even when every readout arrived.
 
 ## Header
 
@@ -107,8 +114,10 @@ noise scans and navigators included, and no other.
 
 A series is refused, and its reconstruction stopped, when an acquisition has a
 sample count other than its readout's, when the scan counters skip or repeat
-one, when an acquisition before the last is flagged `LAST_IN_MEASUREMENT`, or
-when the stream carries more or fewer acquisitions than the chain plays.
+one, when an acquisition before the last is flagged `LAST_IN_MEASUREMENT`,
+when the stream carries more or fewer acquisitions than the chain plays, or
+when it ends without a `CLOSE` or a last acquisition flagged
+`LAST_IN_MEASUREMENT`.
 
 ## See also
 
