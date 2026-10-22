@@ -31,6 +31,11 @@ _RASTERS = (
 REFERENCE_FLIP = np.pi
 REFERENCE_DURATION = 1e-3
 
+#: Window (s) the gradient spectrum is read over against the forbidden bands:
+#: the memory a gradient coil's resonance is driven over, so a train shorter
+#: than it drives a band less. The bands' default threshold is set for it.
+RESONANCE_WINDOW = 0.02
+
 
 @dataclass(frozen=True)
 class CheckLimits:
@@ -170,7 +175,8 @@ def check(
     ``pypulseqpp.safety.check_max_grad`` and ``check_max_slew``, against the
     gradient limits, dead times and ringdown time of ``system``; and with
     ``check_pns``, ``check_mech_resonance`` and ``check_spl`` where ``limits``
-    carries a nerve model, forbidden bands or an acoustic transfer function.
+    carries a nerve model, forbidden bands or an acoustic transfer function;
+    the gradient spectrum is read over windows of ``RESONANCE_WINDOW``.
     The waveforms are timed by the file's own rasters. VOPs are not checked
     here: see :func:`sar_ratios`.
 
@@ -306,7 +312,9 @@ def _pns(sequence: pp.Sequence, system: pp.Opts, limits: CheckLimits) -> list[st
 def _resonance(
     sequence: pp.Sequence, system: pp.Opts, limits: CheckLimits
 ) -> list[str]:
-    _, found = safety.check_mech_resonance(sequence, limits.bands, system=system)
+    _, found = safety.check_mech_resonance(
+        sequence, limits.bands, window_width=RESONANCE_WINDOW, system=system
+    )
     return [
         f"{band.peak:.1f} mT/m at {band.frequency:.0f} Hz on {band.peak_axis} in "
         f"the window at {band.window_start:.3f} s exceeds the {band.threshold:.1f} "

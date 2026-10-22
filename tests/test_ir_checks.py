@@ -79,6 +79,21 @@ def test_a_gradient_train_in_a_forbidden_band_is_refused_on_the_axis_it_plays(tr
     assert ir.check(train, SYSTEM, limits=ir.CheckLimits(bands=(BAND_Y,))) == []
 
 
+@pytest.mark.parametrize(("pairs", "refused"), [(4, False), (16, True)])
+def test_a_train_drives_a_band_over_the_20_ms_memory_of_the_resonance(
+    tmp_path, pairs, refused
+):
+    """A 4 ms burst at 1 kHz drives the band too little; 16 ms of it reads over the floor.
+
+    Read over 40 ms, the 16 ms train would read 5.5 mT/m and pass.
+    """
+    lobes = [(_mT("x", sign * 15, 100e-6, 300e-6),) for sign in (1, -1)]
+    path = _written(tmp_path, lobes * pairs + [(pp.make_delay(0.1),)])
+    floor_band = safety.ForbiddenBand("x", 900.0, 1100.0, 0.0)
+    problems = ir.check(path, SYSTEM, limits=ir.CheckLimits(bands=(floor_band,)))
+    assert bool(problems) == refused
+
+
 def test_the_prescription_moves_a_train_into_the_forbidden_band_of_another_axis(train):
     on_x, on_y = (ir.CheckLimits(bands=(band,)) for band in (BAND_X, BAND_Y))
     assert ir.check(train, SYSTEM, rotation=QUARTER, limits=on_x) == []
