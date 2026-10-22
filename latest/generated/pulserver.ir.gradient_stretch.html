@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>repetition_gradients &#8212; pulserver documentation</title>
+    <title>gradient_stretch &#8212; pulserver documentation</title>
   
   
   
@@ -52,7 +52,7 @@
     <script src="../_static/copybutton.js?v=f281be69"></script>
     <script src="../_static/sg-tags.js?v=d80f6fa4"></script>
     <script src="../_static/scripts/sphinx-book-theme.js?v=fab101a9"></script>
-    <script>DOCUMENTATION_OPTIONS.pagename = 'generated/pulserver.ir.repetition_gradients';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'generated/pulserver.ir.gradient_stretch';</script>
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
@@ -62,7 +62,7 @@
         </script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
     <script src="../_static/capabilities.js?v=421ebb92"></script>
-    <link rel="canonical" href="https://pulserver.github.io/pulserver/latest/generated/pulserver.ir.repetition_gradients.html" />
+    <link rel="canonical" href="https://pulserver.github.io/pulserver/latest/generated/pulserver.ir.gradient_stretch.html" />
     <link rel="icon" href="../_static/pulserver-mark.svg"/>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
@@ -344,7 +344,7 @@
       
       
       
-      <li><a href="https://github.com/pulserver/pulserver/edit/main/docs/generated/pulserver.ir.repetition_gradients.rst" target="_blank"
+      <li><a href="https://github.com/pulserver/pulserver/edit/main/docs/generated/pulserver.ir.gradient_stretch.rst" target="_blank"
    class="btn btn-sm btn-source-edit-button dropdown-item"
    title="Suggest edit"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -361,7 +361,7 @@
       
       
       
-      <li><a href="https://github.com/pulserver/pulserver/issues/new?title=Issue%20on%20page%20%2Fgenerated/pulserver.ir.repetition_gradients.html&body=Your%20issue%20content%20here." target="_blank"
+      <li><a href="https://github.com/pulserver/pulserver/issues/new?title=Issue%20on%20page%20%2Fgenerated/pulserver.ir.gradient_stretch.html&body=Your%20issue%20content%20here." target="_blank"
    class="btn btn-sm btn-source-issues-button dropdown-item"
    title="Open an issue"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -391,7 +391,7 @@
       
       
       
-      <li><a href="../_sources/generated/pulserver.ir.repetition_gradients.rst" target="_blank"
+      <li><a href="../_sources/generated/pulserver.ir.gradient_stretch.rst" target="_blank"
    class="btn btn-sm btn-download-source-button dropdown-item"
    title="Download source file"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -474,7 +474,7 @@
               
 
 <div id="jb-print-docs-body" class="onlyprint">
-    <h1>repetition_gradients</h1>
+    <h1>gradient_stretch</h1>
     <!-- Table of contents -->
     <div id="print-main-content">
         <div id="jb-print-toc">
@@ -484,7 +484,7 @@
             </div>
             <nav aria-label="Page">
                 <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.ir.repetition_gradients"><code class="docutils literal notranslate"><span class="pre">repetition_gradients()</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.ir.gradient_stretch"><code class="docutils literal notranslate"><span class="pre">gradient_stretch()</span></code></a></li>
 </ul>
             </nav>
         </div>
@@ -496,32 +496,40 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section id="repetition-gradients">
-<h1>repetition_gradients<a class="headerlink" href="#repetition-gradients" title="Link to this heading">#</a></h1>
+  <section id="gradient-stretch">
+<h1>gradient_stretch<a class="headerlink" href="#gradient-stretch" title="Link to this heading">#</a></h1>
 <dl class="py function">
-<dt class="sig sig-object py" id="pulserver.ir.repetition_gradients">
-<span class="sig-prename descclassname"><span class="pre">pulserver.ir.</span></span><span class="sig-name descname"><span class="pre">repetition_gradients</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pulserver/ir/_waves.html#repetition_gradients"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.ir.repetition_gradients" title="Link to this definition">#</a></dt>
-<dd><p>Return the gradients of a subsequence’s repetition of most gradient energy.</p>
-<p>The C library’s choice (<code class="docutils literal notranslate"><span class="pre">pulseg_get_tr_corner_points</span></code>): of the
-repetitions the cache’s execution stream holds, from its first block,
-the one over which the squared gradient summed over the axes integrates
-to the most, the earliest on a tie; the whole subsequence where it does
-not repeat. The repetition is one the scanner plays, with its blocks’
-own amplitudes, shapes and rotations. A scanner evaluates its
-gradient-heating and acoustic models on it.</p>
+<dt class="sig sig-object py" id="pulserver.ir.gradient_stretch">
+<span class="sig-prename descclassname"><span class="pre">pulserver.ir.</span></span><span class="sig-name descname"><span class="pre">gradient_stretch</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pulserver/ir/_waves.html#gradient_stretch"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.ir.gradient_stretch" title="Link to this definition">#</a></dt>
+<dd><p>Return the gradients of one of a subsequence’s stretches.</p>
+<p>The C library’s choice (<code class="docutils literal notranslate"><span class="pre">pulseg_get_gradient_stretch</span></code>). A stretch is the
+run of whole segment instances from one instance’s start until they last
+the subsequence’s hyper-repetition (<code class="docutils literal notranslate"><span class="pre">hyper_us</span></code> of the summary’s
+<code class="docutils literal notranslate"><span class="pre">tr_timing</span></code>), or 10 s (<code class="docutils literal notranslate"><span class="pre">PULSEG_STRETCH_US</span></code>) where that is shorter, or
+to the subsequence’s end where it comes first, each block at its played
+duration. <code class="docutils literal notranslate"><span class="pre">&quot;heaviest&quot;</span></code> is, of those lasting that long, the one over
+which the squared gradient summed over the axes integrates to the most,
+the earliest on a tie, and the whole subsequence where none does.
+<code class="docutils literal notranslate"><span class="pre">&quot;heaviest_repetition&quot;</span></code> starts at
+the instance holding the start of the repetition of most gradient energy,
+of the repetitions the execution stream holds from its first block. A
+scanner evaluates its gradient-heating model on both, each as if played
+without end.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>seq_path</strong> (<em>Path</em><em> | </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a>) – The first file of the chain; the cache is the file beside it.</p></li>
 <li><p><strong>subsequence</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>, </em><em>default=0</em>) – Index of the subsequence, in chain order.</p></li>
+<li><p><strong>stretch</strong> (<em>{'heaviest'</em><em>, </em><em>'heaviest_repetition'}</em><em>, </em><em>default='heaviest'</em>) – Which stretch.</p></li>
 <li><p><strong>raster_us</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><em>float</em></a><em>, </em><em>default=None</em>) – Gradient raster in µs for <code class="docutils literal notranslate"><span class="pre">samples_hz_per_m</span></code>; None omits it.</p></li>
 <li><p><strong>cache_ext</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em>, </em><em>default='.pseg'</em>) – Extension of the cache, dot included.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p><ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">first_position</span></code>: execution-stream position of its first block;</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">duration_us</span></code>: its duration, in µs;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">first_position</span></code>, <code class="docutils literal notranslate"><span class="pre">num_positions</span></code>: execution-stream position of
+its first block, and the positions it spans;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">duration_us</span></code>: its played duration, in µs;</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">energy</span></code>: that integral, in (Hz/m)² s;</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">time_us</span></code>, <code class="docutils literal notranslate"><span class="pre">gradient_hz_per_m</span></code>: <code class="docutils literal notranslate"><span class="pre">(points,)</span></code> and
 <code class="docutils literal notranslate"><span class="pre">(points,</span> <span class="pre">3)</span></code>, its corner points from its start, along the logical
@@ -536,7 +544,8 @@ gradient at the centres of the raster intervals that cover it.</p></li>
 <dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="(in Python v3.15)">dict</a> of str to Any</p>
 </dd>
 <dt class="field-even">Raises<span class="colon">:</span></dt>
-<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.15)"><strong>ValueError</strong></a> – If the cache cannot be loaded or holds no such subsequence.</p>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.15)"><strong>ValueError</strong></a> – If the cache cannot be loaded, holds no such subsequence, or
+    <code class="docutils literal notranslate"><span class="pre">stretch</span></code> is neither name.</p>
 </dd>
 </dl>
 </dd></dl>
@@ -572,7 +581,7 @@ gradient at the centres of the raster intervals that cover it.</p></li>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.ir.repetition_gradients"><code class="docutils literal notranslate"><span class="pre">repetition_gradients()</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.ir.gradient_stretch"><code class="docutils literal notranslate"><span class="pre">gradient_stretch()</span></code></a></li>
 </ul>
   </nav></div>
 

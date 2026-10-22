@@ -75,7 +75,7 @@ from.
    playout
    Prescan
    prescan_tour
-   repetition_gradients
+   gradient_stretch
    chain
    cache_path
 
