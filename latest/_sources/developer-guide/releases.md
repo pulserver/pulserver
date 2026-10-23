@@ -1,8 +1,8 @@
 # Releases
 
 Versions are derived from Git tags by `setuptools_scm`. Pushing a tag `vX.Y.Z`
-runs the Release workflow, which builds the wheels (Linux x86-64 and macOS
-arm64, CPython 3.10 to 3.14) and the source distribution, publishes them to
+runs the Release workflow, which builds the wheels (Linux x86-64, macOS
+arm64 and Windows x86-64, CPython 3.10 to 3.14) and the source distribution, publishes them to
 PyPI through trusted publishing, and creates a GitHub release with Sigstore
 signatures.
 

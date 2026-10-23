@@ -506,8 +506,8 @@
 <section id="prerequisites">
 <h2>Prerequisites<a class="headerlink" href="#prerequisites" title="Link to this heading">#</a></h2>
 <p>You need Git, Python 3.10 to 3.14, a C compiler, a C++17 compiler and CMake,
-on Linux or macOS. Windows is not supported: the warm design server forks per
-call and listens on a Unix socket.</p>
+on Linux or macOS. Windows builds wheels but is not a development platform: the
+warm design server forks per call and listens on a Unix socket.</p>
 <p>The test that compiles <code class="docutils literal notranslate"><span class="pre">src/c/</span></code> as a 32-bit scanner build needs a 32-bit C
 toolchain, which <code class="docutils literal notranslate"><span class="pre">gcc-multilib</span></code> provides on Debian and Ubuntu; without one it
 skips.</p>
