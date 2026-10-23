@@ -509,7 +509,10 @@ exempt, as the scanner plays it. It is then checked with
 <code class="docutils literal notranslate"><span class="pre">pypulseqpp.safety.check_max_grad</span></code> and <code class="docutils literal notranslate"><span class="pre">check_max_slew</span></code>, against the
 gradient limits, dead times and ringdown time of <code class="docutils literal notranslate"><span class="pre">system</span></code>; and with
 <code class="docutils literal notranslate"><span class="pre">check_pns</span></code>, <code class="docutils literal notranslate"><span class="pre">check_mech_resonance</span></code> and <code class="docutils literal notranslate"><span class="pre">check_spl</span></code> where <code class="docutils literal notranslate"><span class="pre">limits</span></code>
-carries a nerve model, forbidden bands or an acoustic transfer function.
+carries a nerve model, forbidden bands or an acoustic transfer function;
+the gradient spectrum is read over windows of <code class="docutils literal notranslate"><span class="pre">RESONANCE_WINDOW</span></code>, a
+band stating no amplitude is held to <code class="docutils literal notranslate"><span class="pre">RESONANCE_FLOOR</span></code>, and a stated
+amplitude limits the axis’s gradient while the band holds a line.
 The waveforms are timed by the file’s own rasters. VOPs are not checked
 here: see <a class="reference internal" href="pulserver.ir.sar_ratios.html#pulserver.ir.sar_ratios" title="pulserver.ir.sar_ratios"><code class="xref py py-func docutils literal notranslate"><span class="pre">sar_ratios()</span></code></a>.</p>
 <dl class="field-list simple">

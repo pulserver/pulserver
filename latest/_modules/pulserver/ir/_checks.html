@@ -456,6 +456,14 @@
 <span class="n">REFERENCE_FLIP</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span>
 <span class="n">REFERENCE_DURATION</span> <span class="o">=</span> <span class="mf">1e-3</span>
 
+<span class="c1">#: Window (s) the gradient spectrum is read over against the forbidden bands:</span>
+<span class="c1">#: the memory a gradient coil's resonance is driven over, so a train shorter</span>
+<span class="c1">#: than it drives a band less. The bands' default threshold is set for it.</span>
+<span class="n">RESONANCE_WINDOW</span> <span class="o">=</span> <span class="mf">0.02</span>
+
+<span class="c1">#: Threshold (mT/m) of a forbidden band whose table states no amplitude.</span>
+<span class="n">RESONANCE_FLOOR</span> <span class="o">=</span> <span class="mf">8.0</span>
+
 
 <div class="viewcode-block" id="CheckLimits">
 <a class="viewcode-back" href="../../../generated/pulserver.ir.CheckLimits.html#pulserver.ir.CheckLimits">[docs]</a>
@@ -609,7 +617,10 @@
 <span class="sd">    ``pypulseqpp.safety.check_max_grad`` and ``check_max_slew``, against the</span>
 <span class="sd">    gradient limits, dead times and ringdown time of ``system``; and with</span>
 <span class="sd">    ``check_pns``, ``check_mech_resonance`` and ``check_spl`` where ``limits``</span>
-<span class="sd">    carries a nerve model, forbidden bands or an acoustic transfer function.</span>
+<span class="sd">    carries a nerve model, forbidden bands or an acoustic transfer function;</span>
+<span class="sd">    the gradient spectrum is read over windows of ``RESONANCE_WINDOW``, a</span>
+<span class="sd">    band stating no amplitude is held to ``RESONANCE_FLOOR``, and a stated</span>
+<span class="sd">    amplitude limits the axis's gradient while the band holds a line.</span>
 <span class="sd">    The waveforms are timed by the file's own rasters. VOPs are not checked</span>
 <span class="sd">    here: see :func:`sar_ratios`.</span>
 
@@ -746,11 +757,24 @@
 <span class="k">def</span><span class="w"> </span><span class="nf">_resonance</span><span class="p">(</span>
     <span class="n">sequence</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Sequence</span><span class="p">,</span> <span class="n">system</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">,</span> <span class="n">limits</span><span class="p">:</span> <span class="n">CheckLimits</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
-    <span class="n">_</span><span class="p">,</span> <span class="n">found</span> <span class="o">=</span> <span class="n">safety</span><span class="o">.</span><span class="n">check_mech_resonance</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">limits</span><span class="o">.</span><span class="n">bands</span><span class="p">,</span> <span class="n">system</span><span class="o">=</span><span class="n">system</span><span class="p">)</span>
+    <span class="n">_</span><span class="p">,</span> <span class="n">found</span> <span class="o">=</span> <span class="n">safety</span><span class="o">.</span><span class="n">check_mech_resonance</span><span class="p">(</span>
+        <span class="n">sequence</span><span class="p">,</span>
+        <span class="n">limits</span><span class="o">.</span><span class="n">bands</span><span class="p">,</span>
+        <span class="n">window_width</span><span class="o">=</span><span class="n">RESONANCE_WINDOW</span><span class="p">,</span>
+        <span class="n">min_threshold</span><span class="o">=</span><span class="n">RESONANCE_FLOOR</span><span class="p">,</span>
+        <span class="n">tolerance_limits</span><span class="o">=</span><span class="s2">"gradient"</span><span class="p">,</span>
+        <span class="n">system</span><span class="o">=</span><span class="n">system</span><span class="p">,</span>
+    <span class="p">)</span>
     <span class="k">return</span> <span class="p">[</span>
         <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">band</span><span class="o">.</span><span class="n">peak</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> mT/m at </span><span class="si">{</span><span class="n">band</span><span class="o">.</span><span class="n">frequency</span><span class="si">:</span><span class="s2">.0f</span><span class="si">}</span><span class="s2"> Hz on </span><span class="si">{</span><span class="n">band</span><span class="o">.</span><span class="n">peak_axis</span><span class="si">}</span><span class="s2"> in "</span>
-        <span class="sa">f</span><span class="s2">"the window at </span><span class="si">{</span><span class="n">band</span><span class="o">.</span><span class="n">window_start</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2"> s exceeds the </span><span class="si">{</span><span class="n">band</span><span class="o">.</span><span class="n">threshold</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> "</span>
-        <span class="sa">f</span><span class="s2">"mT/m of the forbidden band </span><span class="si">{</span><span class="n">band</span><span class="o">.</span><span class="n">f_min</span><span class="si">:</span><span class="s2">.0f</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="n">band</span><span class="o">.</span><span class="n">f_max</span><span class="si">:</span><span class="s2">.0f</span><span class="si">}</span><span class="s2"> Hz"</span>
+        <span class="sa">f</span><span class="s2">"the window at </span><span class="si">{</span><span class="n">band</span><span class="o">.</span><span class="n">window_start</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2"> s "</span>
+        <span class="o">+</span> <span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"with the gradient at </span><span class="si">{</span><span class="n">band</span><span class="o">.</span><span class="n">gradient</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> mT/m exceeds the "</span>
+            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">band</span><span class="o">.</span><span class="n">tolerance</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> mT/m"</span>
+            <span class="k">if</span> <span class="n">band</span><span class="o">.</span><span class="n">tolerance</span> <span class="o">&gt;</span> <span class="mf">0.0</span>
+            <span class="k">else</span> <span class="sa">f</span><span class="s2">"exceeds the </span><span class="si">{</span><span class="n">band</span><span class="o">.</span><span class="n">threshold</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> mT/m"</span>
+        <span class="p">)</span>
+        <span class="o">+</span> <span class="sa">f</span><span class="s2">" of the forbidden band </span><span class="si">{</span><span class="n">band</span><span class="o">.</span><span class="n">f_min</span><span class="si">:</span><span class="s2">.0f</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="n">band</span><span class="o">.</span><span class="n">f_max</span><span class="si">:</span><span class="s2">.0f</span><span class="si">}</span><span class="s2"> Hz"</span>
         <span class="o">+</span> <span class="p">(</span><span class="s2">""</span> <span class="k">if</span> <span class="n">band</span><span class="o">.</span><span class="n">axis</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="sa">f</span><span class="s2">" on </span><span class="si">{</span><span class="n">band</span><span class="o">.</span><span class="n">axis</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
         <span class="k">for</span> <span class="n">band</span> <span class="ow">in</span> <span class="n">found</span><span class="o">.</span><span class="n">bands</span>
         <span class="k">if</span> <span class="n">band</span><span class="o">.</span><span class="n">violations</span>

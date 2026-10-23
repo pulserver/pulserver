@@ -42,9 +42,9 @@ patient safety.
 - **Checks PNS under the scanner's nerve model (chronaxie or SAFE), up to a fraction of its threshold.**
 
   Code: `CheckLimits(pns=..., pns_limit=...)`, `pypulseqpp.safety.check_pns`. Test: *PNS is refused from the fraction of threshold the limits allow* (`test_ir_checks.py`).
-- **Refuses gradient trains in the forbidden bands of mechanical resonance, on the physical axis they play on.**
+- **Refuses gradient trains in the forbidden bands of mechanical resonance, on the physical axis they play on, read over a 20 ms window: a train shorter than that drives a band less.** A band whose table states no amplitude is held to 8 mT/m. A stated amplitude is read as an echo-spacing lockout reads it: the band is refused when it holds a line above 6 mT/m while the axis's gradient exceeds the amplitude. A window that exceeds a band is read again over 80 ms; a steady line that then lies outside the band, at 80 % of its amplitude or more, is leakage through the 20 ms window and is not refused.
 
-  Code: `CheckLimits(bands=...)`, `pypulseqpp.safety.check_mech_resonance`. Tests: *a gradient train in a forbidden band is refused on the axis it plays* (`test_ir_checks.py`); *the prescription moves a train into the forbidden band of another axis* (`test_ir_checks.py`).
+  Code: `CheckLimits(bands=...)`, `RESONANCE_WINDOW`, `RESONANCE_FLOOR`, `pypulseqpp.safety.check_mech_resonance`. Tests: *a gradient train in a forbidden band is refused on the axis it plays* (`test_ir_checks.py`); *a train drives a band over the 20 ms memory of the resonance* (`test_ir_checks.py`); *a band stating no amplitude is held to 8 mT/m* (`test_ir_checks.py`); *a stated amplitude limits the gradient while the band holds a line* (`test_ir_checks.py`); *the prescription moves a train into the forbidden band of another axis* (`test_ir_checks.py`).
 - **Holds the loudest repetition to 140 dB peak and 99 dB(A) average (IEC 60601-2-33), and writes both levels into the cache.**
 
   Code: `CheckLimits(acoustic=...)`, {func}`~pulserver.ir.spl_levels`, {class}`~pulserver.ir.SplLevels`. Tests: *a repetition too loud on the physical axis it plays on is refused* (`test_ir_checks.py`); *the levels the cache carries are those the check holds to its limits* (`test_ir_checks.py`).
