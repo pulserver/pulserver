@@ -25,13 +25,16 @@ virtual-scanner
 ## Supported platforms
 
 pulserver supports Python 3.10 through 3.14; CI tests both bounds on Linux and
-macOS. Windows is not supported: the warm design server forks one process per
-call and listens on a Unix socket.
+macOS. On Windows, sequence design, the safety checks and conversion run from
+the wheel; the warm design server and the reconstruction runtime do not, since
+they fork one process per call, listen on Unix sockets and lock files with
+`fcntl`.
 
 | Platform | Wheel architectures |
 | --- | --- |
 | Linux | x86-64, glibc (`manylinux`) |
 | macOS | Apple silicon |
+| Windows | x86-64 |
 
 Each wheel carries the compiled extension `pulserver._ext`. A source build
 needs a C compiler, a C++17 compiler, CMake and the Python development headers.

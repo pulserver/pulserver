@@ -24,7 +24,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-14]
+        os: [ubuntu-latest, macos-14, windows-latest]
     steps:
       - uses: actions/checkout@v7
         with:
@@ -36,8 +36,12 @@ jobs:
           CIBW_SKIP: "*-musllinux_*"
           CIBW_ARCHS_LINUX: x86_64
           CIBW_ARCHS_MACOS: arm64
+          CIBW_ARCHS_WINDOWS: AMD64
           # Loads the compiled extension, not only the package.
           CIBW_TEST_COMMAND: "python -c \"from pulserver._accelerators import require; print(require().__name__)\""
+          # Windows: also the conversion and checks, which must not reach the
+          # POSIX-only server and reconstruction modules.
+          CIBW_TEST_COMMAND_WINDOWS: "python -c \"from pulserver._accelerators import require; import pulserver.ir; print(require().__name__)\""
 
       - uses: actions/upload-artifact@v7
         with:

@@ -3,8 +3,8 @@
 ## Prerequisites
 
 You need Git, Python 3.10 to 3.14, a C compiler, a C++17 compiler and CMake,
-on Linux or macOS. Windows is not supported: the warm design server forks per
-call and listens on a Unix socket.
+on Linux or macOS. Windows builds wheels but is not a development platform: the
+warm design server forks per call and listens on a Unix socket.
 
 The test that compiles `src/c/` as a 32-bit scanner build needs a 32-bit C
 toolchain, which `gcc-multilib` provides on Debian and Ubuntu; without one it
