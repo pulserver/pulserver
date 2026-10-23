@@ -131,7 +131,7 @@ its limits. Here is an example rheobase-chronaxie model:
 
  .. code-block:: none
 
-    PNS of 102% of the chronaxie threshold, largest on z, at 1.0034 s in block 26 reaches 100%
+    PNS of 104% of the chronaxie threshold, largest on z, at 1.0034 s in block 26 reaches 100%
 
 
 
@@ -337,7 +337,7 @@ What this lesson did, stated the way you would ask an agent for it:
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.386 seconds)
+   **Total running time of the script:** (0 minutes 0.579 seconds)
 
 
 .. _sphx_glr_download_generated_gallery_01-course_03_scanner_representation.py:

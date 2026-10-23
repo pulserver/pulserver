@@ -1,19 +1,19 @@
 [
   {
-    "name": "v0.4.2 (stable)",
-    "version": "v0.4.2",
+    "name": "v0.4.3 (stable)",
+    "version": "v0.4.3",
     "url": "https://pulserver.github.io/pulserver/stable/",
     "preferred": true
+  },
+  {
+    "name": "v0.4.2",
+    "version": "v0.4.2",
+    "url": "https://pulserver.github.io/pulserver/v0.4.2/"
   },
   {
     "name": "v0.4.1",
     "version": "v0.4.1",
     "url": "https://pulserver.github.io/pulserver/v0.4.1/"
-  },
-  {
-    "name": "v0.2.2",
-    "version": "v0.2.2",
-    "url": "https://pulserver.github.io/pulserver/v0.2.2/"
   },
   {
     "name": "latest",

@@ -45,7 +45,7 @@
   <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../_static/documentation_options.js?v=c1adde03"></script>
+    <script src="../_static/documentation_options.js?v=7a515c1e"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -56,7 +56,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.2';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.3';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -70,7 +70,7 @@
     <link rel="prev" title="User guide" href="index.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.4.2" />
+  <meta name="docsearch:version" content="v0.4.3" />
   
     
     <script src="../_static/searchtools.js"></script>
@@ -746,7 +746,7 @@ gradient heating from it.</p>
 <td><p>Largest PNS response allowed, as a fraction of the model’s threshold; 1 when left out</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">forbidden_band_&lt;n&gt;</span></code></p></td>
-<td><p>One forbidden band: its physical axis (<code class="docutils literal notranslate"><span class="pre">x</span></code>, <code class="docutils literal notranslate"><span class="pre">y</span></code>, <code class="docutils literal notranslate"><span class="pre">z</span></code> or <code class="docutils literal notranslate"><span class="pre">all</span></code>), its lowest and highest frequency in Hz and, optionally, the largest amplitude allowed in it in mT/m, separated by spaces. Without an amplitude, the <code class="docutils literal notranslate"><span class="pre">min_threshold</span></code> of <code class="docutils literal notranslate"><span class="pre">pypulseqpp.safety.check_mech_resonance</span></code></p></td>
+<td><p>One forbidden band: its physical axis (<code class="docutils literal notranslate"><span class="pre">x</span></code>, <code class="docutils literal notranslate"><span class="pre">y</span></code>, <code class="docutils literal notranslate"><span class="pre">z</span></code> or <code class="docutils literal notranslate"><span class="pre">all</span></code>), its lowest and highest frequency in Hz and, optionally, the readout gradient amplitude in mT/m above which it is locked, as an echo-spacing lockout table states it, separated by spaces. Without an amplitude, the band is held to 8 mT/m (<code class="docutils literal notranslate"><span class="pre">RESONANCE_FLOOR</span></code>)</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">vop_file</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">.mat</span></code> or <code class="docutils literal notranslate"><span class="pre">.npz</span></code> file of VOPs and the head SAR matrix of each body model, at a path the design calls can read; its <code class="docutils literal notranslate"><span class="pre">safety_factor</span></code> multiplies local SAR</p></td>
