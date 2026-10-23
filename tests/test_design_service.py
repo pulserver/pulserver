@@ -20,6 +20,7 @@ from pulserver.host import DesignStore, design_id, design_identity, prune
 from pulserver.host import _service as service
 from pulserver.host._blocks import format_import, format_limits
 from pulserver.host._store import scans
+from pulserver.ir import _checks
 from pulserver.protocol import (
     FOV_ROTATION,
     PROTOCOL_BEGIN,
@@ -580,8 +581,10 @@ def test_a_request_is_validated_and_designed_under_the_peak_b1_limit(store):
     assert max(peaks) <= pp.MAX_B1_DERATE * pp.Opts(**limited).max_b1 * (1 + 1e-6)
 
 
-def test_a_design_in_a_forbidden_band_is_refused(store):
-    limits = {**LIMITS, "forbidden_band_1": "all 1 5000 0.001"}
+def test_a_design_in_a_forbidden_band_is_refused(store, monkeypatch):
+    # The GRE's lines read under 5 mT/m: a 1 mT/m floor puts them over it.
+    monkeypatch.setattr(_checks, "RESONANCE_FLOOR", 1.0)
+    limits = {**LIMITS, "forbidden_band_1": "all 1 5000"}
     status, text = generate(store, "gre2d", GRE, limits=limits)
     assert status == 1
     assert "of the forbidden band 1-5000 Hz" in text
