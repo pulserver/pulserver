@@ -10,6 +10,7 @@ from .._logs import configure
 from .._memory import without_huge_page_advice
 from ._intake import DesignIntake
 from ._proxy import ReconProxy
+from ._receiver import DicomReceiver
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -96,6 +97,27 @@ def main(argv: list[str] | None = None) -> None:
         "reconstructed it; for a client that reads DICOM alone",
     )
     parser.add_argument(
+        "--dicom-receiver",
+        type=_address,
+        default=None,
+        metavar="HOST:PORT",
+        help="DICOM receiver the images of a series whose client has gone are "
+        "stored to by C-STORE; held for the client's return when unset",
+    )
+    parser.add_argument(
+        "--dicom-receiver-title",
+        default=None,
+        metavar="AE",
+        help="application entity title of the --dicom-receiver; required with it",
+    )
+    parser.add_argument(
+        "--dicom-title",
+        default="PULSERVER",
+        metavar="AE",
+        help="application entity title the proxy calls the --dicom-receiver "
+        "as; PULSERVER when unset",
+    )
+    parser.add_argument(
         "--save-data",
         type=Path,
         default=None,
@@ -125,6 +147,19 @@ def main(argv: list[str] | None = None) -> None:
     args = parser.parse_args(argv)
     if args.forward is None and args.plugins is None:
         parser.error("--plugins is required unless --forward is given")
+    receiver = None
+    if args.dicom_receiver is not None:
+        if not args.dicom_receiver_title:
+            parser.error("--dicom-receiver needs --dicom-receiver-title")
+        try:
+            import pynetdicom  # noqa: F401
+        except ImportError:
+            parser.error(
+                "--dicom-receiver needs pynetdicom: pip install pulserver[dicom]"
+            )
+        receiver = DicomReceiver(
+            *args.dicom_receiver, args.dicom_receiver_title, args.dicom_title
+        )
 
     configure(args.log_level, args.logfile)
     proxy = ReconProxy(
@@ -141,6 +176,7 @@ def main(argv: list[str] | None = None) -> None:
         dicom=args.dicom,
         save_to=args.save_data,
         idle_timeout=args.idle_timeout,
+        dicom_receiver=receiver,
     )
     proxy.bind(args.port, args.host)
     intake = None
