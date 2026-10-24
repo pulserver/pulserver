@@ -86,8 +86,8 @@ of the image it is written into; `{{` and `}}` are literal braces:
 | Name | Value |
 | --- | --- |
 | `slice_location` | The image centre along the plane normal, in mm: the `SliceLocation` written by default |
-| `location` | The image centre along the patient axis the normal lies closest to, in mm, positive towards right, anterior or superior; for an oblique plane, along the normal turned towards those |
-| `location_letter` | The side `location` lies on: `R` or `L`, `A` or `P`, `S` or `I`, and `+` or `-` for an oblique plane |
+| `location` | The image centre's coordinate on the patient axis the normal lies closest to, in mm, positive towards right, anterior or superior; an oblique plane is located on that axis too |
+| `location_letter` | The side `location` lies on: `R` or `L`, `A` or `P`, `S` or `I` |
 | `instance_number`, `series_number` | The image's `InstanceNumber` and `SeriesNumber` |
 
 An attribute that resolves to no tag, for want of the dictionary, is logged and

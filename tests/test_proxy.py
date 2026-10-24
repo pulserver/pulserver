@@ -35,6 +35,7 @@ from pulserver.proxy import (
 )
 from pulserver.proxy._enrich import is_enriched
 from pulserver.proxy._proxy import _config_plugin
+from pulserver.proxy._receiver import DicomReceiver
 from pulserver.proxy._seqdesc import is_message
 from pulserver.recon import load_plugin
 from pulserver.recon._runtime import concurrency
@@ -821,6 +822,76 @@ def test_a_client_that_stays_leaves_nothing_held(
     assert list(tmp_path.iterdir()) == []
 
 
+@pytest.fixture
+def dicom_receiver():
+    """A DICOM storage service on the loopback interface, and the datasets it stored."""
+    from pynetdicom import AE, AllStoragePresentationContexts, evt
+
+    stored = []
+
+    def keep(event):
+        stored.append(event.dataset)
+        return 0x0000
+
+    ae = AE(ae_title="RECEIVER")
+    ae.supported_contexts = AllStoragePresentationContexts
+    server = ae.start_server(
+        ("127.0.0.1", 0), block=False, evt_handlers=[(evt.EVT_C_STORE, keep)]
+    )
+    yield DicomReceiver("127.0.0.1", server.server_address[1], "RECEIVER"), stored
+    server.shutdown()
+
+
+def test_the_images_of_a_series_whose_client_has_gone_reach_the_dicom_receiver(
+    start_proxy, bucket, dicom_receiver, monkeypatch, tmp_path
+):
+    """The proxy stores them itself, and keeps nothing for a client to return to."""
+    monkeypatch.setattr(_held, "DEFAULT_HELD_DIRECTORY", tmp_path)
+    _, series = bucket
+    receiver, stored = dicom_receiver
+    proxy = start_proxy(slots=1, dicom=True, dicom_receiver=receiver)
+    config = json.dumps({"parameters": {"config": "gre2d", "delay": 2.0}})
+    stream(proxy.port, series["gre2d"], config=config, measurement="M5", leave=True)
+
+    _wait_until(lambda: len(stored) == 1, "the receiver was sent no image")
+    _wait_until(
+        lambda: not list(tmp_path.iterdir()), "a delivered series was still held"
+    )
+    assert stored[0].Modality == "MR"
+
+
+def test_a_series_the_dicom_receiver_does_not_take_is_held_for_its_client(
+    start_proxy, bucket, monkeypatch, tmp_path
+):
+    monkeypatch.setattr(_held, "DEFAULT_HELD_DIRECTORY", tmp_path)
+    _, series = bucket
+    with socket.socket() as unused:
+        unused.bind(("127.0.0.1", 0))
+        nowhere = DicomReceiver("127.0.0.1", unused.getsockname()[1], "RECEIVER")
+    proxy = start_proxy(slots=1, dicom=True, dicom_receiver=nowhere)
+    config = json.dumps({"parameters": {"config": "gre2d", "delay": 2.0}})
+    stream(proxy.port, series["gre2d"], config=config, measurement="M6", leave=True)
+
+    _wait_until(
+        lambda: [p for p in tmp_path.iterdir() if p.suffix != ".part"],
+        "the output the receiver did not take was not held",
+    )
+    received = stream(proxy.port, series["gre2d"], readouts=0, measurement="M6")
+    assert sum(isinstance(item, DicomWithName) for item in received) == 1
+
+
+def test_a_client_that_stays_sends_the_dicom_receiver_nothing(
+    start_proxy, bucket, dicom_receiver
+):
+    _, series = bucket
+    receiver, stored = dicom_receiver
+    proxy = start_proxy(slots=1, dicom=True, dicom_receiver=receiver)
+    received = stream(proxy.port, series["gre2d"], measurement="M7")
+
+    assert sum(isinstance(item, DicomWithName) for item in received) == 1
+    assert stored == []
+
+
 def test_a_design_pushed_to_the_intake_is_reconstructed_from_its_store(tmp_path):
     host = DesignStore(tmp_path / "host", "scan")
     design = generate(host, "gre2d", MATRIX)
@@ -1591,6 +1662,32 @@ def test_two_series_at_once_are_kept_in_files_of_their_own(
         len(played[1].table),
         len(played[0].table),
     ], counts
+
+
+def test_a_kept_series_takes_its_name_only_once_its_stream_has_ended(
+    start_proxy, bucket, tmp_path
+):
+    """What collects the directory tells a series still arriving by its suffix."""
+    _, series = bucket
+    played = series["gre2d"]
+    kept = tmp_path / "kept"
+    proxy = start_proxy(slots=1, save_to=kept)
+    stream = socket.create_connection(("127.0.0.1", proxy.port), timeout=DEADLINE)
+    connection = Connection(stream)
+    connection.send_config("gre2d")
+    connection.send_header(header_xml(played, None, None, None, None))
+    for index in range(len(played.table)):
+        connection.send(ismrmrd.Acquisition.from_array(flat(played.table, index)))
+    _wait_until(lambda: list(kept.glob("*.h5.part")), "nothing was being kept")
+    assert not list(kept.glob("*.h5"))
+
+    connection.send_close()
+    received = list(connection)
+    connection.shutdown_close()
+
+    assert closed(received)
+    assert len(list(kept.glob("mrd_*.h5"))) == 1
+    assert not list(kept.glob("*.part"))
 
 
 def test_a_forwarded_series_is_kept_by_the_server_it_reaches(

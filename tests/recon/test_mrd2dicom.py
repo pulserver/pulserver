@@ -199,8 +199,6 @@ def test_the_builder_initializes_the_dicom_template(minimal_mrd_header):
 
     assert builder.dicomDset is not None
     assert builder.mrdHead is minimal_mrd_header
-    # DICOM InstanceNumber is 1-based (see MrdDicomBuilder.__init__).
-    assert builder.instanceNumber == 1
     assert builder.dicomDset.SamplesPerPixel == 1
     assert builder.dicomDset.PhotometricInterpretation == "MONOCHROME2"
     assert builder.dicomDset.PixelRepresentation == 0
@@ -1039,18 +1037,66 @@ def test_an_axis_aligned_plane_is_located_along_its_axis_positive_right_anterior
     assert dataset[0x0011, 0x1011].value == pytest.approx(location)
 
 
-def test_an_oblique_plane_is_located_along_its_normal_and_signed(minimal_mrd_header):
-    header = _explicit(minimal_mrd_header, [("(0011,1010)SH", "{location_letter}")])
-    tilt = np.array([0.0, np.sin(0.3), np.cos(0.3)])
-
-    above = _placed(
-        MrdDicomBuilder(header), 10 * tilt, (1.0, 0.0, 0.0), np.cross(tilt, (1, 0, 0))
+def test_an_oblique_plane_is_located_on_the_patient_axis_its_normal_lies_closest_to(
+    minimal_mrd_header,
+):
+    """A double oblique plane tilted towards anterior: its centre's anterior coordinate."""
+    header = _explicit(
+        minimal_mrd_header,
+        [("(0011,1010)SH", "{location_letter}"), ("(0011,1011)FL", "{location}")],
     )
-    below = _placed(
-        MrdDicomBuilder(header), -10 * tilt, (1.0, 0.0, 0.0), np.cross(tilt, (1, 0, 0))
-    )
+    read = np.array([0.4309, 0.5318, -0.7291])
+    phase = np.array([0.9024, -0.2539, 0.3481])
+    centre = (3.92, -39.81, -32.32)
 
-    assert {above[0x0011, 0x1010].value, below[0x0011, 0x1010].value} == {"+", "-"}
+    dataset = _placed(MrdDicomBuilder(header), centre, read, phase)
+
+    assert abs(np.cross(read, phase)[1]) > abs(np.cross(read, phase)[2])
+    assert dataset[0x0011, 0x1010].value == "A"
+    assert dataset[0x0011, 0x1011].value == pytest.approx(39.81)
+
+
+def _sliced(builder, slice_):
+    image = ismrmrd.Image.from_array(np.ones((8, 8), dtype=np.float32), transpose=False)
+    image.slice = slice_
+    image.read_dir, image.phase_dir, image.slice_dir = (1, 0, 0), (0, 1, 0), (0, 0, 1)
+    image.position = (0.0, 0.0, 6.0 * slice_)
+    image.field_of_view = (160.0, 160.0, 5.0)
+    return int(builder(image).dset.InstanceNumber)
+
+
+def test_the_slices_of_a_stack_are_numbered_by_position_whatever_order_they_arrive_in(
+    minimal_mrd_header,
+):
+    """An interleaved stack of five, two passes: each pass numbers its slices in order."""
+    minimal_mrd_header.encoding[0].encodingLimits.slice = ismrmrd.xsd.limitType(
+        minimum=0, maximum=4, center=2
+    )
+    builder = MrdDicomBuilder(minimal_mrd_header)
+
+    numbers = [_sliced(builder, s) for s in (0, 2, 4, 1, 3) * 2]
+
+    assert numbers == [1, 3, 5, 2, 4, 6, 8, 10, 7, 9]
+
+
+def test_the_partitions_of_a_volume_are_numbered_by_position(minimal_mrd_header):
+    space = minimal_mrd_header.encoding[0].reconSpace
+    space.matrixSize = ismrmrd.xsd.matrixSizeType(x=256, y=192, z=4)
+    builder = MrdDicomBuilder(minimal_mrd_header)
+
+    numbers = [_sliced(builder, p) for p in (0, 1, 2, 3, 0, 1, 2, 3)]
+
+    assert numbers == [1, 2, 3, 4, 5, 6, 7, 8]
+
+
+def test_an_image_numbered_past_the_slices_the_header_states_takes_a_number_of_its_own(
+    minimal_mrd_header,
+):
+    builder = MrdDicomBuilder(minimal_mrd_header)
+
+    numbers = [_sliced(builder, s) for s in (0, 1, 0, 1)]
+
+    assert len(set(numbers)) == len(numbers)
 
 
 def test_a_private_keyword_resolves_through_the_dictionary_the_header_names(

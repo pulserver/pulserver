@@ -36,6 +36,7 @@ from ._designs import Design, DesignCache
 from ._enrich import enrich_acquisition, enrich_header, header_fov_offset_m
 from ._motion import FILENAME, MotionWriter, Pose, pose_of, pose_waveform
 from ._queue import QueueFile
+from ._receiver import DicomReceiver
 from ._seqdesc import is_message
 from ._workers import WorkerPool
 
@@ -52,6 +53,9 @@ _ACCEPT_POLL = 0.5
 _DRAIN_IDLE = 30.0
 # How often the exams nothing has leased for a while are looked for.
 _EXPIRY_POLL = 60.0
+
+#: Suffix of a kept series whose stream has not ended.
+PART = ".part"
 
 
 class _Listener:
@@ -196,15 +200,18 @@ class _Listener:
         acquisitions enriched (the header marked ``pulserver_enriched``); a
         replay plays such a file as it is. A server keeps a forwarded series
         as the proxy sent it, enriched too. The header is written as this is
-        called.
+        called, into a file named with :data:`PART` appended, which takes its
+        own name once the stream has ended: whoever collects the directory
+        tells a series still arriving by the suffix.
         """
         if self.save_to is None:
             return items
         with self._keeping:
-            kept = QueueFile(_unkept_path(self.save_to))
-        _log.info("keeping the series in %s", kept.path)
+            path = _unkept_path(self.save_to)
+            kept = QueueFile(_partial(path))
+        _log.info("keeping the series in %s", path)
         kept.write_header(header)
-        return _keeping(kept, items)
+        return _keeping(kept, items, path)
 
 
 class ReconProxy(_Listener):
@@ -264,7 +271,10 @@ class ReconProxy(_Listener):
     and removed once the client has had all of it. When the client has gone, it
     is kept: a client opening a series with the same ``measurementID`` is sent
     it, once complete, in place of a new reconstruction. Kept output nobody
-    takes up is removed after a day.
+    takes up is removed after a day. With ``dicom_receiver``, the DICOM images
+    of a series whose client has gone are stored to that receiver once the
+    reconstruction ends, and the output is kept only if it did not store them
+    all.
 
     Parameters
     ----------
@@ -311,10 +321,15 @@ class ReconProxy(_Listener):
         DICOM alone, with a plugin that emits images.
     save_to : Path | str, default=None
         Directory each series is kept in, as the scanner sent it, so that it
-        can be reconstructed again offline; not kept when ``None``.
+        can be reconstructed again offline; not kept when ``None``. A series
+        is written to ``mrd_<time>.h5.part`` and renamed ``mrd_<time>.h5``
+        once its stream has ended.
     idle_timeout : float, default=None
         Seconds without a client after which :meth:`serve` returns, counted
         from the last client to leave; never when ``None``.
+    dicom_receiver : DicomReceiver, default=None
+        Where the DICOM images of a series whose client has gone are stored;
+        they are held for the client's return when ``None``.
 
     Attributes
     ----------
@@ -348,10 +363,12 @@ class ReconProxy(_Listener):
         dicom: bool = False,
         save_to: Path | str | None = None,
         idle_timeout: float | None = None,
+        dicom_receiver: DicomReceiver | None = None,
     ) -> None:
         super().__init__(store, save_to, idle_timeout)
         self.designs = DesignCache(store)
         self.held = Path(_held.DEFAULT_HELD_DIRECTORY)
+        self.dicom_receiver = dicom_receiver
         self.workers = self.exams = self.queue = None
         if forward is not None:
             self._reconstruction: _Workers | _Remote = _Remote(
@@ -395,7 +412,7 @@ class ReconProxy(_Listener):
             plugin,
             len(design.table),
         )
-        with _held.HeldClient(client, path) as held:
+        with _held.HeldClient(client, path, self.dicom_receiver) as held:
             self._reconstruction.run(
                 held,
                 config,
@@ -1046,18 +1063,19 @@ def _enriched(
         )
 
 
-def _keeping(kept: QueueFile, items: Iterator[Any]) -> Iterator[Any]:
-    """Yield a series, appending each item to an open file."""
+def _keeping(kept: QueueFile, items: Iterator[Any], path: Path) -> Iterator[Any]:
+    """Yield a series, appending each item to an open file renamed ``path`` once it ends."""
     try:
         for item in items:
             kept.append(item)
             yield item
     finally:
         kept.close()
+        kept.path.replace(path)
 
 
 def _unkept_path(directory: Path) -> Path:
-    """Return a name in ``directory`` no kept series holds.
+    """Return a name in ``directory`` no kept series holds, nor one still arriving.
 
     Two series may start within one second, and a second writer opening the
     file of the first would append to it, leaving one file holding both.
@@ -1065,9 +1083,13 @@ def _unkept_path(directory: Path) -> Path:
     stamp = time.strftime("%Y%m%dT%H%M%S")
     for index in itertools.count():
         path = directory / f"mrd_{stamp}{f'-{index}' if index else ''}.h5"
-        if not path.exists():
+        if not path.exists() and not _partial(path).exists():
             return path
     raise AssertionError("unreachable")
+
+
+def _partial(path: Path) -> Path:
+    return path.with_name(path.name + PART)
 
 
 def _received(client: Connection) -> Iterator[Any]:
