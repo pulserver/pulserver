@@ -48,7 +48,7 @@ and two designs ({doc}`../../explanations/architecture`).
 | Pass | Result |
 | --- | --- |
 | Event deduplication | A library of distinct RF, gradient and ADC definitions, and a per-block instance table recording the definition each block plays and its amplitude |
-| Repetition | The repetition of each subsequence and its repetition time (TR): the period pypulseqpp's `Sequence.repetition` finds, from the first block; a subsequence that does not repeat is one repetition, refused when it is longer than 15 s |
+| Repetition | The repetition of each subsequence and its repetition time (TR): the period pypulseqpp's `Sequence.repetition` finds, from the first block; a subsequence that does not repeat is one repetition, however long |
 | Segmentation | The repetition divided into virtual segments at block boundaries the {class}`~pulserver.ir.Grouping` admits |
 | Execution stream | The segment instances of the whole scan, in play order |
 | Label table | The Pulseq labels in force at every readout, three of which fill the ADC label columns |

@@ -28,15 +28,6 @@ extern "C"
 /* ================================================================== */
 /*  File-scope constants                                              */
 /* ================================================================== */
-/* Ceiling on what may be accepted as a single TR.  Measured over the whole
- * span, delays included, not just the active blocks: every downstream
- * consumer that resamples a TR (pulseg__get_gradient_waveforms_range, and
- * through it the safety analysis) allocates span/raster samples per axis, so
- * it is the span -- not the fraction of it that plays something -- that
- * bounds the cost.  A "single TR" longer than this is a sequence whose real
- * period was not recognised, and silently accepting it costs gigabytes. */
-#define SINGLE_TR_MAX_DURATION_US 15000000 /* 15 s  */
-
 #define SEGSTATE_SEEKING_FIRST_ADC 0
 #define SEGSTATE_SEEKING_BOUNDARY 1
 #define SEGSTATE_OPTIMIZED_MODE 2
@@ -1440,7 +1431,9 @@ void pulseg__compute_exec_stream_tr_start(pulseg_sequence_descriptor *desc)
  * The repetition is the one pypulseqpp's Sequence.repetition finds, handed
  * over in the file's reserved definitions and anchored at the first block;
  * a last copy cut short is part of it.  A sequence that does not repeat is
- * one repetition, refused when its span exceeds SINGLE_TR_MAX_DURATION_US.
+ * one repetition, however long it plays: what reads a repetition walks its
+ * blocks and RF plays, and gradient heating is costed over stretches of at
+ * most PULSEG_STRETCH_US, so nothing holds a repetition's samples.
  */
 int pulseg__get_tr_in_sequence(
     pulseg_sequence_descriptor *desc,
@@ -1476,18 +1469,6 @@ int pulseg__get_tr_in_sequence(
     {
         diag->code = PULSEG_ERR_INVALID_ARGUMENT;
         return diag->code;
-    }
-
-    if (size == nblocks)
-    {
-        span_us = 0.0;
-        for (n = 0; n < nblocks; ++n)
-            span_us += (double)pulseg__played_duration_us(desc, n);
-        if (span_us > (double)SINGLE_TR_MAX_DURATION_US)
-        {
-            diag->code = PULSEG_ERR_TR_NO_PERIODIC_PATTERN;
-            return diag->code;
-        }
     }
 
     span_us = 0.0;

@@ -479,6 +479,42 @@ def test_a_vendor_cache_written_here_loads_in_the_scanner_reader(
     )
 
 
+def test_a_repetition_past_a_32_bit_count_of_microseconds_reads_the_same_in_the_scanner_reader(
+    tmp_path, scanner_reader
+):
+    """A file that does not repeat is one repetition however long it plays.
+
+    Three gradients of their own lengths, each followed by 15 minutes of wait,
+    play 45 minutes, past the 2^31 microseconds a 32-bit scanner build's long
+    holds.
+    """
+    sequence = pp.Sequence(SYSTEM)
+    for index in range(3):
+        sequence.add_block(
+            pp.make_trapezoid("x", amplitude=1000, flat_time=1e-3 + index * 1e-4)
+        )
+        sequence.add_block(pp.make_delay(900.0))
+    seq = tmp_path / "three_quarters_of_an_hour.seq"
+    sequence.write(seq)
+    cache = convert(
+        seq, SYSTEM, vendor=VENDOR, label_column_map=LABELS, cache_ext=".cache"
+    )
+    printed = subprocess.run(
+        [str(scanner_reader), str(cache), str(seq.stat().st_size)],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    expected = summary(seq, SYSTEM, label_column_map=LABELS)
+    (unit,) = expected["subsequences"]
+    assert unit["tr_size"] == len(sequence)
+    assert unit["tr_timing"]["played_us"] > 2.0**31
+    convert(seq, SYSTEM)
+    assert printed.splitlines() == _reader_lines(expected) + _stretch_lines(
+        seq, expected["num_subsequences"]
+    )
+
+
 def _plan_lines(plan):
     lines = [
         f"wave_plan rc 1 mode {('none', 'resident', 'streamed').index(plan['mode'])} "

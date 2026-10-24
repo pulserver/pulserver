@@ -81,8 +81,6 @@ const char *pulseg_get_error_message(int code)
         return "A segment is played with too many distinct pulse patterns";
     case PULSEG_ERR_TR_NO_BLOCKS:
         return "Sequence contains no blocks";
-    case PULSEG_ERR_TR_NO_PERIODIC_PATTERN:
-        return "No periodic TR pattern found";
     case PULSEG_ERR_SEG_NONZERO_START_GRAD:
         return "TR does not start with zero gradient amplitude";
     case PULSEG_ERR_SEG_NONZERO_END_GRAD:
@@ -154,10 +152,6 @@ const char *pulseg_get_error_hint(int code)
     case PULSEG_ERR_SIGNATURE_MISSING:
         return "The .seq file does not contain a [SIGNATURE] section. "
                "Re-export the sequence to include a signature.";
-    case PULSEG_ERR_TR_NO_PERIODIC_PATTERN:
-        return "This often occurs when phase-encoding gradients are created inside "
-               "the sequence loop with varying amplitudes. Instead, create gradient "
-               "events ONCE outside the loop and use 'scale' parameter to vary amplitude.";
     case PULSEG_ERR_SEG_NONZERO_START_GRAD:
     case PULSEG_ERR_SEG_NONZERO_END_GRAD:
         return "Each segment must begin and end with gradient amplitudes that can "
