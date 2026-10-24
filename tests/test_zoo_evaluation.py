@@ -228,6 +228,7 @@ SCANS = [pytest.param(name, {}, id=name) for name in SHIPPED] + [
             "shuffling",
             {"nslices": 32, "nx": 64, "ny": 64, "Ry": 2},
         ),
+        ("zte3d+SPIRAL", "spiral", {"nx": 64}),
         ("zte3d+MERIDIAN", "meridian", {"nx": 64}),
         (
             "gre_multiecho2d",
@@ -411,6 +412,7 @@ TOGGLED = {
     "gre3d+CARTESIAN": ("gre3d", {"elliptical": False}),
     "fse3d+SHUFFLING": ("fse3d", {"ordering": "shuffling"}),
     "mprage3d+SHUFFLING": ("mprage3d", {"ordering": "shuffling"}),
+    "zte3d+SPIRAL": ("zte3d", {"scheme": "spiral"}),
     "zte3d+MERIDIAN": ("zte3d", {"scheme": "meridian"}),
 }
 
