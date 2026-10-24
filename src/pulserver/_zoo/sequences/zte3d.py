@@ -26,9 +26,9 @@ from pulserver.design import (
 )
 from pulserver.protocol import ImagingMode, TRPreset, UIParam
 
-#: Order of the spokes over the sphere, ``"quiet"``, ``"spiral"`` or ``"meridian"``.
+#: Order of the spokes over the sphere, ``"spiral"``, ``"meridian"`` or ``"quiet"``.
 SCHEME = option(
-    "scheme", "quiet", choices=("quiet", "spiral", "meridian"), **OPTIONS["scheme"]
+    "scheme", "quiet", choices=("spiral", "meridian", "quiet"), **OPTIONS["scheme"]
 )
 
 
