@@ -100,7 +100,7 @@ def _parser() -> argparse.ArgumentParser:
         "--rf-definitions",
         action="store_true",
         help="follow the listing with the [RfDefinitions] block of the plugin's "
-        "evaluation at its default protocol",
+        "evaluation at its default protocol, every saturation band placed",
     )
     validated = call(
         "validate",

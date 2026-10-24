@@ -45,7 +45,11 @@ sequence the evaluation builds, in the order of first play. The listing carries
 the definitions of the evaluation at the default protocol, and a layout names
 the pulses of the listing only where the protocol does not change which pulses
 are played first: the length of a train, a flip angle schedule and the matrix do
-not, and a protocol that adds a preparation pulse does.
+not, and a protocol that adds a preparation pulse does. Explicit saturation
+bands are the exception a console needs, since it places them without listing
+again: the listing's evaluation places every band the plugin offers, and the
+shipped plugins number the band pulse after the others, so a band placed or
+removed changes no other number.
 
 The layout is an estimate for the prescription. An evaluation that states none
 states no estimate and is valid, and what the scanner checks before the scan is
@@ -115,8 +119,8 @@ where the evaluation is invalid or states no layout. They are lists of numbers:
 each number is ASCII decimal with nine significant digits, the numbers of a list
 are separated by single spaces, and each list is one line, so that a reader
 takes tokens. `[RfDefinitions]` follows the listing of a `list` call asked with
-`rf_definitions`, which evaluates the plugin at its default protocol under the
-scanner limits. Each definition is a `definition` line, then the sample times,
+`rf_definitions`, which evaluates the plugin at its default protocol, with
+every explicit saturation band it offers placed, under the scanner limits. Each definition is a `definition` line, then the sample times,
 then the real and the imaginary parts of each channel:
 
 ```text

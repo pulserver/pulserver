@@ -87,9 +87,16 @@ CHANGED = {
     "se_stack_of_stars3d": {"nx": 64, "nslices": 8},
     "zte3d": {"flip": 20.0, "nx": 64},
 }
-REQUESTS = [pytest.param(name, {}, id=f"{name}-default") for name in SHIPPED] + [
-    pytest.param(name, CHANGED[name], id=f"{name}-changed") for name in SHIPPED
-]
+REQUESTS = (
+    [pytest.param(name, {}, id=f"{name}-default") for name in SHIPPED]
+    + [pytest.param(name, CHANGED[name], id=f"{name}-changed") for name in SHIPPED]
+    # Bands the console places after the listing, which holds their pulse.
+    + [
+        pytest.param(name, {"exsat_mask": mask}, id=f"{name}-bands{mask}")
+        for name in ("gre2d", "se2d")
+        for mask in (1, 63)
+    ]
+)
 
 #: The toggled sequences whose refocusing trains blochsim designs.
 OPTIMIZED = ("fse3d+OPTIMIZED", "fse3d+DUAL_REGION")
@@ -582,7 +589,8 @@ def test_an_evaluation_states_as_its_layout_a_regular_tr_of_the_design(
     # An optimized refocusing train is designed around its flip angle rather
     # than scaled by it.
     scaled = UIParam.FLIP in plugin.protocol and not name.startswith("fse3d")
-    expected = rf_layout(main, scaled, start=start)
+    banded = UIParam.EXSAT_MASK in plugin.protocol
+    expected = rf_layout(main, scaled, start=start, banded=banded)
     amplitude = expected.instances.amplitude.copy()
     if name in OPTIMIZED:
         # A train holds the pulses of the longest train, those beyond its own
@@ -972,8 +980,16 @@ def test_a_banded_sequence_offers_its_bands_none_of_them_placed(name, zoo):
 
     assert listing[UIParam.EXSAT_MASK].value == 0
     assert listing[UIParam.EXSAT_MASK].editable
-    assert listing[UIParam.EXSAT_MASK].range_max == 3
-    assert UIParam.exsat_loc(2) in listing and UIParam.exsat_loc(3) not in listing
+    assert listing[UIParam.EXSAT_MASK].range_max == 63
+    assert all(UIParam.exsat_loc(n) in listing for n in range(1, 7))
+
+
+@pytest.mark.parametrize("name", BANDED)
+def test_a_banded_sequence_lists_its_band_pulse_after_the_others(name):
+    listed = parse_rf_definitions(_reply("list", name, rf_definitions=True))
+
+    unbanded = ["excitation", "refocusing"] if name in SPIN_ECHO else ["excitation"]
+    assert [record.use for record in listed] == [*unbanded, "saturation"]
 
 
 @pytest.mark.parametrize("name", BANDED)
@@ -981,20 +997,21 @@ def test_only_the_bands_the_operator_places_are_played(name, zoo):
     plugin = zoo[name]
     played = {
         mask: len(_saturations(_main(plugin, _protocol(plugin, {"exsat_mask": mask}))))
-        for mask in (0, 2, 3)
+        for mask in (0, 2, 3, 63)
     }
 
     assert played[0] == 0
     assert played[3] == 2 * played[2] > 0
+    assert played[63] == 6 * played[2]
 
 
 @pytest.mark.parametrize("name", BANDED)
 def test_a_band_placed_past_those_offered_is_refused(name, zoo):
     plugin = zoo[name]
-    validation = plugin.validate(SYSTEM, {UIParam.EXSAT_MASK: 4})
+    validation = plugin.validate(SYSTEM, {UIParam.EXSAT_MASK: 64})
 
     assert not validation.valid
-    assert "band 2" in validation.info
+    assert "band 6" in validation.info
 
 
 def _saturations(seq):

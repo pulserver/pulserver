@@ -50,8 +50,9 @@ in {doc}`../explanations/protocol`.
 
 The RF blocks are sent only when asked for, and only where the plugin's
 evaluation states an RF layout ({ref}`stating-the-rf-layout`).
-`--rf-definitions` evaluates the plugin at its default protocol under
-`--limits`, which it then requires. `--rf-layout` follows a valid reply with the
+`--rf-definitions` evaluates the plugin at its default protocol, with every
+explicit saturation band it offers placed, under `--limits`, which it then
+requires. `--rf-layout` follows a valid reply with the
 RF layout of the evaluated request, its amplitudes relative to the peaks the
 listing states. Without `--rf-definitions`, `list` depends on the plugin file,
 its options and the installed packages only, so its reply can be written once

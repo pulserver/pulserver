@@ -16,7 +16,7 @@ from pulserver.protocol import ImagingMode, TEPreset, TRPreset, UIParam
 
 #: Explicit saturation bands the console may place, each played while it is
 #: placed; 0 offers none.
-BANDS = 2
+BANDS = 6
 
 
 class Gre2D(SequencePlugin):
