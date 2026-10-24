@@ -56,10 +56,10 @@ on the other end refuses a series it cannot serve, enriches it from its design
   Code: `pulserver.proxy._motion`. Tests: *a motion corrected series publishes its poses to the scan*; *a series not corrected for motion writes no pose file* (`test_proxy.py`).
 - **Keeps each series enriched, for an offline rerun that gives the same image.**
 
-  Code: `--save-data`. Tests: *a kept series runs offline and gives the image the proxy returned*; *what a proxy keeps is the series it reconstructed, enriched*; *a kept series given its design is not enriched twice* (`test_proxy.py`).
-- **Holds images for a client that dropped, and closes on its own when idle.**
+  Code: `--save-data`. Tests: *a kept series runs offline and gives the image the proxy returned*; *what a proxy keeps is the series it reconstructed, enriched*; *a kept series given its design is not enriched twice*; *a kept series takes its name only once its stream has ended* (`test_proxy.py`).
+- **Holds images for a client that dropped, or stores them to a DICOM receiver, and closes on its own when idle.**
 
-  Code: `--idle-timeout`. Tests: *images whose client has gone reach it when it returns*; *the idle timeout counts from the last client leaving* (`test_proxy.py`).
+  Code: `--idle-timeout`, `--dicom-receiver`. Tests: *images whose client has gone reach it when it returns*; *the images of a series whose client has gone reach the dicom receiver*; *a series the dicom receiver does not take is held for its client*; *the idle timeout counts from the last client leaving* (`test_proxy.py`).
 
 :::
 

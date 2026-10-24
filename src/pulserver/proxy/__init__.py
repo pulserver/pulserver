@@ -10,6 +10,7 @@ from ._enrich import (
 from ._intake import DesignIntake
 from ._local import LocalReconstruction
 from ._proxy import ReconProxy, ReconServer
+from ._receiver import DicomReceiver
 
 __all__ = [
     "DESIGN_PARAMETER",
@@ -17,6 +18,7 @@ __all__ = [
     "Design",
     "DesignCache",
     "DesignIntake",
+    "DicomReceiver",
     "LocalReconstruction",
     "ReconProxy",
     "ReconServer",

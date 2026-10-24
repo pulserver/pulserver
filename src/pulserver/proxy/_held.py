@@ -5,7 +5,9 @@ Everything sent to the client is also written, as the MRD bytes the client
 reads, to a file named after the series' ``measurementID``; the file is removed
 once the client has had the whole output, and kept when it has gone. A client
 opening the same measurement again is sent the kept output in place of a new
-reconstruction.
+reconstruction. With a DICOM receiver, the DICOM images of a series whose
+client has gone are stored to it instead, and nothing is kept once it has
+stored them all.
 """
 
 from __future__ import annotations
@@ -22,6 +24,8 @@ from pathlib import Path
 from typing import Any
 
 from ..recon._runtime.connection import Connection
+from ..recon._runtime.mrd2dicom import DicomWithName
+from ._receiver import DicomReceiver
 
 _log = logging.getLogger("pulserver.proxy")
 
@@ -79,19 +83,28 @@ class HeldClient:
     output is sent. A send that fails, or finds the client's connection reset,
     leaves the client gone: what follows is written and no longer sent. On exit
     the file is removed when the client had everything, and kept at ``path``
-    otherwise.
+    otherwise. With ``receiver``, a client gone on exit has every DICOM image
+    of the series stored to it, those sent before it went included, since
+    which of them it read cannot be told; the file is then removed once the
+    receiver has stored them all.
     """
 
-    def __init__(self, client: Connection, path: Path) -> None:
+    def __init__(
+        self, client: Connection, path: Path, receiver: DicomReceiver | None = None
+    ) -> None:
         self._client = client
         self.path = path
         self.gone = False
+        self._receiver = receiver
+        self._images: list[DicomWithName] = []
         path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         _prune(path.parent)
         self._part = path.with_name(path.name + PART)
         self._file = self._part.open("wb")
 
     def send(self, item: Any) -> None:
+        if self._receiver is not None and isinstance(item, DicomWithName):
+            self._images.append(item)
         for accepts, writer in self._client.writers:
             if accepts(item):
                 writer(self._file, item)
@@ -123,10 +136,27 @@ class HeldClient:
         if not self.gone and _reset(self._client):
             self._leave(ConnectionResetError("the client's connection was reset"))
         self._file.close()
-        if self.gone:
+        if self.gone and self._delivered():
+            self._part.unlink(missing_ok=True)
+        elif self.gone:
             self._part.replace(self.path)
         else:
             self._part.unlink(missing_ok=True)
+
+    def _delivered(self) -> bool:
+        """Store the series' images to the receiver; return whether it stored every one."""
+        images = [image for image in self._images if image.dset is not None]
+        if self._receiver is None or not images:
+            return False
+        stored = self._receiver.store(images)
+        _log.info(
+            "%d of the %d images of %s stored to %s",
+            stored,
+            len(images),
+            self.path.name,
+            self._receiver,
+        )
+        return stored == len(images)
 
 
 def _reset(connection: Connection) -> bool:
