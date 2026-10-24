@@ -433,7 +433,7 @@ saturation bands are the console's own controls:
 The saturation bands of `gre2d` and `se2d` are placed graphically, as a
 scanner's console places an explicit band, and each is played before every
 excitation while it is placed; a plugin offers as many bands as its module
-constant `BANDS`, 2, and refuses a mask placing more.
+constant `BANDS`, 6, and refuses a mask placing more.
 `exsat<n>_normal_x`, `_y` and `_z`, `exsat<n>_loc` and `exsat<n>_thickness`
 give each band's normal along the physical axes, the distance of its centre
 from the isocentre along that normal, and its thickness, in mm. The

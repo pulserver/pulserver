@@ -93,14 +93,18 @@ def rf_layout(
     start: float = 0.0,
     copies: int = 1,
     period: float | None = None,
+    banded: bool = False,
 ) -> RfLayout:
     """Return the RF of the TR of ``main`` that begins ``start`` seconds into it.
 
     The TR holds the pulses whose centre lies within the ``TR`` definition of
     ``main`` from ``start``, ``copies`` times over, in play order, and its
     period is that definition unless ``period`` is given. The definitions are
-    those the TR plays, numbered by first play in it. The flip angle scales
-    each excitation when ``scaled``, and no instance has a control otherwise.
+    those the TR plays, numbered by first play in it; when ``banded``, those
+    of the saturation bands after the others, so a band placed or removed
+    leaves the numbers of the others as the listing, made with every band
+    placed, states them. The flip angle scales each excitation when
+    ``scaled``, and no instance has a control otherwise.
     """
     tr = main.definitions["TR"][0]
     tables = main.libraries()
@@ -118,9 +122,15 @@ def rf_layout(
         for index in in_tr:
             one_tr.add_block(main.get_block(int(index) + 1))
         instances = one_tr.rf_instances()
+    definitions = instances.definitions
+    order = sorted(
+        range(len(definitions)),
+        key=lambda d: (banded and definitions[d].use == "saturation", d),
+    )
+    number = np.argsort(order)
     instances = pp.RfInstances(
-        instances.definitions,
-        np.tile(instances.definition, copies),
+        tuple(definitions[d] for d in order),
+        np.tile(number[instances.definition], copies),
         np.tile(instances.amplitude, copies),
     )
     control = tuple(
@@ -176,13 +186,14 @@ def evaluation(
     a = arguments(plugin, protocol)
     one, repetitions = repetition(a)
     scaled = UIParam.FLIP in plugin.protocol
+    banded = UIParam.EXSAT_MASK in plugin.protocol
     if "n_slices" not in a:
         main = plugin.app(system, **(protocol.arguments | one))
         duration = main.duration()[0]
         return Evaluation(
             protocol.replace(achieved(plugin, main)),
             (dummies(a, duration) + repetitions) * duration,
-            rf_layout=rf_layout(main, scaled),
+            rf_layout=rf_layout(main, scaled, banded=banded),
         )
     one |= {"n_slices": 1, "tr": None}
     main = plugin.app(system, **(protocol.arguments | one))
@@ -200,7 +211,9 @@ def evaluation(
     return Evaluation(
         protocol.replace(values),
         (dummies(a, max(cycles)) + repetitions) * sum(cycles),
-        rf_layout=rf_layout(main, scaled, copies=max(sizes), period=max(cycles)),
+        rf_layout=rf_layout(
+            main, scaled, copies=max(sizes), period=max(cycles), banded=banded
+        ),
     )
 
 
