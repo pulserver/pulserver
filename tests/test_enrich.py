@@ -365,6 +365,29 @@ def test_each_readout_of_a_stack_is_positioned_at_its_slice_along_slice_dir(tmp_
         )
 
 
+def test_the_reconstruction_grid_is_centred_half_a_voxel_from_an_fft_one(tmp_path):
+    """Voxel n // 2 lies FOV / (2 n) past the field-of-view centre along an even axis."""
+    table = stack_of_slices(tmp_path)
+    space = table.spaces[int(table.encoding_space[0])]
+    expected_mm = [
+        fov / (2 * n) if n > 1 and n % 2 == 0 else 0.0
+        for fov, n in zip(space.fov_mm, space.matrix, strict=True)
+    ]
+    assert any(expected_mm[:2])
+
+    acquisition = acquisitions(table)[0]
+    acquisition.read_dir[:] = (0.0, 1.0, 0.0)
+    acquisition.phase_dir[:] = (1.0, 0.0, 0.0)
+    acquisition.slice_dir[:] = (0.0, 0.0, 1.0)
+    enrich_acquisition(acquisition, table, 0)
+
+    np.testing.assert_allclose(
+        np.asarray(acquisition.position)[:2],
+        (expected_mm[1], expected_mm[0]),
+        atol=1e-5,
+    )
+
+
 def test_a_slice_counter_beyond_the_slice_positions_is_refused(tmp_path):
     with pytest.raises(ValueError, match="SlicePositions"):
         stack_of_slices(tmp_path, positions=(-0.005, 0.005))

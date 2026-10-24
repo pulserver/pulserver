@@ -196,6 +196,24 @@ class SequenceTable:
         file = int(np.searchsorted(self._first_rows, index, side="right")) - 1
         return self._files[file].readout_k(index - int(self._first_rows[file]))
 
+    def grid_offset_m(self, index: int) -> np.ndarray:
+        """Return where one readout's reconstruction grid puts its centre voxel, in m along the logical axes.
+
+        An FFT places the field-of-view centre on voxel ``n // 2`` of an
+        ``n``-voxel axis. The grid is centred instead, its voxel centres
+        symmetric about the field-of-view centre, which puts voxel ``n // 2``
+        half a voxel past it along each axis of even ``n``: ``FOV / (2 n)``,
+        and 0 along an axis of odd ``n`` or one voxel. Zero for a space that
+        states no matrix size or field of view.
+        """
+        space = self.spaces[int(self.encoding_space[index])]
+        if space.matrix is None or space.fov_mm is None:
+            return np.zeros(3)
+        matrix = np.asarray(space.matrix, dtype=np.int64)
+        fov_m = 1e-3 * np.asarray(space.fov_mm, dtype=np.float64)
+        steps = matrix // 2 - 0.5 * (matrix - 1)
+        return np.where(matrix > 1, steps * fov_m / np.maximum(matrix, 1), 0.0)
+
     def readout_phase_modulation(
         self, index: int, fov_offset_m: Any = None
     ) -> np.ndarray | None:
@@ -492,15 +510,18 @@ def enrich_acquisition(
     whose k moves gets it as ``traj``, trailing constant axes dropped, unless
     it is a Cartesian readout sampled on its flat top alone. The received
     ``position``, the field-of-view centre, is moved along ``slice_dir`` to
-    the centre of the readout's slice (:attr:`SequenceTable.slice_offset_m`).
+    the centre of the readout's slice (:attr:`SequenceTable.slice_offset_m`),
+    and along each axis to the centre of the voxel an FFT reconstructs there,
+    :meth:`SequenceTable.grid_offset_m`, so that the reconstruction grid is
+    centred on the field of view.
 
     The samples are left as received, except where
     :meth:`SequenceTable.readout_phase_modulation` gives a phase, with the
-    object at ``fov_offset_m`` when given. That is the
-    part of a shifted field of view a receiver cannot apply itself: under a
+    object at ``fov_offset_m`` when given, moved by the grid offset. That is
+    the part of a shifted field of view a receiver cannot apply itself: under a
     gradient that holds one value, a shift is a phase and a frequency offset,
     but under one that does not, the phase curves over the readout and is
-    applied here.
+    applied here; and the half voxel that centres the grid.
 
     Raises
     ------
@@ -535,6 +556,18 @@ def enrich_acquisition(
             for axis in range(3)
         ]
 
+    grid_m = table.grid_offset_m(index)
+    if grid_m.any():
+        directions = np.array(
+            [acquisition.read_dir, acquisition.phase_dir, acquisition.slice_dir],
+            dtype=np.float64,
+        )
+        acquisition.position[:] = (
+            np.asarray(acquisition.position, dtype=np.float64)
+            + 1e3 * grid_m @ directions
+        ).tolist()
+        stated = table.fov_offset_m if fov_offset_m is None else fov_offset_m
+        fov_offset_m = np.asarray(stated, dtype=np.float64) + grid_m
     modulation = table.readout_phase_modulation(index, fov_offset_m)
     if modulation is not None:
         if modulation.size != count:

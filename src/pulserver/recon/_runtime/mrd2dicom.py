@@ -461,8 +461,9 @@ class MrdDicomBuilder:
         The image's rows run along ``read_dir`` and its columns along
         ``phase_dir``, or along the meta attributes ``ImageRowDir`` and
         ``ImageColumnDir`` when it states them; MRD's ``position`` is the
-        centre of pixel ``n // 2`` along each, where an FFT places the
-        field-of-view centre. The pixels are then flipped and transposed, never
+        centre of pixel ``n // 2`` along each, as an FFT places it.
+        ``SliceLocation`` and the ``location`` quantities are taken at the
+        middle of the pixel array. The pixels are then flipped and transposed, never
         resampled, into the radiological display orientation of the plane the
         image lies closest to: an axial image with rows towards the patient's
         left and columns towards posterior, a coronal one towards left and
@@ -562,6 +563,13 @@ class MrdDicomBuilder:
             - (columns // 2) * column_spacing * read
             - (rows // 2) * row_spacing * phase
         )
+        # The middle of the pixel array, which a grid centred on the field of
+        # view puts at the prescription centre.
+        middle = (
+            first_pixel
+            + 0.5 * (columns - 1) * column_spacing * read
+            + 0.5 * (rows - 1) * row_spacing * phase
+        )
         if np.any(read) and np.any(phase):
             values, read, phase, row_spacing, column_spacing, first_pixel = _displayed(
                 values, read, phase, row_spacing, column_spacing, first_pixel
@@ -610,7 +618,7 @@ class MrdDicomBuilder:
             round(float(v), 6) for v in (*read, *phase)
         ]
         normal = np.cross(read, phase)
-        dicomDset.SliceLocation = round(float(centre @ normal), 6)
+        dicomDset.SliceLocation = round(float(middle @ normal), 6)
         self._set_diffusion(dicomDset, mrdImg)
 
         if vendor != "GE":
@@ -626,7 +634,7 @@ class MrdDicomBuilder:
             dicomDset.AcquisitionTime = f"{hour:02.0f}{minutes:02.0f}{sec:09.6f}"
         dicomDset.TriggerTime = mrdImg.physiology_time_stamp[0] / 2.5
 
-        self._state(dicomDset, _image_quantities(dicomDset, centre, normal))
+        self._state(dicomDset, _image_quantities(dicomDset, middle, normal))
 
         # ----- Update DICOM header from MRD Image MetaAttributes -----
         if meta.get("SeriesDescription") is not None:
@@ -1072,7 +1080,9 @@ def _image_quantities(
     """
     ras = np.array([-1.0, -1.0, 1.0])
     axis = int(np.argmax(np.abs(normal)))
-    location = float(centre[axis] * ras[axis])
+    # Rounded before its side is read, so a plane through the isocentre is on
+    # the positive side rather than on whichever a rounding error puts it.
+    location = round(float(centre[axis] * ras[axis]), 4) + 0.0
     letter = ("RL", "AP", "SI")[axis][0 if location >= 0 else 1]
     return {
         "slice_location": f"{float(dicomDset.SliceLocation):.6g}",

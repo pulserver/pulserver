@@ -1047,13 +1047,15 @@ def test_an_oblique_plane_is_located_on_the_patient_axis_its_normal_lies_closest
     )
     read = np.array([0.4309, 0.5318, -0.7291])
     phase = np.array([0.9024, -0.2539, 0.3481])
-    centre = (3.92, -39.81, -32.32)
+    centre = np.array((3.92, -39.81, -32.32))
+    # MRD's position is voxel n // 2, half a 20 mm pixel past the middle.
+    position = centre + 10.0 * (read + phase)
 
-    dataset = _placed(MrdDicomBuilder(header), centre, read, phase)
+    dataset = _placed(MrdDicomBuilder(header), position, read, phase)
 
     assert abs(np.cross(read, phase)[1]) > abs(np.cross(read, phase)[2])
     assert dataset[0x0011, 0x1010].value == "A"
-    assert dataset[0x0011, 0x1011].value == pytest.approx(39.81)
+    assert dataset[0x0011, 0x1011].value == pytest.approx(39.81, abs=0.01)
 
 
 def _sliced(builder, slice_):

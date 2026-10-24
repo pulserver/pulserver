@@ -580,21 +580,22 @@ def _wait_until(condition, message, timeout=DEADLINE):
 
 
 def test_a_point_off_the_centre_reconstructs_where_it_was_acquired(start_proxy, bucket):
-    """The readouts arrive demodulated by the playout, and the proxy leaves them so."""
+    """The grid is centred on the field of view: voxel n // 2 lies half a voxel past its centre."""
     _, series = bucket
     proxy = start_proxy(slots=1)
     table = series["gre2d"].table
     fov_mm = table.spaces[0].fov_mm
-    pixel_mm = (fov_mm[0] / MATRIX["nx"], fov_mm[1] / MATRIX["ny"])
-    position = 1e-3 * np.array((2 * pixel_mm[0], 3 * pixel_mm[1], 0.0))
+    pixel_mm = np.array((fov_mm[0] / MATRIX["nx"], fov_mm[1] / MATRIX["ny"]))
+    position = 1e-3 * np.array((2.5 * pixel_mm[0], 3.5 * pixel_mm[1], 0.0))
 
     def kspace(table, index):
         return point(table, index, position)
 
     received = stream(proxy.port, series["gre2d"], data=kspace)
 
+    (image,) = images(received)
     centre = (MATRIX["ny"] // 2, MATRIX["nx"] // 2)
-    assert peak(images(received)[0]) == (centre[0] + 3, centre[1] + 2)
+    assert peak(image) == (centre[0] + 3, centre[1] + 2)
 
 
 def test_a_stopped_proxy_stops_accepting_within_one_poll(tmp_path):
