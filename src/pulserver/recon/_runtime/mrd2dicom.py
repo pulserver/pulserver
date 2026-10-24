@@ -87,10 +87,6 @@ _DICTIONARY_LINE = re.compile(
     r"\(([0-9A-Fa-f]{4}),([0-9A-Fa-f]{4})\)\s+([A-Z]{2})\s+(\w+)"
 )
 
-#: A plane whose normal is this many times longer along one patient axis than
-#: along either other is named by that axis.
-_AXIAL_DOMINANCE = 1000.0
-
 
 def to_dicom_date(value: Any) -> str:
     """Return an ISMRMRD ``XmlDate`` as DICOM DA (``YYYYMMDD``), any other value as ``str``."""
@@ -134,7 +130,7 @@ def convert_string_vrs(ds: pydicom.Dataset) -> pydicom.Dataset:
 
 
 class MrdDicomBuilder:
-    r"""Converts MRD images to DICOM, numbering instances from 1.
+    r"""Converts MRD images to DICOM, numbering instances by slice position from 1.
 
     Patient, study, series, system and imaging-frequency fields are read from the
     MRD header once. Header sections that fail to convert are logged and skipped.
@@ -144,7 +140,12 @@ class MrdDicomBuilder:
     One builder serves a whole connection. Its series, told apart by
     ``image_series_index``, each have their own rescale mapping, clipping
     count, ``SeriesInstanceUID`` and ``SeriesNumber``; the instance numbers run
-    across them. The first series to arrive takes the header's series UID and
+    across them. The ``k``-th image (from 0) at MRD ``slice`` ``s`` is instance
+    ``1 + s + k * S``, ``S`` the slice positions of the header: those its
+    encoding limits state, or the partitions of its reconstruction space for a
+    3D one. The images of one pass so number in the order of their slices
+    whatever order they arrive in; a number taken already is replaced by the
+    next above every number given. The first series to arrive takes the header's series UID and
     number; each later one a UID derived from them and, on a GE system, the
     number ``100 * measurementID + k`` for the ``k``-th series after the first.
 
@@ -158,10 +159,10 @@ class MrdDicomBuilder:
     explicit tag and VR, ``(gggg,eeee)VR``. A value holds ``\`` between
     multiple values and may name, in braces, a quantity of the image it is
     written to: ``slice_location``, the image centre along the plane normal
-    (mm); ``location``, the centre along the patient axis the normal lies
-    closest to, positive towards right, anterior or superior (mm);
-    ``location_letter``, the side that location lies on (``R``/``L``,
-    ``A``/``P``, ``S``/``I``, or ``+``/``-`` for an oblique plane);
+    (mm); ``location``, the centre's coordinate on the patient axis the normal
+    lies closest to, positive towards right, anterior or superior (mm), for an
+    oblique plane too; ``location_letter``, the side that location lies on
+    (``R``/``L``, ``A``/``P``, ``S``/``I``);
     ``instance_number`` and ``series_number``; ``{{`` and ``}}`` are literal
     braces. The private dictionary is the
     file the header's ``dicom:dictionary`` entry names, in MATLAB's format, a
@@ -183,8 +184,6 @@ class MrdDicomBuilder:
     ----------
     dicomDset : pydicom.Dataset
         Template every image starts from.
-    instanceNumber : int
-        ``InstanceNumber`` of the next image.
     clipped : collections.Counter
         Pixels clipped to the stored range so far, by ``image_series_index``;
         0 for a series that has clipped none.
@@ -418,13 +417,15 @@ class MrdDicomBuilder:
         self.diffusion = diffusion_table(mrdHead)
         # Image numbers start at 1: a scanner's image database can reject a
         # C-STORE with image number 0 (A700 OutOfResources).
-        self.instanceNumber = 1
+        self._slices = _slice_positions(mrdHead)
+        self._numbered: collections.Counter[int] = collections.Counter()
+        self._used: set[int] = set()
         self.clipped: collections.Counter[int] = collections.Counter()
         self._scales: dict[int, _Scale] = {}
         self._reported: set[int] = set()
 
     def __call__(self, mrdImg: ismrmrd.Image) -> DicomWithName:
-        """Convert one image and increment :attr:`instanceNumber`.
+        """Convert one image.
 
         Returns ``DicomWithName(None, "")`` for RGB, multi-slice or multi-channel
         images. Integer pixels are stored as they are. Floating-point pixels, and
@@ -601,7 +602,7 @@ class MrdDicomBuilder:
         else:
             dicomDset.ImageType[2] = str(IMTYPE_MAPS[image_type][vendor])
 
-        self._identify(dicomDset, mrdImg.image_series_index)
+        self._identify(dicomDset, mrdImg.image_series_index, mrdImg.slice)
         dicomDset.PixelSpacing = [round(row_spacing, 6), round(column_spacing, 6)]
         dicomDset.SliceThickness = round(mrdImg.field_of_view[2], 6)
         dicomDset.ImagePositionPatient = [round(float(v), 6) for v in first_pixel]
@@ -679,11 +680,10 @@ class MrdDicomBuilder:
             f"EX{study}_{float(series):02.0f}_{description}_{float(instance):03.0f}.dcm"
         )
 
-        self.instanceNumber += 1
         return DicomWithName(dset=dicomDset, filename=fileName)
 
-    def _identify(self, dicomDset: pydicom.Dataset, index: int) -> None:
-        """Set the series UID and number of series ``index``, and the instance number."""
+    def _identify(self, dicomDset: pydicom.Dataset, index: int, slice_: int) -> None:
+        """Set the series UID and number of series ``index``, and the instance number of an image at ``slice_``."""
         if index not in self._series:
             rank = len(self._series)
             root = str(self.dicomDset.SeriesInstanceUID)
@@ -702,7 +702,13 @@ class MrdDicomBuilder:
                 number = index
             self._series[index] = (uid, number)
         dicomDset.SeriesInstanceUID, dicomDset.SeriesNumber = self._series[index]
-        dicomDset.InstanceNumber = self.instanceNumber
+        slice_ = max(int(slice_), 0)
+        number = 1 + slice_ + max(self._slices, slice_ + 1) * self._numbered[slice_]
+        if number in self._used:
+            number = max(self._used) + 1
+        self._numbered[slice_] += 1
+        self._used.add(number)
+        dicomDset.InstanceNumber = number
 
     def _state(self, dicomDset: pydicom.Dataset, quantities: dict[str, Any]) -> None:
         """Write the header's ``dicom:`` attributes that name a quantity of the image."""
@@ -735,7 +741,7 @@ class MrdDicomBuilder:
         dicomDset.PixelRepresentation = 0
         dicomDset.ConversionType = "WSD"
         dicomDset.ImageType = ["DERIVED", "SECONDARY"]
-        self._identify(dicomDset, mrdImg.image_series_index)
+        self._identify(dicomDset, mrdImg.image_series_index, mrdImg.slice)
         self._state(dicomDset, {})
         meta = ismrmrd.Meta.deserialize(mrdImg.attribute_string)
         if meta.get("SeriesDescription") is not None:
@@ -1041,6 +1047,21 @@ def _typed(vr: str, text: str) -> Any:
     return values[0] if len(values) == 1 else values
 
 
+def _slice_positions(header: Any) -> int:
+    """Return the most slice positions an encoding of ``header`` states: slices or partitions, 1 when none."""
+    positions = 1
+    for encoding in getattr(header, "encoding", None) or ():
+        limit = getattr(getattr(encoding, "encodingLimits", None), "slice", None)
+        maximum = getattr(limit, "maximum", None)
+        if maximum is not None:
+            positions = max(positions, int(maximum) + 1)
+        matrix = getattr(getattr(encoding, "reconSpace", None), "matrixSize", None)
+        depth = getattr(matrix, "z", None)
+        if depth is not None:
+            positions = max(positions, int(depth))
+    return positions
+
+
 def _image_quantities(
     dicomDset: pydicom.Dataset, centre: np.ndarray, normal: np.ndarray
 ) -> dict[str, Any]:
@@ -1050,17 +1071,9 @@ def _image_quantities(
     towards posterior, z towards superior.
     """
     ras = np.array([-1.0, -1.0, 1.0])
-    magnitude = np.abs(normal)
-    axis = int(np.argmax(magnitude))
-    others = np.delete(magnitude, axis)
-    if magnitude[axis] > _AXIAL_DOMINANCE * others.max():
-        location = float(centre[axis] * ras[axis])
-        letter = ("RL", "AP", "SI")[axis][0 if location >= 0 else 1]
-    else:
-        direction = normal * ras
-        direction = direction if direction[axis] >= 0 else -direction
-        location = float((centre * ras) @ direction)
-        letter = "+" if location >= 0 else "-"
+    axis = int(np.argmax(np.abs(normal)))
+    location = float(centre[axis] * ras[axis])
+    letter = ("RL", "AP", "SI")[axis][0 if location >= 0 else 1]
     return {
         "slice_location": f"{float(dicomDset.SliceLocation):.6g}",
         "location": f"{round(location, 4):.6g}",
