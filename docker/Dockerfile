@@ -38,17 +38,13 @@ RUN pip install --no-cache-dir "$(echo /wheels/pulserver-*.whl)" \
 # installed from PyPI, where its source is.
 RUN pip install --no-cache-dir "bartorch[pyhysco]"
 
-# BrainWeb's normal brain, downloaded while the image is built, so that no
-# exam reaches BrainWeb's server; brainweb-dl reads it from BRAINWEB_DIR.
+# BrainWeb's normal brain, and the coils' field maps and VOPs that the Fields
+# workflow solves in it with mariepy, which that workflow publishes as an image
+# of those files alone, so that neither a build nor an exam reaches BrainWeb's
+# server; brainweb-dl reads the brain from BRAINWEB_DIR.
 ENV BRAINWEB_DIR=/opt/brainweb
-RUN for attempt in 1 2 3; do \
-      python -c "from pulserver.virtual import BrainWeb; BrainWeb().fractions" && break; \
-      rm -rf "$BRAINWEB_DIR"; [ "$attempt" = 3 ] && exit 1; sleep 30; \
-    done
-
-# The coils' field maps and VOPs, which the Fields workflow solves in the same
-# brain with mariepy and publishes as an image of those files alone.
-COPY --from=ghcr.io/pulserver/brainweb-fields@sha256:c102b4f2563e1a1a19ca25d9cd3b9b9d7505555041b4795310aee4725a659ddb / /console/fields/
+COPY --from=ghcr.io/pulserver/brainweb-fields@sha256:b6ca42ee0d21e16fccb77fee165f15fa7b77dc2f6073ade0ff7000c902e3acb6 /brainweb/ /opt/brainweb/
+COPY --from=ghcr.io/pulserver/brainweb-fields@sha256:b6ca42ee0d21e16fccb77fee165f15fa7b77dc2f6073ade0ff7000c902e3acb6 /fields/ /console/fields/
 
 # The limits the console's sequences design under.
 COPY docker/limits/limits.txt /console/limits.txt
