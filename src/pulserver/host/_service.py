@@ -36,6 +36,7 @@ from ..mrd._sequence import designed_chain
 from ..protocol import (
     Parameter,
     ProtocolKey,
+    UIParam,
     Validation,
     format_listing,
     format_rf_definitions,
@@ -126,9 +127,11 @@ def list_protocol(
     With ``rf_definitions``, the ``[RfDefinitions]`` block of the plugin's
     evaluation at its default protocol under ``limits`` follows it, naming the
     definitions, and the peak amplitudes, the RF layouts of later validations
-    refer to. No block follows where the evaluation states no RF layout. Where
-    it is invalid, a warning is logged and the listing is replied without the
-    block. ``limits`` is not read unless the definitions are asked for.
+    refer to. The evaluation places every explicit saturation band the plugin
+    offers, so the listing holds the band pulse a console plays without
+    listing again. No block follows where the evaluation states no RF layout.
+    Where it is invalid, a warning is logged and the listing is replied
+    without the block. ``limits`` is not read unless the definitions are asked for.
 
     Raises
     ------
@@ -520,9 +523,12 @@ def _default_rf_layout(
 ) -> RfLayout | None:
     """Return the RF layout of the plugin's evaluation at its default protocol, the RF the listing states.
 
-    ``None`` where the evaluation states none. Where it is invalid, a warning
-    that begins with ``unavailable`` is logged and the result is ``None``. The
-    evaluation is made once per variant, as last modified, and limits.
+    Every explicit saturation band the plugin offers is placed: which bands
+    play is the console's choice, made without listing again, so the pulse
+    they play must be listed whichever it places. ``None`` where the
+    evaluation states none. Where it is invalid, a warning that begins with
+    ``unavailable`` is logged and the result is ``None``. The evaluation is
+    made once per variant, as last modified, and limits.
     """
     evaluated = _default_validation(
         variant, _mtimes(variant), tuple(sorted(limits.items()))
@@ -540,7 +546,9 @@ def _default_validation(
     mtimes_ns: tuple[int, ...],  # noqa: ARG001 -- part of the key
     limits: tuple,
 ) -> Validation:
-    return _validated(variant, dict(limits), {})
+    mask = _listing(variant).get(UIParam.EXSAT_MASK)
+    placed = {} if mask is None else {UIParam.EXSAT_MASK: int(mask.range_max)}
+    return _validated(variant, dict(limits), placed)
 
 
 def _play_averages(path: Path, averages: int) -> None:
