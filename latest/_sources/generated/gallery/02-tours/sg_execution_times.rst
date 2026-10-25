@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:04.716** total execution time for 3 files **from generated/gallery/02-tours**:
+**00:06.611** total execution time for 3 files **from generated/gallery/02-tours**:
 
 .. container::
 
@@ -33,11 +33,11 @@ Computation times
      - Time
      - Mem (MB)
    * - :ref:`sphx_glr_generated_gallery_02-tours_01_protocol_resolution.py` (``01_protocol_resolution.py``)
-     - 00:03.813
-     - 0.0
-   * - :ref:`sphx_glr_generated_gallery_02-tours_03_fov_offset_enrichment.py` (``03_fov_offset_enrichment.py``)
-     - 00:00.468
+     - 00:05.497
      - 0.0
    * - :ref:`sphx_glr_generated_gallery_02-tours_02_segmentation.py` (``02_segmentation.py``)
-     - 00:00.435
+     - 00:00.564
+     - 0.0
+   * - :ref:`sphx_glr_generated_gallery_02-tours_03_fov_offset_enrichment.py` (``03_fov_offset_enrichment.py``)
+     - 00:00.549
      - 0.0

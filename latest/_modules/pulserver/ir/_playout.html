@@ -431,6 +431,8 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Literal</span>
 
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+
 <span class="kn">from</span><span class="w"> </span><span class="nn">.._accelerators</span><span class="w"> </span><span class="kn">import</span> <span class="n">require</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._convert</span><span class="w"> </span><span class="kn">import</span> <span class="n">WaveBudget</span><span class="p">,</span> <span class="n">_held</span><span class="p">,</span> <span class="n">cache_path</span>
 
@@ -588,8 +590,10 @@
 <span class="sd">    One visit per segment instance holding the largest drive one channel of a</span>
 <span class="sd">    parallel-transmit RF definition receives in its subsequence: the RF</span>
 <span class="sd">    amplitude times the channel's shim magnitude, or the amplitude alone for</span>
-<span class="sd">    a pulse with a waveform per channel. An instance that holds several is</span>
-<span class="sd">    listed once. A sequence without parallel-transmit RF has no visit.</span>
+<span class="sd">    a pulse with a waveform per channel or with one waveform and no shim,</span>
+<span class="sd">    which a sequence holding any parallel-transmit RF plays on every channel.</span>
+<span class="sd">    An instance that holds several is listed once. A sequence without</span>
+<span class="sd">    parallel-transmit RF has no visit.</span>
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
@@ -598,12 +602,57 @@
 <span class="sd">        ``segment`` (global), ``first_position`` and ``num_blocks`` of its</span>
 <span class="sd">        instance, ``rf_definition`` (local to the subsequence), ``channels``</span>
 <span class="sd">        whose largest drive it plays, the largest of them ``drive_hz``,</span>
-<span class="sd">        ``duration_us``, ``rf_pulses`` and ``readouts``: those the scan</span>
+<span class="sd">        ``duration_us``, ``interval_us`` (the shortest time between the</span>
+<span class="sd">        starts of two successive instances of its segment in the scan, 0</span>
+<span class="sd">        where it plays once), ``rf_pulses`` and ``readouts``: those the scan</span>
 <span class="sd">        acquires that NOPRESCAN does not exempt.</span>
 <span class="sd">    """</span>
     <span class="n">seq_path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">seq_path</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">require</span><span class="p">(</span><span class="s2">"prescan_tour_from_cache"</span><span class="p">)(</span>
         <span class="nb">str</span><span class="p">(</span><span class="n">cache_path</span><span class="p">(</span><span class="n">seq_path</span><span class="p">,</span> <span class="n">cache_ext</span><span class="p">)),</span> <span class="n">seq_path</span><span class="o">.</span><span class="n">stat</span><span class="p">()</span><span class="o">.</span><span class="n">st_size</span>
+    <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="channel_drives">
+<a class="viewcode-back" href="../../../generated/pulserver.ir.channel_drives.html#pulserver.ir.channel_drives">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">channel_drives</span><span class="p">(</span>
+    <span class="n">seq_path</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span> <span class="n">prescan</span><span class="p">:</span> <span class="n">Prescan</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">cache_ext</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">".pseg"</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the largest drive each transmit channel receives in the scan, or in a prescan.</span>
+
+<span class="sd">    A drive is the RF amplitude times the channel's waveform peak, times the</span>
+<span class="sd">    channel's shim magnitude under a shim; a sequence holding any</span>
+<span class="sd">    parallel-transmit RF plays a single waveform with no shim on every</span>
+<span class="sd">    channel. Without ``prescan``, over every block of the scan; with it,</span>
+<span class="sd">    over what that prescan plays: the tour's visits, when it plays the tour,</span>
+<span class="sd">    then the calibration up to the instance completing its readouts. A</span>
+<span class="sd">    prescan drives every channel as hard as the scan where no entry of</span>
+<span class="sd">    ``channel_drives(path, prescan)`` is below ``channel_drives(path)``.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    seq_path : Path | str</span>
+<span class="sd">        The first file of the chain; the cache is the file beside it.</span>
+<span class="sd">    prescan : Prescan, default=None</span>
+<span class="sd">        The prescan to read the drives of; None reads the scan's.</span>
+<span class="sd">    cache_ext : str, default='.pseg'</span>
+<span class="sd">        Extension of the cache, dot included.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    numpy.ndarray</span>
+<span class="sd">        Per transmit channel, the largest drive in Hz; one entry without</span>
+<span class="sd">        parallel-transmit RF.</span>
+<span class="sd">    """</span>
+    <span class="n">seq_path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">seq_path</span><span class="p">)</span>
+    <span class="n">calibration</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">prescan</span> <span class="ow">is</span> <span class="kc">None</span>
+        <span class="k">else</span> <span class="p">(</span><span class="n">prescan</span><span class="o">.</span><span class="n">subsequence</span><span class="p">,</span> <span class="n">prescan</span><span class="o">.</span><span class="n">readouts</span><span class="p">,</span> <span class="n">_TOURS</span><span class="p">[</span><span class="n">prescan</span><span class="o">.</span><span class="n">tour</span><span class="p">])</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">require</span><span class="p">(</span><span class="s2">"channel_drives_from_cache"</span><span class="p">)(</span>
+        <span class="nb">str</span><span class="p">(</span><span class="n">cache_path</span><span class="p">(</span><span class="n">seq_path</span><span class="p">,</span> <span class="n">cache_ext</span><span class="p">)),</span> <span class="n">seq_path</span><span class="o">.</span><span class="n">stat</span><span class="p">()</span><span class="o">.</span><span class="n">st_size</span><span class="p">,</span> <span class="n">calibration</span>
     <span class="p">)</span></div>
 
 </pre></div>

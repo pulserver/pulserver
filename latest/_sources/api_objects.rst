@@ -74,6 +74,7 @@ from.
    sample_wave
    playout
    Prescan
+   channel_drives
    prescan_tour
    gradient_stretch
    chain

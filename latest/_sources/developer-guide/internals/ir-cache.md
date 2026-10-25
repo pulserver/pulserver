@@ -220,7 +220,10 @@ A parallel-transmit sequence can open its prescan with the pTx tour
 (`pulseg_get_prescan_tour`): for every channel of every parallel-transmit RF
 definition of every subsequence, the segment instance holding the largest
 drive that channel receives, the RF amplitude times the channel's shim
-magnitude, or the amplitude alone for a pulse with a waveform per channel.
+magnitude, or the amplitude alone for a pulse with a waveform per channel. A
+sequence holding any parallel-transmit RF plays a single waveform with no shim
+on every channel at its amplitude, so such a pulse is visited for each channel
+too.
 Each instance is visited once, under the prescan's rules, whether or not it
 reads out; the tour either acquires its readouts, counted on top of the
 calibration's, or plays them unacquired. A playout reaches each visit by

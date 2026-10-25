@@ -505,15 +505,19 @@
 <p>One visit per segment instance holding the largest drive one channel of a
 parallel-transmit RF definition receives in its subsequence: the RF
 amplitude times the channel’s shim magnitude, or the amplitude alone for
-a pulse with a waveform per channel. An instance that holds several is
-listed once. A sequence without parallel-transmit RF has no visit.</p>
+a pulse with a waveform per channel or with one waveform and no shim,
+which a sequence holding any parallel-transmit RF plays on every channel.
+An instance that holds several is listed once. A sequence without
+parallel-transmit RF has no visit.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
 <dd class="field-odd"><p>Per visit, by subsequence and then stream position: <code class="docutils literal notranslate"><span class="pre">subsequence</span></code>,
 <code class="docutils literal notranslate"><span class="pre">segment</span></code> (global), <code class="docutils literal notranslate"><span class="pre">first_position</span></code> and <code class="docutils literal notranslate"><span class="pre">num_blocks</span></code> of its
 instance, <code class="docutils literal notranslate"><span class="pre">rf_definition</span></code> (local to the subsequence), <code class="docutils literal notranslate"><span class="pre">channels</span></code>
 whose largest drive it plays, the largest of them <code class="docutils literal notranslate"><span class="pre">drive_hz</span></code>,
-<code class="docutils literal notranslate"><span class="pre">duration_us</span></code>, <code class="docutils literal notranslate"><span class="pre">rf_pulses</span></code> and <code class="docutils literal notranslate"><span class="pre">readouts</span></code>: those the scan
+<code class="docutils literal notranslate"><span class="pre">duration_us</span></code>, <code class="docutils literal notranslate"><span class="pre">interval_us</span></code> (the shortest time between the
+starts of two successive instances of its segment in the scan, 0
+where it plays once), <code class="docutils literal notranslate"><span class="pre">rf_pulses</span></code> and <code class="docutils literal notranslate"><span class="pre">readouts</span></code>: those the scan
 acquires that NOPRESCAN does not exempt.</p>
 </dd>
 <dt class="field-even">Return type<span class="colon">:</span></dt>
