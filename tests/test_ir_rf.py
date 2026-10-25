@@ -368,3 +368,31 @@ def test_a_varying_pulse_is_costed_as_the_repetition_that_plays_the_strongest(
     ((definition, angle),) = read
     assert definition == max(stated, key=stated.get)
     assert angle == pytest.approx(30.0, rel=1e-3)
+
+
+def test_a_periodic_scan_is_costed_as_its_worst_repetition_instance(
+    tmp_path, scanner_build
+):
+    """The averaging span of a periodic scan is one repetition, at the angles of
+    the repetition of most RF energy, not of the first one."""
+    pulses = [
+        pp.make_block_pulse(np.pi * angle / 180, duration=2e-3, system=SYSTEM)
+        for angle in (10, 20, 40, 20)
+    ]
+    path = _written(tmp_path, pulses, repetitions=500)
+    cache = convert(
+        path, SYSTEM, vendor=VENDOR, label_column_map=LABELS, cache_ext=".cache"
+    )
+    reader = scanner_build(tmp_path, "read_rf_definitions.c", "read_rf_definitions")
+    printed = subprocess.run(
+        [str(reader), str(cache), str(path.stat().st_size)],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    angles = [float(line.split()[2]) for line in printed.splitlines()]
+    window = summary(path, SYSTEM)["subsequences"][0]["rf_window"]
+
+    assert angles == [pytest.approx(40.0, rel=1e-3)]
+    assert (window["plays"], window["counts"]) == (1, [1])
+    assert window["span_us"] == pytest.approx(7000.0)

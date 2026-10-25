@@ -289,33 +289,43 @@ extern "C"
         int subseq_idx);
 
     /**
-     * @brief The span of a subsequence's timeline in which its RF plays
-     * carry the most energy, as plays per pulse of the repetition.
+     * @brief The span of a subsequence's timeline over which its RF plays are
+     * averaged against a window, as plays per pulse of the repetition.
      *
      * Each play is placed at the start of its block, every block timed at its
      * own duration, and weighs @p weights[k], k being its pulse in the
-     * repetition as pulseg_get_rf_array() orders them. Of the half-open spans
-     * of @p window_us starting at a play, the one of largest total weight is
-     * taken, the earliest on a tie; a subsequence shorter than the span plays
-     * whole inside it. Two passes over the execution stream, no allocation.
+     * repetition as pulseg_get_rf_array() orders them. Where the
+     * hyper-repetition repeats and is shorter than @p window_us, it is the
+     * span: every window averages what it does, and weighed by
+     * pulseg_get_rf_array(), every repetition plays at the worst repetition
+     * instance's amplitudes. Otherwise a subsequence no
+     * longer than the window is the span. Otherwise, of the half-open spans of
+     * @p window_us starting at a play, or ending at the subsequence's end, the
+     * one of largest total weight is taken, the earliest on a tie, and rounded
+     * out to whole segment instances. Three passes over the execution stream,
+     * no allocation.
      *
      * @param[in]  coll         Loaded collection, with its execution stream.
      * @param[in]  subseq_idx   Subsequence index.
-     * @param[in]  window_us    Span, us; > 0.
+     * @param[in]  timing       Its pulseg_get_tr_timing().
+     * @param[in]  window_us    Averaging window, us; > 0.
      * @param[in]  weights      Energy of one play of each pulse of the repetition.
      * @param[in]  num_weights  Pulses in the repetition.
      * @param[out] counts       num_weights entries: plays of each pulse in the span.
      * @param[out] start_us     Where the span starts; may be NULL.
+     * @param[out] span_us      Its duration, the one to average over; may be NULL.
      * @return Plays in the span (0 without RF), or a negative error code.
      */
     int pulseg_get_rf_window(
         const pulseg_collection *coll,
         int subseq_idx,
+        const pulseg_tr_timing *timing,
         double window_us,
         const double *weights,
         int num_weights,
         int *counts,
-        double *start_us);
+        double *start_us,
+        double *span_us);
 
     /**
      * @brief Return decompressed RF magnitude waveform (multi-channel).

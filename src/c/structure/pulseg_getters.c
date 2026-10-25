@@ -969,23 +969,61 @@ static int rf_play_walk_next(rf_play_walk *w)
     return 0;
 }
 
+/* Move @p *from_us back to the start of the segment instance holding it, and
+ * @p *to_us on to the end of the instance it falls in, or to the stream's end.
+ * Consecutive instances of one segment part every num_blocks positions; a
+ * position without a segment is an instance of its own. */
+static void round_to_instances(const pulseg_sequence_descriptor *desc, double *from_us, double *to_us)
+{
+    double t = 0.0, start;
+    int n = 0, count, blocks, local, from_done = 0;
+
+    while (n < desc->exec_stream_len)
+    {
+        local = pulseg__exec_seg_id(desc, n);
+        blocks = (local >= 0 && local < desc->num_unique_segments)
+            ? desc->segment_definitions[local].num_blocks
+            : 1;
+        start = t;
+        count = 0;
+        do
+        {
+            t += (double)pulseg__played_duration_us(desc, pulseg__exec_block_idx(desc, n));
+            ++count;
+            ++n;
+        } while (count < blocks && n < desc->exec_stream_len && pulseg__exec_seg_id(desc, n) == local);
+        if (!from_done && *from_us < t)
+        {
+            *from_us = start;
+            from_done = 1;
+        }
+        if (t >= *to_us)
+            break;
+    }
+    *to_us = t;
+}
+
 int pulseg_get_rf_window(
     const pulseg_collection *coll,
     int subseq_idx,
+    const pulseg_tr_timing *timing,
     double window_us,
     const double *weights,
     int num_weights,
     int *counts,
-    double *start_us)
+    double *start_us,
+    double *span_us)
 {
     const pulseg_sequence_descriptor *desc;
     rf_play_walk lead, lag;
     int have_lead, k, plays = 0;
-    double sum = 0.0, best = -1.0, best_start = 0.0;
+    double sum = 0.0, best = -1.0, from = 0.0, to;
 
     if (start_us)
         *start_us = 0.0;
-    if (!coll || (num_weights > 0 && (!weights || !counts)))
+    if (span_us)
+        *span_us = 0.0;
+    if (!coll || !timing || (num_weights > 0 && (!weights || !counts)))
         return PULSEG_ERR_NULL_POINTER;
     desc = timed_subsequence(coll, subseq_idx);
     if (!desc || num_weights < 0 || !(window_us > 0.0))
@@ -995,40 +1033,57 @@ int pulseg_get_rf_window(
     for (k = 0; k < num_weights; ++k)
         counts[k] = 0;
 
-    /* The densest span starts at a play: slide its start over the plays and
-     * its end ahead of them, each walk passing over the stream once. */
-    rf_play_walk_start(&lead, desc);
-    rf_play_walk_start(&lag, desc);
-    have_lead = rf_play_walk_next(&lead);
-    while (rf_play_walk_next(&lag))
+    if (timing->hyper_copies > 0 && timing->hyper_copies < timing->num_copies &&
+        timing->hyper_us < window_us)
+        to = timing->hyper_us; /* every hyper-repetition plays the same */
+    else if (timing->played_us <= window_us)
+        to = timing->played_us;
+    else
     {
-        while (have_lead && lead.at_us < lag.at_us + window_us)
+        /* The densest span starts at a play: slide its start over the plays
+         * and its end ahead of them, each walk passing over the stream once. */
+        rf_play_walk_start(&lead, desc);
+        rf_play_walk_start(&lag, desc);
+        have_lead = rf_play_walk_next(&lead);
+        while (rf_play_walk_next(&lag))
         {
-            if (lead.position >= num_weights)
-                return PULSEG_ERR_INVALID_ARGUMENT;
-            sum += weights[lead.position];
-            have_lead = rf_play_walk_next(&lead);
+            while (have_lead && lead.at_us < lag.at_us + window_us)
+            {
+                if (lead.position >= num_weights)
+                    return PULSEG_ERR_INVALID_ARGUMENT;
+                sum += weights[lead.position];
+                have_lead = rf_play_walk_next(&lead);
+            }
+            if (sum > best)
+            {
+                best = sum;
+                from = lag.at_us;
+            }
+            sum -= weights[lag.position];
         }
-        if (sum > best)
-        {
-            best = sum;
-            best_start = lag.at_us;
-        }
-        sum -= weights[lag.position];
+        if (best < 0.0)
+            return 0; /* no RF */
+        /* A span past the stream's end holds no more than the one ending there. */
+        if (from + window_us > timing->played_us)
+            from = timing->played_us - window_us;
+        to = from + window_us;
+        round_to_instances(desc, &from, &to);
     }
-    if (best < 0.0)
-        return 0; /* no RF */
 
     rf_play_walk_start(&lag, desc);
-    while (rf_play_walk_next(&lag) && lag.at_us < best_start + window_us)
+    while (rf_play_walk_next(&lag) && lag.at_us < to)
     {
-        if (lag.at_us < best_start)
+        if (lag.at_us < from)
             continue;
+        if (lag.position >= num_weights)
+            return PULSEG_ERR_INVALID_ARGUMENT;
         counts[lag.position]++;
         plays++;
     }
     if (start_us)
-        *start_us = best_start;
+        *start_us = from;
+    if (span_us)
+        *span_us = to - from;
     return plays;
 }
 

@@ -129,8 +129,8 @@ py::dict tr_timing(const pulseg_collection *coll, int subseq_idx)
     return out;
 }
 
-/* The 10 s span of one subsequence holding the most RF plays, every pulse of
- * its repetition weighed alike. */
+/* The span one subsequence's RF plays are averaged over against 10 s, every
+ * pulse of its repetition weighed alike. */
 py::dict rf_window(const pulseg_collection *coll, int subseq_idx)
 {
     pulseg_rf_stats *pulses = NULL;
@@ -140,14 +140,17 @@ py::dict rf_window(const pulseg_collection *coll, int subseq_idx)
     require(num, "RF array");
     std::vector<double> weights((size_t)num, 1.0);
     std::vector<int> counts((size_t)std::max(num, 1), 0);
-    double start_us = 0.0;
+    pulseg_tr_timing timing;
+    require(pulseg_get_tr_timing(coll, &timing, subseq_idx), "TR timing");
+    double start_us = 0.0, span_us = 0.0;
     const int plays = pulseg_get_rf_window(
-        coll, subseq_idx, 10.0e6, weights.data(), num, counts.data(), &start_us);
+        coll, subseq_idx, &timing, 10.0e6, weights.data(), num, counts.data(), &start_us, &span_us);
     require(plays, "RF window");
     counts.resize((size_t)num);
     py::dict out;
     out["plays"] = plays;
     out["start_us"] = start_us;
+    out["span_us"] = span_us;
     out["counts"] = py::cast(counts);
     return out;
 }

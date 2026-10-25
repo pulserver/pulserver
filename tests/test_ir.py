@@ -398,7 +398,8 @@ def _reader_lines(s):
             f"shortest_copy_us {t['shortest_copy_us']:g} "
             f"longest_copy_us {t['longest_copy_us']:g} "
             f"hyper_copies {t['hyper_copies']} hyper_us {t['hyper_us']:g} "
-            f"rf_window plays {w['plays']} start_us {w['start_us']:g}"
+            f"rf_window plays {w['plays']} start_us {w['start_us']:g} "
+            f"span_us {w['span_us']:g}"
         )
         lines += [
             f"wave {i} {n} points {w['points']} peak "
