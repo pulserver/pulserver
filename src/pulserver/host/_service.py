@@ -209,8 +209,9 @@ def generate(
     the plugin's options, the plugin source, the package versions and the
     limits is returned without designing again.
     Otherwise the sequence is designed once, under the scanner limits
-    capped by the design limits ``design_max_grad`` and ``design_max_slew``,
-    written in the logical frame, checked in the physical frame of the
+    capped by the design limits ``design_max_grad`` and ``design_max_slew``
+    and laid out with the design dead times, written in the logical frame,
+    checked in the physical frame of the
     prescription rotation against the scanner limits with
     :func:`pulserver.ir.check`, converted to the IR cache at the prescribed
     field-of-view offset, and stored in place of the scan's previous design.

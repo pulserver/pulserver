@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import cmath
+import copy
 import re
 from collections.abc import Mapping
 from pathlib import Path
@@ -24,6 +25,11 @@ _WAVE_BUDGET = {
 }
 _CHECK_PREFIXES = ("pns_", "forbidden_band_", "vop_", "acoustic_")
 _DESIGN_LIMITS = {"design_max_grad": "max_grad", "design_max_slew": "max_slew"}
+_DESIGN_TIMES = {
+    "design_rf_dead_time": "rf_dead_time",
+    "design_rf_ringdown_time": "rf_ringdown_time",
+    "design_adc_dead_time": "adc_dead_time",
+}
 _CHRONAXIE = {
     "pns_chronaxie": "chronaxie",
     "pns_rheobase": "rheobase",
@@ -134,7 +140,13 @@ def design_system(limits: Mapping[str, Any]) -> pp.Opts:
     slew rate capped by ``design_max_grad`` and ``design_max_slew`` where the
     limits carry them, in the units of ``max_grad`` and ``max_slew``. These
     are the per-logical-axis limits that a prescription rotation derates. A
-    design limit above the scanner's leaves the scanner's. The result is then
+    design limit above the scanner's leaves the scanner's.
+    ``design_rf_dead_time``, ``design_rf_ringdown_time`` and
+    ``design_adc_dead_time``, in s, are the least dead times and RF ringdown
+    time a design is laid out with: the room the playout needs around an RF
+    pulse or a readout in some layouts but not in every file, which the
+    checks therefore do not hold a sequence to. One below the scanner's
+    leaves the scanner's. The result is then
     derated by ``pypulseqpp.apply_system_derates``: the gradient amplitude,
     the slew rate and the peak B1 are designed to ``pypulseqpp.MAX_GRAD_DERATE``,
     ``MAX_SLEW_DERATE`` and ``MAX_B1_DERATE`` of them, a margin the modules
@@ -159,6 +171,11 @@ def design_system(limits: Mapping[str, Any]) -> pp.Opts:
             grad_unit="Hz/m",
             slew_unit="Hz/m/s",
         )
+    floors = _design_times(limits)
+    if floors:
+        system = copy.copy(system)
+        for name, value in floors.items():
+            setattr(system, name, max(getattr(system, name), value))
     return pp.apply_system_derates(system)
 
 
@@ -169,9 +186,16 @@ def _scanner_arguments(limits: Mapping[str, Any]) -> dict[str, Any]:
 
 def _design_ceilings(limits: Mapping[str, Any]) -> dict[str, float]:
     """Return the design limits as ``pypulseqpp.Opts`` arguments, ``max_grad`` and ``max_slew``."""
-    unknown = [k for k in limits if k.startswith("design_") and k not in _DESIGN_LIMITS]
+    unknown = [
+        k
+        for k in limits
+        if k.startswith("design_")
+        and k not in _DESIGN_LIMITS
+        and k not in _DESIGN_TIMES
+    ]
     if unknown:
         raise ValueError(f"not design limits: {unknown}")
+    _design_times(limits)
     ceilings = {}
     for key, name in _DESIGN_LIMITS.items():
         if key in limits:
@@ -180,6 +204,20 @@ def _design_ceilings(limits: Mapping[str, Any]) -> dict[str, float]:
                 raise ValueError(f"the design limit {key} must be positive: {value}")
             ceilings[name] = value
     return ceilings
+
+
+def _design_times(limits: Mapping[str, Any]) -> dict[str, float]:
+    """Return the design dead times as ``pypulseqpp.Opts`` attributes, in s."""
+    floors = {}
+    for key, name in _DESIGN_TIMES.items():
+        if key in limits:
+            value = float(limits[key])
+            if not value >= 0.0:
+                raise ValueError(
+                    f"the design limit {key} must not be negative: {value}"
+                )
+            floors[name] = value
+    return floors
 
 
 def check_limits(limits: Mapping[str, Any]) -> ir.CheckLimits:

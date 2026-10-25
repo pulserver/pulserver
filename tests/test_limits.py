@@ -319,12 +319,45 @@ def test_the_design_margin_is_taken_once():
     )
 
 
+def test_design_dead_times_reach_the_design_and_leave_the_checks_the_scanners():
+    limits = {
+        **SCANNER,
+        "adc_dead_time": 10e-6,
+        "design_rf_dead_time": 176e-6,
+        "design_rf_ringdown_time": 20e-6,
+        "design_adc_dead_time": 4e-6,
+    }
+    design, scanner = design_system(limits), split_limits(limits)[0]
+    assert (design.rf_dead_time, design.rf_ringdown_time, design.adc_dead_time) == (
+        176e-6,
+        20e-6,
+        10e-6,
+    )
+    assert (scanner.rf_dead_time, scanner.rf_ringdown_time, scanner.adc_dead_time) == (
+        0.0,
+        0.0,
+        10e-6,
+    )
+
+
+def test_a_file_is_not_held_to_the_design_dead_times(tmp_path):
+    limits = {**SCANNER, "design_rf_dead_time": 176e-6, "design_adc_dead_time": 4e-6}
+    seq = pp.Sequence(pp.Opts(**SCANNER))
+    seq.add_block(pp.make_block_pulse(flip_angle=0.1, duration=20e-6))
+    seq.add_block(pp.make_adc(num_samples=64, dwell=10e-6))
+    seq.write(tmp_path / "file.seq")
+    assert ir.check(tmp_path / "file.seq", split_limits(limits)[0]) == []
+    scanner = split_limits({**SCANNER, "rf_dead_time": 176e-6})[0]
+    assert ir.check(tmp_path / "file.seq", scanner) != []
+
+
 @pytest.mark.parametrize(
     ("limits", "message"),
     [
         ({"design_max_rf": 10.0}, "not design limits"),
         ({"design_max_slew": 0.0}, "positive"),
         ({"design_max_grad": -20.0}, "positive"),
+        ({"design_adc_dead_time": -1e-6}, "negative"),
     ],
 )
 def test_design_limits_that_cannot_be_read_are_refused(limits, message):
