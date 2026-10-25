@@ -81,12 +81,15 @@ def _designed_trajectory(seq, rotation=None):
     )
 
 
-def _ideal(seq, phantom, field_t=None, off_resonance_hz=0.0, longitudinal=None):
+def _ideal(
+    seq, phantom, field_t=None, off_resonance_hz=0.0, longitudinal=None, centre_m=None
+):
     """What an unshifted, unrotated prescription acquires of ``phantom``, one array per readout.
 
     Each chemical shift precesses at its frequency as the files time their RF
     pulses, with ``longitudinal[shift]`` of its magnetization, all of it by
-    default.
+    default. ``centre_m``, along the logical axes, demodulates the samples to
+    that field-of-view centre rather than the isocentre.
     """
     k = _designed_trajectory(seq)
     accrued = np.concatenate([precession(sequence) for _, sequence in read_chain(seq)])
@@ -99,6 +102,8 @@ def _ideal(seq, phantom, field_t=None, off_resonance_hz=0.0, longitudinal=None):
         )
         for shift in phantom.shifts_ppm
     )
+    if centre_m is not None:
+        signal = signal * np.exp(2j * np.pi * (np.asarray(centre_m) @ k))
     sizes = [
         int(sequence.get_block(index).adc.num_samples)
         for _, sequence in read_chain(seq)
@@ -603,15 +608,26 @@ def _scan(proxy, tmp_path, rotation, readouts=None):
 def test_a_virtual_scan_reconstructs_the_phantom_where_it_is_prescribed(
     proxy, tmp_path, rotation
 ):
-    """The phantom posed as prescribed is imaged as at the isocentre and placed where it is."""
+    """The phantom posed as prescribed is imaged as at the isocentre and placed where it is.
+
+    The reconstruction grid is centred on the field of view, so its voxel
+    n // 2 lies half a voxel past the prescribed centre along both in-plane
+    axes, and the content moves with it.
+    """
     seq, received = _scan(proxy, tmp_path, rotation)
     (image,) = [item for item in received if isinstance(item, ismrmrd.Image)]
     reconstructed = np.squeeze(np.abs(image.data)).astype(float)
-    expected = _image(_ideal(seq, phantom()), MATRIX)
+    fov = pp.Sequence()
+    fov.read(str(seq))
+    half_voxel = np.array([*fov.definitions["FOV"][:2], 0.0]) / (2 * MATRIX)
+    half_voxel[2] = 0.0
+    expected = _image(_ideal(seq, phantom(), centre_m=half_voxel), MATRIX)
     reconstructed /= reconstructed.max()
     expected /= expected.max()
     assert np.linalg.norm(reconstructed - expected) / np.linalg.norm(expected) < 1e-3
-    np.testing.assert_allclose(image.position, 1e3 * rotation @ OFFSET, atol=1e-4)
+    np.testing.assert_allclose(
+        image.position, 1e3 * rotation @ (OFFSET + half_voxel), atol=1e-4
+    )
     for direction, axis in zip(
         (image.read_dir, image.phase_dir, image.slice_dir), rotation.T, strict=True
     ):

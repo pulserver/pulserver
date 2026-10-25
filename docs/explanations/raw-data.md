@@ -44,6 +44,9 @@ before and after.
 - **Applies the field-of-view phase the scanner's offsets cannot, and any later position change in the header.**
 
   Code: {mod}`pulserver.proxy`. Tests: *a curving readout carries the phase its receiver cannot apply*; *a steady readout needs no curve*; *a stated position away from the converted shift adds its whole phase* (`test_enrich.py`).
+- **Centres the reconstruction grid on the field of view, voxel centres symmetric about the prescribed centre.**
+
+  Code: `SequenceTable.grid_offset_m`. Tests: *the reconstruction grid is centred half a voxel from an fft one* (`test_enrich.py`); *a point off the centre reconstructs where it was acquired* (`test_proxy.py`).
 - **Writes TR, TE, TI and flip angles into the header, measuring the ones the sequence does not define.**
 
   Code: {mod}`pulserver.mrd`. Tests: *te and tr a sequence does not define are the ones pypulseqpp measures*; *the header lists every flip angle the sequence plays* (`test_mrd_sequence.py`, `test_enrich.py`).

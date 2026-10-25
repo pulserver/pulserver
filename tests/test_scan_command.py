@@ -164,7 +164,15 @@ def test_a_headless_scan_streams_a_generated_design_to_a_proxy_and_keeps_its_ima
         dataset.close()
     assert np.abs(image.data).max() > 0.0
     rotation = ORIENTATIONS["sagittal"]
-    np.testing.assert_allclose(image.position, (0.0, 12.0, -8.0))
+    # Voxel n // 2 of the centred grid lies half a voxel past the prescribed
+    # centre along the read and phase axes.
+    fov = pp.Sequence()
+    fov.read(str(next((tmp_path / "designs").rglob("sequence.seq"))))
+    half_voxel_mm = 1e3 * np.array([*fov.definitions["FOV"][:2], 0.0]) / (2 * 32)
+    half_voxel_mm[2] = 0.0
+    np.testing.assert_allclose(
+        image.position, np.add((0.0, 12.0, -8.0), rotation @ half_voxel_mm), atol=1e-4
+    )
     for direction, axis in zip(
         (image.read_dir, image.phase_dir, image.slice_dir), rotation.T, strict=True
     ):

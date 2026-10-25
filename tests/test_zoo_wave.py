@@ -49,13 +49,14 @@ class Images(PicsRecon):
         return result
 
 
-def _slab():
-    """Ellipses stacked along z inside the central half of the slab, seen by four coils."""
+def _slab(centre):
+    """Ellipses stacked along z inside the central half of the slab, about ``centre``, seen by four coils."""
+    x, y, z0 = centre
     ellipses = [
-        virtual.Ellipse((0.0, 0.0, z), (0.07, 0.05), 0.3, 1.0 - 4.0 * abs(z))
+        virtual.Ellipse((x, y, z0 + z), (0.07, 0.05), 0.3, 1.0 - 4.0 * abs(z))
         for z in np.linspace(-0.03, 0.03, 7)
     ]
-    ellipses.append(virtual.Ellipse((0.03, 0.02, 0.0), (0.02, 0.015), 0.0, 0.5))
+    ellipses.append(virtual.Ellipse((x + 0.03, y + 0.02, z0), (0.02, 0.015), 0.0, 0.5))
     return virtual.Phantom(ellipses, coils=4)
 
 
@@ -67,7 +68,11 @@ def _reconstructed(directory, wave, device):
     store = DesignStore(directory / "designs", "scan")
     wave = {f"user{OPTIONS['wave']['user']}_value": int(wave)}
     design = generate(store, "gre3d", PROTOCOL | wave, plugins=plugins)
-    acquired = acquire(store.directory(design) / "sequence.seq", _slab())
+    seq = store.directory(design) / "sequence.seq"
+    # The phantom sits on the voxel centres of the centred reconstruction grid,
+    # half a voxel from the field-of-view centre, as the tolerance assumes.
+    table = DesignCache(directory / "designs").read(seq.parent).table
+    acquired = acquire(seq, _slab(table.grid_offset_m(0)))
     virtual.record(directory / "raw.h5", store.scan, design, acquired)
 
     dataset = ismrmrd.Dataset(str(directory / "raw.h5"), "dataset")

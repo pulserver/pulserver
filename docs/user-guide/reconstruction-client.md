@@ -86,8 +86,8 @@ of the image it is written into; `{{` and `}}` are literal braces:
 | Name | Value |
 | --- | --- |
 | `slice_location` | The image centre along the plane normal, in mm: the `SliceLocation` written by default |
-| `location` | The image centre along the patient axis the normal lies closest to, in mm, positive towards right, anterior or superior; for an oblique plane, along the normal turned towards those |
-| `location_letter` | The side `location` lies on: `R` or `L`, `A` or `P`, `S` or `I`, and `+` or `-` for an oblique plane |
+| `location` | The image centre's coordinate on the patient axis the normal lies closest to, in mm, positive towards right, anterior or superior; an oblique plane is located on that axis too |
+| `location_letter` | The side `location` lies on: `R` or `L`, `A` or `P`, `S` or `I` |
 | `instance_number`, `series_number` | The image's `InstanceNumber` and `SeriesNumber` |
 
 An attribute that resolves to no tag, for want of the dictionary, is logged and
@@ -103,14 +103,24 @@ noise scans and navigators included, and no other.
 | Field | Client | Proxy |
 | --- | --- | --- |
 | `number_of_samples` | The sample count of the readout's ADC event | Checked |
-| `active_channels`, data | The samples, demodulated by each ADC's frequency and phase offsets | Multiplied by the phase a field-of-view offset adds to a readout under a moving gradient, and by any phase modulation the sequence file stores |
+| `active_channels`, data | The samples, demodulated by each ADC's frequency and phase offsets | Multiplied by the phase a field-of-view offset adds to a readout under a moving gradient, by the phase that centres the reconstruction grid (below), and by any phase modulation the sequence file stores |
 | `scan_counter` | 0 on every acquisition, or increasing by one from any start | Checked |
 | `flags` | None, or `LAST_IN_MEASUREMENT` on the last acquisition | Replaced |
 | `idx`, `sample_time_us`, `encoding_space_ref` | Any value | Replaced |
 | `center_sample` | Any value | Replaced, except on a readout whose k-space location does not change |
 | `trajectory_dimensions`, `traj` | Any value | Replaced on a readout whose k-space location changes, in 1/m along the sequence's gradient axes |
-| `position` | The prescribed field-of-view centre, in mm from isocentre | Moved along `slice_dir` to the centre of the readout's slice, for a stack of 2D slices whose sequence defines `SlicePositions`; an image takes it from its reference acquisition |
+| `position` | The prescribed field-of-view centre, in mm from isocentre | Moved along `slice_dir` to the centre of the readout's slice, for a stack of 2D slices whose sequence defines `SlicePositions`, and by half a voxel along each axis of even matrix size (below); an image takes it from its reference acquisition |
 | `measurement_uid`, `read_dir`, `phase_dir`, `slice_dir`, `patient_table_position`, `acquisition_time_stamp`, `physiology_time_stamp`, `user_int`, `user_float` | The scanner's values, as MRD defines them | Passed on unchanged; an image takes them from its reference acquisition |
+
+The reconstruction grid is centred on the field of view: the voxel centres of
+an axis of `n` voxels lie symmetrically about the prescribed centre, at
+`(i - (n - 1) / 2)` voxels from it. An FFT puts the centre on voxel `n // 2`
+instead, half a voxel off along an axis of even `n`, so each acquisition's
+`position` is moved by `FOV / (2 n)` along each such axis of its encoding
+space's matrix, and its samples are given the phase of the same shift of the
+field of view. Voxel `n // 2` of the reconstruction, which MRD's `position`
+locates, then lies half a voxel past the prescribed centre, and the content
+moves with it.
 
 A series is refused, and its reconstruction stopped, when an acquisition has a
 sample count other than its readout's, when the scan counters skip or repeat

@@ -107,11 +107,23 @@ def test_a_console_sequence_images_the_vials_where_the_cartesian_gradient_echo_d
 
     assert images
     if name.endswith("3d"):
-        # The vials lie in the partition at the slab's centre, of each echo or
-        # volume; a sequence without a slices entry images one volume.
+        # The vials lie at the slab's centre, of each echo or volume; a
+        # sequence without a slices entry images one volume. The grid is
+        # centred on the slab, so an even count of partitions puts the centre
+        # midway between its two central partitions.
         partitions = prescribed.get("nslices", len(images))
         assert len(images) % partitions == 0
-        images = images[partitions // 2 :: partitions]
+        volumes = [
+            np.asarray(images[start : start + partitions], dtype=float)
+            for start in range(0, len(images), partitions)
+        ]
+        middle = partitions // 2
+        images = [
+            volume[middle]
+            if partitions % 2
+            else 0.5 * (volume[middle - 1] + volume[middle])
+            for volume in volumes
+        ]
     for image in images:
         assert _correlation(reference, image.astype(float)) > AGREEMENTS.get(
             name, AGREEMENT

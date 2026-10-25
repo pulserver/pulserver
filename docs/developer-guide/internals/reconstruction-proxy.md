@@ -252,7 +252,9 @@ is applied to the stream as follows.
   on the flat top of its readout gradient alone. In a stack of slices, its
   position, the field-of-view centre the client sends, is moved along
   `slice_dir` by the `SlicePositions` entry its `SLC` indexes, to the centre of
-  its slice. When the client numbers its
+  its slice, and by half a voxel along each axis of even matrix size, its
+  samples given the phase of the same shift, so that the reconstruction grid
+  is centred on the field of view (`SequenceTable.grid_offset_m`). When the client numbers its
   acquisitions, each `scan_counter` must follow the previous one by one; a gap
   or a repeat stops the series before it is reconstructed, since every later
   row would be shifted.
