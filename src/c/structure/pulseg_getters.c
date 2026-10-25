@@ -819,7 +819,7 @@ static const pulseg_sequence_descriptor *timed_subsequence(const pulseg_collecti
 
 /* The smallest period of @p copies[0..n), a last period cut short allowed:
  * n less the longest proper prefix that is also a suffix (prefix function). */
-static int smallest_period(const long *copies, int *border, int n)
+static int smallest_period(const double *copies, int *border, int n)
 {
     int i, j;
 
@@ -837,18 +837,20 @@ static int smallest_period(const long *copies, int *border, int n)
 }
 
 /* The hyper-repetition of @p desc into @p out, whose num_copies is set: the
- * shortest run of copies whose durations repeat over the whole copies. */
+ * shortest run of copies whose durations repeat over the whole copies.  The
+ * durations are whole microseconds summed exactly in a double: a copy may be
+ * the whole scan, past the 2^31 us (36 min) a 32-bit long holds. */
 static int time_hyper_repetition(
     const pulseg_sequence_descriptor *desc,
     int size,
     pulseg_tr_timing *out)
 {
-    long *copies;
+    double *copies;
     int *border;
-    long copy = 0;
+    double copy = 0.0;
     int n, c = 0, k;
 
-    copies = (long *)PULSEG_ALLOC((size_t)out->num_copies * sizeof(long));
+    copies = (double *)PULSEG_ALLOC((size_t)out->num_copies * sizeof(double));
     border = (int *)PULSEG_ALLOC((size_t)out->num_copies * sizeof(int));
     if (!copies || !border)
     {
@@ -860,17 +862,17 @@ static int time_hyper_repetition(
     }
     for (n = 0; n < desc->exec_stream_len && c < out->num_copies; ++n)
     {
-        copy += (long)pulseg__played_duration_us(desc, pulseg__exec_block_idx(desc, n));
+        copy += (double)pulseg__played_duration_us(desc, pulseg__exec_block_idx(desc, n));
         if ((n + 1) % size == 0)
         {
             copies[c++] = copy;
-            copy = 0;
+            copy = 0.0;
         }
     }
     out->hyper_copies = smallest_period(copies, border, out->num_copies);
     out->hyper_us = 0.0;
     for (k = 0; k < out->hyper_copies; ++k)
-        out->hyper_us += (double)copies[k];
+        out->hyper_us += copies[k];
     PULSEG_FREE(copies);
     PULSEG_FREE(border);
     return PULSEG_SUCCESS;

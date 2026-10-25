@@ -25,9 +25,9 @@ its segments.
 - **Takes the repetition pypulseqpp reports, and segments within it.**
 
   Code: `src/cpp/ir/structure.cpp`. Tests: *the ir segments the repetition pypulseqpp finds*; *a hyper tr declared as pypulseqpp writes it is the repeating unit* (`test_ir_repetition.py`).
-- **Treats a sequence that does not repeat as one repetition, and refuses one longer than 15 s.**
+- **Treats a sequence that does not repeat as one repetition, however long it plays.**
 
-  Code: `SINGLE_TR_MAX_DURATION_US`. Tests: *a sequence that does not repeat is one repetition*; *a sequence that does not repeat is refused past 15 s* (`test_ir_repetition.py`).
+  Code: `src/cpp/ir/structure.cpp`. Tests: *a sequence that does not repeat is one repetition*; *a sequence that does not repeat is one repetition however long it plays* (`test_ir_repetition.py`); *a repetition past a 32 bit count of microseconds reads the same in the scanner reader* (`test_ir.py`).
 - **Cuts virtual segments only where every gradient is near zero, under a tunable grouping.**
 
   Code: {class}`~pulserver.ir.Grouping`. Tests: *the default grouping is what a conversion does unasked*; *a grouping moves the boundaries and not the gradient* (`test_ir_grouping.py`); *a gradient its file ends live may not end the repetition* (`test_ir.py`).
@@ -98,7 +98,9 @@ at the first block and is the first of these that applies:
 3. The shortest period dividing the sequence over which blocks match in
    duration and in the channels they play, so that shots with their own
    pulses or gradient shapes still repeat.
-4. Otherwise the whole file is one repetition, refused above 15 s.
+4. Otherwise the whole file is one repetition, however long. Nothing holds a
+   repetition's samples: the timing and RF costing walk its blocks and plays,
+   and gradient heating is costed over stretches of at most `PULSEG_STRETCH_US`.
 
 A slice played with its own preparation and dummy shots is therefore one
 repetition, and a block played once makes the whole file one. The segment IDs

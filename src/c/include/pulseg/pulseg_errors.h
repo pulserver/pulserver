@@ -32,7 +32,6 @@
 
 /* TR detection errors (-100 to -199) */
 #define PULSEG_ERR_TR_NO_BLOCKS -100
-#define PULSEG_ERR_TR_NO_PERIODIC_PATTERN -102
 
 /* Segmentation errors (-200 to -299) */
 #define PULSEG_ERR_SEG_NONZERO_START_GRAD -200

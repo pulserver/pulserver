@@ -137,14 +137,16 @@ def test_a_sequence_that_does_not_repeat_is_one_repetition(tmp_path):
     assert segmented(sequence)["tr_size"] == len(sequence) == 8
 
 
-def test_a_sequence_that_does_not_repeat_is_refused_past_15_s(tmp_path):
+def test_a_sequence_that_does_not_repeat_is_one_repetition_however_long_it_plays(
+    tmp_path,
+):
     sequence = read(
-        written(tmp_path, "too_long.seq", gradients_of_distinct_lengths(16, 1.0))
+        written(tmp_path, "long.seq", gradients_of_distinct_lengths(16, 1.0))
     )
-    assert sequence.repetition()[0] == len(sequence)
-    assert sequence.duration()[0] > 15.0
-    with pytest.raises(ValueError, match="No periodic TR pattern found"):
-        segmented(sequence)
+    assert sequence.duration()[0] > 16.0
+    unit = segmented(sequence)
+    assert unit["tr_size"] == len(sequence) == sequence.repetition()[0]
+    assert unit["tr_duration_us"] == pytest.approx(sequence.duration()[0] * 1e6)
 
 
 def test_a_repetition_that_does_not_start_at_the_first_block_is_refused(
