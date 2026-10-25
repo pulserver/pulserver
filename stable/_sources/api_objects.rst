@@ -74,7 +74,9 @@ from.
    sample_wave
    playout
    Prescan
-   prescan_tour
+   channel_drives
+   receive_calibration
+   receive_calibration_sequence
    gradient_stretch
    chain
    cache_path
