@@ -1731,6 +1731,32 @@ float **pulseg_get_rf_phase(
     return get_rf_def_shape(desc, num_channels, num_samples, rdef, PULSEG__RF_SHAPE_PHASE);
 }
 
+int pulseg__rf_channel_peaks(
+    const pulseg_sequence_descriptor *desc,
+    const pulseg_rf_definition *rdef,
+    float *peaks,
+    int max_channels)
+{
+    int nch = 0, ns = 0, ch, k;
+    float **mag = get_rf_def_shape(desc, &nch, &ns, rdef, PULSEG__RF_SHAPE_MAG);
+
+    if (!mag)
+        return 0;
+    for (ch = 0; ch < nch; ++ch)
+    {
+        float peak = 0.0f;
+
+        for (k = 0; k < ns; ++k)
+            if ((float)fabs((double)mag[ch][k]) > peak)
+                peak = (float)fabs((double)mag[ch][k]);
+        if (ch < max_channels)
+            peaks[ch] = peak;
+        PULSEG_FREE(mag[ch]);
+    }
+    PULSEG_FREE(mag);
+    return nch < max_channels ? nch : max_channels;
+}
+
 float *pulseg_get_rf_time_us(const pulseg_collection *coll, int seg_idx, int blk_idx)
 {
     const pulseg_sequence_descriptor *desc;

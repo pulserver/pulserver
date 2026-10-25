@@ -1008,6 +1008,14 @@ int pulseg__exec_seg_id(const pulseg_sequence_descriptor *desc, int n);
 int pulseg__exec_seg_run_start(const pulseg_sequence_descriptor *desc, int n);
 int pulseg__exec_tr_start(const pulseg_sequence_descriptor *desc, int n);
 int pulseg__build_seg_runs(pulseg_sequence_descriptor *desc);
+/* The peak of each channel's magnitude waveform of RF definition @p rdef, in
+ * the waveform's normalised units, into @p peaks; returns the channels written
+ * (at most @p max_channels), 0 when the shape cannot be read. */
+int pulseg__rf_channel_peaks(
+    const pulseg_sequence_descriptor *desc,
+    const pulseg_rf_definition *rdef,
+    float *peaks,
+    int max_channels);
 long pulseg__verify_exec_runs(const pulseg_sequence_descriptor *desc);
 void pulseg__free_exec_stream_scratch(pulseg_sequence_descriptor *desc);
 int pulseg__build_label_table(pulseg_sequence_descriptor *desc, const pulseq_file *seq);

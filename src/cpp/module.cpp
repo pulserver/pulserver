@@ -992,7 +992,7 @@ PYBIND11_MODULE(_ext, module)
                 throw py::value_error("the prescan tour could not be listed: " + std::to_string(count));
             std::vector<int> subsequence, segment, first, blocks, definition, channels, rf, readouts;
             std::vector<float> drive;
-            std::vector<long> duration;
+            std::vector<long> duration, interval;
             for (int i = 0; i < count; ++i)
             {
                 subsequence.push_back(visits[i].subsequence);
@@ -1003,6 +1003,7 @@ PYBIND11_MODULE(_ext, module)
                 channels.push_back(visits[i].channels);
                 drive.push_back(visits[i].drive_hz);
                 duration.push_back(visits[i].duration_us);
+                interval.push_back(visits[i].interval_us);
                 rf.push_back(visits[i].rf_pulses);
                 readouts.push_back(visits[i].readouts);
             }
@@ -1018,11 +1019,31 @@ PYBIND11_MODULE(_ext, module)
             out["channels"] = as_array(channels, n);
             out["drive_hz"] = as_array(drive, n);
             out["duration_us"] = as_array(duration, n);
+            out["interval_us"] = as_array(interval, n);
             out["rf_pulses"] = as_array(rf, n);
             out["readouts"] = as_array(readouts, n);
             return out;
         },
         "List the pTx prescan tour of a written cache.");
+
+    module.def(
+        "channel_drives_from_cache",
+        [](const std::string &cache_path, int source_size, const std::array<int, 3> &prescan)
+        {
+            const Collection coll = load(cache_path, source_size);
+            pulseg_playout_options options = PULSEG_PLAYOUT_OPTIONS_INIT;
+            options.prescan_subsequence = prescan[0];
+            options.prescan_readouts = prescan[1];
+            options.tour = prescan[2];
+            std::vector<float> drive(PULSEG_MAX_RF_SHIM_CHANNELS);
+            const int channels =
+                pulseg_get_channel_drives(coll.get(), &options, drive.data(), PULSEG_MAX_RF_SHIM_CHANNELS);
+            if (channels < 0)
+                throw py::value_error("the channel drives could not be read: " + std::to_string(channels));
+            drive.resize(static_cast<size_t>(std::min(channels, PULSEG_MAX_RF_SHIM_CHANNELS)));
+            return as_array(drive, {static_cast<py::ssize_t>(drive.size())});
+        },
+        "The largest drive each transmit channel receives in the scan or a prescan of a written cache.");
 
     module.def(
         "gradient_stretch_from_cache",

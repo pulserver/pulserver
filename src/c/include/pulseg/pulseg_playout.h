@@ -221,6 +221,9 @@ extern "C"
         int channels;       /**< channels whose largest drive it plays     */
         float drive_hz;     /**< the largest of those drives, in Hz        */
         long duration_us;   /**< its duration                              */
+        long interval_us;   /**< shortest time between the starts of two
+                                 successive instances of its segment in
+                                 its subsequence, 0 where it plays once    */
         int rf_pulses;      /**< RF blocks it plays                        */
         int readouts;       /**< readouts it acquires outside prescan that
                                  NOPRESCAN does not exempt                 */
@@ -231,7 +234,10 @@ extern "C"
      *        drive of every parallel-transmit RF definition.
      *
      * An RF definition is parallel-transmit where it plays a waveform per
-     * channel, or plays under an RF shim of more than one channel.  Visits
+     * channel, or plays under an RF shim of more than one channel.  A
+     * collection holding one is parallel-transmit throughout: there, a single
+     * waveform with no shim plays on every channel at the instance's
+     * amplitude, and is visited for each.  Visits
      * are listed by subsequence, then by first position; one instance that
      * holds the largest drive of several channels, or of several
      * definitions, is listed once, for the first definition, with the
@@ -245,6 +251,30 @@ extern "C"
      * @return The number of visits (>= 0), or a negative error code.
      */
     int pulseg_get_prescan_tour(const pulseg_collection *coll, pulseg_prescan_visit **out_visits);
+
+    /**
+     * @brief The largest drive each transmit channel receives in the scan, or
+     *        in a prescan.
+     *
+     * A drive is the RF amplitude times the channel's waveform peak, times
+     * the channel's shim magnitude under a shim; in a parallel-transmit
+     * collection a single waveform with no shim drives every channel.  With
+     * @p options NULL or naming no prescan subsequence, over every block of
+     * the scan; otherwise over what that prescan plays: the tour's visits
+     * when it plays the tour, then the calibration from the subsequence's
+     * start to the instance completing its readouts.  Comparing the two says
+     * whether a prescan drives every channel as hard as the scan does.
+     *
+     * @param[out] drive_hz  Per channel, in Hz; @p max_channels entries are
+     *                       written, 0 beyond the collection's channels.
+     * @return The collection's transmit channels (1 without
+     *         parallel-transmit RF), or a negative error code.
+     */
+    int pulseg_get_channel_drives(
+        const pulseg_collection *coll,
+        const pulseg_playout_options *options,
+        float *drive_hz,
+        int max_channels);
 
     /**
      * @brief The first stage: prepare every segment and load resident waves.
