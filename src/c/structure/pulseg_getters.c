@@ -969,40 +969,6 @@ static int rf_play_walk_next(rf_play_walk *w)
     return 0;
 }
 
-/* Move @p *from_us back to the start of the segment instance holding it, and
- * @p *to_us on to the end of the instance it falls in, or to the stream's end.
- * Consecutive instances of one segment part every num_blocks positions; a
- * position without a segment is an instance of its own. */
-static void round_to_instances(const pulseg_sequence_descriptor *desc, double *from_us, double *to_us)
-{
-    double t = 0.0, start;
-    int n = 0, count, blocks, local, from_done = 0;
-
-    while (n < desc->exec_stream_len)
-    {
-        local = pulseg__exec_seg_id(desc, n);
-        blocks = (local >= 0 && local < desc->num_unique_segments)
-            ? desc->segment_definitions[local].num_blocks
-            : 1;
-        start = t;
-        count = 0;
-        do
-        {
-            t += (double)pulseg__played_duration_us(desc, pulseg__exec_block_idx(desc, n));
-            ++count;
-            ++n;
-        } while (count < blocks && n < desc->exec_stream_len && pulseg__exec_seg_id(desc, n) == local);
-        if (!from_done && *from_us < t)
-        {
-            *from_us = start;
-            from_done = 1;
-        }
-        if (t >= *to_us)
-            break;
-    }
-    *to_us = t;
-}
-
 int pulseg_get_rf_window(
     const pulseg_collection *coll,
     int subseq_idx,
@@ -1067,7 +1033,6 @@ int pulseg_get_rf_window(
         if (from + window_us > timing->played_us)
             from = timing->played_us - window_us;
         to = from + window_us;
-        round_to_instances(desc, &from, &to);
     }
 
     rf_play_walk_start(&lag, desc);

@@ -97,11 +97,11 @@ def test_a_scan_shorter_than_the_window_plays_whole_inside_it(tmp_path):
     assert w["span_us"] == pytest.approx(x["tr_timing"]["played_us"])
 
 
-def test_a_dense_stretch_is_found_and_rounded_out_to_whole_instances(tmp_path):
+def test_a_dense_stretch_is_found_and_costed_over_the_window_alone(tmp_path):
     # 12 s of sparse pulses, then 18 s of dense ones every 30 ms, each pulse
     # led by a spoiler in its segment: the densest 10 s starts at the first
-    # dense pulse, 1 ms into its instance, and ends in the delay of the 334th,
-    # whose end closes the span.
+    # dense pulse, 1 ms into its instance, and holds 334 pulses. Plays are
+    # costed by count, so the span is not widened to whole instances.
     spoiler = pp.make_trapezoid("z", area=1000, duration=1e-3, system=SYSTEM)
     sequence = pp.Sequence(SYSTEM)
     for wait, repeats in ((0.998, 12), (0.028, 600)):
@@ -113,8 +113,8 @@ def test_a_dense_stretch_is_found_and_rounded_out_to_whole_instances(tmp_path):
     sequence.write(path)
     w = subsequence(path)["rf_window"]
     assert w["plays"] == 334
-    assert w["start_us"] == pytest.approx(12.0e6)
-    assert w["span_us"] == pytest.approx(334 * 30000.0)
+    assert w["start_us"] == pytest.approx(12.001e6)
+    assert w["span_us"] == pytest.approx(10.0e6)
 
 
 def _played(path, waits):

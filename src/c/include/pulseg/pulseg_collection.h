@@ -301,9 +301,9 @@ extern "C"
      * instance's amplitudes. Otherwise a subsequence no
      * longer than the window is the span. Otherwise, of the half-open spans of
      * @p window_us starting at a play, or ending at the subsequence's end, the
-     * one of largest total weight is taken, the earliest on a tie, and rounded
-     * out to whole segment instances. Three passes over the execution stream,
-     * no allocation.
+     * one of largest total weight is taken, the earliest on a tie: plays are
+     * costed by count, so the span needs no whole segment instances. Two
+     * passes over the execution stream, no allocation.
      *
      * @param[in]  coll         Loaded collection, with its execution stream.
      * @param[in]  subseq_idx   Subsequence index.
