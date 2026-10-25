@@ -14,7 +14,7 @@ from ._convert import (
     prescribe,
     summary,
 )
-from ._playout import Prescan, playout, prescan_tour
+from ._playout import Prescan, channel_drives, playout, prescan_tour
 from ._source import played_rf
 from ._vendor import read_vendor
 from ._waves import gradient_stretch, plan_waves, sample_wave
@@ -31,6 +31,7 @@ __all__ = [
     "WaveBudget",
     "cache_path",
     "chain",
+    "channel_drives",
     "check",
     "convert",
     "gradient_stretch",

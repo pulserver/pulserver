@@ -262,11 +262,14 @@ typedef struct tour_best
 } tour_best;
 
 /* The channels one RF occurrence drives, and the shim it plays under, NULL
- * for none: its shim's, or its waveform's. */
+ * for none: its shim's, or its waveform's.  In a parallel-transmit collection
+ * of @p ptx_channels channels, a single waveform with no shim plays on every
+ * channel at the instance's amplitude. */
 static int occurrence_channels(
     const pulseg_sequence_descriptor *desc,
     const pulseg_block_table_element *bte,
     const pulseg_rf_definition *def,
+    int ptx_channels,
     const pulseg_rf_shim_definition **shim)
 {
     int channels;
@@ -275,21 +278,50 @@ static int occurrence_channels(
         ? &desc->rf_shim_definitions[bte->rf_shim_id]
         : NULL;
     channels = *shim ? (*shim)->num_channels : def->num_channels;
+    if (!*shim && channels <= 1)
+        channels = ptx_channels;
     return channels > PULSEG_MAX_RF_SHIM_CHANNELS ? PULSEG_MAX_RF_SHIM_CHANNELS : channels;
 }
 
-/* Record, for every channel of every parallel-transmit RF definition of
- * subsequence @p s, the instance holding its largest drive.  Instances start
+/* The transmit channels of a collection: the most any RF definition carries a
+ * waveform for or any RF shim weights, 1 where none has more than one. */
+static int collection_ptx_channels(const pulseg_collection *coll)
+{
+    int s, i, channels = 1;
+
+    for (s = 0; s < coll->num_subsequences; ++s)
+    {
+        const pulseg_sequence_descriptor *desc = &coll->descriptors[s];
+
+        for (i = 0; i < desc->num_unique_rfs; ++i)
+            if (desc->rf_definitions[i].num_channels > channels)
+                channels = desc->rf_definitions[i].num_channels;
+        for (i = 0; i < desc->num_rf_shims; ++i)
+            if (desc->rf_shim_definitions[i].num_channels > channels)
+                channels = desc->rf_shim_definitions[i].num_channels;
+    }
+    return channels;
+}
+
+/* Record, for every channel of every RF definition of subsequence @p s that
+ * drives more than one, the instance holding its largest drive.  Instances start
  * where the segment changes, and every num_blocks entries into a run of one
  * segment, as the cursor reads them. */
-static void tour_survey(const pulseg_sequence_descriptor *desc, tour_best *best)
+static void tour_survey(
+    const pulseg_sequence_descriptor *desc,
+    int ptx_channels,
+    tour_best *best,
+    long *last_start,
+    long *interval)
 {
     int n, run_segment = -2, run_start = 0, k;
+    long t = 0;
 
     for (n = 0; n < desc->exec_stream_len; ++n)
     {
         const int local = pulseg__exec_seg_id(desc, n);
         const int block = pulseg__exec_block_idx(desc, n);
+        const long start = t;
         const pulseg_block_table_element *bte;
         const pulseg_rf_table_element *rte;
         const pulseg_rf_shim_definition *shim;
@@ -301,20 +333,32 @@ static void tour_survey(const pulseg_sequence_descriptor *desc, tour_best *best)
             run_segment = local;
             run_start = n;
         }
+        if (block >= 0 && block < desc->num_blocks)
+        {
+            const pulseg_block_table_element *e = &desc->block_table[block];
+            t += e->duration_us >= 0 ? e->duration_us : desc->base_blocks[e->id].duration_us;
+        }
         if (local < 0 || local >= desc->num_unique_segments || block < 0 || block >= desc->num_blocks)
             continue;
+        blocks = desc->segment_definitions[local].num_blocks > 0
+            ? desc->segment_definitions[local].num_blocks
+            : 1;
+        if ((n - run_start) % blocks == 0)
+        {
+            if (last_start[local] >= 0 &&
+                (interval[local] < 0 || start - last_start[local] < interval[local]))
+                interval[local] = start - last_start[local];
+            last_start[local] = start;
+        }
         bte = &desc->block_table[block];
         if (bte->rf_id < 0 || bte->rf_id >= desc->rf_table_size)
             continue;
         rte = &desc->rf_table[bte->rf_id];
         if (rte->id < 0 || rte->id >= desc->num_unique_rfs)
             continue;
-        channels = occurrence_channels(desc, bte, &desc->rf_definitions[rte->id], &shim);
+        channels = occurrence_channels(desc, bte, &desc->rf_definitions[rte->id], ptx_channels, &shim);
         if (channels <= 1)
             continue;
-        blocks = desc->segment_definitions[local].num_blocks > 0
-            ? desc->segment_definitions[local].num_blocks
-            : 1;
         first = n - (n - run_start) % blocks;
         amplitude = (float)fabs((double)rte->amplitude);
         for (k = 0; k < channels; ++k)
@@ -361,6 +405,7 @@ static int tour_collect(
     int s,
     const tour_best *best,
     int num_best,
+    const long *interval,
     pulseg_prescan_visit *visits,
     int count)
 {
@@ -389,6 +434,10 @@ static int tour_collect(
             coll, s, pulseg__exec_seg_id(&coll->descriptors[s], best[i].first));
         v->first_position = best[i].first;
         v->num_blocks = best[i].num_blocks;
+        {
+            const int local = pulseg__exec_seg_id(&coll->descriptors[s], best[i].first);
+            v->interval_us = (local >= 0 && interval[local] > 0) ? interval[local] : 0;
+        }
         v->rf_definition = i / PULSEG_MAX_RF_SHIM_CHANNELS;
         v->channels = 1;
         v->drive_hz = best[i].drive;
@@ -413,11 +462,14 @@ int pulseg_get_prescan_tour(const pulseg_collection *coll, pulseg_prescan_visit 
 {
     pulseg_prescan_visit *visits = NULL;
     tour_best *best = NULL;
-    int s, i, capacity = 0, count = 0;
+    int s, i, ptx_channels, capacity = 0, count = 0;
 
     if (!coll || !out_visits)
         return PULSEG_ERR_NULL_POINTER;
     *out_visits = NULL;
+    ptx_channels = collection_ptx_channels(coll);
+    if (ptx_channels <= 1)
+        return 0;
     for (s = 0; s < coll->num_subsequences; ++s)
         capacity += coll->descriptors[s].num_unique_rfs * PULSEG_MAX_RF_SHIM_CHANNELS;
     if (capacity <= 0)
@@ -430,12 +482,22 @@ int pulseg_get_prescan_tour(const pulseg_collection *coll, pulseg_prescan_visit 
     {
         const pulseg_sequence_descriptor *desc = &coll->descriptors[s];
         const int num_best = desc->num_unique_rfs * PULSEG_MAX_RF_SHIM_CHANNELS;
+        const int segments = desc->num_unique_segments > 0 ? desc->num_unique_segments : 1;
+        long *last_start, *interval;
 
         if (num_best <= 0)
             continue;
         best = (tour_best *)PULSEG_ALLOC((size_t)num_best * sizeof(tour_best));
-        if (!best)
+        last_start = (long *)PULSEG_ALLOC((size_t)segments * sizeof(long));
+        interval = (long *)PULSEG_ALLOC((size_t)segments * sizeof(long));
+        if (!best || !last_start || !interval)
         {
+            if (best)
+                PULSEG_FREE(best);
+            if (last_start)
+                PULSEG_FREE(last_start);
+            if (interval)
+                PULSEG_FREE(interval);
             count = PULSEG_ERR_ALLOC_FAILED;
             break;
         }
@@ -445,9 +507,16 @@ int pulseg_get_prescan_tour(const pulseg_collection *coll, pulseg_prescan_visit 
             best[i].first = -1;
             best[i].num_blocks = 0;
         }
-        tour_survey(desc, best);
-        count = tour_collect(coll, s, best, num_best, visits, count);
+        for (i = 0; i < segments; ++i)
+        {
+            last_start[i] = -1;
+            interval[i] = -1;
+        }
+        tour_survey(desc, ptx_channels, best, last_start, interval);
+        count = tour_collect(coll, s, best, num_best, interval, visits, count);
         PULSEG_FREE(best);
+        PULSEG_FREE(last_start);
+        PULSEG_FREE(interval);
         best = NULL;
     }
 
@@ -830,4 +899,160 @@ int pulseg_playout_scan(
         rc = play_entry(&walk, coll);
     walk_close(&walk);
     return rc;
+}
+
+/* ================================================================== */
+/*  Channel drives                                                    */
+/* ================================================================== */
+
+/* The per-channel waveform peaks of every RF definition of a subsequence,
+ * PULSEG_MAX_RF_SHIM_CHANNELS to a definition, read once. */
+static float *channel_peaks(const pulseg_sequence_descriptor *desc)
+{
+    const int n = desc->num_unique_rfs > 0 ? desc->num_unique_rfs : 1;
+    float *peaks = (float *)PULSEG_ALLOC((size_t)n * PULSEG_MAX_RF_SHIM_CHANNELS * sizeof(float));
+    int i;
+
+    if (!peaks)
+        return NULL;
+    for (i = 0; i < n * PULSEG_MAX_RF_SHIM_CHANNELS; ++i)
+        peaks[i] = 0.0f;
+    for (i = 0; i < desc->num_unique_rfs; ++i)
+        pulseg__rf_channel_peaks(
+            desc, &desc->rf_definitions[i], &peaks[i * PULSEG_MAX_RF_SHIM_CHANNELS],
+            PULSEG_MAX_RF_SHIM_CHANNELS);
+    return peaks;
+}
+
+/* Raise @p drive_hz to what entry @p n of @p desc drives each channel at:
+ * the RF amplitude times the channel's waveform peak, times its shim
+ * magnitude under a shim.  A single waveform plays on every channel of a
+ * parallel-transmit collection. */
+static void entry_drives(
+    const pulseg_sequence_descriptor *desc,
+    const float *peaks,
+    int n,
+    int ptx_channels,
+    float *drive_hz,
+    int max_channels)
+{
+    const int block = pulseg__exec_block_idx(desc, n);
+    const pulseg_block_table_element *bte;
+    const pulseg_rf_table_element *rte;
+    const pulseg_rf_definition *def;
+    const pulseg_rf_shim_definition *shim;
+    float amplitude;
+    int channels, k;
+
+    if (block < 0 || block >= desc->num_blocks)
+        return;
+    bte = &desc->block_table[block];
+    if (bte->rf_id < 0 || bte->rf_id >= desc->rf_table_size)
+        return;
+    rte = &desc->rf_table[bte->rf_id];
+    if (rte->id < 0 || rte->id >= desc->num_unique_rfs)
+        return;
+    def = &desc->rf_definitions[rte->id];
+    channels = occurrence_channels(desc, bte, def, ptx_channels, &shim);
+    amplitude = (float)fabs((double)rte->amplitude);
+    for (k = 0; k < channels && k < max_channels; ++k)
+    {
+        const float peak = peaks[rte->id * PULSEG_MAX_RF_SHIM_CHANNELS + (def->num_channels > 1 ? k : 0)];
+        const float drive = amplitude * peak * (shim ? shim->magnitudes[k] : 1.0f);
+
+        if (drive > drive_hz[k])
+            drive_hz[k] = drive;
+    }
+}
+
+/* Raise @p drive_hz over the blocks the receive-gain calibration of
+ * subsequence @p s plays: from its start to the instance that completes
+ * @p readouts readouts NOPRESCAN does not exempt. */
+static void calibration_drives(
+    const pulseg_sequence_descriptor *desc,
+    const float *peaks,
+    int readouts,
+    int ptx_channels,
+    float *drive_hz,
+    int max_channels)
+{
+    int n, local = -1, position = 0;
+
+    for (n = 0; n < desc->exec_stream_len; ++n)
+    {
+        const int seg = pulseg__exec_seg_id(desc, n);
+        const int block = pulseg__exec_block_idx(desc, n);
+        int blocks;
+
+        if (seg < 0 || seg >= desc->num_unique_segments)
+        {
+            local = -1;
+            continue;
+        }
+        blocks = desc->segment_definitions[seg].num_blocks;
+        position = (seg == local && blocks > 0) ? (position + 1) % blocks : 0;
+        local = seg;
+        entry_drives(desc, peaks, n, ptx_channels, drive_hz, max_channels);
+        if (block >= 0 && block < desc->num_blocks && desc->block_table[block].adc_id >= 0 &&
+            !desc->block_table[block].noprescan_flag)
+            readouts -= 1;
+        if (readouts <= 0 && instance_ends(desc, n, position, blocks))
+            break;
+    }
+}
+
+int pulseg_get_channel_drives(
+    const pulseg_collection *coll,
+    const pulseg_playout_options *options,
+    float *drive_hz,
+    int max_channels)
+{
+    const int prescan = (options && options->prescan_subsequence >= 0) ? options->prescan_subsequence : -1;
+    float **peaks;
+    int s, n, k, ptx_channels, rc = PULSEG_SUCCESS;
+
+    if (!coll || !drive_hz)
+        return PULSEG_ERR_NULL_POINTER;
+    if (prescan >= coll->num_subsequences)
+        return PULSEG_ERR_INVALID_ARGUMENT;
+    ptx_channels = collection_ptx_channels(coll);
+    for (k = 0; k < max_channels; ++k)
+        drive_hz[k] = 0.0f;
+    peaks = (float **)PULSEG_ALLOC((size_t)(coll->num_subsequences > 0 ? coll->num_subsequences : 1) * sizeof(float *));
+    if (!peaks)
+        return PULSEG_ERR_ALLOC_FAILED;
+    for (s = 0; s < coll->num_subsequences; ++s)
+        peaks[s] = NULL;
+    for (s = 0; s < coll->num_subsequences && PULSEG_SUCCEEDED(rc); ++s)
+        if (!(peaks[s] = channel_peaks(&coll->descriptors[s])))
+            rc = PULSEG_ERR_ALLOC_FAILED;
+
+    if (PULSEG_SUCCEEDED(rc) && prescan < 0)
+        for (s = 0; s < coll->num_subsequences; ++s)
+            for (n = 0; n < coll->descriptors[s].exec_stream_len; ++n)
+                entry_drives(&coll->descriptors[s], peaks[s], n, ptx_channels, drive_hz, max_channels);
+    if (PULSEG_SUCCEEDED(rc) && prescan >= 0)
+    {
+        pulseg_prescan_visit *visits = NULL;
+        const int count = options->tour != PULSEG_TOUR_NONE ? pulseg_get_prescan_tour(coll, &visits) : 0;
+        int i;
+
+        if (count < 0)
+            rc = count;
+        for (i = 0; i < count; ++i)
+            for (n = visits[i].first_position; n < visits[i].first_position + visits[i].num_blocks; ++n)
+                entry_drives(&coll->descriptors[visits[i].subsequence], peaks[visits[i].subsequence], n,
+                             ptx_channels, drive_hz, max_channels);
+        if (visits)
+            PULSEG_FREE(visits);
+        if (PULSEG_SUCCEEDED(rc))
+            calibration_drives(&coll->descriptors[prescan], peaks[prescan],
+                               prescan_readouts(coll, prescan, options), ptx_channels, drive_hz, max_channels);
+    }
+
+    for (s = 0; s < coll->num_subsequences; ++s)
+        if (peaks[s])
+            PULSEG_FREE(peaks[s]);
+    PULSEG_FREE(peaks);
+    return PULSEG_SUCCEEDED(rc) ? ptx_channels : rc;
 }

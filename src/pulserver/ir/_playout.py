@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
+import numpy as np
+
 from .._accelerators import require
 from ._convert import WaveBudget, _held, cache_path
 
@@ -155,8 +157,10 @@ def prescan_tour(seq_path: Path | str, cache_ext: str = ".pseg") -> dict[str, An
     One visit per segment instance holding the largest drive one channel of a
     parallel-transmit RF definition receives in its subsequence: the RF
     amplitude times the channel's shim magnitude, or the amplitude alone for
-    a pulse with a waveform per channel. An instance that holds several is
-    listed once. A sequence without parallel-transmit RF has no visit.
+    a pulse with a waveform per channel or with one waveform and no shim,
+    which a sequence holding any parallel-transmit RF plays on every channel.
+    An instance that holds several is listed once. A sequence without
+    parallel-transmit RF has no visit.
 
     Returns
     -------
@@ -165,10 +169,52 @@ def prescan_tour(seq_path: Path | str, cache_ext: str = ".pseg") -> dict[str, An
         ``segment`` (global), ``first_position`` and ``num_blocks`` of its
         instance, ``rf_definition`` (local to the subsequence), ``channels``
         whose largest drive it plays, the largest of them ``drive_hz``,
-        ``duration_us``, ``rf_pulses`` and ``readouts``: those the scan
+        ``duration_us``, ``interval_us`` (the shortest time between the
+        starts of two successive instances of its segment in the scan, 0
+        where it plays once), ``rf_pulses`` and ``readouts``: those the scan
         acquires that NOPRESCAN does not exempt.
     """
     seq_path = Path(seq_path)
     return require("prescan_tour_from_cache")(
         str(cache_path(seq_path, cache_ext)), seq_path.stat().st_size
+    )
+
+
+def channel_drives(
+    seq_path: Path | str, prescan: Prescan | None = None, cache_ext: str = ".pseg"
+) -> np.ndarray:
+    """Return the largest drive each transmit channel receives in the scan, or in a prescan.
+
+    A drive is the RF amplitude times the channel's waveform peak, times the
+    channel's shim magnitude under a shim; a sequence holding any
+    parallel-transmit RF plays a single waveform with no shim on every
+    channel. Without ``prescan``, over every block of the scan; with it,
+    over what that prescan plays: the tour's visits, when it plays the tour,
+    then the calibration up to the instance completing its readouts. A
+    prescan drives every channel as hard as the scan where no entry of
+    ``channel_drives(path, prescan)`` is below ``channel_drives(path)``.
+
+    Parameters
+    ----------
+    seq_path : Path | str
+        The first file of the chain; the cache is the file beside it.
+    prescan : Prescan, default=None
+        The prescan to read the drives of; None reads the scan's.
+    cache_ext : str, default='.pseg'
+        Extension of the cache, dot included.
+
+    Returns
+    -------
+    numpy.ndarray
+        Per transmit channel, the largest drive in Hz; one entry without
+        parallel-transmit RF.
+    """
+    seq_path = Path(seq_path)
+    calibration = (
+        (-1, 0, 0)
+        if prescan is None
+        else (prescan.subsequence, prescan.readouts, _TOURS[prescan.tour])
+    )
+    return require("channel_drives_from_cache")(
+        str(cache_path(seq_path, cache_ext)), seq_path.stat().st_size, calibration
     )
