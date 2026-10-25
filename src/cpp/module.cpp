@@ -966,7 +966,7 @@ PYBIND11_MODULE(_ext, module)
         [](const std::string &cache_path,
            int source_size,
            const std::optional<Budget> &budget,
-           const std::array<int, 3> &prescan,
+           const std::array<int, 4> &prescan,
            bool waveforms,
            bool pulses)
         {
@@ -976,6 +976,7 @@ PYBIND11_MODULE(_ext, module)
             options.prescan_subsequence = prescan[0];
             options.prescan_readouts = prescan[1];
             options.tour = prescan[2];
+            options.calibration = prescan[3];
             return native::record_playout(
                 coll.get(), planned.plan, options, waveforms, pulses);
         },
@@ -1028,13 +1029,14 @@ PYBIND11_MODULE(_ext, module)
 
     module.def(
         "channel_drives_from_cache",
-        [](const std::string &cache_path, int source_size, const std::array<int, 3> &prescan)
+        [](const std::string &cache_path, int source_size, const std::array<int, 4> &prescan)
         {
             const Collection coll = load(cache_path, source_size);
             pulseg_playout_options options = PULSEG_PLAYOUT_OPTIONS_INIT;
             options.prescan_subsequence = prescan[0];
             options.prescan_readouts = prescan[1];
             options.tour = prescan[2];
+            options.calibration = prescan[3];
             std::vector<float> drive(PULSEG_MAX_RF_SHIM_CHANNELS);
             const int channels =
                 pulseg_get_channel_drives(coll.get(), &options, drive.data(), PULSEG_MAX_RF_SHIM_CHANNELS);
@@ -1044,6 +1046,28 @@ PYBIND11_MODULE(_ext, module)
             return as_array(drive, {static_cast<py::ssize_t>(drive.size())});
         },
         "The largest drive each transmit channel receives in the scan or a prescan of a written cache.");
+
+    module.def(
+        "receive_calibration_from_cache",
+        [](const std::string &cache_path, int source_size)
+        {
+            const Collection coll = load(cache_path, source_size);
+            pulseg_receive_calibration cal;
+            const int rc = pulseg_get_receive_calibration(coll.get(), &cal);
+            if (PULSEG_FAILED(rc))
+                throw py::value_error("the receive calibration could not be chosen: " + std::to_string(rc));
+            py::dict out;
+            out["generated"] = static_cast<bool>(cal.generated);
+            out["subsequence"] = cal.subsequence;
+            out["first_position"] = cal.first_position;
+            out["num_blocks"] = cal.num_blocks;
+            out["readouts"] = cal.readouts;
+            out["balanced"] = static_cast<bool>(cal.balanced);
+            out["period_us"] = cal.period_us;
+            out["signal"] = cal.signal;
+            return out;
+        },
+        "The receive-gain calibration a prescan of a written cache plays.");
 
     module.def(
         "gradient_stretch_from_cache",

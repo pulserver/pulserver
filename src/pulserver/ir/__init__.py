@@ -14,7 +14,13 @@ from ._convert import (
     prescribe,
     summary,
 )
-from ._playout import Prescan, channel_drives, playout, prescan_tour
+from ._playout import (
+    Prescan,
+    channel_drives,
+    playout,
+    prescan_tour,
+    receive_calibration,
+)
 from ._source import played_rf
 from ._vendor import read_vendor
 from ._waves import gradient_stretch, plan_waves, sample_wave
@@ -42,6 +48,7 @@ __all__ = [
     "prescan_tour",
     "prescribe",
     "read_vendor",
+    "receive_calibration",
     "sample_wave",
     "sar_ratios",
     "spl_levels",

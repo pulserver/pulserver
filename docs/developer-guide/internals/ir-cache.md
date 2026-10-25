@@ -216,6 +216,25 @@ repetition, as the gradient flags are, and reported on the block instance
 cache, the field-of-view offset included, so the mean is the centre of the
 positioned stack.
 
+What the prescan calibrates the receive gain on is chosen from the cache
+(`pulseg_get_receive_calibration`). Where exactly one subsequence reads out and
+it repeats with the same RF amplitudes, it is that subsequence from its start,
+the scan's own steady state. Otherwise no repetition of the scan stands for the
+others, and the calibration is the span of one excitation, from its segment
+instance to the end of the instance of its last readout before the next
+excitation: the excitation scoring highest on the sine of its flip angle,
+capped at 90 degrees, times the thickness it excites, the RF bandwidth over
+the slice-select gradient, a head coil's 0.3 m without one. Played from relaxed
+magnetization, so once, after a rest, the span's readouts carry at least the
+signal of any readout of the scan it outscores, and the gain errs towards
+headroom rather than clipping. A span whose gradients are balanced up to the
+next excitation can reach a steady state above its relaxed signal; it scores at
+least 0.5 and is played to that steady state. The span is the scan's own
+blocks under the prescan's rules, so it drives nothing harder than the scan.
+`pulseg_get_channel_drives` reports the largest drive each transmit channel
+receives in the scan or in a prescan, so a playout can check that its prescan,
+tour included, drives every channel as hard as the scan and none harder.
+
 A parallel-transmit sequence can open its prescan with the pTx tour
 (`pulseg_get_prescan_tour`): for every channel of every parallel-transmit RF
 definition of every subsequence, the segment instance holding the largest

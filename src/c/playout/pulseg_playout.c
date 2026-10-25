@@ -540,6 +540,7 @@ typedef struct scan_walk
     wave_loader loader;
     int prescan;       /* the subsequence the prescan plays, -1 in the scan */
     int tour;          /* PULSEG_TOUR_* of the prescan                     */
+    int calibration;   /* PULSEG_CALIBRATION_* of the prescan              */
     int visit;         /* the tour's visit being played, -1 outside it     */
     int readouts_left; /* before the prescan ends                          */
     int done;          /* 1 once the prescan has its readouts              */
@@ -602,6 +603,7 @@ static int walk_open(
         w->prescan = options->prescan_subsequence;
         w->readouts_left = prescan_readouts(coll, w->prescan, options);
         w->tour = options->tour;
+        w->calibration = options->calibration;
     }
     w->instances = (int *)PULSEG_ALLOC((size_t)segments * sizeof(int));
     if (!w->instances)
@@ -874,6 +876,29 @@ static int play_tour(scan_walk *w, pulseg_collection *coll)
     return rc;
 }
 
+/* Play the generated receive calibration: its span, once, acquired. */
+static int play_calibration(scan_walk *w, pulseg_collection *coll)
+{
+    pulseg_receive_calibration cal;
+    pulseg_prescan_visit v;
+    int rc = pulseg_get_receive_calibration(coll, &cal);
+
+    if (PULSEG_FAILED(rc) || !cal.generated)
+    {
+        w->done = 1;
+        return rc;
+    }
+    memset(&v, 0, sizeof(v));
+    v.subsequence = cal.subsequence;
+    v.first_position = cal.first_position;
+    v.num_blocks = cal.num_blocks;
+    rc = play_visit(w, coll, &v);
+    w->subsequence = -1;
+    w->local = -1;
+    w->done = 1;
+    return rc;
+}
+
 int pulseg_playout_scan(
     pulseg_collection *coll,
     const pulseg_wave_plan *plan,
@@ -893,6 +918,8 @@ int pulseg_playout_scan(
         rc = walk_open(&walk, coll, plan, options);
     if (PULSEG_SUCCEEDED(rc) && walk.prescan >= 0 && walk.tour != PULSEG_TOUR_NONE)
         rc = play_tour(&walk, coll);
+    if (PULSEG_SUCCEEDED(rc) && walk.prescan >= 0 && walk.calibration == PULSEG_CALIBRATION_GENERATED)
+        rc = play_calibration(&walk, coll);
     if (PULSEG_SUCCEEDED(rc))
         pulseg_cursor_reset(coll);
     while (PULSEG_SUCCEEDED(rc) && !walk.done && pulseg_cursor_next(coll) == PULSEG_CURSOR_BLOCK)
@@ -1045,7 +1072,17 @@ int pulseg_get_channel_drives(
                              ptx_channels, drive_hz, max_channels);
         if (visits)
             PULSEG_FREE(visits);
-        if (PULSEG_SUCCEEDED(rc))
+        if (PULSEG_SUCCEEDED(rc) && options->calibration == PULSEG_CALIBRATION_GENERATED)
+        {
+            pulseg_receive_calibration cal;
+
+            rc = pulseg_get_receive_calibration(coll, &cal);
+            for (n = cal.first_position; PULSEG_SUCCEEDED(rc) && cal.generated &&
+                 n < cal.first_position + cal.num_blocks; ++n)
+                entry_drives(&coll->descriptors[cal.subsequence], peaks[cal.subsequence], n,
+                             ptx_channels, drive_hz, max_channels);
+        }
+        else if (PULSEG_SUCCEEDED(rc))
             calibration_drives(&coll->descriptors[prescan], peaks[prescan],
                                prescan_readouts(coll, prescan, options), ptx_channels, drive_hz, max_channels);
     }
@@ -1055,4 +1092,318 @@ int pulseg_get_channel_drives(
             PULSEG_FREE(peaks[s]);
     PULSEG_FREE(peaks);
     return PULSEG_SUCCEEDED(rc) ? ptx_channels : rc;
+}
+
+/* ================================================================== */
+/*  Receive calibration                                               */
+/* ================================================================== */
+
+/* Thickness a non-selective excitation is taken to excite, m: a head coil's
+ * coverage, so it outranks any slab. */
+#define PULSEG_CALIBRATION_COVERAGE_M 0.3f
+/* Net gradient area under this fraction of the absolute area is balanced. */
+#define PULSEG_CALIBRATION_BALANCE_TOL 1.0e-2
+/* The largest steady-state signal of a balanced sequence, in units of the
+ * equilibrium magnetization. */
+#define PULSEG_CALIBRATION_BALANCED_BOUND 0.5
+#define PULSEG_CALIBRATION_HALF_PI 1.5707963267948966
+
+/* Block duration as the scan plays it. */
+static long entry_duration(const pulseg_sequence_descriptor *desc, int n)
+{
+    const int block = pulseg__exec_block_idx(desc, n);
+    const pulseg_block_table_element *e;
+
+    if (block < 0 || block >= desc->num_blocks)
+        return 0;
+    e = &desc->block_table[block];
+    return e->duration_us >= 0 ? e->duration_us : desc->base_blocks[e->id].duration_us;
+}
+
+/* The RF table element entry @p n plays, NULL for none. */
+static const pulseg_rf_table_element *entry_rf(const pulseg_sequence_descriptor *desc, int n)
+{
+    const int block = pulseg__exec_block_idx(desc, n);
+    const pulseg_block_table_element *bte;
+
+    if (block < 0 || block >= desc->num_blocks)
+        return NULL;
+    bte = &desc->block_table[block];
+    if (bte->rf_id < 0 || bte->rf_id >= desc->rf_table_size)
+        return NULL;
+    if (desc->rf_table[bte->rf_id].id < 0 || desc->rf_table[bte->rf_id].id >= desc->num_unique_rfs)
+        return NULL;
+    return &desc->rf_table[bte->rf_id];
+}
+
+static int entry_excites(const pulseg_sequence_descriptor *desc, int n)
+{
+    const pulseg_rf_table_element *rte = entry_rf(desc, n);
+
+    return rte && (rte->rf_use == PULSEG_RF_USE_EXCITATION || rte->rf_use == PULSEG_RF_USE_UNKNOWN);
+}
+
+static int entry_reads(const pulseg_sequence_descriptor *desc, int n)
+{
+    const int block = pulseg__exec_block_idx(desc, n);
+
+    return block >= 0 && block < desc->num_blocks && desc->block_table[block].adc_id >= 0 &&
+        !desc->block_table[block].noprescan_flag;
+}
+
+/* Gradient amplitude of axis @p a of entry @p n, Hz/m, and its area, Hz/m us,
+ * into *area; *known is cleared for an arbitrary shape, whose area is not
+ * read here. */
+static float entry_gradient(const pulseg_sequence_descriptor *desc, int n, int a, double *area, int *known)
+{
+    const int block = pulseg__exec_block_idx(desc, n);
+    const pulseg_block_table_element *bte;
+    const pulseg_grad_definition *def;
+    int id;
+    float amp;
+
+    *area = 0.0;
+    if (block < 0 || block >= desc->num_blocks)
+        return 0.0f;
+    bte = &desc->block_table[block];
+    id = (a == 0) ? bte->gx_id : (a == 1) ? bte->gy_id : bte->gz_id;
+    if (id < 0 || id >= desc->grad_table_size || desc->grad_table[id].id < 0 ||
+        desc->grad_table[id].id >= desc->num_unique_grads)
+        return 0.0f;
+    amp = desc->grad_table[id].amplitude;
+    def = &desc->grad_definitions[desc->grad_table[id].id];
+    if (def->type == 0)
+        *area = (double)amp * (0.5 * def->rise_time_or_unused + def->flat_time_or_unused +
+                               0.5 * def->fall_time_or_num_uncompressed_samples);
+    else
+        *known = 0;
+    return amp;
+}
+
+/* The largest |amplitude| each RF definition of @p desc plays at, the
+ * amplitude its nominal flip angle is stated at. */
+static float *largest_amplitudes(const pulseg_sequence_descriptor *desc)
+{
+    const int n = desc->num_unique_rfs > 0 ? desc->num_unique_rfs : 1;
+    float *largest = (float *)PULSEG_ALLOC((size_t)n * sizeof(float));
+    int i;
+
+    if (!largest)
+        return NULL;
+    for (i = 0; i < n; ++i)
+        largest[i] = 0.0f;
+    for (i = 0; i < desc->rf_table_size; ++i)
+    {
+        const int id = desc->rf_table[i].id;
+        const float amplitude = (float)fabs((double)desc->rf_table[i].amplitude);
+
+        if (id >= 0 && id < desc->num_unique_rfs && amplitude > largest[id])
+            largest[id] = amplitude;
+    }
+    return largest;
+}
+
+/* The sine of the flip of the excitation at entry @p n, capped at 90
+ * degrees, and in *thickness the thickness it excites, m; a
+ * parallel-transmit pulse's flip is taken relative to the 1/sqrt(N)
+ * reference drive. */
+static double excitation_sine(
+    const pulseg_collection *coll,
+    int s,
+    int n,
+    int ptx_channels,
+    const float *peaks,
+    const float *largest,
+    double *thickness)
+{
+    const pulseg_sequence_descriptor *desc = &coll->descriptors[s];
+    const pulseg_rf_table_element *rte = entry_rf(desc, n);
+    const pulseg_rf_definition *def = &desc->rf_definitions[rte->id];
+    const pulseg_block_table_element *bte = &desc->block_table[pulseg__exec_block_idx(desc, n)];
+    const pulseg_rf_shim_definition *shim;
+    pulseg_rf_stats stats;
+    double flip, g2 = 0.0, drive = 0.0;
+    int a, k, known = 1, channels;
+
+    *thickness = 0.0;
+    if (PULSEG_FAILED(pulseg_get_rf_stats(coll, &stats, s, rte->id)) || largest[rte->id] <= 0.0f)
+        return 0.0;
+    flip = stats.flip_angle_rad * fabs((double)rte->amplitude) / largest[rte->id];
+    if (ptx_channels > 1)
+    {
+        channels = occurrence_channels(desc, bte, def, ptx_channels, &shim);
+        for (k = 0; k < channels; ++k)
+            drive += (shim ? shim->magnitudes[k] : 1.0) *
+                peaks[rte->id * PULSEG_MAX_RF_SHIM_CHANNELS + (def->num_channels > 1 ? k : 0)];
+        flip *= drive / sqrt((double)ptx_channels);
+    }
+    if (flip > PULSEG_CALIBRATION_HALF_PI)
+        flip = PULSEG_CALIBRATION_HALF_PI;
+    for (a = 0; a < 3; ++a)
+    {
+        double area;
+        const float g = entry_gradient(desc, n, a, &area, &known);
+        g2 += (double)g * g;
+    }
+    *thickness = (g2 > 0.0 && stats.bandwidth_hz > 0.0f)
+        ? stats.bandwidth_hz * (stats.num_bands > 1 ? stats.num_bands : 1) / sqrt(g2)
+        : PULSEG_CALIBRATION_COVERAGE_M;
+    if (*thickness > PULSEG_CALIBRATION_COVERAGE_M)
+        *thickness = PULSEG_CALIBRATION_COVERAGE_M;
+    return sin(flip);
+}
+
+/* The standard calibration's subsequence: the only one that reads out, where
+ * it repeats with the same RF amplitudes; -1 where none such is. */
+static int standard_subsequence(const pulseg_collection *coll)
+{
+    int s, n, reading = -1, count = 0;
+
+    for (s = 0; s < coll->num_subsequences; ++s)
+    {
+        const pulseg_sequence_descriptor *desc = &coll->descriptors[s];
+
+        for (n = 0; n < desc->exec_stream_len; ++n)
+            if (entry_reads(desc, n))
+            {
+                reading = s;
+                ++count;
+                break;
+            }
+    }
+    if (count != 1)
+        return -1;
+    {
+        pulseg_subseq_info info = PULSEG_SUBSEQ_INFO_INIT;
+
+        if (PULSEG_FAILED(pulseg_get_subseq_info(coll, &info, reading)) || info.num_trs <= 1 ||
+            info.rf_amplitude_variable)
+            return -1;
+    }
+    return reading;
+}
+
+/* Start of the segment instance holding entry @p n. */
+static int instance_start(const pulseg_sequence_descriptor *desc, int n)
+{
+    const int local = pulseg__exec_seg_id(desc, n);
+    int blocks;
+
+    if (local < 0 || local >= desc->num_unique_segments)
+        return n;
+    blocks = desc->segment_definitions[local].num_blocks > 0 ? desc->segment_definitions[local].num_blocks : 1;
+    return n - (n - pulseg__exec_seg_run_start(desc, n)) % blocks;
+}
+
+/* One past the segment instance holding entry @p n. */
+static int instance_stop(const pulseg_sequence_descriptor *desc, int n)
+{
+    const int local = pulseg__exec_seg_id(desc, n);
+    int blocks;
+
+    if (local < 0 || local >= desc->num_unique_segments)
+        return n + 1;
+    blocks = desc->segment_definitions[local].num_blocks > 0 ? desc->segment_definitions[local].num_blocks : 1;
+    return instance_start(desc, n) + blocks;
+}
+
+/* Consider the excitation at entry @p e of subsequence @p s and the readouts
+ * after it, up to the next excitation, as the calibration. */
+static void consider_excitation(
+    const pulseg_collection *coll,
+    int s,
+    int e,
+    int ptx_channels,
+    const float *peaks,
+    const float *largest,
+    pulseg_receive_calibration *best)
+{
+    const pulseg_sequence_descriptor *desc = &coll->descriptors[s];
+    double net[3] = {0.0, 0.0, 0.0}, total[3] = {0.0, 0.0, 0.0};
+    double sine, thickness;
+    long elapsed = 0;
+    int n, a, last = -1, known = 1, balanced = 1, any = 0;
+    float signal;
+
+    for (n = e; n < desc->exec_stream_len && (n == e || !entry_excites(desc, n)); ++n)
+    {
+        for (a = 0; a < 3; ++a)
+        {
+            double area;
+            entry_gradient(desc, n, a, &area, &known);
+            net[a] += area;
+            total[a] += fabs(area);
+        }
+        elapsed += entry_duration(desc, n);
+        if (entry_reads(desc, n))
+            last = n;
+    }
+    if (last < 0)
+        return;
+    sine = excitation_sine(coll, s, e, ptx_channels, peaks, largest, &thickness);
+    for (a = 0; a < 3; ++a)
+    {
+        any |= total[a] > 0.0;
+        if (fabs(net[a]) > PULSEG_CALIBRATION_BALANCE_TOL * total[a])
+            balanced = 0;
+    }
+    balanced = balanced && known && any;
+    if (balanced && sine < PULSEG_CALIBRATION_BALANCED_BOUND)
+        sine = PULSEG_CALIBRATION_BALANCED_BOUND;
+    signal = (float)(sine * thickness);
+    if (signal <= best->signal)
+        return;
+    best->subsequence = s;
+    best->first_position = instance_start(desc, e);
+    best->num_blocks = instance_stop(desc, last) - best->first_position;
+    best->readouts = 0;
+    for (n = best->first_position; n < best->first_position + best->num_blocks; ++n)
+        best->readouts += entry_reads(desc, n);
+    best->balanced = balanced;
+    best->period_us = elapsed;
+    best->signal = signal;
+}
+
+int pulseg_get_receive_calibration(const pulseg_collection *coll, pulseg_receive_calibration *out)
+{
+    const int standard = coll ? standard_subsequence(coll) : -1;
+    int s, n, ptx_channels;
+
+    if (!coll || !out)
+        return PULSEG_ERR_NULL_POINTER;
+    out->generated = 0;
+    out->subsequence = standard;
+    out->first_position = 0;
+    out->num_blocks = 0;
+    out->readouts = 0;
+    out->balanced = 0;
+    out->period_us = 0;
+    out->signal = 0.0f;
+    if (standard >= 0)
+        return PULSEG_SUCCESS;
+    ptx_channels = collection_ptx_channels(coll);
+    for (s = 0; s < coll->num_subsequences; ++s)
+    {
+        const pulseg_sequence_descriptor *desc = &coll->descriptors[s];
+        float *peaks = channel_peaks(desc);
+        float *largest = largest_amplitudes(desc);
+
+        if (!peaks || !largest)
+        {
+            if (peaks)
+                PULSEG_FREE(peaks);
+            if (largest)
+                PULSEG_FREE(largest);
+            return PULSEG_ERR_ALLOC_FAILED;
+        }
+        for (n = 0; n < desc->exec_stream_len; ++n)
+            if (entry_excites(desc, n))
+                consider_excitation(coll, s, n, ptx_channels, peaks, largest, out);
+        PULSEG_FREE(peaks);
+        PULSEG_FREE(largest);
+    }
+    out->generated = out->num_blocks > 0;
+    if (!out->generated)
+        out->subsequence = -1;
+    return PULSEG_SUCCESS;
 }
