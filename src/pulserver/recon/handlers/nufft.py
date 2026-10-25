@@ -9,6 +9,7 @@ import numpy as np
 from ...mrd._acquisitions import AcquisitionFlag
 from ...mrd._images import center_crop
 from .._buffers import ReconBuffer, ReconData
+from .._calibration import CoilCompression
 from .._correct import gradient_unwarped, states_gradient_coefficients
 from ..gadgets import Prewhiten
 from ..plugin import ReconContext, ReconPlugin, ReconResult
@@ -61,9 +62,18 @@ class NufftRecon(ReconPlugin):
         ``lambda``, relative to the data scaling ``pics`` estimates.
     iterations : int, default=30
         Iterations of the solve.
+    virtual_coils : int | None, default=12
+        Receive channels beyond this many are compressed to it before the
+        maps and the solve (:class:`~pulserver.recon.CoilCompression`);
+        ``None`` keeps every channel.
     """
 
-    def __init__(self, wavelet: float = 0.005, iterations: int = 30) -> None:
+    def __init__(
+        self,
+        wavelet: float = 0.005,
+        iterations: int = 30,
+        virtual_coils: int | None = 12,
+    ) -> None:
         super().__init__(
             gadgets=[Prewhiten()],
             triggers={
@@ -75,14 +85,17 @@ class NufftRecon(ReconPlugin):
         )
         self.wavelet = wavelet
         self.iterations = iterations
+        self.virtual_coils = virtual_coils
 
     def recon(
         self, context: ReconContext, branch: str, data: ReconData
     ) -> ReconResult | None:
         del branch
-        buffer = data.data
-        if buffer is None:
+        if data.data is None:
             return None
+        if self.virtual_coils is not None and data.data.coils > self.virtual_coils:
+            data = CoilCompression(self.virtual_coils)(context, data)
+        buffer = data.data
         grid = buffer.grid_trajectory()
         if grid is None:
             raise ValueError(

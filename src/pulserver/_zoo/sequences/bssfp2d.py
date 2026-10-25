@@ -3,7 +3,12 @@
 import math
 
 import pypulseqpp as pp
-from pypulseqpp.sequences.sequence.bssfp2D_sequence import MAX_SLICE_DURATION, bssfp2d
+from pypulseqpp import sequences
+from pypulseqpp.sequences.sequence.bssfp2D_sequence import (
+    MAX_SLICE_DURATION,
+    PROSPECTIVE_DUMMIES,
+    bssfp2d,
+)
 
 from pulserver._zoo._evaluation import achieved, arguments, cartesian_2d, rf_layout
 from pulserver._zoo._user import OPTIONS, user_entries
@@ -86,12 +91,12 @@ class Bssfp2D(SequencePlugin):
         # repetition. The design of one line plays one repetition of one slice.
         a = arguments(self, protocol)
         one, lines = cartesian_2d(a)
-        repetitions = a["n_dummy"] + lines
         line = self.app(system, **(_ungated(protocol) | one | {"n_slices": 1}))
         tr = line.definitions["TR"][0]
         once = line.duration()[0]
-        train = once + (repetitions - 1) * tr
         gating = _gating(protocol)
+        n_dummy = _dummies(a, tr, gating)
+        train = once + (n_dummy + lines - 1) * tr
         if gating != "none":
             g = _segmented(a, tr, protocol)
             segments = _segments(a, g["views_per_segment"])
@@ -101,7 +106,7 @@ class Bssfp2D(SequencePlugin):
             else:
                 per_segment = max(1, round(rr / (g["views_per_segment"] * tr)))
                 cycles = per_segment * sum(segments)
-                train = once + (a["n_dummy"] + cycles - 1) * tr
+                train = once + (n_dummy + cycles - 1) * tr
         if train > MAX_SLICE_DURATION:
             raise ValueError(
                 f"a slice's train lasts {train:.1f} s, longer than the "
@@ -131,6 +136,17 @@ def _gating(protocol) -> str:
     return "none"
 
 
+def _dummies(a, tr: float, gating: str) -> int:
+    """Return the dummy repetitions the app plays ahead of a slice's first readout."""
+    if a["n_dummy"] is not None:
+        return int(a["n_dummy"])
+    if gating == "prospective":
+        return PROSPECTIVE_DUMMIES
+    return sequences.steady_state_dummies(
+        tr, a["flip_angle_deg"], t2_s=sequences.STEADY_STATE_T2_S
+    )
+
+
 def _ungated(protocol) -> dict:
     """Return the app's arguments of an ungated design of ``protocol``."""
     return {k: v for k, v in protocol.arguments.items() if k != "trigger_type"}
@@ -145,7 +161,9 @@ def _segmented(a, tr: float, protocol) -> dict:
         If one line per cardiac phase does not fit the heartbeat.
     """
     rr = 60.0 / a["heart_rate_bpm"]
-    free = rr - a["trigger_delay"] - (0.5 + a["n_dummy"]) * tr
+    gating = _gating(protocol)
+    leading = (0.5 + _dummies(a, tr, gating)) * tr if gating == "prospective" else 0.0
+    free = rr - a["trigger_delay"] - leading
     views = math.floor(free / (a["n_phases"] * tr) + 1e-9)
     if views < 1:
         raise ValueError(
@@ -153,7 +171,7 @@ def _segmented(a, tr: float, protocol) -> dict:
             f"{rr * 1e3:.0f} ms heartbeat"
         )
     return {
-        "gating": _gating(protocol),
+        "gating": gating,
         "views_per_segment": views,
         "n_phases": a["n_phases"],
         "trigger_delay": a["trigger_delay"],

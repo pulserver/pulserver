@@ -358,6 +358,34 @@ def test_the_image_of_blades_is_the_object_they_sample():
     assert correlation > 0.9
 
 
+def test_channels_beyond_the_virtual_coils_are_compressed_before_the_solve():
+    pytest.importorskip("bartorch")
+    segments = 4
+    points = blades(segments)
+    _, data = phantom(points)
+    plugin = Solves()
+    plugin.virtual_coils = 1
+
+    play(plugin, header(segments=segments), stream(data, points))
+
+    ((samples, _),) = plugin.solved
+    assert samples.shape[0] == 1
+
+
+def test_the_image_of_blades_compressed_to_one_virtual_coil_is_the_object_they_sample():
+    pytest.importorskip("bartorch")
+    segments = 4
+    points = blades(segments)
+    blob, data = phantom(points)
+
+    ((_, result),) = play(
+        NufftRecon(virtual_coils=1), header(segments=segments), stream(data, points)
+    )
+
+    image = np.asarray(result.data, dtype=float)
+    assert np.corrcoef(image.ravel(), blob.ravel())[0, 1] > 0.9
+
+
 def spokes(shots, views, *, samples=SAMPLES, reach=1.0):
     """The trajectory ``(shots, views, samples, 3)`` of spokes through the centre, in grid units.
 
