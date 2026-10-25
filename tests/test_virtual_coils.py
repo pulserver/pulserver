@@ -105,9 +105,7 @@ def test_sensitivities_are_interpolated_linearly_and_held_beyond_the_grid(modell
 
 
 @pytest.mark.parametrize("model", [("HEAD_3D_64CH", 32), ("HEAD_2D_8CH", 8)])
-def test_sensitivities_are_the_trilinear_interpolation_of_their_grid(
-    modelled, model
-):
+def test_sensitivities_are_the_trilinear_interpolation_of_their_grid(modelled, model):
     grid = _coils._receive(model)
     rng = np.random.default_rng(3)
     points = np.concatenate(
@@ -117,7 +115,10 @@ def test_sensitivities_are_the_trilinear_interpolation_of_their_grid(
     # Single-precision weights: the compiled kernel and NumPy may round the
     # last bit differently.
     np.testing.assert_allclose(
-        _coils._interpolated(grid, points), _coils._trilinear(grid, points), rtol=1e-6, atol=1e-7
+        _coils._interpolated(grid, points),
+        _coils._trilinear(grid, points),
+        rtol=1e-6,
+        atol=1e-7,
     )
 
 
