@@ -296,7 +296,9 @@ extern "C"
      * own duration, and weighs @p weights[k], k being its pulse in the
      * repetition as pulseg_get_rf_array() orders them. Where the
      * hyper-repetition repeats and is shorter than @p window_us, it is the
-     * span: every window averages what it does. Otherwise a subsequence no
+     * span: every window averages what it does, and weighed by
+     * pulseg_get_rf_array(), every repetition plays at the worst repetition
+     * instance's amplitudes. Otherwise a subsequence no
      * longer than the window is the span. Otherwise, of the half-open spans of
      * @p window_us starting at a play, or ending at the subsequence's end, the
      * one of largest total weight is taken, the earliest on a tie, and rounded

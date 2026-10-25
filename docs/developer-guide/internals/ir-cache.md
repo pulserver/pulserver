@@ -302,7 +302,7 @@ pulse. The span is costed over its own duration.
 
 | Subsequence | Span |
 |---|---|
-| Its hyper-repetition repeats and is shorter than the window | One hyper-repetition from the start, which plays at the subsequence's mean power; a window-long span would add up to one repetition's energy at its edges |
+| Its hyper-repetition repeats and is shorter than the window | One hyper-repetition from the start, which plays at the subsequence's mean power; a window-long span would add up to one repetition's energy at its edges. Weighed by `pulseg_get_rf_array`, which takes each pulse at the worst repetition instance, the repetition of largest $\sum A^2 P$, every repetition in it plays as that instance |
 | No longer than the window | The whole subsequence |
 | Otherwise | Of the window-long spans starting at a play or ending at the subsequence's end, the one of most energy, the earliest on a tie, rounded out to whole segment instances |
 
