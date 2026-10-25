@@ -216,41 +216,40 @@ repetition, as the gradient flags are, and reported on the block instance
 cache, the field-of-view offset included, so the mean is the centre of the
 positioned stack.
 
-What the prescan calibrates the receive gain on is chosen from the cache
-(`pulseg_get_receive_calibration`). Where exactly one subsequence reads out and
-it repeats with the same RF amplitudes, it is that subsequence from its start,
-the scan's own steady state. Otherwise no repetition of the scan stands for the
-others, and the calibration is the span of one excitation, from its segment
-instance to the end of the instance of its last readout before the next
-excitation: the excitation scoring highest on the sine of its flip angle,
-capped at 90 degrees, times the thickness it excites, the RF bandwidth over
-the slice-select gradient, a head coil's 0.3 m without one. Played from relaxed
-magnetization, so once, after a rest, the span's readouts carry at least the
-signal of any readout of the scan it outscores, and the gain errs towards
-headroom rather than clipping. A span whose gradients are balanced up to the
-next excitation can reach a steady state above its relaxed signal; it scores at
-least 0.5 and is played to that steady state. The span is the scan's own
-blocks under the prescan's rules, so it drives nothing harder than the scan.
-`pulseg_get_channel_drives` reports the largest drive each transmit channel
-receives in the scan or in a prescan, so a playout can check that its prescan,
-tour included, drives every channel as hard as the scan and none harder.
+A scanner sets one receive gain for the whole scan from what its prescan
+acquires, and on a parallel-transmit system a channel must be driven as hard
+as the scan drives it before the scan. Both come from one subsequence the host
+generates (`ir.receive_calibration_sequence`) and appends to the chain after
+the user's files, which keep their indices. The cache marks it `prescan_only`
+(`pulseg_subseq_info.prescan_only`): a playout plays it in the prescan and
+never in the scan.
 
-A parallel-transmit sequence can open its prescan with the pTx tour
-(`pulseg_get_prescan_tour`): for every channel of every parallel-transmit RF
-definition of every subsequence, the segment instance holding the largest
-drive that channel receives, the RF amplitude times the channel's shim
-magnitude, or the amplitude alone for a pulse with a waveform per channel. A
-sequence holding any parallel-transmit RF plays a single waveform with no shim
-on every channel at its amplitude, so such a pulse is visited for each channel
-too.
-Each instance is visited once, under the prescan's rules, whether or not it
-reads out; the tour either acquires its readouts, counted on top of the
-calibration's, or plays them unacquired. A playout reaches each visit by
-seeking the cursor to its first block (`pulseg_cursor_seek`). A visit plays
-part of one occurrence of its subsequence's repetition, each pulse at its
-largest, so resting after it until it has lasted the time per occurrence the
-scan's RF is costed at keeps its average power within the scan's; the rest is
-the interpreter's, from the visit's duration.
+In a parallel-transmit chain it opens with a tour: for every transmit channel,
+the RF block that drives it hardest anywhere in the chain (the RF amplitude
+times the channel's waveform peak and shim magnitude; a single waveform with no
+shim drives every channel), with its blocks up to the next RF pulse, its
+readouts under `NOPRESCAN`, then a rest until it has lasted the shortest
+interval at which its file plays that pulse. Where exactly one file reads out
+and it repeats with the same RF amplitudes, the prescan then calibrates on that
+file from its start, the scan's own steady state, and the subsequence is the
+tour alone, or is not generated without parallel transmit. Otherwise no
+repetition stands for the scan, and the tour is followed by the calibration:
+the excitation scoring highest on the sine of its flip angle, capped at 90
+degrees, times the thickness it excites (the RF bandwidth over the slice-select
+gradient, a head coil's 0.3 m without one), with its blocks up to the next
+excitation, every gradient that varies across the file's repetitions at zero,
+played twice, each after a 3 s rest. From relaxed magnetization a readout
+carries at least the signal of any readout of the scan its excitation
+outscores, since a steady state, spoiled or balanced, never exceeds the
+equilibrium magnetization times the sine of its flip.
+
+Every block of the subsequence is one the scan plays, at the scan's amplitude,
+so it drives no channel harder than the scan, and it is checked and costed like
+any subsequence. `pulseg_get_receive_calibration` names the subsequence a
+prescan calibrates on and the prescan-only one it plays first, if any;
+`pulseg_get_channel_drives` reports the largest drive each transmit channel
+receives in the scan or in a prescan, so a playout can check that its prescan
+drives every channel as hard as the scan and none harder.
 
 Waveform memory holds samples of the type and scale a scanner build defines
 before it includes the library: `PULSEG_WAVE_SAMPLE`, the type;

@@ -492,6 +492,7 @@ void build_pulseq_file(pulseq_file &seq, const py::dict &libraries, Held &held)
     reserved.spl_average_dba =
         static_cast<PULSEQ_REAL>(declared["spl_average_dba"].cast<double>());
     reserved.repetition_size = declared["repetition_size"].cast<int>();
+    reserved.prescan_only = declared.contains("prescan_only") ? declared["prescan_only"].cast<int>() : 0;
     copy_name(reserved.name, sizeof(reserved.name), declared["name"].cast<std::string>());
     copy_name(
         reserved.next_sequence,

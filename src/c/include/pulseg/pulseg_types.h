@@ -760,12 +760,15 @@ typedef struct pulseg_subseq_info
     /** The raster the file's gradient shapes are sampled on, in us: its
      *  GradientRasterTime, or the conversion's where it declares none. */
     float grad_raster_us;
+    /** 1 for the receive calibration the host generated: played only by a
+     *  prescan, never by the scan. */
+    int prescan_only;
 } pulseg_subseq_info;
 
 /* clang-format off */
 #define PULSEG_SUBSEQ_INFO_INIT \
     { \
-    0.0f, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0.0f, 0.0f, -1.0f, -1.0f, 0.0f \
+    0.0f, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0.0f, 0.0f, -1.0f, -1.0f, 0.0f, 0 \
     }
 /* clang-format on */
 

@@ -1410,6 +1410,7 @@ int pulseg__get_unique_blocks(
     desc->vop_global_sar_ratio = seq->reserved_definitions_library.vop_global_sar_ratio;
     desc->spl_peak_db = seq->reserved_definitions_library.spl_peak_db;
     desc->spl_average_dba = seq->reserved_definitions_library.spl_average_dba;
+    desc->prescan_only = seq->reserved_definitions_library.prescan_only;
     desc->vendor = opts->vendor;
     desc->profile = opts->profile;
     desc->label_column_map[0] = opts->label_column_map[0];

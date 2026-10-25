@@ -54,8 +54,6 @@ extern "C"
         int slot;           /**< the slot of its positions' rings it plays,
                                  @c instance modulo the plan's slots; -1
                                  unless the waves are streamed             */
-        int visit;          /**< the prescan tour's visit it plays, -1
-                                 outside the tour                          */
     } pulseg_playout_segment;
 
     /**
@@ -176,128 +174,42 @@ extern "C"
      */
     typedef struct pulseg_playout_options
     {
-        int prescan_subsequence; /**< -1 plays the scan; otherwise the
+        int prescan_subsequence; /**< -1 plays the scan, which plays no
+                                      prescan-only subsequence; otherwise the
                                       receive-gain calibration prescan on
                                       this subsequence                     */
         int prescan_readouts;    /**< readouts after which the prescan ends,
                                       with the instance that completes them;
                                       0 takes the subsequence's
                                       num_gain_cal_readouts, at least 1    */
-        int tour;                /**< PULSEG_TOUR_*: whether the prescan
-                                      plays the pTx tour first, and whether
-                                      it acquires the tour's readouts      */
-        int calibration;         /**< PULSEG_CALIBRATION_*: what the
-                                      prescan calibrates on after the tour */
     } pulseg_playout_options;
 
-/** The prescan plays no tour. */
-#define PULSEG_TOUR_NONE 0
-/** The prescan plays the tour first and acquires none of its readouts. */
-#define PULSEG_TOUR_PLAYED 1
-/** The prescan plays the tour first, acquires its readouts and counts them
- *  on top of the calibration's. */
-#define PULSEG_TOUR_ACQUIRED 2
-
-/** The prescan calibrates on its subsequence from the start. */
-#define PULSEG_CALIBRATION_STANDARD 0
-/** The prescan calibrates on the span pulseg_get_receive_calibration()
- *  generates, played once and acquired; prescan_subsequence and
- *  prescan_readouts are not read. */
-#define PULSEG_CALIBRATION_GENERATED 1
 /* clang-format off */
-#define PULSEG_PLAYOUT_OPTIONS_INIT {-1, 0, PULSEG_TOUR_NONE, PULSEG_CALIBRATION_STANDARD}
+#define PULSEG_PLAYOUT_OPTIONS_INIT {-1, 0}
 /* clang-format on */
-
-    /**
-     * @brief One segment instance of the pTx prescan tour.
-     *
-     * The instance of its subsequence that holds the largest drive one
-     * channel of a parallel-transmit RF definition receives: the RF
-     * amplitude times the channel's shim magnitude, or the amplitude alone
-     * for a pulse with a waveform per channel, whose channels all peak at
-     * the instance of largest amplitude.
-     */
-    typedef struct pulseg_prescan_visit
-    {
-        int subsequence;    /**< subsequence it plays in                   */
-        int segment;        /**< global segment index                      */
-        int first_position; /**< execution-stream position of its first
-                                 block                                     */
-        int num_blocks;     /**< its blocks                                */
-        int rf_definition;  /**< the subsequence's RF definition whose
-                                 largest drive it plays                    */
-        int channels;       /**< channels whose largest drive it plays     */
-        float drive_hz;     /**< the largest of those drives, in Hz        */
-        long duration_us;   /**< its duration                              */
-        long interval_us;   /**< shortest time between the starts of two
-                                 successive instances of its segment in
-                                 its subsequence, 0 where it plays once    */
-        int rf_pulses;      /**< RF blocks it plays                        */
-        int readouts;       /**< readouts it acquires outside prescan that
-                                 NOPRESCAN does not exempt                 */
-    } pulseg_prescan_visit;
-
-    /**
-     * @brief The pTx prescan tour: one segment instance per largest channel
-     *        drive of every parallel-transmit RF definition.
-     *
-     * An RF definition is parallel-transmit where it plays a waveform per
-     * channel, or plays under an RF shim of more than one channel.  A
-     * collection holding one is parallel-transmit throughout: there, a single
-     * waveform with no shim plays on every channel at the instance's
-     * amplitude, and is visited for each.  Visits
-     * are listed by subsequence, then by first position; one instance that
-     * holds the largest drive of several channels, or of several
-     * definitions, is listed once, for the first definition, with the
-     * channels of all of them counted.  A sequence with no
-     * parallel-transmit RF has no tour.
-     *
-     * Needs the execution stream and the instance tables, as the scan does.
-     *
-     * @param[out] out_visits  Set to an array the caller releases with
-     *                         PULSEG_FREE(), or NULL for no visit.
-     * @return The number of visits (>= 0), or a negative error code.
-     */
-    int pulseg_get_prescan_tour(const pulseg_collection *coll, pulseg_prescan_visit **out_visits);
 
     /**
      * @brief The receive-gain calibration a prescan plays.
      *
-     * Where exactly one subsequence reads out and it repeats with the same
-     * RF amplitudes, the calibration is that subsequence from its start
-     * (@c generated 0).  Otherwise it is
-     * the excitation whose readouts carry the most signal, by a proxy that
-     * bounds it: the sine of its flip, capped at 90 degrees, times the
-     * thickness it excites (RF bandwidth over the slice-select gradient, a
-     * head coil's coverage without one).  The flip of a parallel-transmit
-     * pulse is taken relative to the 1/sqrt(N) reference drive.  The span
-     * from that excitation's segment instance to the end of the instance of
-     * its last readout before the next excitation is played from relaxed
-     * magnetization, which bounds every readout of the scan it scores above;
-     * a balanced span, whose steady state can exceed its relaxed signal, is
-     * scored at the larger of its sine and 0.5 and is played to its steady
-     * state instead.
+     * The subsequence the host generated for it, which only a prescan plays
+     * (pulseg_subseq_info.prescan_only), where the cache holds one that
+     * reads out.  Otherwise, where exactly one subsequence reads out, that
+     * subsequence from its start, after the generated subsequence where the
+     * cache holds one that does not read out: a pTx tour, every channel
+     * driven at the scan's largest before the calibration.
      */
     typedef struct pulseg_receive_calibration
     {
-        int generated;      /**< 1 for an excitation's span, 0 for the
-                                 standard calibration                      */
-        int subsequence;    /**< subsequence it plays in, -1 where nothing
-                                 reads out                                 */
-        int first_position; /**< execution-stream position of the span's
-                                 first block                               */
-        int num_blocks;     /**< its blocks, 0 for the standard one        */
-        int readouts;       /**< readouts the span acquires that NOPRESCAN
-                                 does not exempt                           */
-        int balanced;       /**< 1 where its gradients are balanced up to
-                                 the next excitation                       */
-        long period_us;     /**< from the excitation to the next, or to the
-                                 end of its subsequence                    */
-        float signal;       /**< the proxy, m                              */
+        int generated;   /**< 1 for the generated, prescan-only subsequence */
+        int lead;        /**< the prescan-only subsequence played before
+                              @c subsequence, -1 for none                  */
+        int subsequence; /**< subsequence a prescan calibrates on, -1 where
+                              neither holds                               */
+        int readouts;    /**< readouts it calibrates on                    */
     } pulseg_receive_calibration;
 
     /**
-     * @brief Choose the receive-gain calibration of a collection.
+     * @brief Find the receive-gain calibration of a collection.
      *
      * @return PULSEG_SUCCESS, or a negative error code.
      */
@@ -311,9 +223,10 @@ extern "C"
      * the channel's shim magnitude under a shim; in a parallel-transmit
      * collection a single waveform with no shim drives every channel.  With
      * @p options NULL or naming no prescan subsequence, over every block of
-     * the scan; otherwise over what that prescan plays: the tour's visits
-     * when it plays the tour, then the calibration from the subsequence's
-     * start to the instance completing its readouts.  Comparing the two says
+     * the scan, prescan-only subsequences left out; otherwise over what that
+     * prescan plays: a prescan-only subsequence it plays first, then the
+     * calibration from the subsequence's start to the instance completing
+     * its readouts.  Comparing the two says
      * whether a prescan drives every channel as hard as the scan does.
      *
      * @param[out] drive_hz  Per channel, in Hz; @p max_channels entries are
@@ -354,10 +267,10 @@ extern "C"
      * while the instances before it play.
      *
      * The prescan plays one subsequence from its start and ends with the
-     * instance that completes its readouts.  With a tour it plays every
-     * visit of pulseg_get_prescan_tour() first, each once, under the same
-     * rules; PULSEG_TOUR_ACQUIRED adds the visits' readouts to those it ends
-     * after, PULSEG_TOUR_PLAYED neither acquires nor counts them.  It waits
+     * instance that completes its readouts, after the whole of a
+     * prescan-only subsequence other than it, once, under the same rules,
+     * whose readouts are NOPRESCAN.  The scan plays no prescan-only
+     * subsequence.  It waits
      * for no trigger, drives
      * no digital output, plays at zero every gradient whose amplitude varies
      * across repetitions, and a wave any of whose logical axes varies, and

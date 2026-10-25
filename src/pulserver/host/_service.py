@@ -574,13 +574,21 @@ def _check_and_convert(
     """Check the chain in the frame of ``rotation`` while its cache is written; return the problems.
 
     The chain is ``designed`` when given, else read once from ``seq_path`` and
-    verified. Its sound pressure levels are taken first, held to the limits
-    by the check and written into the cache. The cache is segmented from
-    copies of the chain moved to ``fov_offset`` while the check rotates the
-    chain in place.
+    verified. A receive calibration generated from it
+    (:func:`~pulserver.ir.receive_calibration_sequence`) joins it as its last
+    subsequence, so it is checked, costed and written like any other. Its
+    sound pressure levels are taken first, held to the limits by the check
+    and written into the cache. The cache is segmented from copies of the
+    chain moved to ``fov_offset`` while the check rotates the chain in place.
     """
     if designed is None:
         designed = _read_chain(Path(seq_path), True)
+    calibration = ir.receive_calibration_sequence([s for _, s in designed], system)
+    if calibration is not None:
+        designed = [
+            *designed,
+            (Path(seq_path).with_name("prescan_calibration.seq"), calibration),
+        ]
     levels = (
         None
         if checked.acoustic is None

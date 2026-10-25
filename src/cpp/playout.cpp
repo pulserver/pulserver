@@ -296,7 +296,6 @@ void put_registers(
     c.put("position", block.position);
     c.put("instance", segment.instance);
     c.put("slot", segment.slot);
-    c.put("visit", segment.visit);
     c.put("rotate", segment.rotate);
     c.put("await_trigger", segment.await_trigger);
     c.put("first_position", segment.first_position);

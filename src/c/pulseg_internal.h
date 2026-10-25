@@ -470,6 +470,7 @@ typedef struct pulseg_sequence_descriptor
     float vop_global_sar_ratio; /**< see pulseg_subseq_info.vop_global_sar_ratio */
     float spl_peak_db;          /**< see pulseg_subseq_info.spl_peak_db */
     float spl_average_dba;      /**< see pulseg_subseq_info.spl_average_dba */
+    int prescan_only;           /**< see pulseg_subseq_info.prescan_only */
     int vendor;                /**< PULSEG_VENDOR_* runtime constant */
     /** what the cache holds its numbers as; copied from pulseg_opts */
     pulseg_vendor_profile profile;
@@ -647,7 +648,7 @@ typedef struct pulseg_sequence_descriptor
 #define PULSEG_SEQUENCE_DESCRIPTOR_INIT \
     { \
     0.0f, 0.0f, 0.0f, 0.0f, 0, 0, /* sar burst */ 0, /* vop ratios */ 0.0f, 0.0f, \
-    /* spl levels */ -1.0f, -1.0f, 0, \
+    /* spl levels */ -1.0f, -1.0f, /* prescan_only */ 0, 0, \
     PULSEG_VENDOR_PROFILE_INIT, {0, 1, 2}, {0, 0, 0}, {0, 0, \
     0}, {0, 0, 0}, {0, 0, 0}, 0, NULL, 0, NULL, 0, NULL, 0, NULL, 0, /* rf_amplitude_variable */ \
     0, NULL, 0, NULL, /* grad shape stats */ 0, NULL, NULL, NULL, NULL, \

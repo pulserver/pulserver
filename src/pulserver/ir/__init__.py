@@ -1,5 +1,6 @@
 """Conversion of a Pulseq sequence into the scanner's segmented binary IR."""
 
+from ._calibration import receive_calibration_sequence
 from ._checks import CheckLimits, SarRatio, SplLevels, check, sar_ratios, spl_levels
 from ._convert import (
     Format,
@@ -18,7 +19,6 @@ from ._playout import (
     Prescan,
     channel_drives,
     playout,
-    prescan_tour,
     receive_calibration,
 )
 from ._source import played_rf
@@ -45,10 +45,10 @@ __all__ = [
     "play",
     "played_rf",
     "playout",
-    "prescan_tour",
     "prescribe",
     "read_vendor",
     "receive_calibration",
+    "receive_calibration_sequence",
     "sample_wave",
     "sar_ratios",
     "spl_levels",

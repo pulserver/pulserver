@@ -3348,6 +3348,7 @@ int pulseg_get_subseq_info(const pulseg_collection *coll, pulseg_subseq_info *in
     info->vop_global_sar_ratio = coll->descriptors[subseq_idx].vop_global_sar_ratio;
     info->spl_peak_db = coll->descriptors[subseq_idx].spl_peak_db;
     info->spl_average_dba = coll->descriptors[subseq_idx].spl_average_dba;
+    info->prescan_only = coll->descriptors[subseq_idx].prescan_only;
 
     return PULSEG_SUCCESS;
 }

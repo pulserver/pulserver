@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
 import numpy as np
 
@@ -19,40 +19,22 @@ class Prescan:
     Attributes
     ----------
     subsequence
-        The subsequence it plays, from its start.
+        The subsequence it plays, from its start, after the whole of a
+        prescan-only subsequence other than it.
     readouts
         The readouts after which it ends, with the segment instance that
         completes them; 0 takes the number its sequence declares
         (``NumGainCalibrationReadouts``), whole repetitions of it.
-    tour
-        Whether it first plays the pTx tour of :func:`prescan_tour`, each
-        visit once: ``"played"`` acquires none of the tour's readouts,
-        ``"acquired"`` acquires them and adds them to ``readouts``.
-    calibration
-        ``"standard"`` calibrates on ``subsequence`` from its start;
-        ``"generated"`` on the span :func:`receive_calibration` chooses,
-        played once, ``subsequence`` and ``readouts`` unread.
     """
 
     subsequence: int = 0
     readouts: int = 0
-    tour: Literal["none", "played", "acquired"] = "none"
-    calibration: Literal["standard", "generated"] = "standard"
 
 
-_TOURS = {"none": 0, "played": 1, "acquired": 2}
-_CALIBRATIONS = {"standard": 0, "generated": 1}
-
-
-def _prescan_options(prescan: Prescan | None) -> tuple[int, int, int, int]:
+def _prescan_options(prescan: Prescan | None) -> tuple[int, int]:
     if prescan is None:
-        return (-1, 0, 0, 0)
-    return (
-        prescan.subsequence,
-        prescan.readouts,
-        _TOURS[prescan.tour],
-        _CALIBRATIONS[prescan.calibration],
-    )
+        return (-1, 0)
+    return (prescan.subsequence, prescan.readouts)
 
 
 def playout(
@@ -115,8 +97,7 @@ def playout(
         - ``blocks``: per played block, in play order, ``subsequence``,
           ``segment``, ``position``, ``instance`` (instances of its segment
           played before its own), ``slot`` (of its position's ring, -1 unless
-          the waves are streamed), ``visit`` (of the prescan's tour, -1
-          outside it), ``rotate`` (0 where NOROT keeps the prescription
+          the waves are streamed), ``rotate`` (0 where NOROT keeps the prescription
           rotation out), ``await_trigger``, ``first_position`` (the
           execution-stream position of its instance's first block) and
           ``duration_us``; the registers ``rf_amp_hz``, ``rf_phase_rad``,
@@ -163,35 +144,6 @@ def playout(
     )
 
 
-def prescan_tour(seq_path: Path | str, cache_ext: str = ".pseg") -> dict[str, Any]:
-    """List the pTx prescan tour of the cache beside a sequence file.
-
-    One visit per segment instance holding the largest drive one channel of a
-    parallel-transmit RF definition receives in its subsequence: the RF
-    amplitude times the channel's shim magnitude, or the amplitude alone for
-    a pulse with a waveform per channel or with one waveform and no shim,
-    which a sequence holding any parallel-transmit RF plays on every channel.
-    An instance that holds several is listed once. A sequence without
-    parallel-transmit RF has no visit.
-
-    Returns
-    -------
-    dict of str to numpy.ndarray
-        Per visit, by subsequence and then stream position: ``subsequence``,
-        ``segment`` (global), ``first_position`` and ``num_blocks`` of its
-        instance, ``rf_definition`` (local to the subsequence), ``channels``
-        whose largest drive it plays, the largest of them ``drive_hz``,
-        ``duration_us``, ``interval_us`` (the shortest time between the
-        starts of two successive instances of its segment in the scan, 0
-        where it plays once), ``rf_pulses`` and ``readouts``: those the scan
-        acquires that NOPRESCAN does not exempt.
-    """
-    seq_path = Path(seq_path)
-    return require("prescan_tour_from_cache")(
-        str(cache_path(seq_path, cache_ext)), seq_path.stat().st_size
-    )
-
-
 def channel_drives(
     seq_path: Path | str, prescan: Prescan | None = None, cache_ext: str = ".pseg"
 ) -> np.ndarray:
@@ -201,7 +153,7 @@ def channel_drives(
     channel's shim magnitude under a shim; a sequence holding any
     parallel-transmit RF plays a single waveform with no shim on every
     channel. Without ``prescan``, over every block of the scan; with it,
-    over what that prescan plays: the tour's visits, when it plays the tour,
+    over what that prescan plays: a prescan-only subsequence it plays first,
     then the calibration up to the instance completing its readouts. A
     prescan drives every channel as hard as the scan where no entry of
     ``channel_drives(path, prescan)`` is below ``channel_drives(path)``.
@@ -232,21 +184,14 @@ def channel_drives(
 def receive_calibration(
     seq_path: Path | str, cache_ext: str = ".pseg"
 ) -> dict[str, Any]:
-    """Return the receive-gain calibration a prescan of the cache beside a sequence file plays.
+    """Return the subsequence a prescan of the cache beside a sequence file calibrates the receive gain on.
 
-    Where exactly one subsequence reads out and it repeats with the same RF
-    amplitudes, the calibration is that subsequence from its start, as the
-    scan plays it. Otherwise it is
-    the span of one excitation: from its segment instance to the end of the
-    instance of its last readout before the next excitation, the excitation
-    whose readouts carry the most signal by a proxy that bounds it. The proxy
-    is the sine of the flip angle, capped at 90 degrees, times the thickness
-    excited: the RF bandwidth over the slice-select gradient, 0.3 m without
-    one; a parallel-transmit pulse's flip is taken relative to the 1/sqrt(N)
-    reference drive. Played from relaxed magnetization the span bounds every
-    readout of the scan it scores above. A span whose gradients are balanced
-    up to the next excitation can reach a steady state above its relaxed
-    signal: it is scored at no less than 0.5 and played to that steady state.
+    The calibration the host generated
+    (:func:`receive_calibration_sequence`), which only a prescan plays, where
+    the cache holds one that reads out; otherwise, where exactly one
+    subsequence reads out, that subsequence from its start, after a generated
+    subsequence that does not read out, the pTx tour, where the cache holds
+    one.
 
     Parameters
     ----------
@@ -258,11 +203,11 @@ def receive_calibration(
     Returns
     -------
     dict of str to Any
-        ``generated`` (False for the standard calibration), ``subsequence``
-        (-1 where nothing reads out), ``first_position`` and ``num_blocks``
-        of the span, ``readouts`` it acquires that NOPRESCAN does not exempt,
-        ``balanced``, ``period_us`` (from the excitation to the next, or to
-        the end of its subsequence) and ``signal``, the proxy in m.
+        ``generated`` (True for the generated, prescan-only subsequence),
+        ``lead`` (the prescan-only subsequence played before it, -1 for
+        none),
+        ``subsequence`` (-1 where neither holds) and ``readouts``, those it
+        calibrates on.
     """
     seq_path = Path(seq_path)
     return require("receive_calibration_from_cache")(
