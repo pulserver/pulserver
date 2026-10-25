@@ -354,6 +354,7 @@ def conversion_payload(sequence: Any, system: pp.Opts) -> dict[str, Any]:
             "spl_peak_db": -1.0,
             "spl_average_dba": -1.0,
             "repetition_size": repetition,
+            "prescan_only": int(_numbers(declared, "PrescanOnly", 1)[0]),
             "name": str(declared.get("Name", "")),
             "next_sequence": str(declared.get("NextSequence", "")),
         },

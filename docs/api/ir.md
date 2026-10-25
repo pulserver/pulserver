@@ -40,9 +40,10 @@ the cache layout in {doc}`../developer-guide/internals/ir-cache`.
 | {obj}`~pulserver.ir.Format` | Whether a quantity is stored as a float in its SI unit or as an integer. |
 | {obj}`~pulserver.ir.sample_wave` | A cache's wave on a playout's gradient raster, as loaded into a region of its waveform memory. |
 | {obj}`~pulserver.ir.playout` | Both stages of a segmented playout of a cache, the scan or its receive-gain prescan, recorded: what each position prepares, the registers of each block, what each wave reads from waveform memory and, on request, the waveforms each block plays. |
-| {obj}`~pulserver.ir.Prescan` | The receive-gain calibration a playout plays instead of the scan: one subsequence, to the instance completing its readouts, opened by the pTx tour on request. |
+| {obj}`~pulserver.ir.Prescan` | The receive-gain calibration a playout plays instead of the scan: one subsequence, to the instance completing its readouts, after a prescan-only subsequence other than it. |
 | {obj}`~pulserver.ir.channel_drives` | The largest drive each transmit channel receives in the scan, or in a prescan: what tells whether a prescan has driven every channel as hard as the scan. |
-| {obj}`~pulserver.ir.prescan_tour` | The pTx prescan tour of a cache: the segment instance holding each channel's largest drive of every parallel-transmit RF definition. |
+| {obj}`~pulserver.ir.receive_calibration` | The subsequence a prescan calibrates the receive gain on: the generated, prescan-only one where the cache holds it, else the only one that reads out. |
+| {obj}`~pulserver.ir.receive_calibration_sequence` | The receive-gain calibration generated from a chain whose start does not stand for the rest: the excitation that bounds its signal, played twice from relaxed magnetization. |
 | {obj}`~pulserver.ir.gradient_stretch` | The gradients of a subsequence's hyper-repetition-long stretch of most gradient energy, or of the one from its heaviest repetition, as corner points and on a raster: what a scanner's heating model is evaluated on. |
 | {obj}`~pulserver.ir.chain` | Files of the `NextSequence` chain starting at a sequence file, in play order. |
 | {obj}`~pulserver.ir.cache_path` | Cache file of a sequence file. |

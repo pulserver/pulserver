@@ -280,6 +280,9 @@ typedef struct pulseq_reserved_definitions
      *  counted from the first block, as pypulseqpp's Sequence.repetition
      *  finds it; the whole table when the sequence does not repeat. */
     int repetition_size;
+    /** Computed by the host, not declared by the file: 1 for the receive
+     *  calibration the host generates, which only a prescan plays. */
+    int prescan_only;
 } pulseq_reserved_definitions;
 
 /** @brief One RF_SHIMS library entry (parallel-transmit channel weights). */

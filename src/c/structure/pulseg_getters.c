@@ -230,6 +230,8 @@ int pulseg_get_scan_time(const pulseg_collection *coll, pulseg_scan_time_info *i
     for (i = 0; i < coll->num_subsequences; ++i)
     {
         desc = &coll->descriptors[i];
+        if (desc->prescan_only)
+            continue;
         prev_seg = -1;
 
         for (n = 0; n < desc->exec_stream_len; ++n)
@@ -3348,6 +3350,7 @@ int pulseg_get_subseq_info(const pulseg_collection *coll, pulseg_subseq_info *in
     info->vop_global_sar_ratio = coll->descriptors[subseq_idx].vop_global_sar_ratio;
     info->spl_peak_db = coll->descriptors[subseq_idx].spl_peak_db;
     info->spl_average_dba = coll->descriptors[subseq_idx].spl_average_dba;
+    info->prescan_only = coll->descriptors[subseq_idx].prescan_only;
 
     return PULSEG_SUCCESS;
 }
