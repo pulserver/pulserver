@@ -1258,7 +1258,7 @@ def test_a_dummy_scan_count_of_minus_one_plays_until_the_steady_state(zoo):
 
 
 def test_a_sequence_that_counts_its_own_dummies_offers_no_steady_state_choice(zoo):
-    entry = zoo["bssfp2d"].protocol.get(UIParam.user_value(0))
+    entry = zoo["mprage3d"].protocol.get(UIParam.user_value(0))
 
     assert entry is None or entry.automatic is None
 
