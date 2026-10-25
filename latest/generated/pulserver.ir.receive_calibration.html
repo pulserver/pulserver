@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Prescan.tour &#8212; pulserver documentation</title>
+    <title>receive_calibration &#8212; pulserver documentation</title>
   
   
   
@@ -52,7 +52,7 @@
     <script src="../_static/copybutton.js?v=f281be69"></script>
     <script src="../_static/sg-tags.js?v=d80f6fa4"></script>
     <script src="../_static/scripts/sphinx-book-theme.js?v=fab101a9"></script>
-    <script>DOCUMENTATION_OPTIONS.pagename = 'generated/pulserver.ir.Prescan.tour';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'generated/pulserver.ir.receive_calibration';</script>
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
@@ -62,7 +62,7 @@
         </script>
     <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
     <script src="../_static/capabilities.js?v=421ebb92"></script>
-    <link rel="canonical" href="https://pulserver.github.io/pulserver/latest/generated/pulserver.ir.Prescan.tour.html" />
+    <link rel="canonical" href="https://pulserver.github.io/pulserver/latest/generated/pulserver.ir.receive_calibration.html" />
     <link rel="icon" href="../_static/pulserver-mark.svg"/>
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
@@ -344,7 +344,7 @@
       
       
       
-      <li><a href="https://github.com/pulserver/pulserver/edit/main/docs/generated/pulserver.ir.Prescan.tour.rst" target="_blank"
+      <li><a href="https://github.com/pulserver/pulserver/edit/main/docs/generated/pulserver.ir.receive_calibration.rst" target="_blank"
    class="btn btn-sm btn-source-edit-button dropdown-item"
    title="Suggest edit"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -361,7 +361,7 @@
       
       
       
-      <li><a href="https://github.com/pulserver/pulserver/issues/new?title=Issue%20on%20page%20%2Fgenerated/pulserver.ir.Prescan.tour.html&body=Your%20issue%20content%20here." target="_blank"
+      <li><a href="https://github.com/pulserver/pulserver/issues/new?title=Issue%20on%20page%20%2Fgenerated/pulserver.ir.receive_calibration.html&body=Your%20issue%20content%20here." target="_blank"
    class="btn btn-sm btn-source-issues-button dropdown-item"
    title="Open an issue"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -391,7 +391,7 @@
       
       
       
-      <li><a href="../_sources/generated/pulserver.ir.Prescan.tour.rst" target="_blank"
+      <li><a href="../_sources/generated/pulserver.ir.receive_calibration.rst" target="_blank"
    class="btn btn-sm btn-download-source-button dropdown-item"
    title="Download source file"
    data-bs-placement="left" data-bs-toggle="tooltip"
@@ -474,7 +474,7 @@
               
 
 <div id="jb-print-docs-body" class="onlyprint">
-    <h1>Prescan.tour</h1>
+    <h1>receive_calibration</h1>
     <!-- Table of contents -->
     <div id="print-main-content">
         <div id="jb-print-toc">
@@ -484,7 +484,7 @@
             </div>
             <nav aria-label="Page">
                 <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.ir.Prescan.tour"><code class="docutils literal notranslate"><span class="pre">Prescan.tour</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.ir.receive_calibration"><code class="docutils literal notranslate"><span class="pre">receive_calibration()</span></code></a></li>
 </ul>
             </nav>
         </div>
@@ -496,12 +496,37 @@
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section id="prescan-tour">
-<h1>Prescan.tour<a class="headerlink" href="#prescan-tour" title="Link to this heading">#</a></h1>
-<dl class="py attribute">
-<dt class="sig sig-object py" id="pulserver.ir.Prescan.tour">
-<span class="sig-prename descclassname"><span class="pre">Prescan.</span></span><span class="sig-name descname"><span class="pre">tour</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'none'</span></span><a class="headerlink" href="#pulserver.ir.Prescan.tour" title="Link to this definition">#</a></dt>
-<dd></dd></dl>
+  <section id="receive-calibration">
+<h1>receive_calibration<a class="headerlink" href="#receive-calibration" title="Link to this heading">#</a></h1>
+<dl class="py function">
+<dt class="sig sig-object py" id="pulserver.ir.receive_calibration">
+<span class="sig-prename descclassname"><span class="pre">pulserver.ir.</span></span><span class="sig-name descname"><span class="pre">receive_calibration</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pulserver/ir/_playout.html#receive_calibration"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.ir.receive_calibration" title="Link to this definition">#</a></dt>
+<dd><p>Return the subsequence a prescan of the cache beside a sequence file calibrates the receive gain on.</p>
+<p>The calibration the host generated
+(<a class="reference internal" href="pulserver.ir.receive_calibration_sequence.html#pulserver.ir.receive_calibration_sequence" title="pulserver.ir.receive_calibration_sequence"><code class="xref py py-func docutils literal notranslate"><span class="pre">receive_calibration_sequence()</span></code></a>), which only a prescan plays, where
+the cache holds one that reads out; otherwise, where exactly one
+subsequence reads out, that subsequence from its start, after a generated
+subsequence that does not read out, the pTx tour, where the cache holds
+one.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>seq_path</strong> (<em>Path</em><em> | </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a>) – The first file of the chain; the cache is the file beside it.</p></li>
+<li><p><strong>cache_ext</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em>, </em><em>default='.pseg'</em>) – Extension of the cache, dot included.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><code class="docutils literal notranslate"><span class="pre">generated</span></code> (True for the generated, prescan-only subsequence),
+<code class="docutils literal notranslate"><span class="pre">lead</span></code> (the prescan-only subsequence played before it, -1 for
+none),
+<code class="docutils literal notranslate"><span class="pre">subsequence</span></code> (-1 where neither holds) and <code class="docutils literal notranslate"><span class="pre">readouts</span></code>, those it
+calibrates on.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="(in Python v3.15)">dict</a> of str to Any</p>
+</dd>
+</dl>
+</dd></dl>
 
 </section>
 
@@ -534,7 +559,7 @@
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.ir.Prescan.tour"><code class="docutils literal notranslate"><span class="pre">Prescan.tour</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#pulserver.ir.receive_calibration"><code class="docutils literal notranslate"><span class="pre">receive_calibration()</span></code></a></li>
 </ul>
   </nav></div>
 

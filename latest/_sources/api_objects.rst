@@ -75,7 +75,8 @@ from.
    playout
    Prescan
    channel_drives
-   prescan_tour
+   receive_calibration
+   receive_calibration_sequence
    gradient_stretch
    chain
    cache_path

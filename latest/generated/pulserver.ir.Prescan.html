@@ -506,13 +506,11 @@
 <dl class="field-list simple">
 <dt class="field-odd">Attributes<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>subsequence</strong> (<em>int</em>) – The subsequence it plays, from its start.</p></li>
+<li><p><strong>subsequence</strong> (<em>int</em>) – The subsequence it plays, from its start, after the whole of a
+prescan-only subsequence other than it.</p></li>
 <li><p><strong>readouts</strong> (<em>int</em>) – The readouts after which it ends, with the segment instance that
 completes them; 0 takes the number its sequence declares
 (<code class="docutils literal notranslate"><span class="pre">NumGainCalibrationReadouts</span></code>), whole repetitions of it.</p></li>
-<li><p><strong>tour</strong> (<em>Literal[‘none’, ‘played’, ‘acquired’]</em>) – Whether it first plays the pTx tour of <a class="reference internal" href="pulserver.ir.prescan_tour.html#pulserver.ir.prescan_tour" title="pulserver.ir.prescan_tour"><code class="xref py py-func docutils literal notranslate"><span class="pre">prescan_tour()</span></code></a>, each
-visit once: <code class="docutils literal notranslate"><span class="pre">&quot;played&quot;</span></code> acquires none of the tour’s readouts,
-<code class="docutils literal notranslate"><span class="pre">&quot;acquired&quot;</span></code> acquires them and adds them to <code class="docutils literal notranslate"><span class="pre">readouts</span></code>.</p></li>
 </ul>
 </dd>
 </dl>
@@ -525,9 +523,6 @@ visit once: <code class="docutils literal notranslate"><span class="pre">&quot;p
 <td><p></p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="pulserver.ir.Prescan.subsequence.html#pulserver.ir.Prescan.subsequence" title="pulserver.ir.Prescan.subsequence"><code class="xref py py-obj docutils literal notranslate"><span class="pre">subsequence</span></code></a></p></td>
-<td><p></p></td>
-</tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.ir.Prescan.tour.html#pulserver.ir.Prescan.tour" title="pulserver.ir.Prescan.tour"><code class="xref py py-obj docutils literal notranslate"><span class="pre">tour</span></code></a></p></td>
 <td><p></p></td>
 </tr>
 </tbody>

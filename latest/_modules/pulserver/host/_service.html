@@ -1002,13 +1002,21 @@
 <span class="w">    </span><span class="sd">"""Check the chain in the frame of ``rotation`` while its cache is written; return the problems.</span>
 
 <span class="sd">    The chain is ``designed`` when given, else read once from ``seq_path`` and</span>
-<span class="sd">    verified. Its sound pressure levels are taken first, held to the limits</span>
-<span class="sd">    by the check and written into the cache. The cache is segmented from</span>
-<span class="sd">    copies of the chain moved to ``fov_offset`` while the check rotates the</span>
-<span class="sd">    chain in place.</span>
+<span class="sd">    verified. A receive calibration generated from it</span>
+<span class="sd">    (:func:`~pulserver.ir.receive_calibration_sequence`) joins it as its last</span>
+<span class="sd">    subsequence, so it is checked, costed and written like any other. Its</span>
+<span class="sd">    sound pressure levels are taken first, held to the limits by the check</span>
+<span class="sd">    and written into the cache. The cache is segmented from copies of the</span>
+<span class="sd">    chain moved to ``fov_offset`` while the check rotates the chain in place.</span>
 <span class="sd">    """</span>
     <span class="k">if</span> <span class="n">designed</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">designed</span> <span class="o">=</span> <span class="n">_read_chain</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="n">seq_path</span><span class="p">),</span> <span class="kc">True</span><span class="p">)</span>
+    <span class="n">calibration</span> <span class="o">=</span> <span class="n">ir</span><span class="o">.</span><span class="n">receive_calibration_sequence</span><span class="p">([</span><span class="n">s</span> <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">designed</span><span class="p">],</span> <span class="n">system</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">calibration</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">designed</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="o">*</span><span class="n">designed</span><span class="p">,</span>
+            <span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="n">seq_path</span><span class="p">)</span><span class="o">.</span><span class="n">with_name</span><span class="p">(</span><span class="s2">"prescan_calibration.seq"</span><span class="p">),</span> <span class="n">calibration</span><span class="p">),</span>
+        <span class="p">]</span>
     <span class="n">levels</span> <span class="o">=</span> <span class="p">(</span>
         <span class="kc">None</span>
         <span class="k">if</span> <span class="n">checked</span><span class="o">.</span><span class="n">acoustic</span> <span class="ow">is</span> <span class="kc">None</span>
