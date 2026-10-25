@@ -1,7 +1,8 @@
-"""How a subsequence's repetitions play in time, and its densest RF span."""
+"""How a subsequence's repetitions play in time, and the span its RF is averaged over."""
 
 from pathlib import Path
 
+import numpy as np
 import pypulseqpp as pp
 import pytest
 
@@ -59,37 +60,61 @@ def test_a_long_first_repetition_is_not_the_shortest(tmp_path):
     assert t["longest_copy_us"] == pytest.approx(301000.0)
 
 
-def test_the_window_counts_the_densest_ten_seconds(tmp_path):
-    # Packets of five pulses every 0.30416 s: 33 packets start within 10 s,
-    # the 33rd at 9.73 s, so the densest span holds 33 * 5 plays.
+def test_a_periodic_scan_is_averaged_over_one_hyper_repetition(tmp_path):
+    # Packets of five pulses every 0.30416 s, for 12 s: one packet is the span.
     w = subsequence(packets(tmp_path / "packet.seq", [4e-5] * 4 + [0.3], 40))[
         "rf_window"
     ]
-    assert w["plays"] == 33 * 5
-    assert w["counts"] == [33 * 5]
+    assert (w["plays"], w["counts"], w["start_us"]) == (5, [5], 0.0)
+    assert w["span_us"] == pytest.approx(4 * 1040.0 + 301000.0)
+
+
+def test_a_long_repetition_is_averaged_over_itself_not_a_window(tmp_path):
+    # An inversion shot of 3.4 s: any 10 s span starting at a play holds three
+    # inversions and two trains and a half, more than the shot's mean.
+    inversion = pp.make_block_pulse(np.pi, duration=1e-2, system=SYSTEM)
+    sequence = pp.Sequence(SYSTEM)
+    for _ in range(6):
+        sequence.add_block(inversion)
+        sequence.add_block(pp.make_delay(0.99))
+        for _ in range(100):
+            sequence.add_block(PULSE)
+            sequence.add_block(pp.make_delay(0.009))
+        sequence.add_block(pp.make_delay(1.4))
+    path = tmp_path / "shot.seq"
+    sequence.write(path)
+    x = subsequence(path)
+    assert x["tr_timing"]["hyper_us"] == pytest.approx(3.4e6)
+    w = x["rf_window"]
+    assert (w["plays"], w["counts"], w["start_us"]) == (101, [1] * 101, 0.0)
+    assert w["span_us"] == pytest.approx(3.4e6)
 
 
 def test_a_scan_shorter_than_the_window_plays_whole_inside_it(tmp_path):
-    x = subsequence(packets(tmp_path / "short.seq", [4e-5] * 4 + [0.3], 3))
-    assert x["rf_window"]["plays"] == 15
-    assert x["rf_window"]["start_us"] == 0.0
+    x = subsequence(_played(tmp_path / "short.seq", [0.01, 0.02, 0.03, 0.04]))
+    w = x["rf_window"]
+    assert (w["plays"], w["start_us"]) == (4, 0.0)
+    assert w["span_us"] == pytest.approx(x["tr_timing"]["played_us"])
 
 
-def test_a_dense_stretch_is_found_wherever_it_plays(tmp_path):
-    # 12 s of sparse pulses, then 10 s of dense ones: the window lands on the
-    # dense stretch, though the scan's mean density is far lower.
+def test_a_dense_stretch_is_found_and_rounded_out_to_whole_instances(tmp_path):
+    # 12 s of sparse pulses, then 18 s of dense ones every 30 ms, each pulse
+    # led by a spoiler in its segment: the densest 10 s starts at the first
+    # dense pulse, 1 ms into its instance, and ends in the delay of the 334th,
+    # whose end closes the span.
+    spoiler = pp.make_trapezoid("z", area=1000, duration=1e-3, system=SYSTEM)
     sequence = pp.Sequence(SYSTEM)
-    for _ in range(12):
-        sequence.add_block(PULSE)
-        sequence.add_block(pp.make_delay(0.999))
-    for _ in range(500):
-        sequence.add_block(PULSE)
-        sequence.add_block(pp.make_delay(0.019))
+    for wait, repeats in ((0.998, 12), (0.028, 600)):
+        for _ in range(repeats):
+            sequence.add_block(spoiler)
+            sequence.add_block(PULSE)
+            sequence.add_block(pp.make_delay(wait))
     path = tmp_path / "dense_tail.seq"
     sequence.write(path)
     w = subsequence(path)["rf_window"]
-    assert w["plays"] == 500
-    assert w["start_us"] == pytest.approx(12 * 1.0e6)
+    assert w["plays"] == 334
+    assert w["start_us"] == pytest.approx(12.0e6)
+    assert w["span_us"] == pytest.approx(334 * 30000.0)
 
 
 def _played(path, waits):

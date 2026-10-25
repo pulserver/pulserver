@@ -21,7 +21,7 @@ static void print_subsequence(const pulseg_collection *coll, int i)
     pulseg_subseq_info s = PULSEG_SUBSEQ_INFO_INIT;
     pulseg_tr_timing t;
     pulseg_rf_stats *pulses = NULL;
-    double *weights, start_us = 0.0;
+    double *weights, start_us = 0.0, span_us = 0.0;
     int *counts;
     int n, num_rf, plays, num_waves;
 
@@ -42,11 +42,11 @@ static void print_subsequence(const pulseg_collection *coll, int i)
     counts = (int *)malloc((size_t)(num_rf + 1) * sizeof(int));
     for (n = 0; n < num_rf; ++n)
         weights[n] = 1.0;
-    plays = pulseg_get_rf_window(coll, i, 10.0e6, weights, num_rf, counts, &start_us);
+    plays = pulseg_get_rf_window(coll, i, &t, 10.0e6, weights, num_rf, counts, &start_us, &span_us);
     printf("timing %d num_copies %d played_us %g shortest_copy_us %g longest_copy_us %g "
-           "hyper_copies %d hyper_us %g rf_window plays %d start_us %g\n",
+           "hyper_copies %d hyper_us %g rf_window plays %d start_us %g span_us %g\n",
            i, t.num_copies, t.played_us, t.shortest_copy_us, t.longest_copy_us,
-           t.hyper_copies, t.hyper_us, plays, start_us);
+           t.hyper_copies, t.hyper_us, plays, start_us, span_us);
     free(weights);
     free(counts);
     num_waves = pulseg_get_num_waves(coll, i);

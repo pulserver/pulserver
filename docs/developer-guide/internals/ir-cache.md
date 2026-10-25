@@ -292,6 +292,20 @@ axes and linear in between; the prescription's rotation takes them to the
 physical axes, and a model that needs them on a raster samples them at the
 centres of its intervals (`pulseg_sample_corner_points`).
 
+## RF averaging span
+
+A scanner holds SAR and its RF amplifier to averages over windows, such as
+10 s and 6 min. `pulseg_get_rf_window` gives the span of a subsequence a
+window is costed over, and the plays of each pulse of the repetition in it,
+each play at its block's start and weighed by the energy the caller gives its
+pulse. The span is costed over its own duration.
+
+| Subsequence | Span |
+|---|---|
+| Its hyper-repetition repeats and is shorter than the window | One hyper-repetition from the start, which plays at the subsequence's mean power; a window-long span would add up to one repetition's energy at its edges |
+| No longer than the window | The whole subsequence |
+| Otherwise | Of the window-long spans starting at a play or ending at the subsequence's end, the one of most energy, the earliest on a tie, rounded out to whole segment instances |
+
 ## Cache file
 
 The cache has the name of the first sequence file with its extension replaced,
