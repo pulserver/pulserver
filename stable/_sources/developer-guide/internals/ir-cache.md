@@ -48,7 +48,7 @@ and two designs ({doc}`../../explanations/architecture`).
 | Pass | Result |
 | --- | --- |
 | Event deduplication | A library of distinct RF, gradient and ADC definitions, and a per-block instance table recording the definition each block plays and its amplitude |
-| Repetition | The repetition of each subsequence and its repetition time (TR): the period pypulseqpp's `Sequence.repetition` finds, from the first block; a subsequence that does not repeat is one repetition, refused when it is longer than 15 s |
+| Repetition | The repetition of each subsequence and its repetition time (TR): the period pypulseqpp's `Sequence.repetition` finds, from the first block; a subsequence that does not repeat is one repetition, however long |
 | Segmentation | The repetition divided into virtual segments at block boundaries the {class}`~pulserver.ir.Grouping` admits |
 | Execution stream | The segment instances of the whole scan, in play order |
 | Label table | The Pulseq labels in force at every readout, three of which fill the ADC label columns |
@@ -291,6 +291,20 @@ joined over the blocks as corner points on one timeline, along the logical
 axes and linear in between; the prescription's rotation takes them to the
 physical axes, and a model that needs them on a raster samples them at the
 centres of its intervals (`pulseg_sample_corner_points`).
+
+## RF averaging span
+
+A scanner holds SAR and its RF amplifier to averages over windows, such as
+10 s and 6 min. `pulseg_get_rf_window` gives the span of a subsequence a
+window is costed over, and the plays of each pulse of the repetition in it,
+each play at its block's start and weighed by the energy the caller gives its
+pulse. The span is costed over its own duration.
+
+| Subsequence | Span |
+|---|---|
+| Its hyper-repetition repeats and is shorter than the window | One hyper-repetition from the start, which plays at the subsequence's mean power; a window-long span would add up to one repetition's energy at its edges. Weighed by `pulseg_get_rf_array`, which takes each pulse at the worst repetition instance, the repetition of largest $\sum A^2 P$, every repetition in it plays as that instance |
+| No longer than the window | The whole subsequence |
+| Otherwise | Of the window-long spans starting at a play or ending at the subsequence's end, the one of most energy, the earliest on a tie; plays are costed by count, so unlike a gradient stretch it is not widened to whole segment instances |
 
 ## Cache file
 

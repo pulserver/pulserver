@@ -11,7 +11,7 @@ and runs it on a reconstruction worker.
 The proxy listens on a TCP port and is started with
 
 ```bash
-pulserver proxy --store DIR --port N --plugins DIR [--intake-port N] [--slots N] [--spares 1] [--save-data DIR] [--idle-timeout S]
+pulserver proxy --store DIR --port N --plugins DIR [--intake-port N] [--slots N] [--spares 1] [--dicom-receiver HOST:PORT --dicom-receiver-title AE] [--save-data DIR] [--idle-timeout S]
 pulserver proxy --store DIR --port N --forward HOST:PORT [--forward-config NAME] [--dicom]
 ```
 
@@ -35,6 +35,7 @@ and fields of a series in {doc}`../user-guide/reconstruction-client`.
 | --- | --- |
 | {obj}`~pulserver.proxy.ReconProxy` | TCP MRD server enriching each series and routing it to a reconstruction worker or server. |
 | {obj}`~pulserver.proxy.ReconServer` | TCP MRD server reconstructing each series with the plugin its config names. |
+| {obj}`~pulserver.proxy.DicomReceiver` | DICOM storage service the images of a series whose client has gone are stored to. |
 | {obj}`~pulserver.proxy.LocalReconstruction` | Each series checked, enriched and reconstructed in the calling process, as the proxy's workers do, for a host that starts no processes. |
 
 ## Designs

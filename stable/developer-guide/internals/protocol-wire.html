@@ -45,7 +45,7 @@
   <link rel="preload" as="script" href="../../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../../_static/documentation_options.js?v=ef44decf"></script>
+    <script src="../../_static/documentation_options.js?v=54b85cd2"></script>
     <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -56,7 +56,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.4';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.5';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -70,7 +70,7 @@
     <link rel="prev" title="IR cache" href="ir-cache.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.4.4" />
+  <meta name="docsearch:version" content="v0.4.5" />
   
     
     <script src="../../_static/searchtools.js"></script>
@@ -541,7 +541,11 @@ sequence the evaluation builds, in the order of first play. The listing carries
 the definitions of the evaluation at the default protocol, and a layout names
 the pulses of the listing only where the protocol does not change which pulses
 are played first: the length of a train, a flip angle schedule and the matrix do
-not, and a protocol that adds a preparation pulse does.</p>
+not, and a protocol that adds a preparation pulse does. Explicit saturation
+bands are the exception a console needs, since it places them without listing
+again: the listing’s evaluation places every band the plugin offers, and the
+shipped plugins number the band pulse after the others, so a band placed or
+removed changes no other number.</p>
 <p>The layout is an estimate for the prescription. An evaluation that states none
 states no estimate and is valid, and what the scanner checks before the scan is
 the stored design (<a class="reference internal" href="../../explanations/architecture.html"><span class="doc">Architecture</span></a>).</p>
@@ -601,8 +605,8 @@ where the evaluation is invalid or states no layout. They are lists of numbers:
 each number is ASCII decimal with nine significant digits, the numbers of a list
 are separated by single spaces, and each list is one line, so that a reader
 takes tokens. <code class="docutils literal notranslate"><span class="pre">[RfDefinitions]</span></code> follows the listing of a <code class="docutils literal notranslate"><span class="pre">list</span></code> call asked with
-<code class="docutils literal notranslate"><span class="pre">rf_definitions</span></code>, which evaluates the plugin at its default protocol under the
-scanner limits. Each definition is a <code class="docutils literal notranslate"><span class="pre">definition</span></code> line, then the sample times,
+<code class="docutils literal notranslate"><span class="pre">rf_definitions</span></code>, which evaluates the plugin at its default protocol, with
+every explicit saturation band it offers placed, under the scanner limits. Each definition is a <code class="docutils literal notranslate"><span class="pre">definition</span></code> line, then the sample times,
 then the real and the imaginary parts of each channel:</p>
 <div class="highlight-text notranslate"><div class="highlight"><pre><span></span>[RfDefinitions]
 definition &lt;index&gt; &lt;use&gt; &lt;flip_deg&gt; &lt;peak_hz&gt; &lt;bandwidth_hz&gt; &lt;delay_s&gt; &lt;center_s&gt; &lt;duration_s&gt; &lt;channels&gt; &lt;samples&gt;

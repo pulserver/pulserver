@@ -45,7 +45,7 @@
   <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../_static/documentation_options.js?v=ef44decf"></script>
+    <script src="../_static/documentation_options.js?v=54b85cd2"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -56,7 +56,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.4';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.5';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -70,7 +70,7 @@
     <link rel="prev" title="Reconstruction plugins" href="reconstruction-plugins.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.4.4" />
+  <meta name="docsearch:version" content="v0.4.5" />
   
     
     <script src="../_static/searchtools.js"></script>
@@ -672,10 +672,10 @@ of the image it is written into; <code class="docutils literal notranslate"><spa
 <td><p>The image centre along the plane normal, in mm: the <code class="docutils literal notranslate"><span class="pre">SliceLocation</span></code> written by default</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">location</span></code></p></td>
-<td><p>The image centre along the patient axis the normal lies closest to, in mm, positive towards right, anterior or superior; for an oblique plane, along the normal turned towards those</p></td>
+<td><p>The image centre’s coordinate on the patient axis the normal lies closest to, in mm, positive towards right, anterior or superior; an oblique plane is located on that axis too</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">location_letter</span></code></p></td>
-<td><p>The side <code class="docutils literal notranslate"><span class="pre">location</span></code> lies on: <code class="docutils literal notranslate"><span class="pre">R</span></code> or <code class="docutils literal notranslate"><span class="pre">L</span></code>, <code class="docutils literal notranslate"><span class="pre">A</span></code> or <code class="docutils literal notranslate"><span class="pre">P</span></code>, <code class="docutils literal notranslate"><span class="pre">S</span></code> or <code class="docutils literal notranslate"><span class="pre">I</span></code>, and <code class="docutils literal notranslate"><span class="pre">+</span></code> or <code class="docutils literal notranslate"><span class="pre">-</span></code> for an oblique plane</p></td>
+<td><p>The side <code class="docutils literal notranslate"><span class="pre">location</span></code> lies on: <code class="docutils literal notranslate"><span class="pre">R</span></code> or <code class="docutils literal notranslate"><span class="pre">L</span></code>, <code class="docutils literal notranslate"><span class="pre">A</span></code> or <code class="docutils literal notranslate"><span class="pre">P</span></code>, <code class="docutils literal notranslate"><span class="pre">S</span></code> or <code class="docutils literal notranslate"><span class="pre">I</span></code></p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">instance_number</span></code>, <code class="docutils literal notranslate"><span class="pre">series_number</span></code></p></td>
 <td><p>The image’s <code class="docutils literal notranslate"><span class="pre">InstanceNumber</span></code> and <code class="docutils literal notranslate"><span class="pre">SeriesNumber</span></code></p></td>
@@ -707,7 +707,7 @@ noise scans and navigators included, and no other.</p>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">active_channels</span></code>, data</p></td>
 <td><p>The samples, demodulated by each ADC’s frequency and phase offsets</p></td>
-<td><p>Multiplied by the phase a field-of-view offset adds to a readout under a moving gradient, and by any phase modulation the sequence file stores</p></td>
+<td><p>Multiplied by the phase a field-of-view offset adds to a readout under a moving gradient, by the phase that centres the reconstruction grid (below), and by any phase modulation the sequence file stores</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">scan_counter</span></code></p></td>
 <td><p>0 on every acquisition, or increasing by one from any start</p></td>
@@ -731,7 +731,7 @@ noise scans and navigators included, and no other.</p>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">position</span></code></p></td>
 <td><p>The prescribed field-of-view centre, in mm from isocentre</p></td>
-<td><p>Moved along <code class="docutils literal notranslate"><span class="pre">slice_dir</span></code> to the centre of the readout’s slice, for a stack of 2D slices whose sequence defines <code class="docutils literal notranslate"><span class="pre">SlicePositions</span></code>; an image takes it from its reference acquisition</p></td>
+<td><p>Moved along <code class="docutils literal notranslate"><span class="pre">slice_dir</span></code> to the centre of the readout’s slice, for a stack of 2D slices whose sequence defines <code class="docutils literal notranslate"><span class="pre">SlicePositions</span></code>, and by half a voxel along each axis of even matrix size (below); an image takes it from its reference acquisition</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">measurement_uid</span></code>, <code class="docutils literal notranslate"><span class="pre">read_dir</span></code>, <code class="docutils literal notranslate"><span class="pre">phase_dir</span></code>, <code class="docutils literal notranslate"><span class="pre">slice_dir</span></code>, <code class="docutils literal notranslate"><span class="pre">patient_table_position</span></code>, <code class="docutils literal notranslate"><span class="pre">acquisition_time_stamp</span></code>, <code class="docutils literal notranslate"><span class="pre">physiology_time_stamp</span></code>, <code class="docutils literal notranslate"><span class="pre">user_int</span></code>, <code class="docutils literal notranslate"><span class="pre">user_float</span></code></p></td>
 <td><p>The scanner’s values, as MRD defines them</p></td>
@@ -740,6 +740,15 @@ noise scans and navigators included, and no other.</p>
 </tbody>
 </table>
 </div>
+<p>The reconstruction grid is centred on the field of view: the voxel centres of
+an axis of <code class="docutils literal notranslate"><span class="pre">n</span></code> voxels lie symmetrically about the prescribed centre, at
+<code class="docutils literal notranslate"><span class="pre">(i</span> <span class="pre">-</span> <span class="pre">(n</span> <span class="pre">-</span> <span class="pre">1)</span> <span class="pre">/</span> <span class="pre">2)</span></code> voxels from it. An FFT puts the centre on voxel <code class="docutils literal notranslate"><span class="pre">n</span> <span class="pre">//</span> <span class="pre">2</span></code>
+instead, half a voxel off along an axis of even <code class="docutils literal notranslate"><span class="pre">n</span></code>, so each acquisition’s
+<code class="docutils literal notranslate"><span class="pre">position</span></code> is moved by <code class="docutils literal notranslate"><span class="pre">FOV</span> <span class="pre">/</span> <span class="pre">(2</span> <span class="pre">n)</span></code> along each such axis of its encoding
+space’s matrix, and its samples are given the phase of the same shift of the
+field of view. Voxel <code class="docutils literal notranslate"><span class="pre">n</span> <span class="pre">//</span> <span class="pre">2</span></code> of the reconstruction, which MRD’s <code class="docutils literal notranslate"><span class="pre">position</span></code>
+locates, then lies half a voxel past the prescribed centre, and the content
+moves with it.</p>
 <p>A series is refused, and its reconstruction stopped, when an acquisition has a
 sample count other than its readout’s, when the scan counters skip or repeat
 one, when an acquisition before the last is flagged <code class="docutils literal notranslate"><span class="pre">LAST_IN_MEASUREMENT</span></code>,

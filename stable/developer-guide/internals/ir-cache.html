@@ -45,7 +45,7 @@
   <link rel="preload" as="script" href="../../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../../_static/documentation_options.js?v=ef44decf"></script>
+    <script src="../../_static/documentation_options.js?v=54b85cd2"></script>
     <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -58,7 +58,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.4';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.5';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -72,7 +72,7 @@
     <link rel="prev" title="Calibration, noise and coil compression" href="calibration.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.4.4" />
+  <meta name="docsearch:version" content="v0.4.5" />
   
     
     <script src="../../_static/searchtools.js"></script>
@@ -498,6 +498,7 @@
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#waves">Waves</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#playout-stages">Playout stages</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#heaviest-repetition">Heaviest repetition</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#rf-averaging-span">RF averaging span</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#cache-file">Cache file</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#playback">Playback</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#language-constraint">Language constraint</a></li>
@@ -568,7 +569,7 @@ and two designs (<a class="reference internal" href="../../explanations/architec
 <td><p>A library of distinct RF, gradient and ADC definitions, and a per-block instance table recording the definition each block plays and its amplitude</p></td>
 </tr>
 <tr class="row-odd"><td><p>Repetition</p></td>
-<td><p>The repetition of each subsequence and its repetition time (TR): the period pypulseqpp’s <code class="docutils literal notranslate"><span class="pre">Sequence.repetition</span></code> finds, from the first block; a subsequence that does not repeat is one repetition, refused when it is longer than 15 s</p></td>
+<td><p>The repetition of each subsequence and its repetition time (TR): the period pypulseqpp’s <code class="docutils literal notranslate"><span class="pre">Sequence.repetition</span></code> finds, from the first block; a subsequence that does not repeat is one repetition, however long</p></td>
 </tr>
 <tr class="row-even"><td><p>Segmentation</p></td>
 <td><p>The repetition divided into virtual segments at block boundaries the <a class="reference internal" href="../../generated/pulserver.ir.Grouping.html#pulserver.ir.Grouping" title="pulserver.ir.Grouping"><code class="xref py py-class docutils literal notranslate"><span class="pre">Grouping</span></code></a> admits</p></td>
@@ -826,6 +827,33 @@ axes and linear in between; the prescription’s rotation takes them to the
 physical axes, and a model that needs them on a raster samples them at the
 centres of its intervals (<code class="docutils literal notranslate"><span class="pre">pulseg_sample_corner_points</span></code>).</p>
 </section>
+<section id="rf-averaging-span">
+<h2>RF averaging span<a class="headerlink" href="#rf-averaging-span" title="Link to this heading">#</a></h2>
+<p>A scanner holds SAR and its RF amplifier to averages over windows, such as
+10 s and 6 min. <code class="docutils literal notranslate"><span class="pre">pulseg_get_rf_window</span></code> gives the span of a subsequence a
+window is costed over, and the plays of each pulse of the repetition in it,
+each play at its block’s start and weighed by the energy the caller gives its
+pulse. The span is costed over its own duration.</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Subsequence</p></th>
+<th class="head"><p>Span</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Its hyper-repetition repeats and is shorter than the window</p></td>
+<td><p>One hyper-repetition from the start, which plays at the subsequence’s mean power; a window-long span would add up to one repetition’s energy at its edges. Weighed by <code class="docutils literal notranslate"><span class="pre">pulseg_get_rf_array</span></code>, which takes each pulse at the worst repetition instance, the repetition of largest <span class="math notranslate nohighlight">\(\sum A^2 P\)</span>, every repetition in it plays as that instance</p></td>
+</tr>
+<tr class="row-odd"><td><p>No longer than the window</p></td>
+<td><p>The whole subsequence</p></td>
+</tr>
+<tr class="row-even"><td><p>Otherwise</p></td>
+<td><p>Of the window-long spans starting at a play or ending at the subsequence’s end, the one of most energy, the earliest on a tie; plays are costed by count, so unlike a gradient stretch it is not widened to whole segment instances</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
 <section id="cache-file">
 <h2>Cache file<a class="headerlink" href="#cache-file" title="Link to this heading">#</a></h2>
 <p>The cache has the name of the first sequence file with its extension replaced,
@@ -927,6 +955,7 @@ back a cache written on the host.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#waves">Waves</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#playout-stages">Playout stages</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#heaviest-repetition">Heaviest repetition</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#rf-averaging-span">RF averaging span</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#cache-file">Cache file</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#playback">Playback</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#language-constraint">Language constraint</a></li>

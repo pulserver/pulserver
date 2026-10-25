@@ -45,7 +45,7 @@
   <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../_static/documentation_options.js?v=ef44decf"></script>
+    <script src="../_static/documentation_options.js?v=54b85cd2"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -56,7 +56,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.4';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.5';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -68,7 +68,7 @@
     <link rel="search" title="Search" href="../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.4.4" />
+  <meta name="docsearch:version" content="v0.4.5" />
   
     
     <script src="../_static/searchtools.js"></script>
@@ -508,14 +508,17 @@ across the readout, in which case the received value stays. A readout
 whose k moves gets it as <code class="docutils literal notranslate"><span class="pre">traj</span></code>, trailing constant axes dropped, unless
 it is a Cartesian readout sampled on its flat top alone. The received
 <code class="docutils literal notranslate"><span class="pre">position</span></code>, the field-of-view centre, is moved along <code class="docutils literal notranslate"><span class="pre">slice_dir</span></code> to
-the centre of the readout’s slice (<a class="reference internal" href="pulserver.proxy.SequenceTable.slice_offset_m.html#pulserver.proxy.SequenceTable.slice_offset_m" title="pulserver.proxy.SequenceTable.slice_offset_m"><code class="xref py py-attr docutils literal notranslate"><span class="pre">SequenceTable.slice_offset_m</span></code></a>).</p>
+the centre of the readout’s slice (<a class="reference internal" href="pulserver.proxy.SequenceTable.slice_offset_m.html#pulserver.proxy.SequenceTable.slice_offset_m" title="pulserver.proxy.SequenceTable.slice_offset_m"><code class="xref py py-attr docutils literal notranslate"><span class="pre">SequenceTable.slice_offset_m</span></code></a>),
+and along each axis to the centre of the voxel an FFT reconstructs there,
+<a class="reference internal" href="pulserver.proxy.SequenceTable.grid_offset_m.html#pulserver.proxy.SequenceTable.grid_offset_m" title="pulserver.proxy.SequenceTable.grid_offset_m"><code class="xref py py-meth docutils literal notranslate"><span class="pre">SequenceTable.grid_offset_m()</span></code></a>, so that the reconstruction grid is
+centred on the field of view.</p>
 <p>The samples are left as received, except where
 <a class="reference internal" href="pulserver.proxy.SequenceTable.readout_phase_modulation.html#pulserver.proxy.SequenceTable.readout_phase_modulation" title="pulserver.proxy.SequenceTable.readout_phase_modulation"><code class="xref py py-meth docutils literal notranslate"><span class="pre">SequenceTable.readout_phase_modulation()</span></code></a> gives a phase, with the
-object at <code class="docutils literal notranslate"><span class="pre">fov_offset_m</span></code> when given. That is the
-part of a shifted field of view a receiver cannot apply itself: under a
+object at <code class="docutils literal notranslate"><span class="pre">fov_offset_m</span></code> when given, moved by the grid offset. That is
+the part of a shifted field of view a receiver cannot apply itself: under a
 gradient that holds one value, a shift is a phase and a frequency offset,
 but under one that does not, the phase curves over the readout and is
-applied here.</p>
+applied here; and the half voxel that centres the grid.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Raises<span class="colon">:</span></dt>
 <dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.15)"><strong>ValueError</strong></a> – If the acquisition’s sample count differs from the row’s.</p>

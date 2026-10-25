@@ -44,7 +44,7 @@
   <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../../../_static/documentation_options.js?v=ef44decf"></script>
+    <script src="../../../_static/documentation_options.js?v=54b85cd2"></script>
     <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -55,7 +55,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.4';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.5';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -67,7 +67,7 @@
     <link rel="search" title="Search" href="../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.4.4" />
+  <meta name="docsearch:version" content="v0.4.5" />
   
     
     <script src="../../../_static/searchtools.js"></script>
@@ -629,6 +629,27 @@
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_files</span><span class="p">[</span><span class="n">file</span><span class="p">]</span><span class="o">.</span><span class="n">readout_k</span><span class="p">(</span><span class="n">index</span> <span class="o">-</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_first_rows</span><span class="p">[</span><span class="n">file</span><span class="p">]))</span></div>
 
 
+<div class="viewcode-block" id="SequenceTable.grid_offset_m">
+<a class="viewcode-back" href="../../../generated/pulserver.proxy.SequenceTable.grid_offset_m.html#pulserver.proxy.SequenceTable.grid_offset_m">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">grid_offset_m</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Return where one readout's reconstruction grid puts its centre voxel, in m along the logical axes.</span>
+
+<span class="sd">        An FFT places the field-of-view centre on voxel ``n // 2`` of an</span>
+<span class="sd">        ``n``-voxel axis. The grid is centred instead, its voxel centres</span>
+<span class="sd">        symmetric about the field-of-view centre, which puts voxel ``n // 2``</span>
+<span class="sd">        half a voxel past it along each axis of even ``n``: ``FOV / (2 n)``,</span>
+<span class="sd">        and 0 along an axis of odd ``n`` or one voxel. Zero for a space that</span>
+<span class="sd">        states no matrix size or field of view.</span>
+<span class="sd">        """</span>
+        <span class="n">space</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">spaces</span><span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">encoding_space</span><span class="p">[</span><span class="n">index</span><span class="p">])]</span>
+        <span class="k">if</span> <span class="n">space</span><span class="o">.</span><span class="n">matrix</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">space</span><span class="o">.</span><span class="n">fov_mm</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span>
+        <span class="n">matrix</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">space</span><span class="o">.</span><span class="n">matrix</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+        <span class="n">fov_m</span> <span class="o">=</span> <span class="mf">1e-3</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">space</span><span class="o">.</span><span class="n">fov_mm</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+        <span class="n">steps</span> <span class="o">=</span> <span class="n">matrix</span> <span class="o">//</span> <span class="mi">2</span> <span class="o">-</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="p">(</span><span class="n">matrix</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">matrix</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">,</span> <span class="n">steps</span> <span class="o">*</span> <span class="n">fov_m</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">maximum</span><span class="p">(</span><span class="n">matrix</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="mf">0.0</span><span class="p">)</span></div>
+
+
 <div class="viewcode-block" id="SequenceTable.readout_phase_modulation">
 <a class="viewcode-back" href="../../../generated/pulserver.proxy.SequenceTable.readout_phase_modulation.html#pulserver.proxy.SequenceTable.readout_phase_modulation">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">readout_phase_modulation</span><span class="p">(</span>
@@ -937,15 +958,18 @@
 <span class="sd">    whose k moves gets it as ``traj``, trailing constant axes dropped, unless</span>
 <span class="sd">    it is a Cartesian readout sampled on its flat top alone. The received</span>
 <span class="sd">    ``position``, the field-of-view centre, is moved along ``slice_dir`` to</span>
-<span class="sd">    the centre of the readout's slice (:attr:`SequenceTable.slice_offset_m`).</span>
+<span class="sd">    the centre of the readout's slice (:attr:`SequenceTable.slice_offset_m`),</span>
+<span class="sd">    and along each axis to the centre of the voxel an FFT reconstructs there,</span>
+<span class="sd">    :meth:`SequenceTable.grid_offset_m`, so that the reconstruction grid is</span>
+<span class="sd">    centred on the field of view.</span>
 
 <span class="sd">    The samples are left as received, except where</span>
 <span class="sd">    :meth:`SequenceTable.readout_phase_modulation` gives a phase, with the</span>
-<span class="sd">    object at ``fov_offset_m`` when given. That is the</span>
-<span class="sd">    part of a shifted field of view a receiver cannot apply itself: under a</span>
+<span class="sd">    object at ``fov_offset_m`` when given, moved by the grid offset. That is</span>
+<span class="sd">    the part of a shifted field of view a receiver cannot apply itself: under a</span>
 <span class="sd">    gradient that holds one value, a shift is a phase and a frequency offset,</span>
 <span class="sd">    but under one that does not, the phase curves over the readout and is</span>
-<span class="sd">    applied here.</span>
+<span class="sd">    applied here; and the half voxel that centres the grid.</span>
 
 <span class="sd">    Raises</span>
 <span class="sd">    ------</span>
@@ -980,6 +1004,18 @@
             <span class="k">for</span> <span class="n">axis</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span>
         <span class="p">]</span>
 
+    <span class="n">grid_m</span> <span class="o">=</span> <span class="n">table</span><span class="o">.</span><span class="n">grid_offset_m</span><span class="p">(</span><span class="n">index</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">grid_m</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+        <span class="n">directions</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span>
+            <span class="p">[</span><span class="n">acquisition</span><span class="o">.</span><span class="n">read_dir</span><span class="p">,</span> <span class="n">acquisition</span><span class="o">.</span><span class="n">phase_dir</span><span class="p">,</span> <span class="n">acquisition</span><span class="o">.</span><span class="n">slice_dir</span><span class="p">],</span>
+            <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">acquisition</span><span class="o">.</span><span class="n">position</span><span class="p">[:]</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">acquisition</span><span class="o">.</span><span class="n">position</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+            <span class="o">+</span> <span class="mf">1e3</span> <span class="o">*</span> <span class="n">grid_m</span> <span class="o">@</span> <span class="n">directions</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+        <span class="n">stated</span> <span class="o">=</span> <span class="n">table</span><span class="o">.</span><span class="n">fov_offset_m</span> <span class="k">if</span> <span class="n">fov_offset_m</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">fov_offset_m</span>
+        <span class="n">fov_offset_m</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">stated</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span> <span class="o">+</span> <span class="n">grid_m</span>
     <span class="n">modulation</span> <span class="o">=</span> <span class="n">table</span><span class="o">.</span><span class="n">readout_phase_modulation</span><span class="p">(</span><span class="n">index</span><span class="p">,</span> <span class="n">fov_offset_m</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">modulation</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">if</span> <span class="n">modulation</span><span class="o">.</span><span class="n">size</span> <span class="o">!=</span> <span class="n">count</span><span class="p">:</span>
