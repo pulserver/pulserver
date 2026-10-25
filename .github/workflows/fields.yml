@@ -1,8 +1,10 @@
 # BrainWeb's head in the virtual scanner's coils: each coil's transmit and
 # receive maps and the transmit coils' VOPs, solved by mariepy's
-# examples/brainweb.py and published as an image that holds only those files,
-# which docker/Dockerfile copies in by digest. mariepy runs here as a program;
-# none of its code enters pulserver or its image.
+# examples/brainweb.py, published with the normal brain they are solved in as
+# an image that holds only those files, /fields and /brainweb, which
+# docker/Dockerfile copies in by digest, so that no build of pulserver's image
+# reaches BrainWeb's server. mariepy runs here as a program; none of its code
+# enters pulserver or its image.
 name: Fields
 
 on:
@@ -43,8 +45,26 @@ jobs:
           python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
           python -m pip install . brainweb-dl scipy
 
+      # From BrainWeb's server, or, while it does not answer, from the
+      # pulserver image that already carries it; either way the same bytes.
+      - name: Fetch BrainWeb's normal brain
+        env:
+          PHANTOM: phantom_1.0mm_normal_fuzzy.nii.gz
+          SHA256: cb56eb3e684ddbea48f6146839d18402c742f3b0ffdfb24b3d8ae1e3fc47fc5d
+          MIRROR: ghcr.io/pulserver/pulserver@sha256:28a3c682d8ad281e8e3ffd871b03b9477a51c59c373e8a5c41d6f398d085d386
+        run: |
+          timeout 900 python -c "import brainweb_dl; brainweb_dl.get_mri(0, 'fuzzy', brainweb_dir='brainweb')" || {
+            rm -rf brainweb && mkdir brainweb
+            cid=$(docker create "$MIRROR")
+            docker cp "$cid:/opt/brainweb/$PHANTOM" brainweb/
+            docker rm "$cid"
+          }
+          echo "$SHA256  brainweb/$PHANTOM" | sha256sum -c
+
       - name: Solve
-        run: python examples/brainweb.py --out fields --resolution "$RESOLUTION"
+        run: >-
+          python examples/brainweb.py --out fields --resolution "$RESOLUTION"
+          --brainweb-dir brainweb
 
       - name: Record what solved them
         env:
@@ -65,8 +85,9 @@ jobs:
         run: |
           image="ghcr.io/pulserver/brainweb-fields:$(git rev-parse --short HEAD)-${RESOLUTION}mm"
           echo "$TOKEN" | docker login ghcr.io -u "$ACTOR" --password-stdin
+          mkdir image && cp -r fields brainweb image/
           printf '%s\n' 'FROM scratch' \
             'LABEL org.opencontainers.image.source=https://github.com/pulserver/pulserver' \
-            'COPY . /' | docker build -t "$image" -f - fields
+            'COPY . /' | docker build -t "$image" -f - image
           docker push "$image"
           echo "Published $(docker inspect --format '{{index .RepoDigests 0}}' "$image")" >> "$GITHUB_STEP_SUMMARY"
