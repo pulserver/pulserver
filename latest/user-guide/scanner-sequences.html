@@ -1007,7 +1007,7 @@ saturation bands are the console’s own controls:</p>
 <p>The saturation bands of <code class="docutils literal notranslate"><span class="pre">gre2d</span></code> and <code class="docutils literal notranslate"><span class="pre">se2d</span></code> are placed graphically, as a
 scanner’s console places an explicit band, and each is played before every
 excitation while it is placed; a plugin offers as many bands as its module
-constant <code class="docutils literal notranslate"><span class="pre">BANDS</span></code>, 2, and refuses a mask placing more.
+constant <code class="docutils literal notranslate"><span class="pre">BANDS</span></code>, 6, and refuses a mask placing more.
 <code class="docutils literal notranslate"><span class="pre">exsat&lt;n&gt;_normal_x</span></code>, <code class="docutils literal notranslate"><span class="pre">_y</span></code> and <code class="docutils literal notranslate"><span class="pre">_z</span></code>, <code class="docutils literal notranslate"><span class="pre">exsat&lt;n&gt;_loc</span></code> and <code class="docutils literal notranslate"><span class="pre">exsat&lt;n&gt;_thickness</span></code>
 give each band’s normal along the physical axes, the distance of its centre
 from the isocentre along that normal, and its thickness, in mm. The
@@ -1102,7 +1102,7 @@ same user entry in every plugin:</p>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">zte3d</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">scheme</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">user43</span></code></p></td>
-<td><p>Spokes ordered <code class="docutils literal notranslate"><span class="pre">&quot;spiral&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;meridian&quot;</span></code></p></td>
+<td><p>Spokes ordered <code class="docutils literal notranslate"><span class="pre">&quot;spiral&quot;</span></code>, at a constant step across many rings; <code class="docutils literal notranslate"><span class="pre">&quot;meridian&quot;</span></code>; or <code class="docutils literal notranslate"><span class="pre">&quot;quiet&quot;</span></code>, the default: the spiral’s directions in steps about a ring gap long, every other shell played backwards</p></td>
 <td><p>None</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">bssfp2d</span></code></p></td>

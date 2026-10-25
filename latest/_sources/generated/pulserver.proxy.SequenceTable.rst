@@ -14,6 +14,7 @@
    :toctree:
    :nosignatures:
 
+   ~SequenceTable.grid_offset_m
    ~SequenceTable.read
    ~SequenceTable.readout_k
    ~SequenceTable.readout_phase_modulation

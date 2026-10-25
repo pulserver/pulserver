@@ -742,7 +742,9 @@ location changes across the readout, except on a Cartesian readout sampled
 on the flat top of its readout gradient alone. In a stack of slices, its
 position, the field-of-view centre the client sends, is moved along
 <code class="docutils literal notranslate"><span class="pre">slice_dir</span></code> by the <code class="docutils literal notranslate"><span class="pre">SlicePositions</span></code> entry its <code class="docutils literal notranslate"><span class="pre">SLC</span></code> indexes, to the centre of
-its slice. When the client numbers its
+its slice, and by half a voxel along each axis of even matrix size, its
+samples given the phase of the same shift, so that the reconstruction grid
+is centred on the field of view (<code class="docutils literal notranslate"><span class="pre">SequenceTable.grid_offset_m</span></code>). When the client numbers its
 acquisitions, each <code class="docutils literal notranslate"><span class="pre">scan_counter</span></code> must follow the previous one by one; a gap
 or a repeat stops the series before it is reconstructed, since every later
 row would be shifted.</p></li>

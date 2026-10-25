@@ -461,6 +461,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">._enrich</span><span class="w"> </span><span class="kn">import</span> <span class="n">enrich_acquisition</span><span class="p">,</span> <span class="n">enrich_header</span><span class="p">,</span> <span class="n">header_fov_offset_m</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._motion</span><span class="w"> </span><span class="kn">import</span> <span class="n">FILENAME</span><span class="p">,</span> <span class="n">MotionWriter</span><span class="p">,</span> <span class="n">Pose</span><span class="p">,</span> <span class="n">pose_of</span><span class="p">,</span> <span class="n">pose_waveform</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._queue</span><span class="w"> </span><span class="kn">import</span> <span class="n">QueueFile</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">._receiver</span><span class="w"> </span><span class="kn">import</span> <span class="n">DicomReceiver</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._seqdesc</span><span class="w"> </span><span class="kn">import</span> <span class="n">is_message</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._workers</span><span class="w"> </span><span class="kn">import</span> <span class="n">WorkerPool</span>
 
@@ -477,6 +478,9 @@
 <span class="n">_DRAIN_IDLE</span> <span class="o">=</span> <span class="mf">30.0</span>
 <span class="c1"># How often the exams nothing has leased for a while are looked for.</span>
 <span class="n">_EXPIRY_POLL</span> <span class="o">=</span> <span class="mf">60.0</span>
+
+<span class="c1">#: Suffix of a kept series whose stream has not ended.</span>
+<span class="n">PART</span> <span class="o">=</span> <span class="s2">".part"</span>
 
 
 <span class="k">class</span><span class="w"> </span><span class="nc">_Listener</span><span class="p">:</span>
@@ -621,15 +625,18 @@
 <span class="sd">        acquisitions enriched (the header marked ``pulserver_enriched``); a</span>
 <span class="sd">        replay plays such a file as it is. A server keeps a forwarded series</span>
 <span class="sd">        as the proxy sent it, enriched too. The header is written as this is</span>
-<span class="sd">        called.</span>
+<span class="sd">        called, into a file named with :data:`PART` appended, which takes its</span>
+<span class="sd">        own name once the stream has ended: whoever collects the directory</span>
+<span class="sd">        tells a series still arriving by the suffix.</span>
 <span class="sd">        """</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">save_to</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">return</span> <span class="n">items</span>
         <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_keeping</span><span class="p">:</span>
-            <span class="n">kept</span> <span class="o">=</span> <span class="n">QueueFile</span><span class="p">(</span><span class="n">_unkept_path</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">save_to</span><span class="p">))</span>
-        <span class="n">_log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">"keeping the series in </span><span class="si">%s</span><span class="s2">"</span><span class="p">,</span> <span class="n">kept</span><span class="o">.</span><span class="n">path</span><span class="p">)</span>
+            <span class="n">path</span> <span class="o">=</span> <span class="n">_unkept_path</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">save_to</span><span class="p">)</span>
+            <span class="n">kept</span> <span class="o">=</span> <span class="n">QueueFile</span><span class="p">(</span><span class="n">_partial</span><span class="p">(</span><span class="n">path</span><span class="p">))</span>
+        <span class="n">_log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">"keeping the series in </span><span class="si">%s</span><span class="s2">"</span><span class="p">,</span> <span class="n">path</span><span class="p">)</span>
         <span class="n">kept</span><span class="o">.</span><span class="n">write_header</span><span class="p">(</span><span class="n">header</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">_keeping</span><span class="p">(</span><span class="n">kept</span><span class="p">,</span> <span class="n">items</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">_keeping</span><span class="p">(</span><span class="n">kept</span><span class="p">,</span> <span class="n">items</span><span class="p">,</span> <span class="n">path</span><span class="p">)</span>
 
 
 <div class="viewcode-block" id="ReconProxy">
@@ -691,7 +698,10 @@
 <span class="sd">    and removed once the client has had all of it. When the client has gone, it</span>
 <span class="sd">    is kept: a client opening a series with the same ``measurementID`` is sent</span>
 <span class="sd">    it, once complete, in place of a new reconstruction. Kept output nobody</span>
-<span class="sd">    takes up is removed after a day.</span>
+<span class="sd">    takes up is removed after a day. With ``dicom_receiver``, the DICOM images</span>
+<span class="sd">    of a series whose client has gone are stored to that receiver once the</span>
+<span class="sd">    reconstruction ends, and the output is kept only if it did not store them</span>
+<span class="sd">    all.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
@@ -738,10 +748,15 @@
 <span class="sd">        DICOM alone, with a plugin that emits images.</span>
 <span class="sd">    save_to : Path | str, default=None</span>
 <span class="sd">        Directory each series is kept in, as the scanner sent it, so that it</span>
-<span class="sd">        can be reconstructed again offline; not kept when ``None``.</span>
+<span class="sd">        can be reconstructed again offline; not kept when ``None``. A series</span>
+<span class="sd">        is written to ``mrd_&lt;time&gt;.h5.part`` and renamed ``mrd_&lt;time&gt;.h5``</span>
+<span class="sd">        once its stream has ended.</span>
 <span class="sd">    idle_timeout : float, default=None</span>
 <span class="sd">        Seconds without a client after which :meth:`serve` returns, counted</span>
 <span class="sd">        from the last client to leave; never when ``None``.</span>
+<span class="sd">    dicom_receiver : DicomReceiver, default=None</span>
+<span class="sd">        Where the DICOM images of a series whose client has gone are stored;</span>
+<span class="sd">        they are held for the client's return when ``None``.</span>
 
 <span class="sd">    Attributes</span>
 <span class="sd">    ----------</span>
@@ -775,10 +790,12 @@
         <span class="n">dicom</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">save_to</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">idle_timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">dicom_receiver</span><span class="p">:</span> <span class="n">DicomReceiver</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">store</span><span class="p">,</span> <span class="n">save_to</span><span class="p">,</span> <span class="n">idle_timeout</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">designs</span> <span class="o">=</span> <span class="n">DesignCache</span><span class="p">(</span><span class="n">store</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">held</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">_held</span><span class="o">.</span><span class="n">DEFAULT_HELD_DIRECTORY</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dicom_receiver</span> <span class="o">=</span> <span class="n">dicom_receiver</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">workers</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">exams</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">queue</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="k">if</span> <span class="n">forward</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_reconstruction</span><span class="p">:</span> <span class="n">_Workers</span> <span class="o">|</span> <span class="n">_Remote</span> <span class="o">=</span> <span class="n">_Remote</span><span class="p">(</span>
@@ -825,7 +842,7 @@
             <span class="n">plugin</span><span class="p">,</span>
             <span class="nb">len</span><span class="p">(</span><span class="n">design</span><span class="o">.</span><span class="n">table</span><span class="p">),</span>
         <span class="p">)</span>
-        <span class="k">with</span> <span class="n">_held</span><span class="o">.</span><span class="n">HeldClient</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="n">path</span><span class="p">)</span> <span class="k">as</span> <span class="n">held</span><span class="p">:</span>
+        <span class="k">with</span> <span class="n">_held</span><span class="o">.</span><span class="n">HeldClient</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="n">path</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">dicom_receiver</span><span class="p">)</span> <span class="k">as</span> <span class="n">held</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_reconstruction</span><span class="o">.</span><span class="n">run</span><span class="p">(</span>
                 <span class="n">held</span><span class="p">,</span>
                 <span class="n">config</span><span class="p">,</span>
@@ -1483,18 +1500,19 @@
         <span class="p">)</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_keeping</span><span class="p">(</span><span class="n">kept</span><span class="p">:</span> <span class="n">QueueFile</span><span class="p">,</span> <span class="n">items</span><span class="p">:</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Any</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">"""Yield a series, appending each item to an open file."""</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_keeping</span><span class="p">(</span><span class="n">kept</span><span class="p">:</span> <span class="n">QueueFile</span><span class="p">,</span> <span class="n">items</span><span class="p">:</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Any</span><span class="p">],</span> <span class="n">path</span><span class="p">:</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Any</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Yield a series, appending each item to an open file renamed ``path`` once it ends."""</span>
     <span class="k">try</span><span class="p">:</span>
         <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">items</span><span class="p">:</span>
             <span class="n">kept</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">item</span><span class="p">)</span>
             <span class="k">yield</span> <span class="n">item</span>
     <span class="k">finally</span><span class="p">:</span>
         <span class="n">kept</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+        <span class="n">kept</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_unkept_path</span><span class="p">(</span><span class="n">directory</span><span class="p">:</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Path</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Return a name in ``directory`` no kept series holds.</span>
+<span class="w">    </span><span class="sd">"""Return a name in ``directory`` no kept series holds, nor one still arriving.</span>
 
 <span class="sd">    Two series may start within one second, and a second writer opening the</span>
 <span class="sd">    file of the first would append to it, leaving one file holding both.</span>
@@ -1502,9 +1520,13 @@
     <span class="n">stamp</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">strftime</span><span class="p">(</span><span class="s2">"%Y%m</span><span class="si">%d</span><span class="s2">T%H%M%S"</span><span class="p">)</span>
     <span class="k">for</span> <span class="n">index</span> <span class="ow">in</span> <span class="n">itertools</span><span class="o">.</span><span class="n">count</span><span class="p">():</span>
         <span class="n">path</span> <span class="o">=</span> <span class="n">directory</span> <span class="o">/</span> <span class="sa">f</span><span class="s2">"mrd_</span><span class="si">{</span><span class="n">stamp</span><span class="si">}{</span><span class="sa">f</span><span class="s1">'-</span><span class="si">{</span><span class="n">index</span><span class="si">}</span><span class="s1">'</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="n">index</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="s1">''</span><span class="si">}</span><span class="s2">.h5"</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">()</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">_partial</span><span class="p">(</span><span class="n">path</span><span class="p">)</span><span class="o">.</span><span class="n">exists</span><span class="p">():</span>
             <span class="k">return</span> <span class="n">path</span>
     <span class="k">raise</span> <span class="ne">AssertionError</span><span class="p">(</span><span class="s2">"unreachable"</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_partial</span><span class="p">(</span><span class="n">path</span><span class="p">:</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Path</span><span class="p">:</span>
+    <span class="k">return</span> <span class="n">path</span><span class="o">.</span><span class="n">with_name</span><span class="p">(</span><span class="n">path</span><span class="o">.</span><span class="n">name</span> <span class="o">+</span> <span class="n">PART</span><span class="p">)</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_received</span><span class="p">(</span><span class="n">client</span><span class="p">:</span> <span class="n">Connection</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Iterator</span><span class="p">[</span><span class="n">Any</span><span class="p">]:</span>

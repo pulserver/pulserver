@@ -50,8 +50,9 @@ in {doc}`../explanations/protocol`.
 
 The RF blocks are sent only when asked for, and only where the plugin's
 evaluation states an RF layout ({ref}`stating-the-rf-layout`).
-`--rf-definitions` evaluates the plugin at its default protocol under
-`--limits`, which it then requires. `--rf-layout` follows a valid reply with the
+`--rf-definitions` evaluates the plugin at its default protocol, with every
+explicit saturation band it offers placed, under `--limits`, which it then
+requires. `--rf-layout` follows a valid reply with the
 RF layout of the evaluated request, its amplitudes relative to the peaks the
 listing states. Without `--rf-definitions`, `list` depends on the plugin file,
 its options and the installed packages only, so its reply can be written once
@@ -277,8 +278,8 @@ scan beside the rest of that scan's log.
 ## Reconstruction proxy
 
 ```bash
-pulserver proxy --store DIR --port N --plugins DIR [--host ADDR] [--intake-port N] [--queue DIR] [--exams DIR] [--slots N] [--gpu-slots 1] [--spares 1] [--recon-timeout S] [--dicom] [--save-data DIR] [--idle-timeout S] [--logfile FILE] [--log-level LEVEL]
-pulserver proxy --store DIR --port N --forward HOST:PORT [--forward-config NAME] [--host ADDR] [--intake-port N] [--recon-timeout S] [--dicom] [--save-data DIR] [--idle-timeout S] [--logfile FILE] [--log-level LEVEL]
+pulserver proxy --store DIR --port N --plugins DIR [--host ADDR] [--intake-port N] [--queue DIR] [--exams DIR] [--slots N] [--gpu-slots 1] [--spares 1] [--recon-timeout S] [--dicom] [--dicom-receiver HOST:PORT --dicom-receiver-title AE [--dicom-title AE]] [--save-data DIR] [--idle-timeout S] [--logfile FILE] [--log-level LEVEL]
+pulserver proxy --store DIR --port N --forward HOST:PORT [--forward-config NAME] [--host ADDR] [--intake-port N] [--recon-timeout S] [--dicom] [--dicom-receiver HOST:PORT --dicom-receiver-title AE [--dicom-title AE]] [--save-data DIR] [--idle-timeout S] [--logfile FILE] [--log-level LEVEL]
 ```
 
 | Option | Meaning |
@@ -297,6 +298,9 @@ pulserver proxy --store DIR --port N --forward HOST:PORT [--forward-config NAME]
 | `--forward` | `HOST:PORT` of the MRD server that reconstructs every series, instead of local workers |
 | `--forward-config` | Config name sent to the `--forward` server; the series' reconstruction plugin when unset |
 | `--dicom` | Convert each image to DICOM before it is relayed, whatever reconstructed it; for a client that reads DICOM only |
+| `--dicom-receiver` | `HOST:PORT` of a DICOM storage service the images of a series whose client has gone are stored to by C-STORE; held for the client's return when unset. Needs `pynetdicom` (`pulserver[dicom]`) |
+| `--dicom-receiver-title` | Application entity title of the `--dicom-receiver`; required with it |
+| `--dicom-title` | Application entity title the proxy calls the `--dicom-receiver` as; `PULSERVER` when unset |
 | `--save-data` | Directory each series is kept in, enriched; kept nowhere when unset |
 | `--idle-timeout` | Seconds without a client after which the proxy closes, never while a series is reconstructed. Unlimited when unset |
 | `--logfile` | File the log is appended to, together with the standard output and error of the proxy and its workers, so whatever a reconstruction plugin logs, prints or warns lands there too; standard error when unset |
@@ -319,14 +323,20 @@ A series that finds every slot busy is written to the queue directory as it
 arrives and reconstructed once a slot frees; the client stays connected
 meanwhile. What goes back to a client whose connection has dropped is kept for
 a day: a client that opens a series with the same `measurementID` is sent it in
-place of a new reconstruction.
+place of a new reconstruction. With `--dicom-receiver`, the series' DICOM
+images are stored to the receiver instead once its reconstruction ends, all of
+them, since which ones the client read before it went cannot be told; the
+output is kept only if the receiver did not store every one. A scanner client
+whose process may be ended before a slow reconstruction finishes names its
+image database here.
 
 ### Saved series
 
 With `--save-data`, each series is also written to
 `<save-data>/mrd_<timestamp>.h5` as the proxy reconstructs it: header and
 acquisitions enriched, the header marked `pulserver_enriched`, each acquisition
-as it arrives. `pulserver replay` runs a plugin on that file as it stands and
+as it arrives. Until the stream ends the file is `mrd_<timestamp>.h5.part`, so
+whatever collects the directory can tell a series still arriving. `pulserver replay` runs a plugin on that file as it stands and
 gives the image the proxy did ({ref}`series-replay`). The queue directory holds a series only until it is
 reconstructed.
 

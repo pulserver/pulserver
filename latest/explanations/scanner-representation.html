@@ -537,8 +537,8 @@ its segments.</p>
 <li><p><strong>Takes the repetition pypulseqpp reports, and segments within it.</strong></p>
 <p>Code: <code class="docutils literal notranslate"><span class="pre">src/cpp/ir/structure.cpp</span></code>. Tests: <em>the ir segments the repetition pypulseqpp finds</em>; <em>a hyper tr declared as pypulseqpp writes it is the repeating unit</em> (<code class="docutils literal notranslate"><span class="pre">test_ir_repetition.py</span></code>).</p>
 </li>
-<li><p><strong>Treats a sequence that does not repeat as one repetition, and refuses one longer than 15 s.</strong></p>
-<p>Code: <code class="docutils literal notranslate"><span class="pre">SINGLE_TR_MAX_DURATION_US</span></code>. Tests: <em>a sequence that does not repeat is one repetition</em>; <em>a sequence that does not repeat is refused past 15 s</em> (<code class="docutils literal notranslate"><span class="pre">test_ir_repetition.py</span></code>).</p>
+<li><p><strong>Treats a sequence that does not repeat as one repetition, however long it plays.</strong></p>
+<p>Code: <code class="docutils literal notranslate"><span class="pre">src/cpp/ir/structure.cpp</span></code>. Tests: <em>a sequence that does not repeat is one repetition</em>; <em>a sequence that does not repeat is one repetition however long it plays</em> (<code class="docutils literal notranslate"><span class="pre">test_ir_repetition.py</span></code>); <em>a repetition past a 32 bit count of microseconds reads the same in the scanner reader</em> (<code class="docutils literal notranslate"><span class="pre">test_ir.py</span></code>).</p>
 </li>
 <li><p><strong>Cuts virtual segments only where every gradient is near zero, under a tunable grouping.</strong></p>
 <p>Code: <a class="reference internal" href="../generated/pulserver.ir.Grouping.html#pulserver.ir.Grouping" title="pulserver.ir.Grouping"><code class="xref py py-class docutils literal notranslate"><span class="pre">Grouping</span></code></a>. Tests: <em>the default grouping is what a conversion does unasked</em>; <em>a grouping moves the boundaries and not the gradient</em> (<code class="docutils literal notranslate"><span class="pre">test_ir_grouping.py</span></code>); <em>a gradient its file ends live may not end the repetition</em> (<code class="docutils literal notranslate"><span class="pre">test_ir.py</span></code>).</p>
@@ -613,7 +613,9 @@ repeats, the last copy possibly cut short.</p></li>
 <li><p>The shortest period dividing the sequence over which blocks match in
 duration and in the channels they play, so that shots with their own
 pulses or gradient shapes still repeat.</p></li>
-<li><p>Otherwise the whole file is one repetition, refused above 15 s.</p></li>
+<li><p>Otherwise the whole file is one repetition, however long. Nothing holds a
+repetition’s samples: the timing and RF costing walk its blocks and plays,
+and gradient heating is costed over stretches of at most <code class="docutils literal notranslate"><span class="pre">PULSEG_STRETCH_US</span></code>.</p></li>
 </ol>
 <p>A slice played with its own preparation and dummy shots is therefore one
 repetition, and a block played once makes the whole file one. The segment IDs

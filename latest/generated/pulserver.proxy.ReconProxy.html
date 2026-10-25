@@ -552,7 +552,10 @@ system’s temporary directory, shared with every other proxy on this host,
 and removed once the client has had all of it. When the client has gone, it
 is kept: a client opening a series with the same <code class="docutils literal notranslate"><span class="pre">measurementID</span></code> is sent
 it, once complete, in place of a new reconstruction. Kept output nobody
-takes up is removed after a day.</p>
+takes up is removed after a day. With <code class="docutils literal notranslate"><span class="pre">dicom_receiver</span></code>, the DICOM images
+of a series whose client has gone are stored to that receiver once the
+reconstruction ends, and the output is kept only if it did not store them
+all.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -586,9 +589,13 @@ local workers when <code class="docutils literal notranslate"><span class="pre">
 relayed, whatever reconstructed it. Needed by a client that reads
 DICOM alone, with a plugin that emits images.</p></li>
 <li><p><strong>save_to</strong> (<em>Path</em><em> | </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em>, </em><em>default=None</em>) – Directory each series is kept in, as the scanner sent it, so that it
-can be reconstructed again offline; not kept when <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
+can be reconstructed again offline; not kept when <code class="docutils literal notranslate"><span class="pre">None</span></code>. A series
+is written to <code class="docutils literal notranslate"><span class="pre">mrd_&lt;time&gt;.h5.part</span></code> and renamed <code class="docutils literal notranslate"><span class="pre">mrd_&lt;time&gt;.h5</span></code>
+once its stream has ended.</p></li>
 <li><p><strong>idle_timeout</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><em>float</em></a><em>, </em><em>default=None</em>) – Seconds without a client after which <a class="reference internal" href="pulserver.proxy.ReconProxy.serve.html#pulserver.proxy.ReconProxy.serve" title="pulserver.proxy.ReconProxy.serve"><code class="xref py py-meth docutils literal notranslate"><span class="pre">serve()</span></code></a> returns, counted
 from the last client to leave; never when <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
+<li><p><strong>dicom_receiver</strong> (<a class="reference internal" href="pulserver.proxy.DicomReceiver.html#pulserver.proxy.DicomReceiver" title="pulserver.proxy.DicomReceiver"><em>DicomReceiver</em></a><em>, </em><em>default=None</em>) – Where the DICOM images of a series whose client has gone are stored;
+they are held for the client’s return when <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Attributes<span class="colon">:</span></dt>

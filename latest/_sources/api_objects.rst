@@ -180,6 +180,7 @@ from.
 
    ReconProxy
    ReconServer
+   DicomReceiver
    LocalReconstruction
    DesignCache
    Design

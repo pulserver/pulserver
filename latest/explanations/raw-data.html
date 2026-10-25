@@ -552,6 +552,9 @@ before and after.</p>
 <li><p><strong>Applies the field-of-view phase the scanner’s offsets cannot, and any later position change in the header.</strong></p>
 <p>Code: <code class="xref py py-mod docutils literal notranslate"><span class="pre">pulserver.proxy</span></code>. Tests: <em>a curving readout carries the phase its receiver cannot apply</em>; <em>a steady readout needs no curve</em>; <em>a stated position away from the converted shift adds its whole phase</em> (<code class="docutils literal notranslate"><span class="pre">test_enrich.py</span></code>).</p>
 </li>
+<li><p><strong>Centres the reconstruction grid on the field of view, voxel centres symmetric about the prescribed centre.</strong></p>
+<p>Code: <code class="docutils literal notranslate"><span class="pre">SequenceTable.grid_offset_m</span></code>. Tests: <em>the reconstruction grid is centred half a voxel from an fft one</em> (<code class="docutils literal notranslate"><span class="pre">test_enrich.py</span></code>); <em>a point off the centre reconstructs where it was acquired</em> (<code class="docutils literal notranslate"><span class="pre">test_proxy.py</span></code>).</p>
+</li>
 <li><p><strong>Writes TR, TE, TI and flip angles into the header, measuring the ones the sequence does not define.</strong></p>
 <p>Code: <code class="xref py py-mod docutils literal notranslate"><span class="pre">pulserver.mrd</span></code>. Tests: <em>te and tr a sequence does not define are the ones pypulseqpp measures</em>; <em>the header lists every flip angle the sequence plays</em> (<code class="docutils literal notranslate"><span class="pre">test_mrd_sequence.py</span></code>, <code class="docutils literal notranslate"><span class="pre">test_enrich.py</span></code>).</p>
 </li>

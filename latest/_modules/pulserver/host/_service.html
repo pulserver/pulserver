@@ -461,6 +461,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">..protocol</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">Parameter</span><span class="p">,</span>
     <span class="n">ProtocolKey</span><span class="p">,</span>
+    <span class="n">UIParam</span><span class="p">,</span>
     <span class="n">Validation</span><span class="p">,</span>
     <span class="n">format_listing</span><span class="p">,</span>
     <span class="n">format_rf_definitions</span><span class="p">,</span>
@@ -551,9 +552,11 @@
 <span class="sd">    With ``rf_definitions``, the ``[RfDefinitions]`` block of the plugin's</span>
 <span class="sd">    evaluation at its default protocol under ``limits`` follows it, naming the</span>
 <span class="sd">    definitions, and the peak amplitudes, the RF layouts of later validations</span>
-<span class="sd">    refer to. No block follows where the evaluation states no RF layout. Where</span>
-<span class="sd">    it is invalid, a warning is logged and the listing is replied without the</span>
-<span class="sd">    block. ``limits`` is not read unless the definitions are asked for.</span>
+<span class="sd">    refer to. The evaluation places every explicit saturation band the plugin</span>
+<span class="sd">    offers, so the listing holds the band pulse a console plays without</span>
+<span class="sd">    listing again. No block follows where the evaluation states no RF layout.</span>
+<span class="sd">    Where it is invalid, a warning is logged and the listing is replied</span>
+<span class="sd">    without the block. ``limits`` is not read unless the definitions are asked for.</span>
 
 <span class="sd">    Raises</span>
 <span class="sd">    ------</span>
@@ -948,9 +951,12 @@
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">RfLayout</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Return the RF layout of the plugin's evaluation at its default protocol, the RF the listing states.</span>
 
-<span class="sd">    ``None`` where the evaluation states none. Where it is invalid, a warning</span>
-<span class="sd">    that begins with ``unavailable`` is logged and the result is ``None``. The</span>
-<span class="sd">    evaluation is made once per variant, as last modified, and limits.</span>
+<span class="sd">    Every explicit saturation band the plugin offers is placed: which bands</span>
+<span class="sd">    play is the console's choice, made without listing again, so the pulse</span>
+<span class="sd">    they play must be listed whichever it places. ``None`` where the</span>
+<span class="sd">    evaluation states none. Where it is invalid, a warning that begins with</span>
+<span class="sd">    ``unavailable`` is logged and the result is ``None``. The evaluation is</span>
+<span class="sd">    made once per variant, as last modified, and limits.</span>
 <span class="sd">    """</span>
     <span class="n">evaluated</span> <span class="o">=</span> <span class="n">_default_validation</span><span class="p">(</span>
         <span class="n">variant</span><span class="p">,</span> <span class="n">_mtimes</span><span class="p">(</span><span class="n">variant</span><span class="p">),</span> <span class="nb">tuple</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">limits</span><span class="o">.</span><span class="n">items</span><span class="p">()))</span>
@@ -968,7 +974,9 @@
     <span class="n">mtimes_ns</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span>  <span class="c1"># noqa: ARG001 -- part of the key</span>
     <span class="n">limits</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Validation</span><span class="p">:</span>
-    <span class="k">return</span> <span class="n">_validated</span><span class="p">(</span><span class="n">variant</span><span class="p">,</span> <span class="nb">dict</span><span class="p">(</span><span class="n">limits</span><span class="p">),</span> <span class="p">{})</span>
+    <span class="n">mask</span> <span class="o">=</span> <span class="n">_listing</span><span class="p">(</span><span class="n">variant</span><span class="p">)</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">UIParam</span><span class="o">.</span><span class="n">EXSAT_MASK</span><span class="p">)</span>
+    <span class="n">placed</span> <span class="o">=</span> <span class="p">{}</span> <span class="k">if</span> <span class="n">mask</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="p">{</span><span class="n">UIParam</span><span class="o">.</span><span class="n">EXSAT_MASK</span><span class="p">:</span> <span class="nb">int</span><span class="p">(</span><span class="n">mask</span><span class="o">.</span><span class="n">range_max</span><span class="p">)}</span>
+    <span class="k">return</span> <span class="n">_validated</span><span class="p">(</span><span class="n">variant</span><span class="p">,</span> <span class="nb">dict</span><span class="p">(</span><span class="n">limits</span><span class="p">),</span> <span class="n">placed</span><span class="p">)</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_play_averages</span><span class="p">(</span><span class="n">path</span><span class="p">:</span> <span class="n">Path</span><span class="p">,</span> <span class="n">averages</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
