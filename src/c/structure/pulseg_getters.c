@@ -230,6 +230,8 @@ int pulseg_get_scan_time(const pulseg_collection *coll, pulseg_scan_time_info *i
     for (i = 0; i < coll->num_subsequences; ++i)
     {
         desc = &coll->descriptors[i];
+        if (desc->prescan_only)
+            continue;
         prev_seg = -1;
 
         for (n = 0; n < desc->exec_stream_len; ++n)

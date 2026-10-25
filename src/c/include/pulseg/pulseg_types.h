@@ -654,7 +654,7 @@ typedef struct pulseg_cursor_info
  */
 typedef struct pulseg_scan_time_info
 {
-    float total_duration_us;      /**< total sequence duration (us)  */
+    float total_duration_us;      /**< scan duration (us), prescan-only subsequences left out */
     int total_segment_boundaries; /**< total segment boundary count  */
 } pulseg_scan_time_info;
 
@@ -695,8 +695,8 @@ typedef struct pulseg_collection_info
     int num_subsequences;    /**< number of subsequences              */
     int num_segments;        /**< total unique segments               */
     int max_adc_samples;     /**< max sample count across all ADCs    */
-    int total_readouts;      /**< total ADC readout events            */
-    float total_duration_us; /**< total sequence duration (us)        */
+    int total_readouts;      /**< ADC readout events of the scan, prescan-only subsequences left out */
+    float total_duration_us; /**< scan duration (us), prescan-only subsequences left out */
 } pulseg_collection_info;
 
 /* clang-format off */

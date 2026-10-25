@@ -141,3 +141,10 @@ def test_the_calibration_drives_no_channel_beyond_the_scan(tmp_path):
 
     assert (prescan <= ir.channel_drives(path) * (1 + 1e-6)).all()
     assert prescan[0] > 0
+
+
+def test_the_scan_totals_leave_the_calibration_out(tmp_path):
+    path, _ = _converted(tmp_path, [_periodic(90, 3e-3), _periodic(15, 0.1)])
+    summary = ir.summary(path, SYSTEM, cache_ext=".pseg")
+
+    assert summary["total_readouts"] == 8
