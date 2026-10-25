@@ -26,8 +26,10 @@ from pulserver.design import (
 )
 from pulserver.protocol import ImagingMode, TRPreset, UIParam
 
-#: Order of the spokes over the sphere, ``"spiral"`` or ``"meridian"``.
-SCHEME = option("scheme", "spiral", choices=("spiral", "meridian"), **OPTIONS["scheme"])
+#: Order of the spokes over the sphere, ``"spiral"``, ``"meridian"`` or ``"quiet"``.
+SCHEME = option(
+    "scheme", "quiet", choices=("spiral", "meridian", "quiet"), **OPTIONS["scheme"]
+)
 
 
 class Zte3D(SequencePlugin):

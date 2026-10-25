@@ -487,7 +487,7 @@ same user entry in every plugin:
 | `gre3d`, `gre_multiecho3d`, `mprage3d`, `fse3d` | `wave` | `user37` | Wave-CAIPI; the calibration region is acquired first without the wave, and `pics` and `pmc` reconstruct the wave-encoded volume | `user10` and `user11`: wave amplitude and cycles |
 | `gre3d`, `se3d`, `gre_multiecho3d` | `elliptical` | `user40` | Only the phase encodes inside the ky-kz ellipse; on by default | None |
 | `gre_multiecho2d`, `gre_multiecho3d` | `flyback` | `user41` | Monopolar echoes, on by default; off reads even echoes reversed | None |
-| `zte3d` | `scheme` | `user43` | Spokes ordered `"spiral"` or `"meridian"` | None |
+| `zte3d` | `scheme` | `user43` | Spokes ordered `"spiral"`, at a constant step across many rings; `"meridian"`; or `"quiet"`, the default: the spiral's directions in steps about a ring gap long, every other shell played backwards | None |
 | `bssfp2d` | `retrospective` | `user44` | ECG gating: off, prospective, each heartbeat triggered and acquired once per cardiac phase; on, retrospective, each segment cycled over a heartbeat and binned into cardiac phases by the reconstruction | None |
 | `gre_spiral2d`, `se_spiral2d`, `gre_stack_of_spirals3d`, `se_stack_of_spirals3d`, `mprage_stack_of_spirals3d` | `variable_density` | `user42` | Variable-density spirals | `user12`: periphery undersampling |
 
