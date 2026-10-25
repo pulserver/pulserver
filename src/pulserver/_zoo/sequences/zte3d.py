@@ -84,7 +84,11 @@ class Zte3D(SequencePlugin):
         main = turn.seq
         main.set_definition(key="TR", value=turn.tr)
         shell = main.duration()[0] + (n_views - 2) * turn.tr
-        shells = a["n_dummy"] + len(range(0, n_shots, a["r"]))
+        n_dummy = a["n_dummy"]
+        if n_dummy is None:
+            repetitions = sequences.steady_state_dummies(turn.tr, a["flip_angle_deg"])
+            n_dummy = -(-repetitions // n_views)
+        shells = n_dummy + len(range(0, n_shots, a["r"]))
         return Evaluation(
             protocol.replace(achieved(self, main)),
             shells * shell,

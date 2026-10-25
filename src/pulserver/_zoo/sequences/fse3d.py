@@ -10,7 +10,13 @@ from pypulseqpp.sequences.sequence.fse3D_sequence import (
     shot_parameters,
 )
 
-from pulserver._zoo._evaluation import achieved, arguments, rf_layout, waved
+from pulserver._zoo._evaluation import (
+    achieved,
+    arguments,
+    dummies,
+    rf_layout,
+    waved,
+)
 from pulserver._zoo._pmc import navigated
 from pulserver._zoo._slab import slab
 from pulserver._zoo._user import (
@@ -188,7 +194,7 @@ class Fse3D(SequencePlugin):
         references = -(-calibrating // lengths[0]) if waved(a) else 0
         return Evaluation(
             protocol.replace(achieved(self, train)),
-            (a["n_dummy"] + references) * times[0] + sum(times),
+            (dummies(a, times[0]) + references) * times[0] + sum(times),
             rf_layout=_longest_train(train, min(times)),
         )
 
