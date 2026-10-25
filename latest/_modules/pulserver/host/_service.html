@@ -634,8 +634,9 @@
 <span class="sd">    the plugin's options, the plugin source, the package versions and the</span>
 <span class="sd">    limits is returned without designing again.</span>
 <span class="sd">    Otherwise the sequence is designed once, under the scanner limits</span>
-<span class="sd">    capped by the design limits ``design_max_grad`` and ``design_max_slew``,</span>
-<span class="sd">    written in the logical frame, checked in the physical frame of the</span>
+<span class="sd">    capped by the design limits ``design_max_grad`` and ``design_max_slew``</span>
+<span class="sd">    and laid out with the design dead times, written in the logical frame,</span>
+<span class="sd">    checked in the physical frame of the</span>
 <span class="sd">    prescription rotation against the scanner limits with</span>
 <span class="sd">    :func:`pulserver.ir.check`, converted to the IR cache at the prescribed</span>
 <span class="sd">    field-of-view offset, and stored in place of the scan's previous design.</span>

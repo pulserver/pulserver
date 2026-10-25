@@ -133,9 +133,16 @@ scanner for the prescription's rotation:
 | --- | --- |
 | `design_max_grad` | Gradient amplitude each logical axis is designed under, in the `grad_unit` of `max_grad` |
 | `design_max_slew` | Slew rate each logical axis is designed under, in the `slew_unit` of `max_slew` |
+| `design_rf_dead_time` | Least delay of an RF pulse in its block, in s |
+| `design_rf_ringdown_time` | Least time from the end of an RF pulse to the end of its block, in s |
+| `design_adc_dead_time` | Least delay of a readout in its block, and least time after it, in s |
 
 A design limit above the scanner's leaves the scanner's, and one left out is the
-scanner's. The plugin designs under these limits derated once by
+scanner's; a design dead time below the scanner's leaves the scanner's. The
+design dead times are the room a playout needs around an RF pulse or a readout
+in some layouts and not in others, such as a readout that starts right after
+its excitation: designs make it everywhere, and the checks, which hold a file
+to the scanner's own dead times, do not ask it of an imported chain. The plugin designs under these limits derated once by
 `pypulseqpp.apply_system_derates`: the gradient amplitude, slew rate and peak
 B1 scaled by `pypulseqpp.MAX_GRAD_DERATE`, `MAX_SLEW_DERATE` and
 `MAX_B1_DERATE`. The checks, the design's identity and its manifest keep the

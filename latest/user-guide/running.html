@@ -668,11 +668,24 @@ scanner for the prescription’s rotation:</p>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">design_max_slew</span></code></p></td>
 <td><p>Slew rate each logical axis is designed under, in the <code class="docutils literal notranslate"><span class="pre">slew_unit</span></code> of <code class="docutils literal notranslate"><span class="pre">max_slew</span></code></p></td>
 </tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">design_rf_dead_time</span></code></p></td>
+<td><p>Least delay of an RF pulse in its block, in s</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">design_rf_ringdown_time</span></code></p></td>
+<td><p>Least time from the end of an RF pulse to the end of its block, in s</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">design_adc_dead_time</span></code></p></td>
+<td><p>Least delay of a readout in its block, and least time after it, in s</p></td>
+</tr>
 </tbody>
 </table>
 </div>
 <p>A design limit above the scanner’s leaves the scanner’s, and one left out is the
-scanner’s. The plugin designs under these limits derated once by
+scanner’s; a design dead time below the scanner’s leaves the scanner’s. The
+design dead times are the room a playout needs around an RF pulse or a readout
+in some layouts and not in others, such as a readout that starts right after
+its excitation: designs make it everywhere, and the checks, which hold a file
+to the scanner’s own dead times, do not ask it of an imported chain. The plugin designs under these limits derated once by
 <code class="docutils literal notranslate"><span class="pre">pypulseqpp.apply_system_derates</span></code>: the gradient amplitude, slew rate and peak
 B1 scaled by <code class="docutils literal notranslate"><span class="pre">pypulseqpp.MAX_GRAD_DERATE</span></code>, <code class="docutils literal notranslate"><span class="pre">MAX_SLEW_DERATE</span></code> and
 <code class="docutils literal notranslate"><span class="pre">MAX_B1_DERATE</span></code>. The checks, the design’s identity and its manifest keep the
