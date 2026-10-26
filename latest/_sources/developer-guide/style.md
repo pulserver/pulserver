@@ -22,22 +22,3 @@ nothing in `src/cpp/`, whose passes run only on the host. Docstrings are NumPy
 style, and comments and docstrings describe the code as it is, not its
 history. `AGENTS.md` states these rules in full.
 
-## Simulation with KomaMRI
-
-`tests/test_koma.py` simulates every fixture and every sequence pypulseqpp
-ships with KomaMRI, as designed and as {func}`~pulserver.virtual.export`
-writes what its cache plays, and compares the two signals. It runs where
-`PULSERVER_KOMA_PROJECT` names a Julia project holding KomaMRI and `julia` is
-on the path, and skips elsewhere; `PULSERVER_KOMA_CASES` restricts it to a
-comma-separated list of cases. The KomaMRI workflow runs it every night
-against pypulseqpp's latest release, and on demand. To run it locally with
-Julia 1.10 or later:
-
-```bash
-julia --project=tests/koma -e 'using Pkg; Pkg.instantiate()'
-PULSERVER_KOMA_PROJECT=tests/koma pytest -q tests/test_koma.py
-```
-
-`tests/koma/Project.toml` admits the patch releases of the KomaMRI minor
-versions it names; a newer minor version is adopted by editing its `[compat]`
-entries.
