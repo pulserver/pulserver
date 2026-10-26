@@ -29,7 +29,6 @@ behaviour comes with a regression test where practical.
 | Console | pull requests that change `docker/`, the console or the proxy | one exam scanned through the virtual scanner's console, the proxy and Gadgetron in Docker Compose |
 | Image | pull requests that change `docker/`, `src/` or the build, `main` | the Docker image, scanned through its own console; published from `main` |
 | Fields | on demand | the virtual coils' field maps and VOPs, solved with mariepy and published as an image |
-| KomaMRI | nightly, on demand | the KomaMRI simulation ({doc}`style`) |
 | CodeQL | every pull request, `main` | static analysis |
 | Release | release tags | wheels, PyPI and the GitHub release ({doc}`releases`) |
 

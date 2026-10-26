@@ -377,9 +377,9 @@ the images whatever its samples.
 
 ## External simulators
 
-A Bloch simulator that reads Pulseq files, KomaMRI for example, integrates the
-Bloch equation through every RF pulse, which the Fourier engine reduces to a
-rotation at its centre. A simulation of the design would test
+A Bloch simulator that reads Pulseq files integrates the Bloch equation
+through every RF pulse, which the Fourier engine reduces to a rotation at its
+centre. A simulation of the design would test
 the design alone; {func}`~pulserver.virtual.export` writes the blocks the
 cache plays instead, so that a simulation of the file tests the IR as the
 virtual interpreter does. Each played block becomes one block of a Pulseq
@@ -391,10 +391,8 @@ virtual interpreter does. Each played block becomes one block of a Pulseq
   are summed, as at unit, in-phase sensitivity. A simulator reads the pulse as
   it reads the design's, and applies the offsets as it applies a design's. In
   Pulseq, a frequency offset and the same phase ramp written into the samples
-  play one pulse; KomaMRI simulates the offset in the pulse's rotating frame
-  but takes the samples' phase in the opposite sense of rotation, so from the
-  ramp it would excite the mirror image of an offset slice. It refers the
-  offset's phase to the pulse's centre, which the file therefore records.
+  play one pulse; the file keeps the offset apart, its phase referred to the
+  pulse's centre, which the file therefore records.
 - The gradients along the physical axes: those the cache plays, the block's
   rotation in them, turned by $R$ except in blocks labelled `NOROT`, as the
   virtual interpreter turns them. A time-shaped gradient through the corners of all three axes
@@ -404,24 +402,13 @@ virtual interpreter does. Each played block becomes one block of a Pulseq
 - The ADC window without its offsets. The receiver phase $\theta$ of every
   sample is returned instead, and the simulated samples are demodulated by it
   as the playout demodulates. The offsets act on the samples alone, so no
-  simulator has to apply them; KomaMRI applies an ADC's phase offset but
-  neither its frequency offset nor a phase modulation.
+  simulator has to apply them.
 
 The file holds the standard sections alone. The text format writes a
 gradient's amplitude to six significant figures, and a turned gradient's
 amplitude is written as the rotation leaves it, so the k-space of a file
 exported under an oblique prescription agrees with the played trajectory to a
 relative $10^{-5}$ of its extent.
-
-A job run every night and on demand simulates every fixture and every sequence
-pypulseqpp ships with KomaMRI, over one phantom whose density, relaxation times
-and off-resonance vary across it: as designed, and as exported from its cache.
-KomaMRI drops the ppm term of an offset, so a design file carrying one is given
-to it as Pulseq 1.4.1, whose writer resolves the term; and its rotation of a
-block can drop a corner a gradient holds twice, such as the peak of a trapezoid
-without a flat top, so the job turns a design's gradients itself. The two
-simulations then differ only where the cache plays something other than the
-design, or by the rounding of the text format.
 
 ## Test coverage
 
@@ -486,9 +473,6 @@ design, or by the rounding of the text format.
   integrated by pypulseqpp, has the trajectory the cache plays, under an
   axial, an oblique and a reflected prescription, and holds each RF pulse with
   the samples, offsets, centre and use of the design's.
-- In the scheduled KomaMRI job, the signal simulated from the exported file of
-  every fixture and every shipped sequence is the one simulated from its
-  design, to the rounding of the text format.
 
 (vs-coils-from-field-maps)=
 ## Coils from field maps
