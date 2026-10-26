@@ -5,7 +5,6 @@ import math
 import pypulseqpp as pp
 from pypulseqpp import sequences
 from pypulseqpp.sequences.sequence.bssfp2D_sequence import (
-    MAX_SLICE_DURATION,
     PROSPECTIVE_DUMMIES,
     bssfp2d,
 )
@@ -107,12 +106,6 @@ class Bssfp2D(SequencePlugin):
                 per_segment = max(1, round(rr / (g["views_per_segment"] * tr)))
                 cycles = per_segment * sum(segments)
                 train = once + (n_dummy + cycles - 1) * tr
-        if train > MAX_SLICE_DURATION:
-            raise ValueError(
-                f"a slice's train lasts {train:.1f} s, longer than the "
-                f"{MAX_SLICE_DURATION:.0f} s one repetition of the scan may; "
-                "raise ry, or lower n_y"
-            )
         return Evaluation(
             protocol.replace(achieved(self, line)),
             a["n_slices"] * train,
