@@ -135,9 +135,12 @@ def _dummies(a, tr: float, gating: str) -> int:
         return int(a["n_dummy"])
     if gating == "prospective":
         return PROSPECTIVE_DUMMIES
-    return sequences.steady_state_dummies(
+    n = sequences.steady_state_dummies(
         tr, a["flip_angle_deg"], t2_s=sequences.STEADY_STATE_T2_S
     )
+    if gating == "retrospective":
+        n = min(n, max(1, round(60.0 / a["heart_rate_bpm"] / tr)))
+    return n
 
 
 def _ungated(protocol) -> dict:
