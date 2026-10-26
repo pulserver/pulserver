@@ -45,7 +45,7 @@
   <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../_static/documentation_options.js?v=43ccdcb4"></script>
+    <script src="../_static/documentation_options.js?v=f8305ea9"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -56,7 +56,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.6';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.7';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -70,7 +70,7 @@
     <link rel="prev" title="Contribution workflow" href="workflow.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.4.6" />
+  <meta name="docsearch:version" content="v0.4.7" />
   
     
     <script src="../_static/searchtools.js"></script>
@@ -488,7 +488,6 @@
                 <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#formatting-and-tests">Formatting and tests</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#code-conventions">Code conventions</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#simulation-with-komamri">Simulation with KomaMRI</a></li>
 </ul>
             </nav>
         </div>
@@ -521,24 +520,6 @@ without a device.</p>
 nothing in <code class="docutils literal notranslate"><span class="pre">src/cpp/</span></code>, whose passes run only on the host. Docstrings are NumPy
 style, and comments and docstrings describe the code as it is, not its
 history. <code class="docutils literal notranslate"><span class="pre">AGENTS.md</span></code> states these rules in full.</p>
-</section>
-<section id="simulation-with-komamri">
-<h2>Simulation with KomaMRI<a class="headerlink" href="#simulation-with-komamri" title="Link to this heading">#</a></h2>
-<p><code class="docutils literal notranslate"><span class="pre">tests/test_koma.py</span></code> simulates every fixture and every sequence pypulseqpp
-ships with KomaMRI, as designed and as <a class="reference internal" href="../generated/pulserver.virtual.export.html#pulserver.virtual.export" title="pulserver.virtual.export"><code class="xref py py-func docutils literal notranslate"><span class="pre">export()</span></code></a>
-writes what its cache plays, and compares the two signals. It runs where
-<code class="docutils literal notranslate"><span class="pre">PULSERVER_KOMA_PROJECT</span></code> names a Julia project holding KomaMRI and <code class="docutils literal notranslate"><span class="pre">julia</span></code> is
-on the path, and skips elsewhere; <code class="docutils literal notranslate"><span class="pre">PULSERVER_KOMA_CASES</span></code> restricts it to a
-comma-separated list of cases. The KomaMRI workflow runs it every night
-against pypulseqpp’s latest release, and on demand. To run it locally with
-Julia 1.10 or later:</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>julia<span class="w"> </span>--project<span class="o">=</span>tests/koma<span class="w"> </span>-e<span class="w"> </span><span class="s1">'using Pkg; Pkg.instantiate()'</span>
-<span class="nv">PULSERVER_KOMA_PROJECT</span><span class="o">=</span>tests/koma<span class="w"> </span>pytest<span class="w"> </span>-q<span class="w"> </span>tests/test_koma.py
-</pre></div>
-</div>
-<p><code class="docutils literal notranslate"><span class="pre">tests/koma/Project.toml</span></code> admits the patch releases of the KomaMRI minor
-versions it names; a newer minor version is adopted by editing its <code class="docutils literal notranslate"><span class="pre">[compat]</span></code>
-entries.</p>
 </section>
 </section>
 
@@ -591,7 +572,6 @@ entries.</p>
     <ul class="pst-show_toc_level nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#formatting-and-tests">Formatting and tests</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#code-conventions">Code conventions</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#simulation-with-komamri">Simulation with KomaMRI</a></li>
 </ul>
   </nav></div>
 

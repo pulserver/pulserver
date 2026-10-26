@@ -45,7 +45,7 @@
   <link rel="preload" as="script" href="../../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../../_static/documentation_options.js?v=43ccdcb4"></script>
+    <script src="../../_static/documentation_options.js?v=f8305ea9"></script>
     <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -58,7 +58,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.6';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.7';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -72,7 +72,7 @@
     <link rel="prev" title="SAR ratios against a reference pulse" href="sar-ratios.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.4.6" />
+  <meta name="docsearch:version" content="v0.4.7" />
   
     
     <script src="../../_static/searchtools.js"></script>
@@ -884,9 +884,9 @@ the images whatever its samples.</p>
 </section>
 <section id="external-simulators">
 <h2>External simulators<a class="headerlink" href="#external-simulators" title="Link to this heading">#</a></h2>
-<p>A Bloch simulator that reads Pulseq files, KomaMRI for example, integrates the
-Bloch equation through every RF pulse, which the Fourier engine reduces to a
-rotation at its centre. A simulation of the design would test
+<p>A Bloch simulator that reads Pulseq files integrates the Bloch equation
+through every RF pulse, which the Fourier engine reduces to a rotation at its
+centre. A simulation of the design would test
 the design alone; <a class="reference internal" href="../../generated/pulserver.virtual.export.html#pulserver.virtual.export" title="pulserver.virtual.export"><code class="xref py py-func docutils literal notranslate"><span class="pre">export()</span></code></a> writes the blocks the
 cache plays instead, so that a simulation of the file tests the IR as the
 virtual interpreter does. Each played block becomes one block of a Pulseq
@@ -898,10 +898,8 @@ cache was converted at, its centre and its use. The channels of a pTx pulse
 are summed, as at unit, in-phase sensitivity. A simulator reads the pulse as
 it reads the design’s, and applies the offsets as it applies a design’s. In
 Pulseq, a frequency offset and the same phase ramp written into the samples
-play one pulse; KomaMRI simulates the offset in the pulse’s rotating frame
-but takes the samples’ phase in the opposite sense of rotation, so from the
-ramp it would excite the mirror image of an offset slice. It refers the
-offset’s phase to the pulse’s centre, which the file therefore records.</p></li>
+play one pulse; the file keeps the offset apart, its phase referred to the
+pulse’s centre, which the file therefore records.</p></li>
 <li><p>The gradients along the physical axes: those the cache plays, the block’s
 rotation in them, turned by <span class="math notranslate nohighlight">\(R\)</span> except in blocks labelled <code class="docutils literal notranslate"><span class="pre">NOROT</span></code>, as the
 virtual interpreter turns them. A time-shaped gradient through the corners of all three axes
@@ -911,23 +909,13 @@ The file therefore needs no rotation extension.</p></li>
 <li><p>The ADC window without its offsets. The receiver phase <span class="math notranslate nohighlight">\(\theta\)</span> of every
 sample is returned instead, and the simulated samples are demodulated by it
 as the playout demodulates. The offsets act on the samples alone, so no
-simulator has to apply them; KomaMRI applies an ADC’s phase offset but
-neither its frequency offset nor a phase modulation.</p></li>
+simulator has to apply them.</p></li>
 </ul>
 <p>The file holds the standard sections alone. The text format writes a
 gradient’s amplitude to six significant figures, and a turned gradient’s
 amplitude is written as the rotation leaves it, so the k-space of a file
 exported under an oblique prescription agrees with the played trajectory to a
 relative <span class="math notranslate nohighlight">\(10^{-5}\)</span> of its extent.</p>
-<p>A job run every night and on demand simulates every fixture and every sequence
-pypulseqpp ships with KomaMRI, over one phantom whose density, relaxation times
-and off-resonance vary across it: as designed, and as exported from its cache.
-KomaMRI drops the ppm term of an offset, so a design file carrying one is given
-to it as Pulseq 1.4.1, whose writer resolves the term; and its rotation of a
-block can drop a corner a gradient holds twice, such as the peak of a trapezoid
-without a flat top, so the job turns a design’s gradients itself. The two
-simulations then differ only where the cache plays something other than the
-design, or by the rounding of the text format.</p>
 </section>
 <section id="test-coverage">
 <h2>Test coverage<a class="headerlink" href="#test-coverage" title="Link to this heading">#</a></h2>
@@ -993,9 +981,6 @@ directions.</p></li>
 integrated by pypulseqpp, has the trajectory the cache plays, under an
 axial, an oblique and a reflected prescription, and holds each RF pulse with
 the samples, offsets, centre and use of the design’s.</p></li>
-<li><p>In the scheduled KomaMRI job, the signal simulated from the exported file of
-every fixture and every shipped sequence is the one simulated from its
-design, to the rounding of the text format.</p></li>
 </ul>
 </section>
 <section id="coils-from-field-maps">
