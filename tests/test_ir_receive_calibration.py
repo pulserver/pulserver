@@ -118,6 +118,15 @@ def test_an_rf_spoiled_train_measures_its_pulse_shape_once(tmp_path, monkeypatch
     assert _flips(calibration) == pytest.approx([80, 80], abs=0.1)
 
 
+@pytest.mark.parametrize("flips", [(120, 150), (150, 120)])
+def test_excitations_past_ninety_degrees_tie_and_the_first_played_wins(flips):
+    calibration = ir.receive_calibration_sequence(
+        [_periodic(flips[0], 5e-3), _periodic(flips[1], 5e-3)], SYSTEM
+    )
+
+    assert _flips(calibration) == pytest.approx([flips[0]] * 2, abs=0.1)
+
+
 def test_a_sequence_without_readouts_generates_nothing():
     seq = pp.Sequence(SYSTEM)
     seq.add_block(pp.make_block_pulse(0.3, duration=1e-3, system=SYSTEM))

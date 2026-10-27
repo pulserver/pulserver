@@ -15,6 +15,9 @@ import pypulseqpp as pp
 COVERAGE = 0.3
 #: Net gradient area under this fraction of the absolute area is balanced.
 BALANCE_TOLERANCE = 1e-2
+#: Decimals, in m, signals are compared at: candidates equal to rounding
+#: tie, and the first in play order is taken.
+SIGNAL_DIGITS = 9
 #: Plays of the calibration whose readouts set the gain.
 FRAMES = 2
 #: Rest before each play of the calibration, s, so it reads relaxed
@@ -146,9 +149,10 @@ def receive_calibration_sequence(
     reading = [i for i, f in enumerate(files) if f.reads.any()]
     calibration = None
     if reading and not (len(reading) == 1 and _repeats_alike(files[reading[0]])):
+        # Equal signals, to rounding, go to the first in play order.
         calibration = max(
             (span for i in reading for span in _spans(files[i], i, channels)),
-            key=lambda span: span.signal,
+            key=lambda span: round(span.signal, SIGNAL_DIGITS),
             default=None,
         )
     if not tour and calibration is None:
