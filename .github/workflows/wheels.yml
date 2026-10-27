@@ -30,7 +30,7 @@ jobs:
         with:
           fetch-depth: 0 # setuptools_scm reads the tags
 
-      - uses: pypa/cibuildwheel@v4.3.1
+      - uses: pypa/cibuildwheel@v4.3.4
         env:
           CIBW_BUILD: ${{ inputs.cibw-build }}
           CIBW_SKIP: "*-musllinux_*"
