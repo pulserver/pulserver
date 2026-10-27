@@ -45,7 +45,7 @@
   <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../_static/documentation_options.js?v=b296df57"></script>
+    <script src="../_static/documentation_options.js?v=096a5d4a"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -56,7 +56,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.8';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.9';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -70,7 +70,7 @@
     <link rel="prev" title="Reconstruction plugins" href="reconstruction-plugins.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.4.8" />
+  <meta name="docsearch:version" content="v0.4.9" />
   
     
     <script src="../_static/searchtools.js"></script>
@@ -679,6 +679,9 @@ of the image it is written into; <code class="docutils literal notranslate"><spa
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">instance_number</span></code>, <code class="docutils literal notranslate"><span class="pre">series_number</span></code></p></td>
 <td><p>The image’s <code class="docutils literal notranslate"><span class="pre">InstanceNumber</span></code> and <code class="docutils literal notranslate"><span class="pre">SeriesNumber</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">instance_number+N</span></code>, <code class="docutils literal notranslate"><span class="pre">instance_number-N</span></code>, <code class="docutils literal notranslate"><span class="pre">series_number+N</span></code>, <code class="docutils literal notranslate"><span class="pre">series_number-N</span></code></p></td>
+<td><p>Either number plus or minus the integer <code class="docutils literal notranslate"><span class="pre">N</span></code>, as in <code class="docutils literal notranslate"><span class="pre">{instance_number+1000}</span></code></p></td>
 </tr>
 </tbody>
 </table>
