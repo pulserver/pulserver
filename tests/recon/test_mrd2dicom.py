@@ -1236,6 +1236,62 @@ def test_a_stated_attribute_without_a_quantity_is_part_of_the_series_template(
     assert (above[0x0011, 0x1011].value, below[0x0011, 0x1011].value) == (10.0, -10.0)
 
 
+@pytest.mark.parametrize(
+    ("value", "keyword", "offset"),
+    [
+        ("{instance_number+36352}", "InstanceNumber", 36352),
+        ("{instance_number - 1}", "InstanceNumber", -1),
+        ("{series_number+7}", "SeriesNumber", 7),
+    ],
+)
+def test_an_integer_quantity_plus_or_minus_an_integer_is_written_per_image(
+    minimal_mrd_header, value, keyword, offset
+):
+    header = _explicit(minimal_mrd_header, [("(0011,10a2)SL", value)])
+
+    dataset = _placed(MrdDicomBuilder(header), **CORONAL)
+
+    assert dataset[0x0011, 0x10A2].value == int(dataset[keyword].value) + offset
+
+
+def test_an_offset_follows_the_instance_number_of_each_image(minimal_mrd_header):
+    header = _explicit(minimal_mrd_header, [("(0011,10a2)SL", "{instance_number+100}")])
+
+    builder = MrdDicomBuilder(header)
+    first = _placed(builder, **CORONAL)
+    second = _placed(builder, **CORONAL)
+
+    assert (first.InstanceNumber, second.InstanceNumber) == (1, 2)
+    assert (first[0x0011, 0x10A2].value, second[0x0011, 0x10A2].value) == (101, 102)
+
+
+def test_an_offset_keeps_literal_braces_and_a_format_spec(minimal_mrd_header):
+    header = _explicit(
+        minimal_mrd_header,
+        [("(0011,1013)LO", "{{run}} {instance_number+41:05d}")],
+    )
+
+    dataset = _placed(MrdDicomBuilder(header), **CORONAL)
+
+    assert dataset[0x0011, 0x1013].value == "{run} 00042"
+
+
+def test_an_offset_of_a_quantity_that_is_not_an_integer_is_logged_and_left_out(
+    minimal_mrd_header, caplog
+):
+    header = _explicit(
+        minimal_mrd_header,
+        [("(0011,1011)FL", "{location+1}"), ("(0011,1012)SL", "{instance_number*2}")],
+    )
+
+    with caplog.at_level(logging.DEBUG):
+        dataset = _placed(MrdDicomBuilder(header), **CORONAL)
+
+    assert (0x0011, 0x1011) not in dataset
+    assert (0x0011, 0x1012) not in dataset
+    assert "location is not an integer quantity" in caplog.text
+
+
 # ---------------------------------------------------------------------------
 # Display orientation
 # ---------------------------------------------------------------------------
