@@ -86,6 +86,26 @@ _EXPLICIT = re.compile(r"\(([0-9A-Fa-f]{4}),([0-9A-Fa-f]{4})\)([A-Z]{2})")
 _DICTIONARY_LINE = re.compile(
     r"\(([0-9A-Fa-f]{4}),([0-9A-Fa-f]{4})\)\s+([A-Z]{2})\s+(\w+)"
 )
+#: A placeholder offsetting an integer quantity, ``instance_number+36352``.
+_OFFSET = re.compile(r"\s*(\w+)\s*([+-])\s*(\d+)\s*")
+
+
+class _Quantities(dict):
+    """The quantities of an image, and an integer one plus or minus an integer.
+
+    :meth:`str.format_map` hands ``{instance_number+5}`` over as the key
+    ``"instance_number+5"``, which is evaluated here.
+    """
+
+    def __missing__(self, key: str) -> int:
+        match = _OFFSET.fullmatch(key)
+        if match is None:
+            raise KeyError(key)
+        name, sign, offset = match.groups()
+        value = self[name]
+        if not isinstance(value, int) or isinstance(value, bool):
+            raise KeyError(f"{name} is not an integer quantity")
+        return value + int(offset) if sign == "+" else value - int(offset)
 
 
 def to_dicom_date(value: Any) -> str:
@@ -163,7 +183,8 @@ class MrdDicomBuilder:
     lies closest to, positive towards right, anterior or superior (mm), for an
     oblique plane too; ``location_letter``, the side that location lies on
     (``R``/``L``, ``A``/``P``, ``S``/``I``);
-    ``instance_number`` and ``series_number``; ``{{`` and ``}}`` are literal
+    ``instance_number`` and ``series_number``, either of them plus or minus
+    an integer, ``{instance_number+1000}``; ``{{`` and ``}}`` are literal
     braces. The private dictionary is the
     file the header's ``dicom:dictionary`` entry names, in MATLAB's format, a
     ``(gggg,eeee) VR Keyword VM`` line per attribute. An attribute that cannot
@@ -720,11 +741,11 @@ class MrdDicomBuilder:
 
     def _state(self, dicomDset: pydicom.Dataset, quantities: dict[str, Any]) -> None:
         """Write the header's ``dicom:`` attributes that name a quantity of the image."""
-        quantities = {
-            **quantities,
-            "instance_number": dicomDset.InstanceNumber,
-            "series_number": dicomDset.SeriesNumber,
-        }
+        quantities = _Quantities(
+            quantities,
+            instance_number=dicomDset.InstanceNumber,
+            series_number=dicomDset.SeriesNumber,
+        )
         for tag, vr, value in self._per_image:
             try:
                 text = value.format_map(quantities)

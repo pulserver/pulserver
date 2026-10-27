@@ -89,6 +89,7 @@ of the image it is written into; `{{` and `}}` are literal braces:
 | `location` | The image centre's coordinate on the patient axis the normal lies closest to, in mm, positive towards right, anterior or superior; an oblique plane is located on that axis too |
 | `location_letter` | The side `location` lies on: `R` or `L`, `A` or `P`, `S` or `I` |
 | `instance_number`, `series_number` | The image's `InstanceNumber` and `SeriesNumber` |
+| `instance_number+N`, `instance_number-N`, `series_number+N`, `series_number-N` | Either number plus or minus the integer `N`, as in `{instance_number+1000}` |
 
 An attribute that resolves to no tag, for want of the dictionary, is logged and
 left out. `pulserver replay --dicom-dictionary` names another dictionary for a
