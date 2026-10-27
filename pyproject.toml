@@ -47,7 +47,7 @@ dev = [
   "coverage>=7.16.2",
   # Pinned, not ranged: a formatter that differs between a contributor and
   # CI makes "one entry point" a lie. Dependabot proposes the bumps.
-  "ruff==0.17.1",
+  "ruff==0.17.2",
   "pre-commit>=4.6.2",
   "build",
 ]
