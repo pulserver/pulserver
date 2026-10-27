@@ -12,10 +12,11 @@ from pulserver.ir import Prescan, WaveBudget
 SYSTEM = pp.Opts(max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s")
 
 
-def _repetition(seq, flip_deg, thickness, delay=5e-3, phase_area=0.0):
+def _repetition(seq, flip_deg, thickness, delay=5e-3, phase_area=0.0, phase=0.0):
     rf, gz, gzr = pp.make_sinc_pulse(
         math.radians(flip_deg),
         duration=2e-3,
+        phase_offset=phase,
         slice_thickness=thickness,
         time_bw_product=4,
         system=SYSTEM,
@@ -97,6 +98,33 @@ def test_a_flip_angle_train_calibrates_on_its_largest_flip_at_its_own_amplitude(
 
     assert calibration is not None
     assert _flips(calibration) == pytest.approx([80, 80], abs=0.1)
+
+
+def test_an_rf_spoiled_train_measures_its_pulse_shape_once(tmp_path, monkeypatch):
+    seq = pp.Sequence(SYSTEM)
+    for k, flip in enumerate([10, 35, 80, 20, 55]):
+        _repetition(seq, flip, 5e-3, phase=math.radians(117) * k * (k + 1) / 2)
+    seq.write(str(tmp_path / "spoiled.seq"))
+    seq = pp.io.read(str(tmp_path / "spoiled.seq"))
+    measured = []
+    measure = pp.calc_rf_bandwidth
+    monkeypatch.setattr(
+        pp, "calc_rf_bandwidth", lambda rf: measured.append(rf) or measure(rf)
+    )
+    calibration = ir.receive_calibration_sequence([seq], SYSTEM)
+
+    assert len(seq.libraries().rf) == 5
+    assert len(measured) == 1
+    assert _flips(calibration) == pytest.approx([80, 80], abs=0.1)
+
+
+@pytest.mark.parametrize("flips", [(120, 150), (150, 120)])
+def test_excitations_past_ninety_degrees_tie_and_the_first_played_wins(flips):
+    calibration = ir.receive_calibration_sequence(
+        [_periodic(flips[0], 5e-3), _periodic(flips[1], 5e-3)], SYSTEM
+    )
+
+    assert _flips(calibration) == pytest.approx([flips[0]] * 2, abs=0.1)
 
 
 def test_a_sequence_without_readouts_generates_nothing():

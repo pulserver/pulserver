@@ -15,6 +15,9 @@ import pypulseqpp as pp
 COVERAGE = 0.3
 #: Net gradient area under this fraction of the absolute area is balanced.
 BALANCE_TOLERANCE = 1e-2
+#: Decimals, in m, signals are compared at: candidates equal to rounding
+#: tie, and the first in play order is taken.
+SIGNAL_DIGITS = 9
 #: Plays of the calibration whose readouts set the gain.
 FRAMES = 2
 #: Rest before each play of the calibration, s, so it reads relaxed
@@ -54,6 +57,22 @@ class _File:
         self.channels = np.asarray(sequence.rf_channels(), dtype=int)
         self.durations = np.asarray(self.tables.block_durations, dtype=float)
         self._signals: dict[int, np.ndarray] = {}
+        self._bandwidths: dict[tuple[int, int, int], float] = {}
+
+    def bandwidth(self, rf_id: int) -> float:
+        """Return the bandwidth, Hz, of the RF of ``rf_id``.
+
+        It depends on the magnitude, phase and time shapes alone, so an
+        RF-spoiled train, whose every pulse is an RF definition of its own,
+        measures it once.
+        """
+        row = self.tables.rf[rf_id - 1]
+        shape = (int(row[1]), int(row[2]), int(row[3]))
+        if shape not in self._bandwidths:
+            block = int(np.flatnonzero(self.rf == rf_id)[0]) + 1
+            rf = self.sequence.get_block(block).rf
+            self._bandwidths[shape] = float(pp.calc_rf_bandwidth(rf))
+        return self._bandwidths[shape]
 
     def signal(self, rf_id: int) -> np.ndarray:
         """Return the RF waveform of ``rf_id``, Hz, one row per channel."""
@@ -130,9 +149,10 @@ def receive_calibration_sequence(
     reading = [i for i, f in enumerate(files) if f.reads.any()]
     calibration = None
     if reading and not (len(reading) == 1 and _repeats_alike(files[reading[0]])):
+        # Equal signals, to rounding, go to the first in play order.
         calibration = max(
             (span for i in reading for span in _spans(files[i], i, channels)),
-            key=lambda span: span.signal,
+            key=lambda span: round(span.signal, SIGNAL_DIGITS),
             default=None,
         )
     if not tour and calibration is None:
@@ -194,11 +214,6 @@ def _interval(f: _File, block: int) -> float:
     return float(np.diff(starts[same]).min()) if same.size > 1 else 0.0
 
 
-def _bandwidth(f: _File, rf_id: int) -> float:
-    block = int(np.flatnonzero(f.rf == rf_id)[0]) + 1
-    return float(pp.calc_rf_bandwidth(f.sequence.get_block(block).rf))
-
-
 def _areas(f: _File, ids: np.ndarray) -> tuple[np.ndarray, bool]:
     """Area of each gradient id, Hz/m s; False where one is not a trapezoid."""
     trapezoids = np.asarray(f.tables.trapezoids, dtype=float)
@@ -230,7 +245,6 @@ def _spans(f: _File, file: int, channels: int):
         int(b) - 1: float(np.linalg.norm(g))
         for b, g in zip(gradients.block, gradients.gradient, strict=True)
     }
-    bandwidths: dict[int, float] = {}
     for first, stop in zip(
         excitations, [*excitations[1:], f.blocks.shape[0]], strict=True
     ):
@@ -242,12 +256,9 @@ def _spans(f: _File, file: int, channels: int):
         if channels > 1:
             drives = f.drives(first, channels)
             flip *= float(drives.sum() / (drives.max() * math.sqrt(channels)))
-        if rf_id not in bandwidths:
-            bandwidths[rf_id] = _bandwidth(f, rf_id)
+        bandwidth = f.bandwidth(rf_id)
         g = slice_gradient.get(first, 0.0)
-        thickness = (
-            bandwidths[rf_id] / g if g > 0 and bandwidths[rf_id] > 0 else COVERAGE
-        )
+        thickness = bandwidth / g if g > 0 and bandwidth > 0 else COVERAGE
         signal = math.sin(math.radians(min(flip, 90.0))) * min(thickness, COVERAGE)
         areas, known = _areas(f, f.blocks[first:stop, _GX : _GZ + 1])
         net, total = np.abs(areas.sum(axis=0)), np.abs(areas).sum(axis=0)
