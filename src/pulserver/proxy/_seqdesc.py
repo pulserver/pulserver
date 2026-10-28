@@ -174,12 +174,17 @@ def describe(seq: Any, *, subsequence_index: int = 0) -> SequenceDescription:
     gradients = seq.rf_gradients()
     slice_select = _slice_select(gradients)
 
+    # Read once for the whole sequence: each of these tabulates every block,
+    # and reading it again per pulse makes a long scan quadratic.
+    library_ids = _rf_library_ids(seq)
+    shims = _shim_ids(seq)
+
     definitions: dict[int, RfDefinition] = {}
     rows: dict[int, SequenceEvent] = {}
 
     for at, block in enumerate(np.asarray(pulses.block, dtype=int)):
         pulse = seq.get_block(int(block)).rf
-        definition = _definition_id(seq, int(block))
+        definition = int(library_ids[block - 1])
         if definition not in definitions:
             definitions[definition] = _definition_of(
                 definition, pulse, float(seq.rf_raster_time)
@@ -193,7 +198,7 @@ def describe(seq: Any, *, subsequence_index: int = 0) -> SequenceDescription:
                 float(np.max(np.abs(np.asarray(pulse.signal)))),
                 float(pulses.phase_offset[at]),
                 float(pulses.freq_offset[at]),
-                _shim_id(seq, int(block)),
+                int(shims[block - 1]),
                 slice_select.get(int(block), 0.0),
             ),
         )
@@ -236,18 +241,14 @@ def _slice_select(gradients: Any) -> dict[int, float]:
     }
 
 
-def _definition_id(seq: Any, block: int) -> int:
-    """Return the library id of the pulse a block plays."""
-    return int(seq.block_events[block][1])
+def _rf_library_ids(seq: Any) -> np.ndarray:
+    """Return the library id of the pulse each block plays, block ``i`` at ``i - 1``."""
+    return np.asarray([row[1] for row in seq.block_events.values()], dtype=int)
 
 
-def _shim_id(seq: Any, block: int) -> int:
-    """Return the transmit shim a block drives, 0 where it drives none."""
-    shims = getattr(seq, "block_shims", None)
-    if shims is None:
-        return 0
-    held = shims()
-    return int(held.get(block, 0)) if isinstance(held, dict) else 0
+def _shim_ids(seq: Any) -> np.ndarray:
+    """Return the transmit shim each block drives, block ``i`` at ``i - 1``; 0 where none."""
+    return np.asarray(seq.block_shims(), dtype=int)
 
 
 def _definition_of(definition: int, pulse: Any, raster_s: float) -> RfDefinition:

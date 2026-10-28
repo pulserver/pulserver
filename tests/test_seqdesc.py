@@ -129,6 +129,40 @@ def test_a_pulse_played_under_a_gradient_carries_its_amplitude():
     assert float(description.events[0].params[6]) != 0.0
 
 
+def test_a_pulse_driven_through_a_shim_names_it():
+    seq = pp.Sequence(SYSTEM)
+    pulse = pp.make_block_pulse(np.pi / 2, duration=1e-3, system=SYSTEM)
+    seq.add_block(pulse, pp.make_rf_shim(np.array([1.0, 1j])))
+    seq.add_block(pulse)
+    description = describe(seq)
+    assert [int(event.params[5]) for event in description.events] == [1, 0]
+
+
+def test_the_block_table_is_read_once_however_many_pulses_play(monkeypatch):
+    """Reading it per pulse made a 70,000-readout scan take half an hour."""
+    seq = pp.Sequence(SYSTEM)
+    pulse = pp.make_block_pulse(np.pi / 18, duration=1e-4, system=SYSTEM)
+    for _ in range(50):
+        seq.add_block(pulse)
+        seq.add_block(pp.make_delay(1e-3))
+    reads = {"block_events": 0, "block_shims": 0}
+    cls = type(seq)
+    events, shims = cls.block_events, cls.block_shims
+
+    def counted_events(self):
+        reads["block_events"] += 1
+        return events.fget(self)
+
+    def counted_shims(self):
+        reads["block_shims"] += 1
+        return shims(self)
+
+    monkeypatch.setattr(cls, "block_events", property(counted_events))
+    monkeypatch.setattr(cls, "block_shims", counted_shims)
+    assert len(describe(seq)) == 100
+    assert reads == {"block_events": 1, "block_shims": 1}
+
+
 def test_the_stream_flattens_to_one_row_per_block():
     description = describe(gre())
     rows = as_rows(description)
