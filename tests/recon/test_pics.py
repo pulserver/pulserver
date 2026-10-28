@@ -369,3 +369,61 @@ def test_a_volume_of_fewer_partitions_than_the_wavelet_needs_reconstructs(
     assert image.shape == (partitions, MATRIX, MATRIX)
     assert np.isfinite(image).all()
     assert image.max() > 0
+
+
+#: Compression to at least the rank of the coil data discards nothing, so the
+#: image of the virtual channels is that of all of them to single-precision
+#: round-off.
+COMPRESSION = 1e-5
+
+
+def test_channels_beyond_the_virtual_coils_are_compressed_before_the_maps_and_the_solve(
+    device,
+):
+    """Eight channels spanning three dimensions of coil space lose nothing in six virtual channels."""
+    coils = 8
+    _, _, kspace = coil_phantom(coils, MATRIX)
+    lines = acquired(range(0, MATRIX, 2))
+    header = calibration_header(coils, MATRIX)
+    every_channel = Images()
+    every_channel.virtual_coils = None
+
+    context, (compressed,) = reconstruct(stream(kspace, lines), header, device=device)
+    _, (full,) = reconstruct(
+        stream(kspace, lines), header, device=device, plugin=every_channel
+    )
+
+    assert context.coil_compression.n_virtual == 6
+    assert context.coil_maps[0].maps.shape == (6, MATRIX, MATRIX)
+    assert context.coil_maps[0].basis == context.coil_compression.id
+    assert relative_difference(compressed, full) < COMPRESSION
+
+
+@pytest.mark.parametrize("partitions", [1, 8])
+def test_the_solve_on_host_k_space_is_bartorchs_pics_with_the_image_on_the_host(
+    device, partitions
+):
+    """The encoding computes on the context's device; the k-space, the maps and the image stay on the host."""
+    import torch
+    from bartorch import apps, priors
+
+    from pulserver.recon.handlers.pics import nlinv_estimate, pics_image, wavelet_axes
+
+    kspace = vials()[:, None] * (1.0 + np.arange(partitions))[:, None, None]
+    kspace = np.fft.fftshift(
+        np.fft.fft(np.fft.ifftshift(kspace, axes=1), axis=1, norm="ortho"), axes=1
+    )
+    kspace[:, :, 1::2] = 0
+    kspace = torch.from_numpy(np.ascontiguousarray(kspace, dtype=np.complex64))
+    maps = nlinv_estimate(kspace)
+    sampled = kspace.abs().sum(dim=0) > 0
+    terms = priors.Wavelet(wavelet_axes(kspace.shape[1:], (-1, -2, -3)), 0.005)
+    expected = apps.pics(kspace, maps, regularizers=terms, maxiter=30)
+
+    image = pics_image(kspace, maps, sampled, 0.005, 30, device)
+
+    assert image.device.type == "cpu"
+    assert image.shape == kspace.shape[1:]
+    assert (
+        relative_difference(image.numpy(), expected.reshape(image.shape).numpy()) < 1e-5
+    )

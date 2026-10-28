@@ -77,23 +77,36 @@ class PmcRecon(PicsTrainRecon):
         return pose_waveform(self.pose(planes))
 
     def pose(self, planes: list[Any]) -> Pose:
-        """Return the filtered pose of one navigator's readouts, one per plane."""
+        """Return the filtered pose of one navigator's readouts, one per plane.
+
+        The pose is computed on one thread, and the thread count of the process
+        is restored after it, so the image units are reconstructed with the
+        count they had.
+        """
         import bartorch
         import torch
         from bartorch import tools
 
+        # bartorch's count is process-wide and BART shares torch's OpenMP
+        # runtime, so torch reports the count BART runs with.
+        threads = torch.get_num_threads()
         bartorch.set_num_threads(1)
-        if self.geometry is None:
-            self.geometry = _geometry(planes, self.matrix)
-            self.tracker = tools.NavigatorMotionTracker()
-        traj, axes, spacing_mm, density = self.geometry
-        kspace = torch.from_numpy(
-            np.stack([np.asarray(plane.data, dtype=np.complex64) for plane in planes])
-        )
-        images = tools.reconstruct_navigator(
-            kspace, traj, (self.matrix, self.matrix), density=density
-        )
-        estimate = self.tracker.track(list(images), axes, spacing=spacing_mm)
+        try:
+            if self.geometry is None:
+                self.geometry = _geometry(planes, self.matrix)
+                self.tracker = tools.NavigatorMotionTracker()
+            traj, axes, spacing_mm, density = self.geometry
+            kspace = torch.from_numpy(
+                np.stack(
+                    [np.asarray(plane.data, dtype=np.complex64) for plane in planes]
+                )
+            )
+            images = tools.reconstruct_navigator(
+                kspace, traj, (self.matrix, self.matrix), density=density
+            )
+            estimate = self.tracker.track(list(images), axes, spacing=spacing_mm)
+        finally:
+            bartorch.set_num_threads(threads)
         rotation = estimate.matrix[:3, :3]
         return Pose(
             rotation=tuple(float(v) for v in rotation.ravel()),
