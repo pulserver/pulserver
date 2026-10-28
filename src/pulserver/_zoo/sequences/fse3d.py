@@ -1,6 +1,7 @@
 """pypulseqpp's 3D fast spin echo bound to the scanner UI, its partitions counted by the number of slices."""
 
 import functools
+import importlib.util
 
 import numpy as np
 import pypulseqpp as pp
@@ -65,8 +66,14 @@ DUAL_REGION = REFOCUSING == "dual_region"
 #: adds their amplitude and cycles as user entries.
 WAVE = option("wave", False, **OPTIONS["wave"])
 
-if OPTIMIZED:
-    import blochsim  # noqa: F401  the trains are designed with it
+# Found, not imported: only generating designs a train, and blochsim imports
+# torch, which a listing or an evaluation would wait for.
+if OPTIMIZED and importlib.util.find_spec("blochsim") is None:
+    raise ModuleNotFoundError(
+        "the optimized refocusing trains are designed with blochsim, which is "
+        "not installed",
+        name="blochsim",
+    )
 
 #: Order of the views across shots, ``"radial"`` or ``"shuffling"``.
 ORDERING = option("ordering", "radial", choices=ORDERINGS, **OPTIONS["ordering"])

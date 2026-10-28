@@ -3,6 +3,9 @@
 import functools
 import importlib.util
 import inspect
+import os
+import subprocess
+import sys
 from types import SimpleNamespace
 
 import numpy as np
@@ -853,6 +856,39 @@ def test_an_undersampled_shuffled_scan_states_the_scan_time_of_its_draw(
     # counted without drawing it.
     rounding = SYSTEM.block_duration_raster * sum(map(_excitations, chain))
     assert abs(evaluation.duration - played) <= rounding + 1e-9
+
+
+#: Lists and evaluates the shipped 3D fast spin echo at an option, then names
+#: the trains it designs.
+LIST_AND_EVALUATE = """
+import sys
+from pulserver import _plugins
+from pulserver.design import load_plugin
+from pulserver.host._limits import design_system
+plugin = load_plugin(_plugins.SEQUENCES / "fse3d.py", {"refocusing": sys.argv[1]})
+plugin.listing()
+assert plugin.validate(design_system(dict(LIMITS)), {}).valid
+print(plugin.app.keywords.get("flip_modulation"))
+"""
+
+
+@WITH_BLOCHSIM
+@pytest.mark.parametrize("refocusing", ["optimized", "dual_region"])
+def test_listing_and_evaluating_an_fse_with_designed_trains_imports_no_torch(
+    tmp_path, refocusing
+):
+    """Only generating designs a train: torch, which blochsim imports, is imported then."""
+    (tmp_path / "torch.py").write_text("raise SystemExit('torch imported')\n")
+    probe = f"LIMITS = {LIMITS!r}\n{LIST_AND_EVALUATE}"
+    found = subprocess.run(
+        [sys.executable, "-c", probe, refocusing],
+        capture_output=True,
+        text=True,
+        env={**os.environ, "PYTHONPATH": str(tmp_path)},
+        check=False,
+    )
+    assert found.returncode == 0, found.stderr
+    assert found.stdout.strip() == "optimized"
 
 
 @WITH_BLOCHSIM

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import importlib.util
 import json
 import logging
 import os
@@ -98,9 +99,10 @@ class DesignServer:
     """Server of design calls on a Unix socket, each answered in a child forked from a warm parent.
 
     The parent imports the design engine, designs, checks and converts one
-    sequence of its own, and imports every plugin the directories ``plugins``
-    hold; no plugin code designs in it. A call is answered in a child forked
-    from it, which inherits what the parent imported, answers as :func:`answer` does and
+    sequence of its own, designs one refocusing train with blochsim, and
+    imports every plugin the directories ``plugins`` hold; no plugin code
+    designs in it. A call is answered in a child forked from it, which
+    inherits what the parent imported, answers as :func:`answer` does and
     exits: nothing a call does outlives its child. A child that ends without
     a reply, a crash of plugin code among them, is answered with an ``ERROR``
     line naming its exit status. Calls run concurrently, one child each.
@@ -119,14 +121,19 @@ class DesignServer:
         self._children: dict[int, socket.socket] = {}
 
     def warm(self) -> None:
-        """Design, check and convert pypulseqpp's 2D gradient echo, and import every plugin.
+        """Design, check and convert pypulseqpp's 2D gradient echo, design one refocusing train, and import every plugin.
 
-        A plugin that cannot be imported is left cold; its calls are answered
+        A plugin that cannot be imported is left cold, and so is the train
+        design without blochsim or where it fails; their calls are answered
         all the same.
         """
         from . import _service
 
         _warm_design()
+        try:
+            _warm_trains()
+        except Exception as error:  # the train design stays cold
+            _log.info("warming the train design stopped: %s", error)
         for name in names(self.plugins):
             try:
                 _service.list_protocol(self.plugins, name)
@@ -232,6 +239,21 @@ def _warm_design() -> None:
         )[0]
         ir.check(first, system)
         ir.convert(first, system)
+
+
+def _warm_trains() -> None:
+    """Design pypulseqpp's 3D fast spin echo with optimized refocusing trains, a few echoes long.
+
+    blochsim, torch and what torch loads on the first derivative a design
+    takes are then imported, on the CPU: CUDA is not initialised, so a child
+    can still use it.
+    """
+    if importlib.util.find_spec("blochsim") is None:
+        return
+    import pypulseqpp as pp
+    from pypulseqpp.sequences.sequence.fse3D_sequence import fse3d
+
+    fse3d(pp.Opts(), n_x=32, n_y=8, n_z=4, etl=4, flip_modulation="optimized")
 
 
 def _wait(pid: int, timeout: float) -> None:

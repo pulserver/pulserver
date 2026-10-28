@@ -1,5 +1,6 @@
 """The warm design server: forwarded calls, each answered in a child of its own."""
 
+import importlib.util
 import os
 import shutil
 import signal
@@ -351,6 +352,33 @@ def test_a_forwarded_rf_request_loads_no_design_engine(server, limits_file):
     )
     assert "[RfDefinitions]" in probe.stdout
     assert probe.stderr.strip().splitlines()[-1] == "0 []"
+
+
+WARMED = """
+import sys
+from pulserver.host._server import DesignServer
+DesignServer(sys.argv[1], sys.argv[1] + "/s").warm()
+loaded = sorted(m for m in ("blochsim", "torch") if m in sys.modules)
+import torch
+print(loaded, torch.cuda.is_initialized())
+"""
+
+
+@pytest.mark.skipif(
+    importlib.util.find_spec("blochsim") is None, reason="needs blochsim"
+)
+def test_a_warm_server_holds_the_train_design_engine_and_leaves_cuda_to_its_children(
+    tmp_path,
+):
+    """A child designing refocusing trains imports nothing, and may initialise CUDA after the fork."""
+    warmed = subprocess.run(
+        [sys.executable, "-c", WARMED, str(tmp_path)],
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=DEADLINE,
+    )
+    assert warmed.stdout.strip().splitlines()[-1] == "['blochsim', 'torch'] False"
 
 
 def test_a_call_naming_a_log_file_appends_its_outcome_there(server, tmp_path):
