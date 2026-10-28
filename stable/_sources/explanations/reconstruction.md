@@ -49,9 +49,12 @@ write such a plugin.
 - **Shares an exam cache across the series of one exam.**
 
   Code: {class}`~pulserver.recon.ExamCache`. Test: *a value one cache stores is read by the next on its directory* (`test_app.py`).
-- **Ships a `pics` plugin with prewhitening, partial Fourier and asymmetric echo.**
+- **Ships a `pics` plugin with prewhitening, coil compression, partial Fourier and asymmetric echo.**
 
-  Code: `src/pulserver/_zoo/recon/pics.py`. Tests: *every other phase encode and the centre reconstruct to the image of all lines*; *a partial fourier image is closer to the full one than the solve of its lines alone* (`test_pics.py`).
+  Code: `src/pulserver/_zoo/recon/pics.py`. Tests: *every other phase encode and the centre reconstruct to the image of all lines*; *a partial fourier image is closer to the full one than the solve of its lines alone*; *channels beyond the virtual coils are compressed before the maps and the solve* (`test_pics.py`).
+- **Keeps a unit's k-space, maps and solver vectors on the host, the encoding computing on the series' GPU.**
+
+  Code: `pics_image` in `src/pulserver/recon/handlers/pics.py`. Test: *the solve on host k space is bartorchs pics with the image on the host* (`test_pics.py`).
 - **Runs a plugin offline on a kept series, unchanged.**
 
   Code: `python -m pulserver.recon`. Test: *plugin runs unchanged offline* (`test_app.py`).

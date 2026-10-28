@@ -1,0 +1,897 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>6. Test your pair on the virtual scanner &#8212; pulserver documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../_static/styles/theme.css?digest=90905a2f556bf617f1a9" rel="stylesheet" />
+<link href="../../../_static/styles/pydata-sphinx-theme.css?digest=90905a2f556bf617f1a9" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=03e43079" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/styles/sphinx-book-theme.css?v=4418a689" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery.css?v=c83e6b79" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-binder.css?v=f4aeca0c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-dataframe.css?v=2082cf3c" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/sg_gallery-rendered-html.css?v=1277b6f3" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/pulserver.css?v=6854ff42" />
+  
+  <!-- So that users can add custom icons -->
+  <script defer src="../../../_static/scripts/fontawesome.js?digest=90905a2f556bf617f1a9"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
+<link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
+
+    <script src="../../../_static/documentation_options.js?v=f4c53e65"></script>
+    <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../../../_static/copybutton.js?v=f281be69"></script>
+    <script src="../../../_static/sg-tags.js?v=d80f6fa4"></script>
+    <script src="../../../_static/scripts/sphinx-book-theme.js?v=fab101a9"></script>
+    <script>window.MathJax = {"options": {"processHtmlClass": "tex2jax_process|mathjax_process|math|output_area"}}</script>
+    <script defer="defer" src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'generated/gallery/01-course/06_testing_on_the_virtual_scanner';</script>
+    <script>
+        DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
+        DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.10';
+        DOCUMENTATION_OPTIONS.show_version_warning_banner =
+            true;
+        </script>
+    <script>DOCUMENTATION_OPTIONS.search_as_you_type = false;</script>
+    <script src="../../../_static/capabilities.js?v=421ebb92"></script>
+    <link rel="canonical" href="https://pulserver.github.io/pulserver/stable/generated/gallery/01-course/06_testing_on_the_virtual_scanner.html" />
+    <link rel="icon" href="../../../_static/pulserver-mark.svg"/>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+    <link rel="next" title="Tours" href="../../../examples/tours.html" />
+    <link rel="prev" title="5. Your recon plugin" href="05_recon_plugin.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="v0.4.10" />
+  
+    
+    <script src="../../../_static/searchtools.js"></script>
+    <script src="../../../_static/language_data.js"></script>
+    <script src="../../../searchindex.js"></script>
+  
+  </head>
+  <body data-default-mode="">
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+  
+  
+  
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search..."
+         aria-label="Search..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header id="pst-header" class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+    
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../../_static/pulserver-mark.svg" class="logo__image only-light" alt="pulserver"/>
+    <img src="../../../_static/pulserver-mark-dark.svg" class="logo__image only-dark pst-js-only" alt="pulserver"/>
+  
+  
+</a></div>
+        <div class="sidebar-primary-item">
+<div class="version-switcher__container dropdown pst-js-only">
+  <button id="pst-version-switcher-button-2"
+    type="button"
+    class="version-switcher__button btn btn-sm dropdown-toggle"
+    data-bs-toggle="dropdown"
+    aria-haspopup="listbox"
+    aria-controls="pst-version-switcher-list-2"
+    aria-label="Version switcher list"
+  >
+    Choose version  <!-- this text may get changed later by javascript -->
+    <span class="caret"></span>
+  </button>
+  <div id="pst-version-switcher-list-2"
+    class="version-switcher__menu dropdown-menu list-group-flush py-0"
+    role="listbox" aria-labelledby="pst-version-switcher-button-2">
+    <!-- dropdown will be populated by javascript on page load -->
+  </div>
+</div></div>
+        <div class="sidebar-primary-item">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button></div>
+        <div class="sidebar-primary-item"><nav class="bd-links bd-docs-nav" aria-label="Main">
+    <div class="bd-toc-item navbar-nav active">
+        
+        <ul class="nav bd-sidenav bd-sidenav__home-link">
+            <li class="toctree-l1">
+                <a class="reference internal" href="../../../index.html">
+                    Homepage
+                </a>
+            </li>
+        </ul>
+        <ul class="current nav bd-sidenav">
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../user-guide/index.html">User guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/running.html">Services</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/scanner-sequences.html">Scanner sequences</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/reconstruction-plugins.html">Reconstruction plugins</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/reconstruction-client.html">Reconstruction client</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../user-guide/virtual-scanner.html">Virtual scanner</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../developer-guide/index.html">Developer guide</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/installation.html">Development setup</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/workflow.html">Contribution workflow</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/style.html">Coding style</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/documentation.html">Documentation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/terminology.html">Terminology and conventions</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../../developer-guide/internals/index.html">Internals</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/calibration.html">Calibration, noise and coil compression</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/ir-cache.html">IR cache</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/protocol-wire.html">Protocol text blocks</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/reconstruction-proxy.html">Reconstruction proxy</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/sar-ratios.html">SAR ratios against a reference pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../developer-guide/releases.html">Releases</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../explanations/index.html">Explanations</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/architecture.html">Architecture</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/protocol.html">Protocol resolution</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/safety-checks.html">Safety checks</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/scanner-representation.html">PulSeg representation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/raw-data.html">MRD enrichment</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/reconstruction-session.html">Reconstruction session</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/reconstruction.html">Reconstruction plugins and calibration context</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../explanations/virtual-scanner.html">Virtual scanner</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="../../../examples/index.html">Examples</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
+<li class="toctree-l2 current active has-children"><a class="reference internal" href="../../../examples/course.html">Course</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="01_protocol_to_image.html">1. Your first scan</a></li>
+<li class="toctree-l3"><a class="reference internal" href="02_sequence_plugin.html">2. Your sequence in the scanner UI</a></li>
+<li class="toctree-l3"><a class="reference internal" href="03_scanner_representation.html">3. What the scanner plays</a></li>
+<li class="toctree-l3"><a class="reference internal" href="04_reconstruction_plugin.html">4. What your recon receives</a></li>
+<li class="toctree-l3"><a class="reference internal" href="05_recon_plugin.html">5. Your recon plugin</a></li>
+<li class="toctree-l3 current active"><a class="current reference internal" href="#">6. Test your pair on the virtual scanner</a></li>
+</ul>
+</details></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../../examples/tours.html">Tours</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="../02-tours/01_protocol_resolution.html">Protocol resolution for a 2D gradient echo</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../02-tours/02_segmentation.html">Segmentation of a sequence for the scanner</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../02-tours/03_fov_offset_enrichment.html">Field-of-view offset and the proxy phase</a></li>
+</ul>
+</details></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../api/index.html">API reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/protocol.html">Protocol</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/design.html">Scanner sequences</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/host.html">Design calls</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/ir.html">IR conversion</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/proxy.html">Reconstruction proxy</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/recon.html">Reconstruction plugins</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/mrd.html">MRD data</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/validate.html">Validation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../api/virtual.html">Virtual scanner</a></li>
+</ul>
+</details></li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../misc/index.html">Miscellaneous</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../misc/license.html">License and notices</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../misc/related.html">Related projects</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../misc/contributors.html">Contributors</a></li>
+</ul>
+</details></li>
+</ul>
+
+    </div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+
+<div class="sbt-scroll-pixel-helper"></div>
+
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item"><button class="sidebar-toggle primary-toggle btn btn-sm" title="Toggle primary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <span class="fa-solid fa-bars"></span>
+</button></div>
+      
+    </div>
+  
+  
+    <div class="header-article-items__end">
+      
+        <div class="header-article-item">
+
+<div class="article-header-buttons">
+
+
+
+
+
+<div class="dropdown dropdown-source-buttons">
+  <button class="btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Source repositories">
+    <i class="fab fa-github"></i>
+  </button>
+  <ul class="dropdown-menu">
+      
+      
+      
+      <li><a href="https://github.com/pulserver/pulserver" target="_blank"
+   class="btn btn-sm btn-source-repository-button dropdown-item"
+   title="Source repository"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fab fa-github"></i>
+  </span>
+<span class="btn__text-container">Repository</span>
+</a>
+</li>
+      
+      
+      
+      
+      <li><a href="https://github.com/pulserver/pulserver/edit/main/docs/generated/gallery/01-course/06_testing_on_the_virtual_scanner.rst" target="_blank"
+   class="btn btn-sm btn-source-edit-button dropdown-item"
+   title="Suggest edit"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-pencil-alt"></i>
+  </span>
+<span class="btn__text-container">Suggest edit</span>
+</a>
+</li>
+      
+      
+      
+      
+      <li><a href="https://github.com/pulserver/pulserver/issues/new?title=Issue%20on%20page%20%2Fgenerated/gallery/01-course/06_testing_on_the_virtual_scanner.html&body=Your%20issue%20content%20here." target="_blank"
+   class="btn btn-sm btn-source-issues-button dropdown-item"
+   title="Open an issue"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-lightbulb"></i>
+  </span>
+<span class="btn__text-container">Open issue</span>
+</a>
+</li>
+      
+  </ul>
+</div>
+
+
+
+
+
+
+<div class="dropdown dropdown-download-buttons">
+  <button class="btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Download this page">
+    <i class="fas fa-download"></i>
+  </button>
+  <ul class="dropdown-menu">
+      
+      
+      
+      <li><a href="../../../_sources/generated/gallery/01-course/06_testing_on_the_virtual_scanner.rst" target="_blank"
+   class="btn btn-sm btn-download-source-button dropdown-item"
+   title="Download source file"
+   data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-file"></i>
+  </span>
+<span class="btn__text-container">.rst</span>
+</a>
+</li>
+      
+      
+      
+      
+      <li>
+<button onclick="window.print()"
+  class="btn btn-sm btn-download-pdf-button dropdown-item"
+  title="Print to PDF"
+  data-bs-placement="left" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-file-pdf"></i>
+  </span>
+<span class="btn__text-container">.pdf</span>
+</button>
+</li>
+      
+  </ul>
+</div>
+
+
+
+
+<button onclick="toggleFullScreen()"
+  class="btn btn-sm btn-fullscreen-button pst-navbar-icon"
+  title="Fullscreen mode"
+  data-bs-placement="bottom" data-bs-toggle="tooltip"
+>
+  
+
+<span class="btn__icon-container">
+  <i class="fas fa-expand"></i>
+  </span>
+
+</button>
+
+
+
+<div class="theme-switch-container dropdown pst-js-only" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Color mode">
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button dropdown-toggle" aria-label="Color mode" data-bs-toggle="dropdown">
+    <i class="theme-switch fa-solid fa-sun fa-lg fa-fw" data-mode="light" title="Light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg fa-fw" data-mode="dark" title="Dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg fa-fw" data-mode="auto" title="System Settings"></i>
+  </button>
+  <ul class="dropdown-menu dropdown-menu-end">
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="auto"><i class="fa-solid fa-circle-half-stroke fa-lg fa-fw me-1"></i>System Settings</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="light"><i class="fa-solid fa-sun fa-lg fa-fw me-1"></i>Light</button></li>
+    <li><button class="dropdown-item d-flex align-items-center theme-change-button" data-mode="dark"><i class="fa-solid fa-moon fa-lg fa-fw me-1"></i>Dark</button></li>
+  </ul>
+</div>
+
+
+<button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+</button>
+<button class="sidebar-toggle secondary-toggle btn btn-sm pst-navbar-icon" title="Toggle secondary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="fa-solid fa-list"></span>
+</button>
+</div></div>
+      
+    </div>
+  
+</div>
+</div>
+              
+              
+
+<div id="jb-print-docs-body" class="onlyprint">
+    <h1>6. Test your pair on the virtual scanner</h1>
+    <!-- Table of contents -->
+    <div id="print-main-content">
+        <div id="jb-print-toc">
+            
+            <div>
+                <h2> Contents </h2>
+            </div>
+            <nav aria-label="Page">
+                <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#your-plugins-as-files">Your plugins, as files</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#the-virtual-scanner-with-your-plugins">The virtual scanner, with your plugins</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#a-flip-angle-series">A flip-angle series</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#against-the-physics">Against the physics</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#on-a-scanner">On a scanner</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#as-a-spec">As a spec</a></li>
+</ul>
+            </nav>
+        </div>
+    </div>
+</div>
+
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <div class="sphx-glr-download-link-note admonition note">
+<p class="admonition-title">Note</p>
+<p><a class="reference internal" href="#sphx-glr-download-generated-gallery-01-course-06-testing-on-the-virtual-scanner-py"><span class="std std-ref">Go to the end</span></a>
+to download the full example code.</p>
+</div>
+<section class="sphx-glr-example-title" id="test-your-pair-on-the-virtual-scanner">
+<span id="sphx-glr-generated-gallery-01-course-06-testing-on-the-virtual-scanner-py"></span><h1>6. Test your pair on the virtual scanner<a class="headerlink" href="#test-your-pair-on-the-virtual-scanner" title="Link to this heading">#</a></h1>
+<a class="reference external image-reference" href="https://colab.research.google.com/github/pulserver/pulserver/blob/gh-pages/v0.4.10/_colab/01-course/06_testing_on_the_virtual_scanner.ipynb"><img alt="Open in Colab" class="colab-badge" src="https://colab.research.google.com/assets/colab-badge.svg" />
+</a>
+<p>You now have a sequence plugin (lesson 2) and a recon plugin (lesson 5). On a
+scanner they are two files in two folders, and the operator uses them like
+any shipped sequence and reconstruction. In this lesson you put them in those files, load them
+into the virtual scanner as a scanner would, and scan with them. Then you
+check the images against the physics: if the flip angle, the timing or the
+reconstruction were wrong, the contrast would show it.</p>
+<p><strong>Learning objectives</strong></p>
+<ul class="simple">
+<li><p>Save your plugins as the files a scanner loads.</p></li>
+<li><p>Run the operator’s flow with them: protocol, edit, scan, image.</p></li>
+<li><p>Compare the contrast of a flip-angle series with the closed-form signal of
+a spoiled gradient echo.</p></li>
+</ul>
+<p>Previous: <a class="reference internal" href="05_recon_plugin.html"><span class="doc">5. Your recon plugin</span></a>. This is the last lesson of the course; the
+Tours start from here.</p>
+<section id="your-plugins-as-files">
+<h2>Your plugins, as files<a class="headerlink" href="#your-plugins-as-files" title="Link to this heading">#</a></h2>
+<p>A sequence plugin is a <code class="docutils literal notranslate"><span class="pre">.py</span></code> file in a folder of sequence plugins, and
+the operator sees it under the file’s name. A recon plugin is a <code class="docutils literal notranslate"><span class="pre">.py</span></code>
+file in a folder of recon plugins, with a module-level <code class="docutils literal notranslate"><span class="pre">PLUGIN</span></code>. Here are
+the plugin of lesson 2, with its <code class="docutils literal notranslate"><span class="pre">evaluate</span></code>, and the plugin of lesson 5:</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span class="kn">import</span><span class="w"> </span><span class="nn">tempfile</span><span class="w">
+</span><span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <a class="sphx-glr-backref-module-pathlib sphx-glr-backref-type-py-class reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="pathlib.Path"><span class="n">Path</span></a><span class="w">
+</span><span class="w">
+</span><a class="sphx-glr-backref-module-pathlib sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.PosixPath" title="pathlib.PosixPath"><span class="n">work</span></a> <span class="o">=</span> <a class="sphx-glr-backref-module-pathlib sphx-glr-backref-type-py-class reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="pathlib.Path"><span class="n">Path</span></a><span class="p">(</span><a class="sphx-glr-backref-module-tempfile sphx-glr-backref-type-py-function reference external" href="https://docs.python.org/3/library/tempfile.html#tempfile.mkdtemp" title="tempfile.mkdtemp"><span class="n">tempfile</span><span class="o">.</span><span class="n">mkdtemp</span></a><span class="p">(</span><span class="p">)</span><span class="p">)</span><span class="w">
+</span><span class="p">(</span><a class="sphx-glr-backref-module-pathlib sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.PosixPath" title="pathlib.PosixPath"><span class="n">work</span></a> <span class="o">/</span> <span class="s2">&quot;</span><span class="s2">sequences</span><span class="s2">&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="p">)</span><span class="w">
+</span><span class="p">(</span><a class="sphx-glr-backref-module-pathlib sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.PosixPath" title="pathlib.PosixPath"><span class="n">work</span></a> <span class="o">/</span> <span class="s2">&quot;</span><span class="s2">recon</span><span class="s2">&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="p">)</span><span class="w">
+</span><span class="w">
+</span><span class="p">(</span><a class="sphx-glr-backref-module-pathlib sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.PosixPath" title="pathlib.PosixPath"><span class="n">work</span></a> <span class="o">/</span> <span class="s2">&quot;</span><span class="s2">sequences</span><span class="s2">&quot;</span> <span class="o">/</span> <span class="s2">&quot;</span><span class="s2">my_gre.py</span><span class="s2">&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">write_text</span><span class="p">(</span><span class="s2">&quot;&quot;&quot;</span><span class="s2">
+</span><span class="s2">from pypulseqpp.sequences import steady_state_dummies</span><span class="s2">
+</span><span class="s2">from pypulseqpp.sequences.sequence.gre2D_sequence import gre2d</span><span class="s2">
+</span><span class="s2">
+</span><span class="s2">from pulserver.design import Evaluation, FloatParam, IntParam, SequencePlugin, TimeParam</span><span class="s2">
+</span><span class="s2">from pulserver.protocol import TEPreset, UIParam</span><span class="s2">
+</span><span class="s2">
+</span><span class="s2">
+</span><span class="s2">class Gre(SequencePlugin):</span><span class="s2">
+</span><span class="s2">    app = gre2d</span><span class="s2">
+</span><span class="s2">    protocol = </span><span class="s2">{</span><span class="s2">
+</span><span class="s2">        UIParam.FLIP: FloatParam(</span><span class="s2">&quot;</span><span class="s2">flip_angle_deg</span><span class="s2">&quot;</span><span class="s2">, unit=</span><span class="s2">&quot;</span><span class="s2">deg</span><span class="s2">&quot;</span><span class="s2">, range_min=1, range_max=90),</span><span class="s2">
+</span><span class="s2">        UIParam.TE: TimeParam(</span><span class="s2">
+</span><span class="s2">            </span><span class="s2">&quot;</span><span class="s2">te</span><span class="s2">&quot;</span><span class="s2">, range_min=1000, range_max=80000, presets=</span><span class="s2">{</span><span class="s2">TEPreset.MINIMUM: None}</span><span class="s2">
+</span><span class="s2">        ),</span><span class="s2">
+</span><span class="s2">        UIParam.TR: TimeParam(</span><span class="s2">&quot;</span><span class="s2">tr</span><span class="s2">&quot;</span><span class="s2">, range_min=1000, range_max=5_000_000),</span><span class="s2">
+</span><span class="s2">        UIParam.NY: IntParam(</span><span class="s2">&quot;</span><span class="s2">n_y</span><span class="s2">&quot;</span><span class="s2">, range_min=32, range_max=512, range_incr=2),</span><span class="s2">
+</span><span class="s2">    }</span><span class="s2">
+</span><span class="s2">
+</span><span class="s2">    def evaluate(self, system, protocol):</span><span class="s2">
+</span><span class="s2">        arguments = protocol.arguments</span><span class="s2">
+</span><span class="s2">        n_y = arguments[</span><span class="s2">&quot;</span><span class="s2">n_y</span><span class="s2">&quot;</span><span class="s2">]</span><span class="s2">
+</span><span class="s2">        one_line = arguments | </span><span class="s2">{</span><span class="s2">&quot;</span><span class="s2">ry</span><span class="s2">&quot;</span><span class="s2">: n_y, </span><span class="s2">&quot;</span><span class="s2">n_acs_y</span><span class="s2">&quot;</span><span class="s2">: 0, </span><span class="s2">&quot;</span><span class="s2">n_dummy</span><span class="s2">&quot;</span><span class="s2">: 0}</span><span class="s2">
+</span><span class="s2">        seq = self.app(system, **one_line)</span><span class="s2">
+</span><span class="s2">        te = seq.definitions[</span><span class="s2">&quot;</span><span class="s2">TE</span><span class="s2">&quot;</span><span class="s2">][0]</span><span class="s2">
+</span><span class="s2">        tr = seq.definitions[</span><span class="s2">&quot;</span><span class="s2">TR</span><span class="s2">&quot;</span><span class="s2">][0]</span><span class="s2">
+</span><span class="s2">        dummies = steady_state_dummies(tr, arguments[</span><span class="s2">&quot;</span><span class="s2">flip_angle_deg</span><span class="s2">&quot;</span><span class="s2">])</span><span class="s2">
+</span><span class="s2">        return Evaluation(</span><span class="s2">
+</span><span class="s2">            protocol.replace(</span><span class="s2">{</span><span class="s2">UIParam.TE: te, UIParam.TR: tr}),</span><span class="s2">
+</span><span class="s2">            duration=(dummies + n_y) * tr,</span><span class="s2">
+</span><span class="s2">        )</span><span class="s2">
+</span><span class="s2">&quot;&quot;&quot;</span><span class="p">)</span><span class="w">
+</span><span class="w">
+</span><span class="p">(</span><a class="sphx-glr-backref-module-pathlib sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.PosixPath" title="pathlib.PosixPath"><span class="n">work</span></a> <span class="o">/</span> <span class="s2">&quot;</span><span class="s2">recon</span><span class="s2">&quot;</span> <span class="o">/</span> <span class="s2">&quot;</span><span class="s2">my_pics.py</span><span class="s2">&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">write_text</span><span class="p">(</span><span class="s2">&quot;&quot;&quot;</span><span class="s2">
+</span><span class="s2">import torch</span><span class="s2">
+</span><span class="s2">import bartorch.tools as bt</span><span class="s2">
+</span><span class="s2">
+</span><span class="s2">from bartorch import apps, priors</span><span class="s2">
+</span><span class="s2">from pulserver import recon</span><span class="s2">
+</span><span class="s2">from pulserver.mrd import AcquisitionFlag</span><span class="s2">
+</span><span class="s2">
+</span><span class="s2">
+</span><span class="s2">class Pics(recon.ReconPlugin):</span><span class="s2">
+</span><span class="s2">    def __init__(self):</span><span class="s2">
+</span><span class="s2">        super().__init__(</span><span class="s2">
+</span><span class="s2">            gadgets=[recon.RemoveReadoutOversampling()],</span><span class="s2">
+</span><span class="s2">            triggers=</span><span class="s2">{</span><span class="s2">&quot;</span><span class="s2">imaging</span><span class="s2">&quot;</span><span class="s2">: AcquisitionFlag.LAST_IN_SLICE},</span><span class="s2">
+</span><span class="s2">        )</span><span class="s2">
+</span><span class="s2">
+</span><span class="s2">    def recon(self, context, branch, data):</span><span class="s2">
+</span><span class="s2">        kspace = torch.from_numpy(data.data.kspace)[:, None]  # (coils, z, y, x)</span><span class="s2">
+</span><span class="s2">        maps = bt.ecalib(kspace, maps=1)</span><span class="s2">
+</span><span class="s2">        image = apps.pics(kspace, maps, regularizers=priors.Wavelet((-1, -2), 0.005))</span><span class="s2">
+</span><span class="s2">        return recon.ReconResult(image.abs().squeeze(0).numpy())</span><span class="s2">
+</span><span class="s2">
+</span><span class="s2">
+</span><span class="s2">PLUGIN = Pics()</span><span class="s2">
+</span><span class="s2">&quot;&quot;&quot;</span><span class="p">)</span><span class="w">
+</span><span class="nb">print</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">path</span><span class="o">.</span><span class="n">relative_to</span><span class="p">(</span><a class="sphx-glr-backref-module-pathlib sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.PosixPath" title="pathlib.PosixPath"><span class="n">work</span></a><span class="p">)</span><span class="p">)</span> <span class="k">for</span> <span class="n">path</span> <span class="ow">in</span> <a class="sphx-glr-backref-module-pathlib sphx-glr-backref-type-py-method reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path.rglob" title="pathlib.Path.rglob"><span class="n">work</span><span class="o">.</span><span class="n">rglob</span></a><span class="p">(</span><span class="s2">&quot;</span><span class="s2">*.py</span><span class="s2">&quot;</span><span class="p">)</span><span class="p">)</span><span class="p">)</span><span class="w">
+</span></pre></div></div>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>['recon/my_pics.py', 'sequences/my_gre.py']
+</pre></div>
+</div>
+</section>
+<section id="the-virtual-scanner-with-your-plugins">
+<h2>The virtual scanner, with your plugins<a class="headerlink" href="#the-virtual-scanner-with-your-plugins" title="Link to this heading">#</a></h2>
+<p>The console of lesson 1 took no plugin folders and used the shipped
+plugins. Point it at your two folders, and <code class="docutils literal notranslate"><span class="pre">my_gre</span></code> and <code class="docutils literal notranslate"><span class="pre">my_pics</span></code> are
+what it offers. When the operator opens <code class="docutils literal notranslate"><span class="pre">my_gre</span></code>, the scanner shows your
+four buttons, plus the number of averages pulserver adds:</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span class="kn">from</span><span class="w"> </span><span class="nn">pulserver</span><span class="w"> </span><span class="kn">import</span> <span class="n">virtual</span><span class="w">
+</span><span class="kn">from</span><span class="w"> </span><span class="nn">pulserver</span><span class="nn">.</span><span class="nn">protocol</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span><span class="w">
+</span>    <span class="n">TEPreset</span><span class="p">,</span><span class="w">
+</span>    <span class="n">UIParam</span><span class="p">,</span><span class="w">
+</span>    <a class="sphx-glr-backref-module-pulserver-protocol sphx-glr-backref-type-py-function reference internal" href="../../pulserver.protocol.format_values.html#pulserver.protocol.format_values" title="pulserver.protocol.format_values"><span class="n">format_values</span></a><span class="p">,</span><span class="w">
+</span>    <a class="sphx-glr-backref-module-pulserver-protocol sphx-glr-backref-type-py-function reference internal" href="../../pulserver.protocol.parse_listing.html#pulserver.protocol.parse_listing" title="pulserver.protocol.parse_listing"><span class="n">parse_listing</span></a><span class="p">,</span><span class="w">
+</span>    <a class="sphx-glr-backref-module-pulserver-protocol sphx-glr-backref-type-py-function reference internal" href="../../pulserver.protocol.parse_validation.html#pulserver.protocol.parse_validation" title="pulserver.protocol.parse_validation"><span class="n">parse_validation</span></a><span class="p">,</span><span class="w">
+</span><span class="p">)</span><span class="w">
+</span><span class="w">
+</span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="str"><span class="n">system</span></a> <span class="o">=</span> <span class="s2">&quot;&quot;&quot;</span><span class="s2">[Limits]</span><span class="s2">
+</span><span class="s2">B0: 3.0</span><span class="s2">
+</span><span class="s2">max_grad: 40</span><span class="s2">
+</span><span class="s2">grad_unit: mT/m</span><span class="s2">
+</span><span class="s2">max_slew: 150</span><span class="s2">
+</span><span class="s2">slew_unit: T/m/s</span><span class="s2">
+</span><span class="s2">[Limits End]</span><span class="s2">
+</span><span class="s2">&quot;&quot;&quot;</span><span class="w">
+</span><a class="sphx-glr-backref-module-pulserver-virtual sphx-glr-backref-type-py-class sphx-glr-backref-instance reference internal" href="../../pulserver.virtual.Console.html#pulserver.virtual.Console" title="pulserver.virtual.Console"><span class="n">console</span></a> <span class="o">=</span> <a class="sphx-glr-backref-module-pulserver-virtual sphx-glr-backref-type-py-class reference internal" href="../../pulserver.virtual.Console.html#pulserver.virtual.Console" title="pulserver.virtual.Console"><span class="n">virtual</span><span class="o">.</span><span class="n">Console</span></a><span class="p">(</span><span class="w">
+</span>    <span class="n">plugins</span><span class="o">=</span><span class="p">[</span><a class="sphx-glr-backref-module-pathlib sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.PosixPath" title="pathlib.PosixPath"><span class="n">work</span></a> <span class="o">/</span> <span class="s2">&quot;</span><span class="s2">sequences</span><span class="s2">&quot;</span><span class="p">]</span><span class="p">,</span><span class="w">
+</span>    <span class="n">recon_plugins</span><span class="o">=</span><span class="p">[</span><a class="sphx-glr-backref-module-pathlib sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.PosixPath" title="pathlib.PosixPath"><span class="n">work</span></a> <span class="o">/</span> <span class="s2">&quot;</span><span class="s2">recon</span><span class="s2">&quot;</span><span class="p">]</span><span class="p">,</span><span class="w">
+</span>    <span class="n">limits</span><span class="o">=</span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="str"><span class="n">system</span></a><span class="p">,</span><span class="w">
+</span>    <span class="n">store</span><span class="o">=</span><a class="sphx-glr-backref-module-pathlib sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.PosixPath" title="pathlib.PosixPath"><span class="n">work</span></a> <span class="o">/</span> <span class="s2">&quot;</span><span class="s2">designs</span><span class="s2">&quot;</span><span class="p">,</span><span class="w">
+</span><span class="p">)</span><span class="w">
+</span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="str"><span class="n">listing</span></a> <span class="o">=</span> <a class="sphx-glr-backref-module-pulserver-virtual sphx-glr-backref-type-py-method reference internal" href="../../pulserver.virtual.Console.design.html#pulserver.virtual.Console.design" title="pulserver.virtual.Console.design"><span class="n">console</span><span class="o">.</span><span class="n">design</span></a><span class="p">(</span><span class="s2">&quot;</span><span class="s2">list</span><span class="s2">&quot;</span><span class="p">,</span> <span class="s2">&quot;</span><span class="s2">my_gre</span><span class="s2">&quot;</span><span class="p">)</span><span class="p">[</span><span class="s2">&quot;</span><span class="s2">reply</span><span class="s2">&quot;</span><span class="p">]</span><span class="w">
+</span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="str"><span class="n">block</span></a> <span class="o">=</span> <a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="str"><span class="n">listing</span></a><span class="p">[</span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="str"><span class="n">listing</span></a><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="s2">&quot;</span><span class="s2">[Protocol]</span><span class="s2">&quot;</span><span class="p">)</span> <span class="p">:</span><span class="p">]</span><span class="w">
+</span><span class="nb">print</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">line</span> <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="str"><span class="n">block</span></a><span class="o">.</span><span class="n">splitlines</span><span class="p">(</span><span class="p">)</span> <span class="k">if</span> <span class="s2">&quot;</span><span class="s2">|off|</span><span class="s2">&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">line</span><span class="p">)</span><span class="p">)</span><span class="w">
+</span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="dict"><span class="n">entries</span></a> <span class="o">=</span> <a class="sphx-glr-backref-module-pulserver-protocol sphx-glr-backref-type-py-function reference internal" href="../../pulserver.protocol.parse_listing.html#pulserver.protocol.parse_listing" title="pulserver.protocol.parse_listing"><span class="n">parse_listing</span></a><span class="p">(</span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="str"><span class="n">block</span></a><span class="p">)</span><span class="w">
+</span></pre></div></div>
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>[Protocol]
+flip: float|typein|12.0|1|90|1.0|deg
+TE: int|dropdown|8000|1000|80000|1|us|-2
+TR: int|typein|250000|1000|5000000|1|us
+ny: int|typein|128|32|512|2|
+nex: float|typein|1.0|1.0|16.0|1.0|
+[Protocol End]
+</pre></div>
+</div>
+<p>The phantom is the vials of lesson 1: seven vials of water whose T1 and T2
+grow around the circle, and one of fat in the middle. Your plugin
+estimates coil maps, which needs more than one receive coil, so the exam
+puts the phantom in the body coil to transmit and a 48-channel head coil to
+receive.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#list" title="list"><span class="n">localizer</span></a> <span class="o">=</span> <a class="sphx-glr-backref-module-pulserver-virtual sphx-glr-backref-type-py-method reference internal" href="../../pulserver.virtual.Console.exam.html#pulserver.virtual.Console.exam" title="pulserver.virtual.Console.exam"><span class="n">console</span><span class="o">.</span><span class="n">exam</span></a><span class="p">(</span><span class="s2">&quot;</span><span class="s2">vials</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">coil</span><span class="o">=</span><span class="s2">&quot;</span><span class="s2">body/head48</span><span class="s2">&quot;</span><span class="p">)</span>  <span class="c1"># DICOM files</span><span class="w">
+</span></pre></div></div>
+</section>
+<section id="a-flip-angle-series">
+<h2>A flip-angle series<a class="headerlink" href="#a-flip-angle-series" title="Link to this heading">#</a></h2>
+<p>The operator sets a TR of 50 ms and the minimum TE, and scans four times
+with flip angles from 5° to 60°. Each scan is the flow of lesson 1: the
+edit is validated, the sequence generated, and the scan played and
+reconstructed by <code class="docutils literal notranslate"><span class="pre">my_pics</span></code>.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><span class="kn">import</span><span class="w"> </span><span class="nn">base64</span><span class="w">
+</span><span class="kn">import</span><span class="w"> </span><span class="nn">io</span><span class="w">
+</span><span class="w">
+</span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span><span class="w">
+</span><span class="kn">import</span><span class="w"> </span><span class="nn">pydicom</span><span class="w">
+</span><span class="w">
+</span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="tuple"><span class="n">FLIPS</span></a> <span class="o">=</span> <span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">15</span><span class="p">,</span> <span class="mi">30</span><span class="p">,</span> <span class="mi">60</span><span class="p">)</span><span class="w">
+</span><span class="w">
+</span><span class="w">
+</span><span class="k">def</span><span class="w"> </span><span class="nf">scan</span><span class="p">(</span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="int"><span class="n">flip</span></a><span class="p">)</span><span class="p">:</span><span class="w">
+</span><span class="w">    </span><span class="sd">&quot;&quot;&quot;Validate, generate and scan my_gre at a flip angle; return the image and TE in s.&quot;&quot;&quot;</span><span class="w">
+</span>    <span class="n">values</span> <span class="o">=</span> <span class="p">{</span><span class="n">key</span><span class="p">:</span> <span class="n">entry</span><span class="o">.</span><span class="n">value</span> <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">entry</span> <span class="ow">in</span> <a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="dict"><span class="n">entries</span></a><span class="o">.</span><span class="n">items</span><span class="p">(</span><span class="p">)</span><span class="p">}</span><span class="w">
+</span>    <span class="n">values</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="w">
+</span>        <span class="p">{</span><span class="w">
+</span>            <a class="sphx-glr-backref-module-pulserver-protocol sphx-glr-backref-type-py-class sphx-glr-backref-instance reference internal" href="../../pulserver.protocol.FloatKey.html#pulserver.protocol.FloatKey" title="pulserver.protocol.FloatKey"><span class="n">UIParam</span><span class="o">.</span><span class="n">FLIP</span></a><span class="p">:</span> <a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="int"><span class="n">flip</span></a><span class="p">,</span><span class="w">
+</span>            <a class="sphx-glr-backref-module-pulserver-protocol sphx-glr-backref-type-py-class sphx-glr-backref-instance reference internal" href="../../pulserver.protocol.FloatKey.html#pulserver.protocol.FloatKey" title="pulserver.protocol.FloatKey"><span class="n">UIParam</span><span class="o">.</span><span class="n">TR</span></a><span class="p">:</span> <span class="mi">50_000</span><span class="p">,</span>  <span class="c1"># µs on the wire</span><span class="w">
+</span>            <a class="sphx-glr-backref-module-pulserver-protocol sphx-glr-backref-type-py-class sphx-glr-backref-instance reference internal" href="../../pulserver.protocol.FloatKey.html#pulserver.protocol.FloatKey" title="pulserver.protocol.FloatKey"><span class="n">UIParam</span><span class="o">.</span><span class="n">TE</span></a><span class="p">:</span> <a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="int"><span class="n">TEPreset</span><span class="o">.</span><span class="n">MINIMUM</span><span class="o">.</span><span class="n">value</span></a><span class="p">,</span><span class="w">
+</span>        <span class="p">}</span><span class="w">
+</span>    <span class="p">)</span><span class="w">
+</span>    <span class="n">request</span> <span class="o">=</span> <a class="sphx-glr-backref-module-pulserver-protocol sphx-glr-backref-type-py-function reference internal" href="../../pulserver.protocol.format_values.html#pulserver.protocol.format_values" title="pulserver.protocol.format_values"><span class="n">format_values</span></a><span class="p">(</span><span class="n">values</span><span class="p">,</span> <a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="dict"><span class="n">entries</span></a><span class="p">)</span><span class="w">
+</span>    <span class="n">validation</span> <span class="o">=</span> <a class="sphx-glr-backref-module-pulserver-protocol sphx-glr-backref-type-py-function reference internal" href="../../pulserver.protocol.parse_validation.html#pulserver.protocol.parse_validation" title="pulserver.protocol.parse_validation"><span class="n">parse_validation</span></a><span class="p">(</span><span class="w">
+</span>        <a class="sphx-glr-backref-module-pulserver-virtual sphx-glr-backref-type-py-method reference internal" href="../../pulserver.virtual.Console.design.html#pulserver.virtual.Console.design" title="pulserver.virtual.Console.design"><span class="n">console</span><span class="o">.</span><span class="n">design</span></a><span class="p">(</span><span class="s2">&quot;</span><span class="s2">validate</span><span class="s2">&quot;</span><span class="p">,</span> <span class="s2">&quot;</span><span class="s2">my_gre</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">request</span><span class="p">)</span><span class="p">[</span><span class="s2">&quot;</span><span class="s2">reply</span><span class="s2">&quot;</span><span class="p">]</span><span class="p">,</span> <a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="dict"><span class="n">entries</span></a><span class="w">
+</span>    <span class="p">)</span><span class="w">
+</span>    <span class="n">te_ms</span> <span class="o">=</span> <span class="n">validation</span><span class="o">.</span><span class="n">values</span><span class="p">[</span><a class="sphx-glr-backref-module-pulserver-protocol sphx-glr-backref-type-py-class sphx-glr-backref-instance reference internal" href="../../pulserver.protocol.FloatKey.html#pulserver.protocol.FloatKey" title="pulserver.protocol.FloatKey"><span class="n">UIParam</span><span class="o">.</span><span class="n">TE</span></a><span class="p">]</span> <span class="o">/</span> <span class="mf">1e3</span><span class="w">
+</span>    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="int"><span class="n">flip</span></a><span class="si">:</span><span class="s2">2d</span><span class="si">}</span><span class="s2">°: TE </span><span class="si">{</span><span class="n">te_ms</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2"> ms, scan time </span><span class="si">{</span><span class="n">validation</span><span class="o">.</span><span class="n">duration</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> s</span><span class="s2">&quot;</span><span class="p">)</span><span class="w">
+</span><span class="w">
+</span>    <span class="n">design</span> <span class="o">=</span> <a class="sphx-glr-backref-module-pulserver-virtual sphx-glr-backref-type-py-method reference internal" href="../../pulserver.virtual.Console.design.html#pulserver.virtual.Console.design" title="pulserver.virtual.Console.design"><span class="n">console</span><span class="o">.</span><span class="n">design</span></a><span class="p">(</span><span class="s2">&quot;</span><span class="s2">generate</span><span class="s2">&quot;</span><span class="p">,</span> <span class="s2">&quot;</span><span class="s2">my_gre</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">request</span><span class="p">)</span><span class="p">[</span><span class="s2">&quot;</span><span class="s2">design</span><span class="s2">&quot;</span><span class="p">]</span><span class="w">
+</span>    <span class="n">received</span> <span class="o">=</span> <span class="p">[</span><span class="p">]</span><span class="w">
+</span>    <a class="sphx-glr-backref-module-pulserver-virtual sphx-glr-backref-type-py-method reference internal" href="../../pulserver.virtual.Console.scan.html#pulserver.virtual.Console.scan" title="pulserver.virtual.Console.scan"><span class="n">console</span><span class="o">.</span><span class="n">scan</span></a><span class="p">(</span><span class="w">
+</span>        <span class="n">design</span><span class="p">,</span><span class="w">
+</span>        <span class="n">rotation</span><span class="o">=</span><a class="sphx-glr-backref-module-numpy sphx-glr-backref-type-py-function reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.eye.html#numpy.eye" title="numpy.eye"><span class="n">np</span><span class="o">.</span><span class="n">eye</span></a><span class="p">(</span><span class="mi">3</span><span class="p">)</span><span class="p">,</span><span class="w">
+</span>        <span class="n">centre_mm</span><span class="o">=</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span><span class="p">,</span><span class="w">
+</span>        <span class="n">emit</span><span class="o">=</span><span class="n">received</span><span class="o">.</span><span class="n">append</span><span class="p">,</span><span class="w">
+</span>        <span class="n">recon</span><span class="o">=</span><span class="s2">&quot;</span><span class="s2">my_pics</span><span class="s2">&quot;</span><span class="p">,</span><span class="w">
+</span>    <span class="p">)</span><span class="w">
+</span>    <span class="n">dicom</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">item</span><span class="p">[</span><span class="s2">&quot;</span><span class="s2">dicom</span><span class="s2">&quot;</span><span class="p">]</span> <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">received</span> <span class="k">if</span> <span class="s2">&quot;</span><span class="s2">dicom</span><span class="s2">&quot;</span> <span class="ow">in</span> <span class="n">item</span><span class="p">)</span><span class="w">
+</span>    <span class="k">return</span> <span class="n">pydicom</span><span class="o">.</span><span class="n">dcmread</span><span class="p">(</span><a class="sphx-glr-backref-module-io sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/library/io.html#io.BytesIO" title="io.BytesIO"><span class="n">io</span><span class="o">.</span><span class="n">BytesIO</span></a><span class="p">(</span><a class="sphx-glr-backref-module-base64 sphx-glr-backref-type-py-function reference external" href="https://docs.python.org/3/library/base64.html#base64.b64decode" title="base64.b64decode"><span class="n">base64</span><span class="o">.</span><span class="n">b64decode</span></a><span class="p">(</span><span class="n">dicom</span><span class="p">)</span><span class="p">)</span><span class="p">)</span><span class="p">,</span> <span class="n">te_ms</span> <span class="o">/</span> <span class="mf">1e3</span><span class="w">
+</span><span class="w">
+</span><span class="w">
+</span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="dict"><span class="n">images</span></a> <span class="o">=</span> <span class="p">{</span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="int"><span class="n">flip</span></a><span class="p">:</span> <span class="n">scan</span><span class="p">(</span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="int"><span class="n">flip</span></a><span class="p">)</span> <span class="k">for</span> <a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="int"><span class="n">flip</span></a> <span class="ow">in</span> <a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="tuple"><span class="n">FLIPS</span></a><span class="p">}</span><span class="w">
+</span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="float"><span class="n">te</span></a> <span class="o">=</span> <a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="dict"><span class="n">images</span></a><span class="p">[</span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="tuple"><span class="n">FLIPS</span></a><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="p">]</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>  <span class="c1"># the minimum TE, the same for every flip angle</span><span class="w">
+</span></pre></div></div>
+<img src="../../../_images/sphx_glr_06_testing_on_the_virtual_scanner_001.png" srcset="../../../_images/sphx_glr_06_testing_on_the_virtual_scanner_001.png" alt="5°, 15°, 30°, 60°" class = "sphx-glr-single-img"/><div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span> 5°: TE 3.44 ms, scan time 12.6 s
+15°: TE 3.44 ms, scan time 9.8 s
+30°: TE 3.44 ms, scan time 7.7 s
+60°: TE 3.44 ms, scan time 6.8 s
+</pre></div>
+</div>
+<p>The four images are drawn on one grey scale. At 5° all the water vials are
+dim and alike; as the flip angle grows, the vials of short T1 brighten and
+those of long T1 fade.</p>
+</section>
+<section id="against-the-physics">
+<h2>Against the physics<a class="headerlink" href="#against-the-physics" title="Link to this heading">#</a></h2>
+<p>After its dummy TRs, an RF-spoiled gradient echo reaches a steady state
+whose signal is known in closed form:</p>
+<div class="math notranslate nohighlight">
+\[S(\alpha) = M_0 \, \sin\alpha \,
+\frac{1 - E_1}{1 - \cos\alpha \, E_1} \, e^{-\mathrm{TE}/T_2},
+\qquad E_1 = e^{-\mathrm{TR}/T_1}.\]</div>
+<p>Each vial’s T1 and T2 are known, so the curves below have no free parameter
+but one overall scale, the same for every vial and every scan, fitted by
+least squares. The points are the mean of each vial in your images.</p>
+<div class="highlight-Python notranslate"><div class="highlight"><pre><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="float"><span class="n">TR</span></a> <span class="o">=</span> <span class="mf">0.05</span><span class="w">
+</span><a class="sphx-glr-backref-module-numpy sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="numpy.ndarray"><span class="n">t1</span></a> <span class="o">=</span> <a class="sphx-glr-backref-module-numpy sphx-glr-backref-type-py-function reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.geomspace.html#numpy.geomspace" title="numpy.geomspace"><span class="n">np</span><span class="o">.</span><span class="n">geomspace</span></a><span class="p">(</span><span class="mf">0.3</span><span class="p">,</span> <span class="mf">2.0</span><span class="p">,</span> <span class="mi">7</span><span class="p">)</span>  <span class="c1"># the vials' T1 and T2, in s</span><span class="w">
+</span><a class="sphx-glr-backref-module-numpy sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="numpy.ndarray"><span class="n">t2</span></a> <span class="o">=</span> <a class="sphx-glr-backref-module-numpy sphx-glr-backref-type-py-function reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.geomspace.html#numpy.geomspace" title="numpy.geomspace"><span class="n">np</span><span class="o">.</span><span class="n">geomspace</span></a><span class="p">(</span><span class="mf">0.04</span><span class="p">,</span> <span class="mf">0.3</span><span class="p">,</span> <span class="mi">7</span><span class="p">)</span><span class="w">
+</span><span class="w">
+</span><span class="w">
+</span><span class="k">def</span><span class="w"> </span><span class="nf">steady_state</span><span class="p">(</span><span class="n">flip_deg</span><span class="p">,</span> <a class="sphx-glr-backref-module-numpy sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="numpy.ndarray"><span class="n">t1</span></a><span class="p">,</span> <a class="sphx-glr-backref-module-numpy sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="numpy.ndarray"><span class="n">t2</span></a><span class="p">)</span><span class="p">:</span><span class="w">
+</span>    <span class="n">alpha</span> <span class="o">=</span> <a class="sphx-glr-backref-module-numpy sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ufunc.html#numpy.ufunc" title="numpy.ufunc"><span class="n">np</span><span class="o">.</span><span class="n">radians</span></a><span class="p">(</span><span class="n">flip_deg</span><span class="p">)</span><span class="w">
+</span>    <span class="n">e1</span> <span class="o">=</span> <a class="sphx-glr-backref-module-numpy sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ufunc.html#numpy.ufunc" title="numpy.ufunc"><span class="n">np</span><span class="o">.</span><span class="n">exp</span></a><span class="p">(</span><span class="o">-</span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="float"><span class="n">TR</span></a> <span class="o">/</span> <a class="sphx-glr-backref-module-numpy sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="numpy.ndarray"><span class="n">t1</span></a><span class="p">)</span><span class="w">
+</span>    <span class="k">return</span> <a class="sphx-glr-backref-module-numpy sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ufunc.html#numpy.ufunc" title="numpy.ufunc"><span class="n">np</span><span class="o">.</span><span class="n">sin</span></a><span class="p">(</span><span class="n">alpha</span><span class="p">)</span> <span class="o">*</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="n">e1</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <a class="sphx-glr-backref-module-numpy sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ufunc.html#numpy.ufunc" title="numpy.ufunc"><span class="n">np</span><span class="o">.</span><span class="n">cos</span></a><span class="p">(</span><span class="n">alpha</span><span class="p">)</span> <span class="o">*</span> <span class="n">e1</span><span class="p">)</span> <span class="o">*</span> <a class="sphx-glr-backref-module-numpy sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ufunc.html#numpy.ufunc" title="numpy.ufunc"><span class="n">np</span><span class="o">.</span><span class="n">exp</span></a><span class="p">(</span><span class="o">-</span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="float"><span class="n">te</span></a> <span class="o">/</span> <a class="sphx-glr-backref-module-numpy sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="numpy.ndarray"><span class="n">t2</span></a><span class="p">)</span><span class="w">
+</span></pre></div></div>
+<img src="../../../_images/sphx_glr_06_testing_on_the_virtual_scanner_002.png" srcset="../../../_images/sphx_glr_06_testing_on_the_virtual_scanner_002.png" alt="lines: closed form    points: your images" class = "sphx-glr-single-img"/><p>Each vial peaks at its own Ernst angle, and the measured points follow the
+closed form for all seven vials with one shared scale. What remains,
+largest for the vials of long T2, is most likely the spoiling: a 117° RF
+phase increment does not remove the transverse magnetization completely,
+and the closed form assumes it does.</p>
+<p>That agreement tests the whole chain at once: the flip angle and the timing
+your sequence plugin designed, the conversion to the scanner’s cache, the
+labels that sorted the raw data, and your reconstruction. A wrong unit in a
+<code class="docutils literal notranslate"><span class="pre">TimeParam</span></code>, or a recon that scaled each scan differently, would break it.</p>
+<p>The virtual scanner is a model. The agreement shows that the pair behaves
+as designed before a scanner is involved; it does not establish scanner or
+patient safety. <a class="reference internal" href="../../../explanations/virtual-scanner.html"><span class="doc">Virtual scanner</span></a>
+describes what it models.</p>
+</section>
+<section id="on-a-scanner">
+<h2>On a scanner<a class="headerlink" href="#on-a-scanner" title="Link to this heading">#</a></h2>
+<p>The same two folders are what pulserver is pointed at on a scanner: the
+design service takes the folder of sequence plugins and the reconstruction
+proxy the folder of recon plugins. Nothing in the files changes.
+<a class="reference internal" href="../../../user-guide/virtual-scanner.html"><span class="doc">Virtual scanner</span></a> runs the same console from the command
+line, with MaRGE’s interface in front of it.</p>
+<p>This is the end of the course. The Tours take each piece further.</p>
+</section>
+<section id="as-a-spec">
+<h2>As a spec<a class="headerlink" href="#as-a-spec" title="Link to this heading">#</a></h2>
+<p>What this lesson did, stated the way you would ask an agent for it:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>Save the gre2d sequence plugin of lesson 2 as sequences/my_gre.py and the
+pics recon plugin of lesson 5 as recon/my_pics.py. Load both folders into
+a pulserver virtual.Console, start a vials exam in the body/head48 coil,
+and scan my_gre with recon my_pics at a TR of 50 ms, the minimum TE and
+flip angles of 5, 15, 30 and 60 degrees. Compare the mean of each water
+vial with the closed-form spoiled gradient echo signal for its T1 and T2,
+with one least-squares scale for all vials and scans.
+</pre></div>
+</div>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 35.348 seconds)</p>
+<div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-generated-gallery-01-course-06-testing-on-the-virtual-scanner-py">
+<div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
+<p><a class="reference download internal" download="" href="../../../_downloads/da471522f29311911a3018b49f58403a/06_testing_on_the_virtual_scanner.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">06_testing_on_the_virtual_scanner.ipynb</span></code></a></p>
+</div>
+<div class="sphx-glr-download sphx-glr-download-python docutils container">
+<p><a class="reference download internal" download="" href="../../../_downloads/ed0d1b4347038b19fa0f94cc44385585/06_testing_on_the_virtual_scanner.py"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Python</span> <span class="pre">source</span> <span class="pre">code:</span> <span class="pre">06_testing_on_the_virtual_scanner.py</span></code></a></p>
+</div>
+<div class="sphx-glr-download sphx-glr-download-zip docutils container">
+<p><a class="reference download internal" download="" href="../../../_downloads/facbddf0f5448bb653810b7f5bf30830/06_testing_on_the_virtual_scanner.zip"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">zipped:</span> <span class="pre">06_testing_on_the_virtual_scanner.zip</span></code></a></p>
+</div>
+</div>
+<p class="sphx-glr-signature"><a class="reference external" href="https://sphinx-gallery.github.io">Gallery generated by Sphinx-Gallery</a></p>
+</section>
+</section>
+
+
+                </article>
+              
+
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="05_recon_plugin.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">5. Your recon plugin</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="../../../examples/tours.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Tours</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item"><div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> Contents
+  </div>
+  <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#your-plugins-as-files">Your plugins, as files</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#the-virtual-scanner-with-your-plugins">The virtual scanner, with your plugins</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#a-flip-angle-series">A flip-angle series</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#against-the-physics">Against the physics</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#on-a-scanner">On a scanner</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#as-a-spec">As a spec</a></li>
+</ul>
+  </nav></div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+<div class="bd-footer-content__inner container">
+  
+  <div class="footer-item">
+    
+<p class="component-author">
+By pulserver contributors
+</p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+
+  <p class="copyright">
+    
+      © Copyright 2024-2026, pulserver contributors.
+      <br/>
+    
+  </p>
+
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+  <div class="footer-item">
+    
+  </div>
+  
+</div>
+          </footer>
+        
+
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../../../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9"></script>
+<script defer src="../../../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9"></script>
+
+  <footer class="bd-footer">
+  </footer>
+  </body>
+</html>

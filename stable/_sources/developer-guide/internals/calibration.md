@@ -71,7 +71,8 @@ $\sum_k \mathbf{y}_k\mathbf{y}_k^H$ over the placed samples of the calibration
 k-space of the first unit the stream compresses, or of its imaging k-space
 where that unit holds no calibration k-space. One basis is estimated per
 stream, and every unit is projected onto it, so the virtual channels of
-successive units are the same.
+successive units are the same. The basis and the projection are computed on
+the host.
 
 If the signal of the channels lies in a subspace of dimension at most $n$,
 compression discards none of it, and SENSE with compressed data and compressed
@@ -93,9 +94,9 @@ The calibration k-space of a unit is {attr}`ReconData.ref
 | Calibration unit | Readouts flagged `IS_PARALLEL_CALIBRATION` in a unit with no imaging readouts, as in an encoding space of their own | That unit, whose `data.data` is `None`; the imaging units of the same slice take the maps from the stream |
 | Calibration series | A series of its own | The reconstruction of that series, which stores the maps in the exam |
 
-The estimate receives the calibration k-space of a Cartesian encoding space
-zero-filled onto the whole grid of the space, the lines its readouts cover
-being at their grid positions, and returns maps on that grid. For a
+The estimate receives the calibration k-space of a Cartesian encoding space on
+the host, zero-filled onto the whole grid of the space, the lines its readouts
+cover being at their grid positions, and returns maps on that grid. For a
 non-Cartesian space {func}`~pulserver.recon.coil_maps` raises `ValueError`.
 
 ### Resolution
