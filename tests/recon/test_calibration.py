@@ -133,11 +133,11 @@ def test_a_reference_only_unit_stores_maps_for_its_slice(device):
     truth = np.abs(image) * sensitivity
     assert relative_difference(np.abs(combine(kspace, stored.maps)), truth) < ESTIMATION
     (returned,) = plugin.results
-    assert returned.device.type == device
+    assert returned.device.type == "cpu"
     np.testing.assert_array_equal(returned.cpu().numpy(), stored.maps)
 
 
-def test_calibration_k_space_reaches_the_estimate_zero_filled_at_its_lines(
+def test_calibration_k_space_reaches_the_estimate_on_the_host_zero_filled_at_its_lines(
     device, torch
 ):
     _, _, kspace = coil_phantom(COILS, MATRIX)
@@ -154,7 +154,7 @@ def test_calibration_k_space_reaches_the_estimate_zero_filled_at_its_lines(
     (given,) = estimate.calls
     assert given.shape == (COILS, MATRIX, MATRIX)
     assert given.dtype == torch.complex64
-    assert given.device.type == device
+    assert given.device.type == "cpu"
     given = given.cpu().numpy()
     np.testing.assert_array_equal(given[:, lines.start : lines.stop], kspace[:, lines])
     assert not given[:, : lines.start].any()

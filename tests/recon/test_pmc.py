@@ -89,3 +89,29 @@ def test_navigator_readouts_are_the_navigator_branch_and_the_rest_imaging():
     assert plugin.branch_for(rtfeedback) == "navigator"
     assert plugin.branch_for(imaging) == "imaging"
     assert plugin.branch_for(noise) is None
+
+
+def test_a_navigator_is_posed_on_one_thread_and_the_images_keep_their_thread_count(
+    monkeypatch,
+):
+    import torch
+    from bartorch import tools
+
+    reconstruct = tools.reconstruct_navigator
+    during = []
+
+    def counted(*args, **kwargs):
+        during.append(torch.get_num_threads())
+        return reconstruct(*args, **kwargs)
+
+    monkeypatch.setattr(tools, "reconstruct_navigator", counted)
+    original = torch.get_num_threads()
+    torch.set_num_threads(3)
+    try:
+        _poses([np.eye(3)])
+        after = torch.get_num_threads()
+    finally:
+        torch.set_num_threads(original)
+
+    assert during == [1]
+    assert after == 3

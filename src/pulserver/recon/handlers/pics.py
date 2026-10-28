@@ -12,7 +12,7 @@ import numpy as np
 from ...mrd._acquisitions import AcquisitionFlag
 from ...mrd._images import center_crop
 from .._buffers import ReconBuffer, ReconData
-from .._calibration import coil_maps
+from .._calibration import CoilCompression, coil_maps
 from .._correct import gradient_unwarped, states_gradient_coefficients
 from ..gadgets import AsymmetricEcho, Prewhiten, RemoveReadoutOversampling
 from ..plugin import ReconContext, ReconPlugin, ReconResult
@@ -25,6 +25,10 @@ WAVELET_MIN_POINTS = 4
 #: Lines of every encoded axis, around the k-space centre, the coil maps are
 #: fitted to, as :func:`bartorch.apps.nlinv_maps` takes them.
 CALIBRATION_LINES = 24
+
+#: Virtual channels the receive channels of a unit are compressed to before
+#: its maps and its solve (:class:`~pulserver.recon.CoilCompression`).
+VIRTUAL_COILS = 6
 
 
 class PicsRecon(ReconPlugin):
@@ -45,6 +49,10 @@ class PicsRecon(ReconPlugin):
     slice closes. Noise readouts are consumed by the whitening;
     phase-correction readouts are rejected.
 
+    A unit of more receive channels than ``virtual_coils`` is compressed to
+    that many virtual channels (:func:`compressed`) before its maps are
+    estimated and its image solved.
+
     The coil sensitivities are those of :func:`~pulserver.recon.coil_maps`
     with :func:`nlinv_estimate` as the estimate: from the unit's calibration
     readouts, else the maps stored for its slice, else the exam's. A unit for
@@ -62,6 +70,11 @@ class PicsRecon(ReconPlugin):
     (``bart homodyne -I -C``). bartorch is imported when the first unit is
     reconstructed.
 
+    The k-space, the maps and the vectors of the solve stay on the host. The
+    encoding is built on ``context.device`` and brings them over a coil at a
+    time as it applies (:func:`bartorch.linop.CartesianSense`), so between
+    applications the device holds the operator alone.
+
     A unit of a non-Cartesian encoding space is a wave-CAIPI volume, which the
     proxy makes of readouts whose k-space moves along the phase encodes:
     reconstructed by :meth:`wave_image`, with the readout oversampling the
@@ -73,9 +86,17 @@ class PicsRecon(ReconPlugin):
         ``lambda``, relative to the data scaling ``pics`` estimates.
     iterations : int, default=30
         Iterations of the solve.
+    virtual_coils : int | None, default=VIRTUAL_COILS
+        Receive channels beyond this many are compressed to it; ``None``
+        keeps every channel.
     """
 
-    def __init__(self, wavelet: float = 0.005, iterations: int = 30) -> None:
+    def __init__(
+        self,
+        wavelet: float = 0.005,
+        iterations: int = 30,
+        virtual_coils: int | None = VIRTUAL_COILS,
+    ) -> None:
         super().__init__(
             triggers={"imaging": AcquisitionFlag.LAST_IN_SLICE},
             axes=("average",),
@@ -84,11 +105,13 @@ class PicsRecon(ReconPlugin):
         self.gadgets = (Prewhiten(), AsymmetricEcho(), RemoveReadoutOversampling())
         self.wavelet = wavelet
         self.iterations = iterations
+        self.virtual_coils = virtual_coils
 
     def recon(
         self, context: ReconContext, branch: str, data: ReconData
     ) -> ReconResult | None:
         del branch
+        data = compressed(context, data, self.virtual_coils)
         if data.data is None and data.ref is not None:
             coil_maps(context, data, estimate=nlinv_estimate)
         buffer = data.data
@@ -113,23 +136,18 @@ class PicsRecon(ReconPlugin):
     ) -> np.ndarray:
         """Return the magnitude image of ``(coils, [partitions,] phase encodes, readout)`` k-space, cropped to ``shape``."""
         import torch
-        from bartorch import apps, priors
+        from bartorch import apps
 
         volume = kspace if kspace.ndim == 4 else kspace[:, None]
-        volume = torch.from_numpy(np.ascontiguousarray(volume)).to(
-            device=context.device, dtype=torch.complex64
-        )
+        volume = torch.from_numpy(np.ascontiguousarray(volume, dtype=np.complex64))
         maps = coil_maps(context, data, estimate=nlinv_estimate, required=False)
         maps = nlinv_estimate(volume) if maps is None else maps.reshape(volume.shape)
-        encoded = wavelet_axes(volume.shape[1:], (-1, -2, -3))
-        image = apps.pics(
-            volume,
-            maps,
-            regularizers=priors.Wavelet(encoded, self.wavelet),
-            maxiter=self.iterations,
-        ).reshape(volume.shape[1:])
-        image = apps.partial_fourier(image, volume.abs().sum(dim=0) > 0)
-        image = image.abs().cpu().numpy()
+        sampled = volume.abs().sum(dim=0) > 0
+        image = pics_image(
+            volume, maps, sampled, self.wavelet, self.iterations, context.device
+        )
+        image = apps.partial_fourier(image, sampled)
+        image = image.abs().numpy()
         if kspace.ndim == 3:
             image = image[0]
         return np.array(center_crop(image, shape[-image.ndim :]))
@@ -186,9 +204,7 @@ class PicsRecon(ReconPlugin):
         psf = linop.wave_psf(k, shape, fov, scale=scale, delay=delay, centred=True)
 
         def tensor(array: np.ndarray) -> torch.Tensor:
-            return torch.from_numpy(np.ascontiguousarray(array)).to(
-                device=context.device, dtype=torch.complex64
-            )
+            return torch.from_numpy(np.ascontiguousarray(array, dtype=np.complex64))
 
         maps = center_crop(nlinv_estimate(tensor(reference)), shape[-1:])
         encoding = linop.WaveSense(
@@ -198,6 +214,7 @@ class PicsRecon(ReconPlugin):
             tensor(np.abs(wave).sum(axis=0) > 0),
             centred=True,
             psf=tensor(psf.numpy()),
+            device=context.device,
         )
         measured = tensor(wave)
         scaling = optim.data_scaling(measured, A=encoding)
@@ -206,7 +223,7 @@ class PicsRecon(ReconPlugin):
             maxiter=self.iterations,
         )
         image = scaling * solve(measured * (1.0 / scaling), encoding)
-        return image.abs().cpu().numpy()
+        return image.abs().numpy()
 
 
 PLUGIN = PicsRecon()
@@ -241,6 +258,58 @@ def nlinv_estimate(
         shape=shape,
         phase_pole=0 if detectable else None,
     )
+
+
+def compressed(
+    context: ReconContext, data: ReconData, virtual_coils: int | None
+) -> ReconData:
+    """Return ``data`` with its receive channels compressed to ``virtual_coils`` (:class:`~pulserver.recon.CoilCompression`).
+
+    ``data`` is returned as it is when it holds no more channels than that, or
+    ``virtual_coils`` is ``None``.
+    """
+    buffer = data.data if data.data is not None else data.ref
+    if virtual_coils is None or buffer is None or buffer.coils <= virtual_coils:
+        return data
+    return CoilCompression(virtual_coils)(context, data)
+
+
+def pics_image(
+    kspace: Any,
+    maps: Any,
+    sampled: Any,
+    wavelet: float,
+    iterations: int,
+    device: str | None,
+) -> Any:
+    """Return the complex image ``(z, y, x)`` of ``bart pics -S -R W`` over host k-space ``(coils, z, y, x)``.
+
+    The solve of :func:`bartorch.apps.pics` on a grid: ``sampled``, the
+    ``(z, y, x)`` lines placed, as its pattern, the scaling estimated from the
+    fully sampled centre, and FISTA over the wavelet term of weight
+    ``wavelet`` along the axes of at least ``WAVELET_MIN_POINTS`` points. A
+    volume of one partition is solved as a plane. The k-space, the maps and
+    the iteration's vectors stay on the host, and the encoding computes on
+    ``device``; ``None`` is the host. The image is on the host.
+    """
+    import bartorch
+    import torch
+    from bartorch import linop, optim, priors
+
+    grid = tuple(kspace.shape[2:] if kspace.shape[1] == 1 else kspace.shape[1:])
+    pattern = sampled.reshape(grid).to(torch.complex64)
+    measured = kspace * sampled
+    scaling = optim.data_scaling(
+        bartorch.fftmod(measured, axes=(-1, -2, -3), inverse=True)
+    )
+    scaling = scaling or 1.0
+    encoding = linop.CartesianSense(
+        maps.reshape(maps.shape[0], *grid), grid, pattern=pattern, device=device
+    )
+    axes = wavelet_axes(grid, tuple(range(-1, -len(grid) - 1, -1)))
+    solve = optim.FISTA(priors.Wavelet(axes, wavelet), maxiter=iterations)
+    data = (measured * (1.0 / scaling)).reshape(kspace.shape[0], *grid)
+    return (scaling * solve(data, encoding)).reshape(kspace.shape[1:])
 
 
 def wavelet_axes(shape: tuple[int, ...], axes: tuple[int, ...]) -> tuple[int, ...]:

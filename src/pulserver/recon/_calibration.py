@@ -165,24 +165,23 @@ def coil_maps(
     Parameters
     ----------
     context : ReconContext
-        Scan context; its ``device`` is where the estimate runs and the maps
-        are returned.
+        Scan context.
     data : ReconData
         The unit that needs maps; ``data.counters["slice"]`` is its slice,
         0 when the unit has no such counter.
     estimate : callable
         ``estimate(kspace) -> maps``, such as :func:`bartorch.apps.nlinv_maps`.
         ``kspace`` is the calibration k-space of the unit as a torch tensor
-        ``(coils, [z,] y, x)``, zero outside the lines it holds, on the grid of
-        its encoding space; ``maps`` are the sensitivities on the same grid.
+        ``(coils, [z,] y, x)`` on the host, zero outside the lines it holds, on
+        the grid of its encoding space; ``maps`` are the sensitivities on the
+        same grid.
     required : bool, default=True
         Return ``None``, rather than raise, when no source has usable maps.
 
     Returns
     -------
     torch.Tensor or None
-        A copy of the maps ``(coils, [z,] y, x)``, complex64, on
-        ``context.device``.
+        A copy of the maps ``(coils, [z,] y, x)``, complex64, on the host.
 
     Raises
     ------
@@ -222,7 +221,7 @@ def coil_maps(
             f"no coil sensitivities for slice {location}; sources consulted:\n  "
             + "\n  ".join(rejected)
         )
-    return torch.tensor(found.maps, device=context.device)
+    return torch.tensor(found.maps)
 
 
 class CoilCompression:
@@ -241,8 +240,9 @@ class CoilCompression:
     compress a unit before asking for its maps.
 
     The returned unit holds new buffers with ``n_virtual`` channels, and shares
-    its ``counters`` and ``acquisitions`` with the unit it was made from.
-    bartorch is imported when a unit is compressed.
+    its ``counters`` and ``acquisitions`` with the unit it was made from. The
+    basis and the projection are computed on the host. bartorch is imported
+    when a unit is compressed.
 
     Corresponds to Gadgetron's ``GenericReconEigenChannelGadget``.
 
@@ -272,7 +272,7 @@ class CoilCompression:
             source = data.ref if data.ref is not None else data.data
             if source is None:
                 raise ValueError("a unit with no k-space cannot give the basis")
-            basis = _basis(source, self.n_virtual, context.device)
+            basis = _basis(source, self.n_virtual)
             context.coil_compression = basis
         elif basis.n_virtual != self.n_virtual:
             raise ValueError(
@@ -281,8 +281,8 @@ class CoilCompression:
             )
         return dataclasses.replace(
             data,
-            data=_compressed(data.data, basis, context.device),
-            ref=_compressed(data.ref, basis, context.device),
+            data=_compressed(data.data, basis),
+            ref=_compressed(data.ref, basis),
         )
 
 
@@ -387,7 +387,7 @@ def _estimated(
     )
     kspace[(slice(None), *lines, slice(None))] = ref.kspace
 
-    maps = estimate(torch.from_numpy(kspace).to(context.device))
+    maps = estimate(torch.from_numpy(kspace))
     maps = np.asarray(maps.detach().cpu().numpy(), dtype=np.complex64)
     if maps.shape != kspace.shape:
         raise ValueError(
@@ -433,7 +433,7 @@ def _usable(
     return None
 
 
-def _basis(buffer: ReconBuffer, n_virtual: int, device: str | None) -> Basis:
+def _basis(buffer: ReconBuffer, n_virtual: int) -> Basis:
     import torch
     from bartorch import tools
 
@@ -442,7 +442,7 @@ def _basis(buffer: ReconBuffer, n_virtual: int, device: str | None) -> Basis:
         raise ValueError(f"cannot keep {n_virtual} virtual channels of {coils}")
     samples = np.ascontiguousarray(buffer.kspace[:, buffer.mask], dtype=np.complex64)
     matrix = tools.cc(
-        torch.from_numpy(samples).reshape(coils, -1, 1, 1).to(device),
+        torch.from_numpy(samples).reshape(coils, -1, 1, 1),
         p=n_virtual,
         M=True,
         A=True,
@@ -452,9 +452,7 @@ def _basis(buffer: ReconBuffer, n_virtual: int, device: str | None) -> Basis:
     return Basis(matrix, n_virtual, digest(matrix[:, :n_virtual], n_virtual))
 
 
-def _compressed(
-    buffer: ReconBuffer | None, basis: Basis, device: str | None
-) -> ReconBuffer | None:
+def _compressed(buffer: ReconBuffer | None, basis: Basis) -> ReconBuffer | None:
     if buffer is None:
         return None
     import torch
@@ -468,8 +466,8 @@ def _compressed(
         )
     kspace = np.ascontiguousarray(buffer.kspace, dtype=np.complex64)
     virtual = tools.ccapply(
-        torch.from_numpy(kspace).reshape(coils, -1, 1, 1).to(device),
-        torch.from_numpy(basis.matrix).reshape(coils, coils, 1, 1, 1).to(device),
+        torch.from_numpy(kspace).reshape(coils, -1, 1, 1),
+        torch.from_numpy(basis.matrix).reshape(coils, coils, 1, 1, 1),
         p=basis.n_virtual,
         S=True,
     )

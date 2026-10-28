@@ -133,9 +133,11 @@ through `self.gadget(kind)`. `context.exam`, an
 {class}`~pulserver.recon.ExamCache`, is shared by the series of one exam, such
 as for a coil calibration; under the proxy a stored value reaches the next
 series pickled, as a copy without its `cleanup`. `context.device` is the GPU
-the proxy gave the series, such as `"cuda:0"`, or `None`. A child process
-started with the `spawn` method runs functions from importable modules, not
-from the plugin file.
+the proxy gave the series, such as `"cuda:0"`, or `None`. The `pics` plugins
+keep a unit's k-space, maps and solver vectors on the host and build their
+encoding on that device, which brings a coil at a time over as it applies. A
+child process started with the `spawn` method runs functions from importable
+modules, not from the plugin file.
 
 (readout-placement)=
 ## Readout placement
@@ -202,7 +204,7 @@ with an FFT before the in-plane NUFFT.
 ## Coil sensitivities, noise and compression
 
 {func}`~pulserver.recon.coil_maps` returns the coil sensitivities of a unit as
-a complex torch tensor `(coils, [z,] y, x)` on `context.device`. They are
+a complex torch tensor `(coils, [z,] y, x)` on the host. They are
 estimated by the function the plugin passes, from the unit's calibration
 k-space `data.ref`, or taken from the maps the stream or the exam holds
 ({doc}`../developer-guide/internals/calibration` states the order and the
@@ -228,16 +230,16 @@ class Pics(recon.ReconPlugin):
             ],
             triggers={"imaging": mrd.AcquisitionFlag.LAST_IN_SLICE},
         )
-        self.compression = recon.CoilCompression(8)
+        self.compression = recon.CoilCompression(6)
 
     def recon(self, context, branch, data):
         data = self.compression(context, data)
         maps = recon.coil_maps(context, data, estimate=apps.nlinv_maps)
         if data.data is None:  # a unit of calibration readouts only
             return None
-        kspace = torch.from_numpy(data.data.kspace).to(context.device)
+        kspace = torch.from_numpy(data.data.kspace)
         image = apps.pics(kspace, maps, regularizers=priors.Wavelet((-1, -2), 0.005))
-        return recon.ReconResult(image.abs().cpu().numpy())
+        return recon.ReconResult(image.abs().numpy())
 
 
 PLUGIN = Pics()
@@ -251,6 +253,12 @@ virtual channels, at most the channels of the first unit, with the basis of
 that unit's calibration k-space (its imaging k-space where it has none), and
 projects every later unit onto it. Compress a unit before requesting its maps,
 so that they are estimated in the basis of the data they are used with.
+
+`apps.pics` computes where the maps are, here the host. An encoding built with
+`device=context.device`, such as {func}`bartorch.linop.CartesianSense`, computes
+on the GPU and takes the k-space, the maps and the solver's vectors from the
+host a coil at a time, so the GPU never holds a whole multi-coil volume; the
+`pics` plugin solves so.
 
 The `pics` and `nufft` handlers fit the maps with
 `apps.nlinv_maps(kspace, phase_pole=0)`, `bart nlinv --phase-pole 0`, on a grid
@@ -447,7 +455,7 @@ volume as one image per partition.
 
 | Plugin | Reconstructs |
 | --- | --- |
-| `pics` | One image per slice, contrast, cardiac phase, set and repetition, averages summed, from readouts placed by their encoding counters, whitened, completed to full echoes and cropped to the reconstruction field of view as they arrive (`Prewhiten`, `AsymmetricEcho`, `RemoveReadoutOversampling`). Each image is solved as `bart pics -R W` over the coil sensitivities of {func}`~pulserver.recon.coil_maps` (`bart nlinv --phase-pole 0` of the unit's calibration readouts, else the maps stored for its slice or the exam's, else a fit to the unit's own low-resolution centre), then completed by `bart homodyne` along a partial-Fourier axis. A unit of calibration readouts only makes no image and stores its maps |
+| `pics` | One image per slice, contrast, cardiac phase, set and repetition, averages summed, from readouts placed by their encoding counters, whitened, completed to full echoes and cropped to the reconstruction field of view as they arrive (`Prewhiten`, `AsymmetricEcho`, `RemoveReadoutOversampling`). A unit of more than six receive channels is compressed to six virtual channels (`CoilCompression`). Each image is solved as `bart pics -R W` over the coil sensitivities of {func}`~pulserver.recon.coil_maps` (`bart nlinv --phase-pole 0` of the unit's calibration readouts, else the maps stored for its slice or the exam's, else a fit to the unit's own low-resolution centre), then completed by `bart homodyne` along a partial-Fourier axis. A unit of calibration readouts only makes no image and stores its maps |
 | `pics_train` | `pics`'s images from readouts that number their place in an echo train or an inversion shot (`contrast`, `ECO`), merged so that the readouts of every place fill one image |
 | `nufft` | The images of `pics` for a radial, spiral, PROPELLER or zero-echo-time trajectory or a stack of them, each solved as `bart pics -t -R W` over `bart nlinv --phase-pole 0 -t` sensitivities of the unit's samples near the k-space centre. The readouts of every segment of a unit, the blades of a PROPELLER scan or the shells of a zero-echo-time one, enter one solve; a trajectory that encodes the partition direction without a partition axis is solved as one volume |
 | `nufft_train` | `nufft`'s images from readouts that number their place in a train of excitations (`contrast`, `ECO`), merged so that the readouts of every place fill one image |
