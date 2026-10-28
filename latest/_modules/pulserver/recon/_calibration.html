@@ -601,24 +601,23 @@
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
 <span class="sd">    context : ReconContext</span>
-<span class="sd">        Scan context; its ``device`` is where the estimate runs and the maps</span>
-<span class="sd">        are returned.</span>
+<span class="sd">        Scan context.</span>
 <span class="sd">    data : ReconData</span>
 <span class="sd">        The unit that needs maps; ``data.counters["slice"]`` is its slice,</span>
 <span class="sd">        0 when the unit has no such counter.</span>
 <span class="sd">    estimate : callable</span>
 <span class="sd">        ``estimate(kspace) -&gt; maps``, such as :func:`bartorch.apps.nlinv_maps`.</span>
 <span class="sd">        ``kspace`` is the calibration k-space of the unit as a torch tensor</span>
-<span class="sd">        ``(coils, [z,] y, x)``, zero outside the lines it holds, on the grid of</span>
-<span class="sd">        its encoding space; ``maps`` are the sensitivities on the same grid.</span>
+<span class="sd">        ``(coils, [z,] y, x)`` on the host, zero outside the lines it holds, on</span>
+<span class="sd">        the grid of its encoding space; ``maps`` are the sensitivities on the</span>
+<span class="sd">        same grid.</span>
 <span class="sd">    required : bool, default=True</span>
 <span class="sd">        Return ``None``, rather than raise, when no source has usable maps.</span>
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
 <span class="sd">    torch.Tensor or None</span>
-<span class="sd">        A copy of the maps ``(coils, [z,] y, x)``, complex64, on</span>
-<span class="sd">        ``context.device``.</span>
+<span class="sd">        A copy of the maps ``(coils, [z,] y, x)``, complex64, on the host.</span>
 
 <span class="sd">    Raises</span>
 <span class="sd">    ------</span>
@@ -658,7 +657,7 @@
             <span class="sa">f</span><span class="s2">"no coil sensitivities for slice </span><span class="si">{</span><span class="n">location</span><span class="si">}</span><span class="s2">; sources consulted:</span><span class="se">\n</span><span class="s2">  "</span>
             <span class="o">+</span> <span class="s2">"</span><span class="se">\n</span><span class="s2">  "</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">rejected</span><span class="p">)</span>
         <span class="p">)</span>
-    <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">found</span><span class="o">.</span><span class="n">maps</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">context</span><span class="o">.</span><span class="n">device</span><span class="p">)</span></div>
+    <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">found</span><span class="o">.</span><span class="n">maps</span><span class="p">)</span></div>
 
 
 
@@ -680,8 +679,9 @@
 <span class="sd">    compress a unit before asking for its maps.</span>
 
 <span class="sd">    The returned unit holds new buffers with ``n_virtual`` channels, and shares</span>
-<span class="sd">    its ``counters`` and ``acquisitions`` with the unit it was made from.</span>
-<span class="sd">    bartorch is imported when a unit is compressed.</span>
+<span class="sd">    its ``counters`` and ``acquisitions`` with the unit it was made from. The</span>
+<span class="sd">    basis and the projection are computed on the host. bartorch is imported</span>
+<span class="sd">    when a unit is compressed.</span>
 
 <span class="sd">    Corresponds to Gadgetron's ``GenericReconEigenChannelGadget``.</span>
 
@@ -711,7 +711,7 @@
             <span class="n">source</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">ref</span> <span class="k">if</span> <span class="n">data</span><span class="o">.</span><span class="n">ref</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">data</span><span class="o">.</span><span class="n">data</span>
             <span class="k">if</span> <span class="n">source</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"a unit with no k-space cannot give the basis"</span><span class="p">)</span>
-            <span class="n">basis</span> <span class="o">=</span> <span class="n">_basis</span><span class="p">(</span><span class="n">source</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_virtual</span><span class="p">,</span> <span class="n">context</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+            <span class="n">basis</span> <span class="o">=</span> <span class="n">_basis</span><span class="p">(</span><span class="n">source</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_virtual</span><span class="p">)</span>
             <span class="n">context</span><span class="o">.</span><span class="n">coil_compression</span> <span class="o">=</span> <span class="n">basis</span>
         <span class="k">elif</span> <span class="n">basis</span><span class="o">.</span><span class="n">n_virtual</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_virtual</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
@@ -720,8 +720,8 @@
             <span class="p">)</span>
         <span class="k">return</span> <span class="n">dataclasses</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span>
             <span class="n">data</span><span class="p">,</span>
-            <span class="n">data</span><span class="o">=</span><span class="n">_compressed</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="n">basis</span><span class="p">,</span> <span class="n">context</span><span class="o">.</span><span class="n">device</span><span class="p">),</span>
-            <span class="n">ref</span><span class="o">=</span><span class="n">_compressed</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">ref</span><span class="p">,</span> <span class="n">basis</span><span class="p">,</span> <span class="n">context</span><span class="o">.</span><span class="n">device</span><span class="p">),</span>
+            <span class="n">data</span><span class="o">=</span><span class="n">_compressed</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="n">basis</span><span class="p">),</span>
+            <span class="n">ref</span><span class="o">=</span><span class="n">_compressed</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">ref</span><span class="p">,</span> <span class="n">basis</span><span class="p">),</span>
         <span class="p">)</span></div>
 
 
@@ -827,7 +827,7 @@
     <span class="p">)</span>
     <span class="n">kspace</span><span class="p">[(</span><span class="nb">slice</span><span class="p">(</span><span class="kc">None</span><span class="p">),</span> <span class="o">*</span><span class="n">lines</span><span class="p">,</span> <span class="nb">slice</span><span class="p">(</span><span class="kc">None</span><span class="p">))]</span> <span class="o">=</span> <span class="n">ref</span><span class="o">.</span><span class="n">kspace</span>
 
-    <span class="n">maps</span> <span class="o">=</span> <span class="n">estimate</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">kspace</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">context</span><span class="o">.</span><span class="n">device</span><span class="p">))</span>
+    <span class="n">maps</span> <span class="o">=</span> <span class="n">estimate</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">kspace</span><span class="p">))</span>
     <span class="n">maps</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">maps</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">(),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">complex64</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">maps</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="n">kspace</span><span class="o">.</span><span class="n">shape</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
@@ -873,7 +873,7 @@
     <span class="k">return</span> <span class="kc">None</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_basis</span><span class="p">(</span><span class="n">buffer</span><span class="p">:</span> <span class="n">ReconBuffer</span><span class="p">,</span> <span class="n">n_virtual</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">device</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Basis</span><span class="p">:</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_basis</span><span class="p">(</span><span class="n">buffer</span><span class="p">:</span> <span class="n">ReconBuffer</span><span class="p">,</span> <span class="n">n_virtual</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Basis</span><span class="p">:</span>
     <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
     <span class="kn">from</span><span class="w"> </span><span class="nn">bartorch</span><span class="w"> </span><span class="kn">import</span> <span class="n">tools</span>
 
@@ -882,7 +882,7 @@
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"cannot keep </span><span class="si">{</span><span class="n">n_virtual</span><span class="si">}</span><span class="s2"> virtual channels of </span><span class="si">{</span><span class="n">coils</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
     <span class="n">samples</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">buffer</span><span class="o">.</span><span class="n">kspace</span><span class="p">[:,</span> <span class="n">buffer</span><span class="o">.</span><span class="n">mask</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">complex64</span><span class="p">)</span>
     <span class="n">matrix</span> <span class="o">=</span> <span class="n">tools</span><span class="o">.</span><span class="n">cc</span><span class="p">(</span>
-        <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">samples</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">coils</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">),</span>
+        <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">samples</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">coils</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
         <span class="n">p</span><span class="o">=</span><span class="n">n_virtual</span><span class="p">,</span>
         <span class="n">M</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
         <span class="n">A</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
@@ -892,9 +892,7 @@
     <span class="k">return</span> <span class="n">Basis</span><span class="p">(</span><span class="n">matrix</span><span class="p">,</span> <span class="n">n_virtual</span><span class="p">,</span> <span class="n">digest</span><span class="p">(</span><span class="n">matrix</span><span class="p">[:,</span> <span class="p">:</span><span class="n">n_virtual</span><span class="p">],</span> <span class="n">n_virtual</span><span class="p">))</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_compressed</span><span class="p">(</span>
-    <span class="n">buffer</span><span class="p">:</span> <span class="n">ReconBuffer</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">basis</span><span class="p">:</span> <span class="n">Basis</span><span class="p">,</span> <span class="n">device</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ReconBuffer</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_compressed</span><span class="p">(</span><span class="n">buffer</span><span class="p">:</span> <span class="n">ReconBuffer</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">basis</span><span class="p">:</span> <span class="n">Basis</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ReconBuffer</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
     <span class="k">if</span> <span class="n">buffer</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">return</span> <span class="kc">None</span>
     <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
@@ -908,8 +906,8 @@
         <span class="p">)</span>
     <span class="n">kspace</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">buffer</span><span class="o">.</span><span class="n">kspace</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">complex64</span><span class="p">)</span>
     <span class="n">virtual</span> <span class="o">=</span> <span class="n">tools</span><span class="o">.</span><span class="n">ccapply</span><span class="p">(</span>
-        <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">kspace</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">coils</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">),</span>
-        <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">basis</span><span class="o">.</span><span class="n">matrix</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">coils</span><span class="p">,</span> <span class="n">coils</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">),</span>
+        <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">kspace</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">coils</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+        <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">basis</span><span class="o">.</span><span class="n">matrix</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">coils</span><span class="p">,</span> <span class="n">coils</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
         <span class="n">p</span><span class="o">=</span><span class="n">basis</span><span class="o">.</span><span class="n">n_virtual</span><span class="p">,</span>
         <span class="n">S</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
     <span class="p">)</span>

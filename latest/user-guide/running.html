@@ -843,7 +843,8 @@ design it cannot send.</p>
 </div>
 <p>A call answered in its own process spends most of its time importing the
 design engine. A warm server imports it once, designs, checks and converts one
-sequence of its own, and imports every plugin of its <code class="docutils literal notranslate"><span class="pre">--plugins</span></code> directories.
+sequence of its own, designs one refocusing train with blochsim, which imports
+PyTorch, and imports every plugin of its <code class="docutils literal notranslate"><span class="pre">--plugins</span></code> directories.
 It answers each call forwarded to its socket in a child process forked from
 it, so nothing a call does outlives the call, and a plugin that ends its
 process fails only its own call, with

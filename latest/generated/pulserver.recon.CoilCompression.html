@@ -515,8 +515,9 @@ decreasing power. <code class="xref py py-func docutils literal notranslate"><sp
 maps it estimates, which only units compressed by the same basis reuse:
 compress a unit before asking for its maps.</p>
 <p>The returned unit holds new buffers with <code class="docutils literal notranslate"><span class="pre">n_virtual</span></code> channels, and shares
-its <code class="docutils literal notranslate"><span class="pre">counters</span></code> and <code class="docutils literal notranslate"><span class="pre">acquisitions</span></code> with the unit it was made from.
-bartorch is imported when a unit is compressed.</p>
+its <code class="docutils literal notranslate"><span class="pre">counters</span></code> and <code class="docutils literal notranslate"><span class="pre">acquisitions</span></code> with the unit it was made from. The
+basis and the projection are computed on the host. bartorch is imported
+when a unit is compressed.</p>
 <p>Corresponds to Gadgetron’s <code class="docutils literal notranslate"><span class="pre">GenericReconEigenChannelGadget</span></code>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>

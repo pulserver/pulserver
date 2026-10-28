@@ -556,8 +556,11 @@ write such a plugin.</p>
 <li><p><strong>Shares an exam cache across the series of one exam.</strong></p>
 <p>Code: <a class="reference internal" href="../generated/pulserver.recon.ExamCache.html#pulserver.recon.ExamCache" title="pulserver.recon.ExamCache"><code class="xref py py-class docutils literal notranslate"><span class="pre">ExamCache</span></code></a>. Test: <em>a value one cache stores is read by the next on its directory</em> (<code class="docutils literal notranslate"><span class="pre">test_app.py</span></code>).</p>
 </li>
-<li><p><strong>Ships a <code class="docutils literal notranslate"><span class="pre">pics</span></code> plugin with prewhitening, partial Fourier and asymmetric echo.</strong></p>
-<p>Code: <code class="docutils literal notranslate"><span class="pre">src/pulserver/_zoo/recon/pics.py</span></code>. Tests: <em>every other phase encode and the centre reconstruct to the image of all lines</em>; <em>a partial fourier image is closer to the full one than the solve of its lines alone</em> (<code class="docutils literal notranslate"><span class="pre">test_pics.py</span></code>).</p>
+<li><p><strong>Ships a <code class="docutils literal notranslate"><span class="pre">pics</span></code> plugin with prewhitening, coil compression, partial Fourier and asymmetric echo.</strong></p>
+<p>Code: <code class="docutils literal notranslate"><span class="pre">src/pulserver/_zoo/recon/pics.py</span></code>. Tests: <em>every other phase encode and the centre reconstruct to the image of all lines</em>; <em>a partial fourier image is closer to the full one than the solve of its lines alone</em>; <em>channels beyond the virtual coils are compressed before the maps and the solve</em> (<code class="docutils literal notranslate"><span class="pre">test_pics.py</span></code>).</p>
+</li>
+<li><p><strong>Keeps a unit’s k-space, maps and solver vectors on the host, the encoding computing on the series’ GPU.</strong></p>
+<p>Code: <code class="docutils literal notranslate"><span class="pre">pics_image</span></code> in <code class="docutils literal notranslate"><span class="pre">src/pulserver/recon/handlers/pics.py</span></code>. Test: <em>the solve on host k space is bartorchs pics with the image on the host</em> (<code class="docutils literal notranslate"><span class="pre">test_pics.py</span></code>).</p>
 </li>
 <li><p><strong>Runs a plugin offline on a kept series, unchanged.</strong></p>
 <p>Code: <code class="docutils literal notranslate"><span class="pre">python</span> <span class="pre">-m</span> <span class="pre">pulserver.recon</span></code>. Test: <em>plugin runs unchanged offline</em> (<code class="docutils literal notranslate"><span class="pre">test_app.py</span></code>).</p>
