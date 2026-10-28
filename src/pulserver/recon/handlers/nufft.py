@@ -9,11 +9,10 @@ import numpy as np
 from ...mrd._acquisitions import AcquisitionFlag
 from ...mrd._images import center_crop
 from .._buffers import ReconBuffer, ReconData
-from .._calibration import CoilCompression
 from .._correct import gradient_unwarped, states_gradient_coefficients
 from ..gadgets import Prewhiten
 from ..plugin import ReconContext, ReconPlugin, ReconResult
-from .pics import averaged, nlinv_estimate, wavelet_axes
+from .pics import VIRTUAL_COILS, averaged, compressed, nlinv_estimate, wavelet_axes
 
 
 class NufftRecon(ReconPlugin):
@@ -37,7 +36,14 @@ class NufftRecon(ReconPlugin):
     (:func:`bartorch.estimate_density`), which preconditions the solve (Baron
     et al., Magn Reson Med 2018). The step is the reciprocal of the largest
     eigenvalue of the normal operator (``bart pics -e``). An image is its
-    averages summed, and its values are those of the solve, unscaled.
+    averages summed, and its values are those of the solve, unscaled. A unit
+    of more receive channels than ``virtual_coils`` is compressed to that many
+    virtual channels first (:func:`~pulserver.recon.handlers.pics.compressed`).
+
+    The samples, the maps, the density and the vectors of the solve stay on
+    the host, where the maps and the density are estimated. The encoding is
+    built on ``context.device``, the trajectory with it, and brings the rest
+    over a coil at a time as it applies.
 
     The trajectory is the one the proxy's enrichment writes, which
     :meth:`~pulserver.recon.ReconBuffer.grid_trajectory` scales to the image
@@ -62,17 +68,16 @@ class NufftRecon(ReconPlugin):
         ``lambda``, relative to the data scaling ``pics`` estimates.
     iterations : int, default=30
         Iterations of the solve.
-    virtual_coils : int | None, default=12
-        Receive channels beyond this many are compressed to it before the
-        maps and the solve (:class:`~pulserver.recon.CoilCompression`);
-        ``None`` keeps every channel.
+    virtual_coils : int | None, default=VIRTUAL_COILS
+        Receive channels beyond this many are compressed to it; ``None``
+        keeps every channel.
     """
 
     def __init__(
         self,
         wavelet: float = 0.005,
         iterations: int = 30,
-        virtual_coils: int | None = 12,
+        virtual_coils: int | None = VIRTUAL_COILS,
     ) -> None:
         super().__init__(
             gadgets=[Prewhiten()],
@@ -93,8 +98,7 @@ class NufftRecon(ReconPlugin):
         del branch
         if data.data is None:
             return None
-        if self.virtual_coils is not None and data.data.coils > self.virtual_coils:
-            data = CoilCompression(self.virtual_coils)(context, data)
+        data = compressed(context, data, self.virtual_coils)
         buffer = data.data
         grid = buffer.grid_trajectory()
         if grid is None:
@@ -183,10 +187,8 @@ class NufftRecon(ReconPlugin):
 
         samples, points = _within(samples, points, shape)
         volume = tuple(shape) if len(shape) == 3 else None
-        samples = torch.from_numpy(
-            np.ascontiguousarray(samples, dtype=np.complex64)
-        ).to(device)
-        points = torch.from_numpy(np.ascontiguousarray(points)).to(device)
+        samples = torch.from_numpy(np.ascontiguousarray(samples, dtype=np.complex64))
+        points = torch.from_numpy(np.ascontiguousarray(points))
         axes = 2 if volume is None else 3
         maps = nlinv_estimate(samples, points, volume)
         grid = tuple(maps.shape[-axes:])
@@ -197,13 +199,13 @@ class NufftRecon(ReconPlugin):
         image = apps.pics(
             samples,
             maps,
-            traj=points,
+            traj=points if device is None else points.to(device),
             pattern=density.sqrt(),
             regularizers=priors.Wavelet(encoded, self.wavelet),
             maxiter=self.iterations,
             eigen_step=True,
         )
-        return image.abs().cpu().numpy().reshape(maps.shape[-axes:])
+        return image.abs().numpy().reshape(maps.shape[-axes:])
 
 
 def _within(

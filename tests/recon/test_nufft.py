@@ -522,3 +522,34 @@ def test_the_maps_of_one_coil_over_a_volume_are_unity_on_its_matrix():
 
     assert maps.shape == (1, MATRIX, MATRIX, MATRIX)
     assert torch.equal(maps, torch.ones_like(maps))
+
+
+def test_the_solve_keeps_its_samples_maps_and_weights_on_the_host_and_the_trajectory_on_the_device(
+    device, monkeypatch
+):
+    pytest.importorskip("bartorch")
+    from bartorch import apps
+
+    points = blades(4)
+    _, data = phantom(points)
+    samples = np.moveaxis(data, 2, 0).reshape(COILS, -1, SAMPLES)
+    flat = np.zeros((*points.shape[:-1], 3))
+    flat[..., :2] = points
+    traj = flat.reshape(-1, SAMPLES, 3)
+    solve = apps.pics
+    given = {}
+
+    def recorded(kspace, maps, **kwargs):
+        given.update(
+            kspace=kspace.device.type,
+            maps=maps.device.type,
+            pattern=kwargs["pattern"].device.type,
+            traj=kwargs["traj"].device.type,
+        )
+        return solve(kspace, maps, **kwargs)
+
+    monkeypatch.setattr(apps, "pics", recorded)
+    image = NufftRecon()._solved(samples, traj, device, (MATRIX, MATRIX))
+
+    assert given == {"kspace": "cpu", "maps": "cpu", "pattern": "cpu", "traj": device}
+    assert image.shape == (MATRIX, MATRIX)

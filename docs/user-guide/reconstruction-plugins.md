@@ -133,7 +133,7 @@ through `self.gadget(kind)`. `context.exam`, an
 {class}`~pulserver.recon.ExamCache`, is shared by the series of one exam, such
 as for a coil calibration; under the proxy a stored value reaches the next
 series pickled, as a copy without its `cleanup`. `context.device` is the GPU
-the proxy gave the series, such as `"cuda:0"`, or `None`. The `pics` plugins
+the proxy gave the series, such as `"cuda:0"`, or `None`. The shipped plugins
 keep a unit's k-space, maps and solver vectors on the host and build their
 encoding on that device, which brings a coil at a time over as it applies. A
 child process started with the `spawn` method runs functions from importable
@@ -258,7 +258,9 @@ so that they are estimated in the basis of the data they are used with.
 `device=context.device`, such as {func}`bartorch.linop.CartesianSense`, computes
 on the GPU and takes the k-space, the maps and the solver's vectors from the
 host a coil at a time, so the GPU never holds a whole multi-coil volume; the
-`pics` plugin solves so.
+`pics` plugin solves so. Off the grid, `apps.pics` builds its encoding where the
+trajectory is, so a trajectory on `context.device` with the rest on the host
+does the same; the `nufft` plugin solves so.
 
 The `pics` and `nufft` handlers fit the maps with
 `apps.nlinv_maps(kspace, phase_pole=0)`, `bart nlinv --phase-pole 0`, on a grid
@@ -450,12 +452,14 @@ Six shipped plugins are complete reconstructions, returning the values of their
 transform or solve unscaled. They are searched after every reconstruction
 plugin directory, so a client can name one, such as `nufft`, without a file of
 its own, and a file of the same name in a `--plugins` directory replaces it.
-Each whitens its readouts with {class}`~pulserver.recon.Prewhiten`, and sends a
-volume as one image per partition.
+Each whitens its readouts with {class}`~pulserver.recon.Prewhiten`, compresses a
+unit of more than six receive channels to six virtual channels
+({class}`~pulserver.recon.CoilCompression`), and sends a volume as one image per
+partition.
 
 | Plugin | Reconstructs |
 | --- | --- |
-| `pics` | One image per slice, contrast, cardiac phase, set and repetition, averages summed, from readouts placed by their encoding counters, whitened, completed to full echoes and cropped to the reconstruction field of view as they arrive (`Prewhiten`, `AsymmetricEcho`, `RemoveReadoutOversampling`). A unit of more than six receive channels is compressed to six virtual channels (`CoilCompression`). Each image is solved as `bart pics -R W` over the coil sensitivities of {func}`~pulserver.recon.coil_maps` (`bart nlinv --phase-pole 0` of the unit's calibration readouts, else the maps stored for its slice or the exam's, else a fit to the unit's own low-resolution centre), then completed by `bart homodyne` along a partial-Fourier axis. A unit of calibration readouts only makes no image and stores its maps |
+| `pics` | One image per slice, contrast, cardiac phase, set and repetition, averages summed, from readouts placed by their encoding counters, whitened, completed to full echoes and cropped to the reconstruction field of view as they arrive (`Prewhiten`, `AsymmetricEcho`, `RemoveReadoutOversampling`). Each image is solved as `bart pics -R W` over the coil sensitivities of {func}`~pulserver.recon.coil_maps` (`bart nlinv --phase-pole 0` of the unit's calibration readouts, else the maps stored for its slice or the exam's, else a fit to the unit's own low-resolution centre), then completed by `bart homodyne` along a partial-Fourier axis. A unit of calibration readouts only makes no image and stores its maps |
 | `pics_train` | `pics`'s images from readouts that number their place in an echo train or an inversion shot (`contrast`, `ECO`), merged so that the readouts of every place fill one image |
 | `nufft` | The images of `pics` for a radial, spiral, PROPELLER or zero-echo-time trajectory or a stack of them, each solved as `bart pics -t -R W` over `bart nlinv --phase-pole 0 -t` sensitivities of the unit's samples near the k-space centre. The readouts of every segment of a unit, the blades of a PROPELLER scan or the shells of a zero-echo-time one, enter one solve; a trajectory that encodes the partition direction without a partition axis is solved as one volume |
 | `nufft_train` | `nufft`'s images from readouts that number their place in a train of excitations (`contrast`, `ECO`), merged so that the readouts of every place fill one image |
