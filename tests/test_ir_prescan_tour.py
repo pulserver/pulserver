@@ -1,5 +1,7 @@
 """The pTx tour of the generated prescan-only subsequence: every channel driven as hard as the scan drives it."""
 
+import math
+
 import numpy as np
 import pypulseqpp as pp
 import pytest
@@ -140,3 +142,68 @@ def test_the_scan_plays_no_prescan_only_subsequence(tmp_path):
     blocks = ir.playout(path, WaveBudget(10**6, 4.0))["blocks"]
 
     assert (blocks["subsequence"] != cal["lead"]).all()
+
+
+def _afi(spoiled, short_first, pairs=4):
+    """An AFI-like shimmed train: one pulse, two interleaved TRs of 20 and 100 ms, RF spoiled or not."""
+    adc = pp.make_adc(64, duration=2e-3, system=SYSTEM)
+    shim = pp.make_rf_shim(np.array([1.0, 0.4j]))
+    trs = (20e-3, 100e-3) if short_first else (100e-3, 20e-3)
+    seq = pp.Sequence(SYSTEM)
+    for k in range(2 * pairs):
+        phase = math.radians(39.0) * k * (k + 1) / 2 if spoiled else 0.0
+        seq.add_block(
+            pp.make_block_pulse(
+                0.5, duration=1e-3, phase_offset=phase, system=SYSTEM, use="excitation"
+            ),
+            shim,
+        )
+        seq.add_block(adc)
+        seq.add_block(pp.make_delay(trs[k % 2] - 3e-3))
+    return seq
+
+
+def _mean_power(seq):
+    """RF energy summed over channels, Hz^2 s, over the duration of ``seq``, s."""
+    tables = seq.libraries()
+    shims = np.asarray(seq.block_shims())
+    energy = 0.0
+    for index in np.flatnonzero(np.asarray(tables.blocks)[:, 0] > 0):
+        pairs = np.asarray(tables.rf_shims[shims[index] - 1], dtype=float)
+        weights = np.abs(pairs[0::2] + 1j * pairs[1::2])
+        rf = seq.get_block(int(index) + 1).rf
+        energy += pp.calc_rf_power(rf, dt=SYSTEM.rf_raster_time)[0] * (weights**2).sum()
+    return energy / float(np.sum(tables.block_durations))
+
+
+@pytest.mark.parametrize("spoiled", [False, True], ids=["unspoiled", "rf_spoiled"])
+@pytest.mark.parametrize("short_first", [True, False], ids=["tr1_first", "tr2_first"])
+def test_the_tour_of_a_two_interval_train_plays_no_faster_than_its_mean_rf_power(
+    tmp_path, spoiled, short_first
+):
+    path = tmp_path / "afi.seq"
+    _afi(spoiled, short_first).write(str(path))
+    scan = pp.io.read(str(path))
+
+    tour = ir.receive_calibration_sequence([scan], SYSTEM)
+
+    assert _mean_power(tour) <= _mean_power(scan) * (1.0 + 1e-3)
+    if short_first:
+        assert _mean_power(tour) == pytest.approx(_mean_power(scan), rel=0.01)
+
+
+def test_an_rf_spoiled_train_tours_and_costs_its_pulse_once(tmp_path, monkeypatch):
+    path = tmp_path / "afi.seq"
+    _afi(spoiled=True, short_first=True).write(str(path))
+    scan = pp.io.read(str(path))
+    measured = []
+    measure = pp.calc_rf_power
+    monkeypatch.setattr(
+        pp, "calc_rf_power", lambda rf, dt: measured.append(rf) or measure(rf, dt=dt)
+    )
+
+    tour = ir.receive_calibration_sequence([scan], SYSTEM)
+
+    assert len(scan.libraries().rf) == 8
+    assert len(measured) == 1
+    assert (np.asarray(tour.libraries().blocks)[:, 0] > 0).sum() == 1

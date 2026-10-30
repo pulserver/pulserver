@@ -10,6 +10,8 @@ from dataclasses import dataclass
 import numpy as np
 import pypulseqpp as pp
 
+from ._source import played_rf
+
 #: Thickness a non-selective excitation is taken to excite, in m: a head
 #: coil's coverage, so it outranks any slab.
 COVERAGE = 0.3
@@ -56,7 +58,19 @@ class _File:
         self.flips = np.abs(np.asarray(sequence.rf_flip_angles(), dtype=float))
         self.channels = np.asarray(sequence.rf_channels(), dtype=int)
         self.durations = np.asarray(self.tables.block_durations, dtype=float)
-        self._signals: dict[int, np.ndarray] = {}
+        self.pulses = self.rf.copy()
+        named = np.unique(self.rf[self.rf > 0])
+        if named.size:
+            amplitudes = np.asarray(self.tables.rf, dtype=float)[named - 1, 0]
+            definitions = np.array([d for d, _ in played_rf(sequence)], dtype=float)
+            _, pulse = np.unique(
+                np.column_stack([definitions, amplitudes]), axis=0, return_inverse=True
+            )
+            by_id = np.zeros(int(named.max()) + 1, dtype=self.rf.dtype)
+            by_id[named] = pulse.ravel() + 1
+            self.pulses = by_id[self.rf]
+        self._peaks: dict[int, np.ndarray] = {}
+        self._energies: dict[int, float] = {}
         self._bandwidths: dict[tuple[int, int, int], float] = {}
 
     def bandwidth(self, rf_id: int) -> float:
@@ -74,25 +88,65 @@ class _File:
             self._bandwidths[shape] = float(pp.calc_rf_bandwidth(rf))
         return self._bandwidths[shape]
 
-    def signal(self, rf_id: int) -> np.ndarray:
-        """Return the RF waveform of ``rf_id``, Hz, one row per channel."""
-        if rf_id not in self._signals:
-            block = int(np.flatnonzero(self.rf == rf_id)[0]) + 1
-            signal = np.asarray(self.sequence.get_block(block).rf.signal)
-            self._signals[rf_id] = signal.reshape(int(self.channels[rf_id - 1]), -1)
-        return self._signals[rf_id]
+    def shim(self, block: int) -> int:
+        """Return the RF shim id of 0-based ``block``, 0 for none."""
+        return int(self.shims[block]) if self.shims.size > block else 0
+
+    def _weights(self, block: int, channels: int) -> np.ndarray | None:
+        """Per channel, the shim magnitude of 0-based ``block``; None for a pTx waveform."""
+        shim = self.shim(block)
+        if shim > 0:
+            pairs = np.asarray(self.tables.rf_shims[shim - 1], dtype=float)
+            return np.abs(pairs[0::2] + 1j * pairs[1::2])
+        if self.channels[int(self.rf[block]) - 1] == 1:
+            return np.ones(channels)
+        return None
+
+    def _first(self, pulse: int):
+        """Return the RF event of the first block playing ``pulse``."""
+        block = int(np.flatnonzero(self.pulses == pulse)[0]) + 1
+        return self.sequence.get_block(block).rf
 
     def drives(self, block: int, channels: int) -> np.ndarray:
         """Per channel, the largest drive, Hz, the RF of 0-based ``block`` plays at."""
-        peaks = np.abs(self.signal(int(self.rf[block]))).max(axis=1)
-        shim = int(self.shims[block]) if self.shims.size > block else 0
-        if shim > 0:
-            pairs = np.asarray(self.tables.rf_shims[shim - 1], dtype=float)
-            weights = np.abs(pairs[0::2] + 1j * pairs[1::2])
-            return peaks.max() * weights
-        if peaks.size == 1:
-            return np.full(channels, peaks[0])
-        return peaks
+        pulse = int(self.pulses[block])
+        if pulse not in self._peaks:
+            rf_id = int(self.rf[block])
+            signal = np.asarray(self._first(pulse).signal)
+            signal = signal.reshape(int(self.channels[rf_id - 1]), -1)
+            self._peaks[pulse] = np.abs(signal).max(axis=1)
+        peaks = self._peaks[pulse]
+        weights = self._weights(block, channels)
+        return peaks if weights is None else peaks.max() * weights
+
+    def energy(self, block: int, channels: int) -> float:
+        """Return the energy, Hz^2 s summed over channels, of the RF of 0-based ``block``."""
+        pulse = int(self.pulses[block])
+        if pulse not in self._energies:
+            rf = self._first(pulse)
+            self._energies[pulse] = float(
+                pp.calc_rf_power(rf, dt=self.sequence.rf_raster_time)[0]
+            )
+        weights = self._weights(block, channels)
+        scale = 1.0 if weights is None else float((weights**2).sum())
+        return self._energies[pulse] * scale
+
+    def rate(self, channels: int) -> float:
+        """Return the mean RF power, Hz^2 summed over channels, the file plays at."""
+        blocks = np.flatnonzero(self.rf > 0)
+        if not blocks.size:
+            return 0.0
+        keys = np.column_stack(
+            [self.pulses[blocks], [self.shim(int(b)) for b in blocks]]
+        )
+        _, first, counts = np.unique(
+            keys, axis=0, return_index=True, return_counts=True
+        )
+        energy = sum(
+            self.energy(int(blocks[k]), channels) * int(n)
+            for k, n in zip(first, counts, strict=True)
+        )
+        return energy / float(self.durations.sum())
 
 
 def receive_calibration_sequence(
@@ -103,8 +157,11 @@ def receive_calibration_sequence(
     It opens, in a parallel-transmit chain, with a tour: for every transmit
     channel, the RF block that drives it hardest anywhere in the chain (a
     single waveform with no shim drives every channel), with its blocks up to
-    the next RF pulse, its readouts under ``NOPRESCAN``, then a rest until it
-    has lasted the shortest interval at which its file plays that pulse.
+    the next RF pulse, its readouts under ``NOPRESCAN``, then a rest until its
+    RF energy over its duration is the highest mean RF power of a file of the
+    chain. A pulse is its shape and amplitude, with its shim; its phase and
+    frequency, which RF spoiling changes from play to play, are not part of
+    it.
 
     Where exactly one file reads out and it repeats with the same RF
     amplitudes, the prescan calibrates on that file from its start after the
@@ -187,31 +244,26 @@ def _next_rf(f: _File) -> np.ndarray:
 
 
 def _tour(files: list[_File], channels: int) -> list[tuple[_Span, float]]:
-    """Per channel the hardest-driving RF block, each once, with the period it plays at."""
+    """Per channel the hardest-driving RF block, each once, with the duration it lasts."""
     best: list[tuple[float, int, int]] = [(-1.0, -1, -1)] * channels
     for i, f in enumerate(files):
         seen: set[tuple[int, int]] = set()
         for block in np.flatnonzero(f.rf > 0):
-            key = (int(f.rf[block]), int(f.shims[block]) if f.shims.size > block else 0)
+            key = (int(f.pulses[block]), f.shim(int(block)))
             if key in seen:
                 continue
             seen.add(key)
             for k, drive in enumerate(f.drives(int(block), channels)[:channels]):
                 if drive > best[k][0]:
                     best[k] = (float(drive), i, int(block))
+    rate = max(f.rate(channels) for f in files)
     visits = []
     for i, block in sorted({(b[1], b[2]) for b in best if b[1] >= 0}):
         f = files[i]
         stop = int(_next_rf(f)[np.searchsorted(np.flatnonzero(f.rf > 0), block)])
-        visits.append((_Span(i, block, stop), _interval(f, block)))
+        lasts = f.energy(block, channels) / rate if rate > 0 else 0.0
+        visits.append((_Span(i, block, stop), lasts))
     return visits
-
-
-def _interval(f: _File, block: int) -> float:
-    """Shortest time, s, between two plays of the RF pulse of ``block`` in its file."""
-    starts = np.concatenate([[0.0], np.cumsum(f.durations)[:-1]])
-    same = np.flatnonzero(f.rf == f.rf[block])
-    return float(np.diff(starts[same]).min()) if same.size > 1 else 0.0
 
 
 def _areas(f: _File, ids: np.ndarray) -> tuple[np.ndarray, bool]:
@@ -312,13 +364,16 @@ def _build(files, tour, calibration, system) -> pp.Sequence:
             pp.make_delay(system.block_duration_raster * 25),
             pp.make_label(label="NOPRESCAN", type="SET", value=1),
         )
-        for span, period in tour:
+        for span, lasts in tour:
             plays = _events(files[span.file], span, zeroed=True)
             for events in plays:
                 sequence.add_block(*events)
             played = float(files[span.file].durations[span.first : span.stop].sum())
-            if period > played:
-                sequence.add_block(pp.make_delay(period - played))
+            if lasts > played:
+                raster = system.block_duration_raster
+                sequence.add_block(
+                    pp.make_delay(math.ceil((lasts - played) / raster - 1e-6) * raster)
+                )
     if calibration is not None:
         plays = _events(files[calibration.file], calibration, zeroed=True)
         for frame in range(FRAMES):
