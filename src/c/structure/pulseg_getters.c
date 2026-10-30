@@ -298,7 +298,7 @@ int pulseg_get_scan_time(const pulseg_collection *coll, pulseg_scan_time_info *i
 int pulseg_get_segment_plays(
     const pulseg_collection *coll, int short_delay_us, pulseg_segment_plays *info)
 {
-    int i, n, bt_idx, seg_id;
+    int i, n, bt_idx, seg_id, delay_us;
     /* Whether the last instance played was not a pure delay. It carries over
      * from one subsequence to the next: a scan plays them as one stream. */
     int prev_active = 0;
@@ -332,10 +332,9 @@ int pulseg_get_segment_plays(
             {
                 bt_idx = pulseg__exec_block_idx(desc, n);
                 bte = &desc->block_table[bt_idx];
-                if (prev_active && bte->duration_us >= 0 && bte->duration_us <= short_delay_us)
-                    info->short_delays += 1;
-                else if (prev_active && bte->duration_us < 0 &&
-                         desc->base_blocks[bte->id].duration_us <= short_delay_us)
+                delay_us = (bte->duration_us >= 0) ? bte->duration_us
+                                                   : desc->base_blocks[bte->id].duration_us;
+                if (prev_active && delay_us <= short_delay_us)
                     info->short_delays += 1;
                 prev_active = 0;
             }
