@@ -298,7 +298,10 @@ int pulseg_get_scan_time(const pulseg_collection *coll, pulseg_scan_time_info *i
 int pulseg_get_segment_plays(
     const pulseg_collection *coll, int short_delay_us, pulseg_segment_plays *info)
 {
-    int i, n, bt_idx, seg_id, prev_active;
+    int i, n, bt_idx, seg_id;
+    /* Whether the last instance played was not a pure delay. It carries over
+     * from one subsequence to the next: a scan plays them as one stream. */
+    int prev_active = 0;
     const pulseg_sequence_descriptor *desc;
     const pulseg_block_table_element *bte;
 
@@ -315,7 +318,6 @@ int pulseg_get_segment_plays(
         desc = &coll->descriptors[i];
         if (desc->prescan_only)
             continue;
-        prev_active = 0;
 
         for (n = 0; n < desc->exec_stream_len; ++n)
         {
