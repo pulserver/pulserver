@@ -394,10 +394,12 @@ def test_a_warm_server_imports_the_train_design_and_leaves_autograd_and_cuda_to_
         check=True,
         timeout=DEADLINE,
     )
-    assert warmed.stdout.strip().splitlines()[-2:] == [
-        "['blochsim.optim', 'blochsim.simulators', 'torch'] False 0",
-        "0",
-    ]
+    parent, child = warmed.stdout.strip().splitlines()[-2:]
+    assert parent == "['blochsim.optim', 'blochsim.simulators', 'torch'] False 0"
+    # On macOS a child forked after the gradient echo design aborts in the
+    # Objective-C runtime, train warm-up or not.
+    if sys.platform != "darwin":
+        assert child == "0", warmed.stderr
 
 
 def test_a_call_naming_a_log_file_appends_its_outcome_there(server, tmp_path):
