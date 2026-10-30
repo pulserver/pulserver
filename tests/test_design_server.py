@@ -355,22 +355,38 @@ def test_a_forwarded_rf_request_loads_no_design_engine(server, limits_file):
 
 
 WARMED = """
-import sys
+import os, sys
+from pypulseqpp.sequences.sequence import fse3D_sequence
 from pulserver.host._server import DesignServer
+designed = []
+fse3D_sequence.design_trains = lambda *args, **kwargs: designed.append(args)
 DesignServer(sys.argv[1], sys.argv[1] + "/s").warm()
-loaded = sorted(m for m in ("blochsim", "torch") if m in sys.modules)
+modules = ("blochsim.optim", "blochsim.simulators", "torch")
+loaded = sorted(m for m in modules if m in sys.modules)
 import torch
-print(loaded, torch.cuda.is_initialized())
+print(loaded, torch.cuda.is_initialized(), len(designed), flush=True)
+pid = os.fork()
+if pid == 0:
+    status = 1
+    try:
+        x = torch.ones(3, requires_grad=True)
+        (x * x).sum().backward()
+        status = 0 if x.grad.tolist() == [2.0, 2.0, 2.0] else 2
+    finally:
+        os._exit(status)
+print(os.waitstatus_to_exitcode(os.waitpid(pid, 0)[1]))
 """
 
 
 @pytest.mark.skipif(
-    importlib.util.find_spec("blochsim") is None, reason="needs blochsim"
+    importlib.util.find_spec("blochsim") is None
+    or importlib.util.find_spec("torch") is None,
+    reason="needs blochsim and torch",
 )
-def test_a_warm_server_holds_the_train_design_engine_and_leaves_cuda_to_its_children(
+def test_a_warm_server_imports_the_train_design_and_leaves_autograd_and_cuda_to_its_children(
     tmp_path,
 ):
-    """A child designing refocusing trains imports nothing, and may initialise CUDA after the fork."""
+    """The parent imports what a train design takes but designs none; a forked child differentiates."""
     warmed = subprocess.run(
         [sys.executable, "-c", WARMED, str(tmp_path)],
         capture_output=True,
@@ -378,7 +394,10 @@ def test_a_warm_server_holds_the_train_design_engine_and_leaves_cuda_to_its_chil
         check=True,
         timeout=DEADLINE,
     )
-    assert warmed.stdout.strip().splitlines()[-1] == "['blochsim', 'torch'] False"
+    assert warmed.stdout.strip().splitlines()[-2:] == [
+        "['blochsim.optim', 'blochsim.simulators', 'torch'] False 0",
+        "0",
+    ]
 
 
 def test_a_call_naming_a_log_file_appends_its_outcome_there(server, tmp_path):
