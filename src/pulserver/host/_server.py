@@ -99,11 +99,12 @@ class DesignServer:
     """Server of design calls on a Unix socket, each answered in a child forked from a warm parent.
 
     The parent imports the design engine, designs, checks and converts one
-    sequence of its own, designs one refocusing train with blochsim, and
-    imports every plugin the directories ``plugins`` hold; no plugin code
-    designs in it. A call is answered in a child forked from it, which
-    inherits what the parent imported, answers as :func:`answer` does and
-    exits: nothing a call does outlives its child. A child that ends without
+    sequence of its own, imports what designing a refocusing train with
+    blochsim takes, and imports every plugin the directories ``plugins``
+    hold; no plugin code designs in it, and no derivative is taken in it. A
+    call is answered in a child forked from it, which inherits what the
+    parent imported, answers as :func:`answer` does and exits: nothing a call
+    does outlives its child. A child that ends without
     a reply, a crash of plugin code among them, is answered with an ``ERROR``
     line naming its exit status. Calls run concurrently, one child each.
 
@@ -121,11 +122,11 @@ class DesignServer:
         self._children: dict[int, socket.socket] = {}
 
     def warm(self) -> None:
-        """Design, check and convert pypulseqpp's 2D gradient echo, design one refocusing train, and import every plugin.
+        """Design, check and convert pypulseqpp's 2D gradient echo, import the train design, and import every plugin.
 
         A plugin that cannot be imported is left cold, and so is the train
-        design without blochsim or where it fails; their calls are answered
-        all the same.
+        design without blochsim or where its import fails; their calls are
+        answered all the same.
         """
         from . import _service
 
@@ -242,18 +243,18 @@ def _warm_design() -> None:
 
 
 def _warm_trains() -> None:
-    """Design pypulseqpp's 3D fast spin echo with optimized refocusing trains, a few echoes long.
+    """Import pypulseqpp's 3D fast spin echo and the blochsim and torch modules its optimized trains are designed with.
 
-    blochsim, torch and what torch loads on the first derivative a design
-    takes are then imported, on the CPU: CUDA is not initialised, so a child
-    can still use it.
+    Nothing is designed: a derivative taken here would start autograd's
+    worker threads, and a forked child could then take none of its own.
+    Neither is CUDA initialised, so a child can still use it.
     """
     if importlib.util.find_spec("blochsim") is None:
         return
-    import pypulseqpp as pp
-    from pypulseqpp.sequences.sequence.fse3D_sequence import fse3d
-
-    fse3d(pp.Opts(), n_x=32, n_y=8, n_z=4, etl=4, flip_modulation="optimized")
+    import blochsim.optim
+    import blochsim.simulators  # noqa: F401
+    import pypulseqpp.sequences.sequence.fse3D_sequence  # noqa: F401
+    import torch  # noqa: F401
 
 
 def _wait(pid: int, timeout: float) -> None:
