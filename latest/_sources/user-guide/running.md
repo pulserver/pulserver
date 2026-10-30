@@ -254,8 +254,9 @@ pulserver design serve --plugins DIR --socket PATH
 
 A call answered in its own process spends most of its time importing the
 design engine. A warm server imports it once, designs, checks and converts one
-sequence of its own, designs one refocusing train with blochsim, which imports
-PyTorch, and imports every plugin of its `--plugins` directories.
+sequence of its own, imports blochsim and PyTorch without designing a
+refocusing train with them, since a forked child cannot differentiate after its
+parent has, and imports every plugin of its `--plugins` directories.
 It answers each call forwarded to its socket in a child process forked from
 it, so nothing a call does outlives the call, and a plugin that ends its
 process fails only its own call, with
