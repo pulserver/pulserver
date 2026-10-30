@@ -211,6 +211,42 @@ static float get_total_duration_us(const pulseg_collection *coll)
     return coll->total_duration_us;
 }
 
+static int segment_def_is_pure_delay(const pulseg_sequence_descriptor *desc, int local_seg)
+{
+    const pulseg_virtual_segment *seg = &desc->segment_definitions[local_seg];
+    const pulseg_base_block *bdef;
+
+    if (seg->num_blocks == 1)
+    {
+        bdef = &desc->base_blocks[seg->unique_block_indices[0]];
+        if (bdef->rf_id == -1 && bdef->gx_id == -1 && bdef->gy_id == -1 && bdef->gz_id == -1 &&
+            bdef->adc_id == -1 && !seg->has_digitalout[0])
+            return 1;
+    }
+    return 0;
+}
+
+/* Whether stream position pos is the first block of a segment instance.
+ * A new instance begins when the seg_id changes, or when enough blocks have
+ * elapsed to complete one full instance of the segment (counted from the
+ * start of the same-seg_id run). */
+static int exec_starts_instance(const pulseg_sequence_descriptor *desc, int pos)
+{
+    const int seg_id = pulseg__exec_seg_id(desc, pos);
+
+    if (pos == 0 || seg_id != pulseg__exec_seg_id(desc, pos - 1))
+        return 1;
+    if (seg_id >= 0 && seg_id < desc->num_unique_segments)
+    {
+        int nb = desc->segment_definitions[seg_id].num_blocks;
+        const int run_start = pulseg__exec_seg_run_start(desc, pos);
+        if (nb <= 0)
+            nb = 1;
+        return (((pos - run_start) % nb) == 0) ? 1 : 0;
+    }
+    return 0;
+}
+
 int pulseg_get_scan_time(const pulseg_collection *coll, pulseg_scan_time_info *info)
 {
     int i, n, bt_idx;
@@ -218,6 +254,9 @@ int pulseg_get_scan_time(const pulseg_collection *coll, pulseg_scan_time_info *i
     const pulseg_block_table_element *bte;
     const pulseg_base_block *bdef;
     int prev_seg, cur_seg;
+    /* A float sum of a million blocks loses whole microseconds per addition
+     * once it passes a few minutes. */
+    double total_us = 0.0;
 
     if (!coll || !info)
         return PULSEG_ERR_NULL_POINTER;
@@ -241,14 +280,67 @@ int pulseg_get_scan_time(const pulseg_collection *coll, pulseg_scan_time_info *i
             bdef = &desc->base_blocks[bte->id];
 
             /* Duration: pure delay uses instance value, normal uses definition */
-            info->total_duration_us +=
-                (bte->duration_us >= 0) ? (float)bte->duration_us : (float)bdef->duration_us;
+            total_us += (bte->duration_us >= 0) ? (double)bte->duration_us
+                                                : (double)bdef->duration_us;
 
             /* Count segment boundaries (transitions) */
             cur_seg = pulseg__exec_seg_id(desc, n);
             if (cur_seg >= 0 && cur_seg != prev_seg)
                 info->total_segment_boundaries += 1;
             prev_seg = cur_seg;
+        }
+    }
+
+    info->total_duration_us = (float)total_us;
+    return PULSEG_SUCCESS;
+}
+
+int pulseg_get_segment_plays(
+    const pulseg_collection *coll, int short_delay_us, pulseg_segment_plays *info)
+{
+    int i, n, bt_idx, seg_id, prev_active;
+    const pulseg_sequence_descriptor *desc;
+    const pulseg_block_table_element *bte;
+
+    if (!coll || !info)
+        return PULSEG_ERR_NULL_POINTER;
+    if (coll->num_subsequences <= 0)
+        return PULSEG_ERR_COLLECTION_EMPTY;
+
+    info->segment_instances = 0;
+    info->short_delays = 0;
+
+    for (i = 0; i < coll->num_subsequences; ++i)
+    {
+        desc = &coll->descriptors[i];
+        if (desc->prescan_only)
+            continue;
+        prev_active = 0;
+
+        for (n = 0; n < desc->exec_stream_len; ++n)
+        {
+            if (!exec_starts_instance(desc, n))
+                continue;
+            seg_id = pulseg__exec_seg_id(desc, n);
+            if (seg_id < 0 || seg_id >= desc->num_unique_segments)
+                continue;
+            info->segment_instances += 1;
+
+            if (segment_def_is_pure_delay(desc, seg_id))
+            {
+                bt_idx = pulseg__exec_block_idx(desc, n);
+                bte = &desc->block_table[bt_idx];
+                if (prev_active && bte->duration_us >= 0 && bte->duration_us <= short_delay_us)
+                    info->short_delays += 1;
+                else if (prev_active && bte->duration_us < 0 &&
+                         desc->base_blocks[bte->id].duration_us <= short_delay_us)
+                    info->short_delays += 1;
+                prev_active = 0;
+            }
+            else
+            {
+                prev_active = 1;
+            }
         }
     }
 
@@ -1174,21 +1266,11 @@ static int is_segment_pure_delay(const pulseg_collection *coll, int seg_idx)
 {
     const pulseg_sequence_descriptor *desc;
     int local_seg;
-    const pulseg_virtual_segment *seg;
-    const pulseg_base_block *bdef;
 
     if (!resolve_segment(coll, &desc, &local_seg, seg_idx))
         return -1;
 
-    seg = &desc->segment_definitions[local_seg];
-    if (seg->num_blocks == 1)
-    {
-        bdef = &desc->base_blocks[seg->unique_block_indices[0]];
-        if (bdef->rf_id == -1 && bdef->gx_id == -1 && bdef->gy_id == -1 && bdef->gz_id == -1 &&
-            bdef->adc_id == -1 && !seg->has_digitalout[0])
-            return 1;
-    }
-    return 0;
+    return segment_def_is_pure_delay(desc, local_seg);
 }
 
 static int get_segment_num_blocks(const pulseg_collection *coll, int seg_idx)
@@ -2975,30 +3057,8 @@ int pulseg_cursor_get_info(const pulseg_collection *coll, pulseg_cursor_info *in
     }
     /* segment_start fires at the first block of every segment instance,
      * including consecutive instances of the same segment (e.g. the ny
-     * phase-encoding readout lines in MPRAGE within one TR).
-     * A new instance begins when the seg_id changes, or when enough
-     * blocks have elapsed to complete one full instance of the segment
-     * (counted from the start of the same-seg_id run). */
-    {
-        int new_inst;
-        if (pos == 0 || pulseg__exec_seg_id(desc, pos) != pulseg__exec_seg_id(desc, pos - 1))
-        {
-            new_inst = 1;
-        }
-        else if (seg_id >= 0 && seg_id < desc->num_unique_segments)
-        {
-            int nb = desc->segment_definitions[seg_id].num_blocks;
-            int run_start = pulseg__exec_seg_run_start(desc, pos);
-            if (nb <= 0)
-                nb = 1;
-            new_inst = (((pos - run_start) % nb) == 0) ? 1 : 0;
-        }
-        else
-        {
-            new_inst = 0;
-        }
-        info->segment_start = new_inst;
-    }
+     * phase-encoding readout lines in MPRAGE within one TR). */
+    info->segment_start = exec_starts_instance(desc, pos);
     {
         int last_inst;
         if (pos == desc->exec_stream_len - 1 ||

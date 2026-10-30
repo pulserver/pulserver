@@ -33,6 +33,7 @@ int main(void)
     pulseg_rf_stats rf = PULSEG_RF_STATS_INIT;
     pulseg_scan_time_info scan_time = PULSEG_SCAN_TIME_INFO_INIT;
     pulseg_segment_info segment = PULSEG_SEGMENT_INFO_INIT;
+    pulseg_segment_plays plays = PULSEG_SEGMENT_PLAYS_INIT;
     pulseg_segment_layout layout = PULSEG_SEGMENT_LAYOUT_INIT;
     pulseg_sequence_flags flags = PULSEG_SEQUENCE_FLAGS_INIT;
     pulseg_subseq_info subsequence = PULSEG_SUBSEQ_INFO_INIT;
@@ -43,13 +44,14 @@ int main(void)
 
     /* Read one field of each, so none is optimised away unexamined. */
     printf(
-        "%d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d\n",
+        "%d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d\n",
         adc.num_samples, block.duration_us, instance.duration_us,
         collection.num_subsequences, corners.num_points, cursor.scan_pos,
         diagnostic.code, opts.vendor, playout.prescan_subsequence,
         shim.num_channels, (int)rf.flip_angle_rad, (int)scan_time.total_duration_us,
         segment.num_blocks, layout.num_blocks, flags.enable_sar_burst_mode,
         subsequence.num_trs, text.capacity, (int)budget.max_samples,
-        plan.mode, shape.num_samples, grouping.split_by_pulses);
+        plan.mode, shape.num_samples, grouping.split_by_pulses,
+        plays.segment_instances);
     return 0;
 }
