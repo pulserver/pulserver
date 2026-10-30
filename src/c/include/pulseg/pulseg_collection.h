@@ -178,6 +178,23 @@ extern "C"
      */
     int pulseg_get_scan_time(const pulseg_collection *coll, pulseg_scan_time_info *info);
 
+    /**
+     * @brief Count the segment instances a scan plays.
+     *
+     * Every instance of a segment in the scan table is one play, consecutive
+     * instances of the same segment included. A pure delay no longer than
+     * @p short_delay_us that follows an instance which is not a pure delay is
+     * counted in @c short_delays too: a vendor whose segments end past their
+     * blocks can fold it into the segment before it.
+     *
+     * @param[in]  coll           Loaded collection.
+     * @param[in]  short_delay_us Longest pure delay counted in short_delays (us).
+     * @param[out] info           Receives the counts.
+     * @return PULSEG_SUCCESS on success, negative error code on failure.
+     */
+    int pulseg_get_segment_plays(
+        const pulseg_collection *coll, int short_delay_us, pulseg_segment_plays *info);
+
     /* ================================================================== */
     /*  Segment table getters (copy to caller buffer)                     */
     /* ================================================================== */

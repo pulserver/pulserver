@@ -650,7 +650,8 @@ typedef struct pulseg_cursor_info
  *
  * When computed from a fully-loaded collection via
  * pulseg_get_scan_time(), both fields are accurate: every block duration
- * and every segment boundary in the scan table.
+ * and every change of segment in the scan table (a segment played twice in
+ * a row counts once; pulseg_get_segment_plays() counts the plays).
  */
 typedef struct pulseg_scan_time_info
 {
@@ -660,6 +661,23 @@ typedef struct pulseg_scan_time_info
 
 /* clang-format off */
 #define PULSEG_SCAN_TIME_INFO_INIT {0.0f, 0}
+/* clang-format on */
+
+/**
+ * @brief Segment instances a scan plays.
+ *
+ * Returned by pulseg_get_segment_plays(). A vendor whose boards pay a fixed
+ * time each time a segment starts multiplies @c segment_instances by it.
+ */
+typedef struct pulseg_segment_plays
+{
+    int segment_instances; /**< segment instances of the scan, prescan-only subsequences left out */
+    int short_delays;      /**< of them, the pure delays no longer than the limit that follow an
+                                instance that is not one */
+} pulseg_segment_plays;
+
+/* clang-format off */
+#define PULSEG_SEGMENT_PLAYS_INIT {0, 0}
 /* clang-format on */
 
 /* ================================================================== */
