@@ -74,6 +74,10 @@ class CheckLimits:
     vop_head_limit, vop_local_limit
         The scanner's head and local SAR limits, W/kg, in its current
         operating mode; :func:`sar_ratios` needs both.
+    adc_gap
+        Least time in s from the end of one ADC to the start of the next: the
+        receiver's start packet for a readout must not fall inside, or just
+        after, the previous readout's window. 0 leaves the check out.
     acoustic
         The gradient coil's acoustic transfer function on the physical axes,
         or the HDF5 file ``pypulseqpp.safety.read_acoustic_response`` reads
@@ -103,6 +107,7 @@ class CheckLimits:
     vop_coil: str | None = None
     vop_head_limit: float | None = None
     vop_local_limit: float | None = None
+    adc_gap: float = 0.0
     acoustic: safety.AcousticResponse | Path | str | None = None
     acoustic_interval: float = 0.0
     spl_peak_limit: float = 140.0
@@ -158,6 +163,10 @@ class SarRatio:
 
     local_sar: float
     global_sar: float
+
+
+#: The ADC column of ``Sequence.libraries().blocks``.
+_ADC_COLUMN = 4
 
 
 def check(
@@ -263,6 +272,8 @@ def _problems(
     is_ok, report = pp.check_timing(sequence)
     if not is_ok:
         problems.append(_timing(sequence, report))
+    if limits.adc_gap > 0:
+        problems += _adc_gaps(sequence, limits.adc_gap)
     checks = [
         (_limit, safety.check_max_grad, "gradient amplitude", "mT/m", 1e3),
         (_limit, safety.check_max_slew, "slew rate", "T/m/s", 1.0),
@@ -280,6 +291,34 @@ def _problems(
     for result in found:
         problems += result.result()
     return problems
+
+
+def _adc_gaps(sequence: pp.Sequence, least: float) -> list[str]:
+    """Return the problem of ADCs closer than ``least`` s, end to start, in play order."""
+    tables = sequence.libraries()
+    blocks = np.asarray(tables.blocks)
+    with_adc = np.flatnonzero(blocks[:, _ADC_COLUMN])
+    if with_adc.size < 2:
+        return []
+    durations = np.asarray(tables.block_durations, dtype=np.float64)
+    starts = np.concatenate(([0.0], np.cumsum(durations)[:-1]))
+    adc = np.asarray(tables.adc, dtype=np.float64).reshape(-1, 8)
+    rows = adc[blocks[with_adc, _ADC_COLUMN].astype(np.int64) - 1]
+    opens = starts[with_adc] + rows[:, 2]
+    closes = opens + rows[:, 0] * rows[:, 1]
+    gaps = opens[1:] - closes[:-1]
+    # A rounding's margin: the times are sums of raster multiples.
+    short = np.flatnonzero(gaps < least - 1e-9)
+    if not short.size:
+        return []
+    first = int(short[0])
+    return [
+        f"ADC timing: {short.size} readout(s) open less than {least * 1e6:.0f} us "
+        f"after the previous one ends, the first in block {int(with_adc[first + 1]) + 1}, "
+        f"{gaps[first] * 1e6:.1f} us after the ADC of block {int(with_adc[first]) + 1}; "
+        "the scanner needs that time to start the next readout. Leave the gap, or "
+        "split the readout where a gap is allowed"
+    ]
 
 
 def _limit(
