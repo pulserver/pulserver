@@ -118,6 +118,14 @@ def main(argv: list[str] | None = None) -> None:
         "as; PULSERVER when unset",
     )
     parser.add_argument(
+        "--viewer-port",
+        type=int,
+        default=None,
+        metavar="PORT",
+        help="port on the --dicom-receiver's host of a viewer each image "
+        "stored there is also sent to, as an AVR1 message; none when unset",
+    )
+    parser.add_argument(
         "--save-data",
         type=Path,
         default=None,
@@ -158,7 +166,10 @@ def main(argv: list[str] | None = None) -> None:
                 "--dicom-receiver needs pynetdicom: pip install pulserver[dicom]"
             )
         receiver = DicomReceiver(
-            *args.dicom_receiver, args.dicom_receiver_title, args.dicom_title
+            *args.dicom_receiver,
+            args.dicom_receiver_title,
+            args.dicom_title,
+            viewer_port=args.viewer_port,
         )
 
     configure(args.log_level, args.logfile)
