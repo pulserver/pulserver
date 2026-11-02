@@ -280,13 +280,13 @@ scan beside the rest of that scan's log.
 ## Reconstruction proxy
 
 ```bash
-pulserver proxy --store DIR --port N --plugins DIR [--host ADDR] [--intake-port N] [--queue DIR] [--exams DIR] [--slots N] [--gpu-slots 1] [--spares 1] [--recon-timeout S] [--dicom] [--dicom-receiver HOST:PORT --dicom-receiver-title AE [--dicom-title AE]] [--save-data DIR] [--idle-timeout S] [--logfile FILE] [--log-level LEVEL]
-pulserver proxy --store DIR --port N --forward HOST:PORT [--forward-config NAME] [--host ADDR] [--intake-port N] [--recon-timeout S] [--dicom] [--dicom-receiver HOST:PORT --dicom-receiver-title AE [--dicom-title AE]] [--save-data DIR] [--idle-timeout S] [--logfile FILE] [--log-level LEVEL]
+pulserver proxy --store DIR --port N --plugins DIR [--host ADDR] [--intake-port N] [--queue DIR] [--exams DIR] [--slots N] [--gpu-slots 1] [--spares 1] [--recon-timeout S] [--dicom] [--dicom-receiver HOST:PORT --dicom-receiver-title AE [--dicom-title AE] [--viewer-port N]] [--save-data DIR] [--idle-timeout S] [--logfile FILE] [--log-level LEVEL]
+pulserver proxy --store DIR --port N --forward HOST:PORT [--forward-config NAME] [--host ADDR] [--intake-port N] [--recon-timeout S] [--dicom] [--dicom-receiver HOST:PORT --dicom-receiver-title AE [--dicom-title AE] [--viewer-port N]] [--save-data DIR] [--idle-timeout S] [--logfile FILE] [--log-level LEVEL]
 ```
 
 | Option | Meaning |
 | --- | --- |
-| `--store` | The design store the proxy reads: the one the design calls write, or the one the intake writes. It also holds each scan's pose file, `<store>/<scan>/motion.buf`, for a scan corrected for motion |
+| `--store` | The design store the proxy reads: the one the design calls write, or the one the intake writes. It also holds each scan's pose file, `<store>/<scan>/motion.buf`, for a scan corrected for motion, and beside it the poses published, `motion.csv` (pitch, roll and yaw about x, y and z in degrees, translation in mm) and their plot `motion.png` |
 | `--port` | TCP port the scanner's reconstruction client connects to |
 | `--host` | Address to listen on; the loopback interface when unset, `0.0.0.0` for every interface |
 | `--intake-port` | TCP port of the design intake, on the `--host` address; no intake when unset |
@@ -302,6 +302,7 @@ pulserver proxy --store DIR --port N --forward HOST:PORT [--forward-config NAME]
 | `--dicom` | Convert each image to DICOM before it is relayed, whatever reconstructed it; for a client that reads DICOM only |
 | `--dicom-receiver` | `HOST:PORT` of a DICOM storage service the images of a series whose client has gone are stored to by C-STORE; held for the client's return when unset. Needs `pynetdicom` (`pulserver[dicom]`) |
 | `--dicom-receiver-title` | Application entity title of the `--dicom-receiver`; required with it |
+| `--viewer-port` | Port on the `--dicom-receiver`'s host of a viewer each stored image is also sent to, as an `AVR1` message (four bytes `AVR1`, three -1 and the file's length as big-endian 32-bit integers, then the DICOM file), so a series whose client has gone is still shown; none when unset |
 | `--dicom-title` | Application entity title the proxy calls the `--dicom-receiver` as; `PULSERVER` when unset |
 | `--save-data` | Directory each series is kept in, enriched; kept nowhere when unset |
 | `--idle-timeout` | Seconds without a client after which the proxy closes, never while a series is reconstructed. Unlimited when unset |
