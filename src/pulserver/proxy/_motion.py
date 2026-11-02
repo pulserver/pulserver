@@ -326,9 +326,9 @@ PLOT_FILENAME = "motion.png"
 _LOG_COLUMNS = (
     "pose",
     "time_s",
-    "rx_deg",
-    "ry_deg",
-    "rz_deg",
+    "pitch_deg",
+    "roll_deg",
+    "yaw_deg",
     "tx_mm",
     "ty_mm",
     "tz_mm",
@@ -349,8 +349,9 @@ class MotionLog:
     """The poses a scan was given, as a table and a plot beside its pose file.
 
     Each pose is appended to ``motion.csv`` as it is published: its index, the
-    seconds since the first, the rotations about x, y and z (degrees,
-    ``R = Rz @ Ry @ Rx``), the translation (mm) and the rescan flag. The table
+    seconds since the first, the rotations (degrees, ``R = Rz @ Ry @ Rx``)
+    as pitch about x (left-right), roll about y (anterior-posterior) and yaw
+    about z (superior-inferior), the translation (mm) and the rescan flag. The table
     is written as ``motion.csv.part`` while the scan runs, so that whatever
     exports the scan's directory waits for it, and on :meth:`close` the six
     parameters are plotted against time into ``motion.png`` and the table is
@@ -411,16 +412,18 @@ class MotionLog:
         except ImportError:
             return
         rows = np.asarray(self._rows)
-        fig, (rot, trans) = plt.subplots(2, 1, sharex=True, figsize=(8, 5))
-        for column, name in zip(range(2, 5), "xyz", strict=True):
-            rot.plot(rows[:, 1], rows[:, column], label=f"about {name}")
+        fig, (rot, trans) = plt.subplots(2, 1, sharex=True, figsize=(9, 5))
+        for column, name in zip(
+            range(2, 5), ("pitch (x)", "roll (y)", "yaw (z)"), strict=True
+        ):
+            rot.plot(rows[:, 1], rows[:, column], label=name)
         for column, name in zip(range(5, 8), "xyz", strict=True):
             trans.plot(rows[:, 1], rows[:, column], label=name)
         rot.set_ylabel("rotation (deg)")
         trans.set_ylabel("translation (mm)")
         trans.set_xlabel("time since the first pose (s)")
-        rot.legend(loc="upper left")
-        trans.legend(loc="upper left")
+        rot.legend(loc="upper left", bbox_to_anchor=(1.01, 1.0), frameon=False)
+        trans.legend(loc="upper left", bbox_to_anchor=(1.01, 1.0), frameon=False)
         fig.tight_layout()
         try:
             fig.savefig(self.path.with_name(PLOT_FILENAME), dpi=100)
