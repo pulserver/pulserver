@@ -36,6 +36,15 @@ class PmcRecon(PicsTrainRecon):
     as a pose waveform, which the proxy publishes to the scan when the design
     sets ``EnablePmc``.
 
+    The navigators of one repetition see different magnetisation: each comes
+    a different time after the imaging readouts before it. So each position in
+    the repetition, counted from the last imaging readout, has its own
+    reference, taken from its second occurrence (the first comes before the
+    steady state), and its own filter; until then the pose stated is the
+    identity. On a still phantom (7 T, 2 Nov 2026) one reference for all five
+    positions read up to 0.8 degrees and 0.4 mm apart, each position within
+    0.05 degrees and 0.02 mm of itself.
+
     A plane's in-plane axes are the two physical axes its trajectory spans,
     so the pose is in the physical frame, relative to the first navigator.
 
@@ -60,11 +69,15 @@ class PmcRecon(PicsTrainRecon):
         super().startup(context)
         self.planes: list[Any] = []
         self.geometry = None
-        self.tracker = None
+        self.trackers: dict[int, Any] = {}
+        self.seen: dict[int, int] = {}
+        self.position = 0
 
     def branch_for(self, acquisition: Any) -> str | None:
         if carries(acquisition, NAVIGATOR):
             return "navigator"
+        # An imaging readout: the next navigator is the first of its repetition.
+        self.position = 0
         return super().branch_for(acquisition)
 
     def recon(self, context: ReconContext, branch: str, data: ReconData) -> Any:
@@ -74,10 +87,11 @@ class PmcRecon(PicsTrainRecon):
         if len(self.planes) < PLANES:
             return None
         planes, self.planes = self.planes, []
-        return pose_waveform(self.pose(planes))
+        position, self.position = self.position, self.position + 1
+        return pose_waveform(self.pose(planes, position))
 
-    def pose(self, planes: list[Any]) -> Pose:
-        """Return the filtered pose of one navigator's readouts, one per plane.
+    def pose(self, planes: list[Any], position: int = 0) -> Pose:
+        """Return the filtered pose of one navigator's readouts, one per plane, at ``position`` in its repetition.
 
         The pose is computed on one thread, and the thread count of the process
         is restored after it, so the image units are reconstructed with the
@@ -89,12 +103,18 @@ class PmcRecon(PicsTrainRecon):
 
         # bartorch's count is process-wide and BART shares torch's OpenMP
         # runtime, so torch reports the count BART runs with.
+        seen = self.seen.get(position, 0)
+        self.seen[position] = seen + 1
+        if seen == 0:
+            return Pose(rotation=tuple(float(v) for v in np.eye(3).ravel()))
         threads = torch.get_num_threads()
         bartorch.set_num_threads(1)
         try:
             if self.geometry is None:
                 self.geometry = _geometry(planes, self.matrix)
-                self.tracker = tools.NavigatorMotionTracker()
+            tracker = self.trackers.get(position)
+            if tracker is None:
+                tracker = self.trackers[position] = tools.NavigatorMotionTracker()
             traj, axes, spacing_mm, density = self.geometry
             kspace = torch.from_numpy(
                 np.stack(
@@ -104,7 +124,7 @@ class PmcRecon(PicsTrainRecon):
             images = tools.reconstruct_navigator(
                 kspace, traj, (self.matrix, self.matrix), density=density
             )
-            estimate = self.tracker.track(list(images), axes, spacing=spacing_mm)
+            estimate = tracker.track(list(images), axes, spacing=spacing_mm)
         finally:
             bartorch.set_num_threads(threads)
         rotation = estimate.matrix[:3, :3]
