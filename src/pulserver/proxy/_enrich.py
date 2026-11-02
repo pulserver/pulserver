@@ -523,12 +523,24 @@ def enrich_acquisition(
     but under one that does not, the phase curves over the readout and is
     applied here; and the half voxel that centres the grid.
 
+    A readout shorter than the scanner's frame arrives padded to the frame,
+    the longest readout of the scan, its own samples first: it is cut to the
+    row's count.
+
     Raises
     ------
     ValueError
-        If the acquisition's sample count differs from the row's.
+        If the acquisition has fewer samples than the row.
     """
     count = int(table.num_samples[index])
+    if int(acquisition.number_of_samples) > count:
+        data = np.array(acquisition.data)[:, :count]
+        acquisition.resize(
+            count,
+            int(acquisition.active_channels),
+            int(acquisition.trajectory_dimensions),
+        )
+        acquisition.data[:] = data
     if int(acquisition.number_of_samples) != count:
         raise ValueError(
             f"acquisition {index} has {acquisition.number_of_samples} samples; "
