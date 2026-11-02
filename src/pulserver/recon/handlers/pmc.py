@@ -29,15 +29,23 @@ class PmcRecon(PicsTrainRecon):
     by a density-compensated adjoint NUFFT, coils combined by root sum of
     squares (:func:`bartorch.tools.reconstruct_navigator`), on one thread. The
     Pipe-Menon density (:func:`bartorch.estimate_density`) is computed once,
-    from the first navigator's trajectory, which the proxy stamps from the
-    sequence. The planes are registered against the first navigator's and the
-    pose filtered by an extended Kalman filter
+    from the first reconstructed navigator's trajectory, which the proxy
+    stamps from the sequence. The planes are registered against a reference
+    navigator's and the pose filtered by an extended Kalman filter
     (:class:`bartorch.tools.NavigatorMotionTracker`); the result is returned
     as a pose waveform, which the proxy publishes to the scan when the design
     sets ``EnablePmc``.
 
+    The navigators of one repetition see different magnetisation, each a
+    different time after the imaging readouts before it, and registering one
+    against another reads that contrast as motion. So each position in the
+    repetition, counted from the last imaging readout, is registered against
+    its own reference with its own filter. The reference is the position's
+    second navigator, as the first repetition comes before the steady state;
+    the first states the identity.
+
     A plane's in-plane axes are the two physical axes its trajectory spans,
-    so the pose is in the physical frame, relative to the first navigator.
+    so the pose is in the physical frame, relative to the second repetition.
 
     Parameters
     ----------
@@ -60,11 +68,13 @@ class PmcRecon(PicsTrainRecon):
         super().startup(context)
         self.planes: list[Any] = []
         self.geometry = None
-        self.tracker = None
+        self.trackers: dict[int, Any] = {}
+        self.position = 0
 
     def branch_for(self, acquisition: Any) -> str | None:
         if carries(acquisition, NAVIGATOR):
             return "navigator"
+        self.position = 0
         return super().branch_for(acquisition)
 
     def recon(self, context: ReconContext, branch: str, data: ReconData) -> Any:
@@ -74,10 +84,11 @@ class PmcRecon(PicsTrainRecon):
         if len(self.planes) < PLANES:
             return None
         planes, self.planes = self.planes, []
-        return pose_waveform(self.pose(planes))
+        position, self.position = self.position, self.position + 1
+        return pose_waveform(self.pose(planes, position))
 
-    def pose(self, planes: list[Any]) -> Pose:
-        """Return the filtered pose of one navigator's readouts, one per plane.
+    def pose(self, planes: list[Any], position: int = 0) -> Pose:
+        """Return the filtered pose of one navigator's readouts, one per plane, at ``position`` in its repetition.
 
         The pose is computed on one thread, and the thread count of the process
         is restored after it, so the image units are reconstructed with the
@@ -87,6 +98,10 @@ class PmcRecon(PicsTrainRecon):
         import torch
         from bartorch import tools
 
+        if position not in self.trackers:
+            self.trackers[position] = tools.NavigatorMotionTracker()
+            return Pose(rotation=tuple(float(v) for v in np.eye(3).ravel()))
+        tracker = self.trackers[position]
         # bartorch's count is process-wide and BART shares torch's OpenMP
         # runtime, so torch reports the count BART runs with.
         threads = torch.get_num_threads()
@@ -94,7 +109,6 @@ class PmcRecon(PicsTrainRecon):
         try:
             if self.geometry is None:
                 self.geometry = _geometry(planes, self.matrix)
-                self.tracker = tools.NavigatorMotionTracker()
             traj, axes, spacing_mm, density = self.geometry
             kspace = torch.from_numpy(
                 np.stack(
@@ -104,7 +118,7 @@ class PmcRecon(PicsTrainRecon):
             images = tools.reconstruct_navigator(
                 kspace, traj, (self.matrix, self.matrix), density=density
             )
-            estimate = self.tracker.track(list(images), axes, spacing=spacing_mm)
+            estimate = tracker.track(list(images), axes, spacing=spacing_mm)
         finally:
             bartorch.set_num_threads(threads)
         rotation = estimate.matrix[:3, :3]
