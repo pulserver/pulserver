@@ -197,8 +197,9 @@ class _Listener:
         """Return a series, written where it can be received again.
 
         The proxy keeps the series as it reconstructs it, header and
-        acquisitions enriched (the header marked ``pulserver_enriched``); a
-        replay plays such a file as it is. A server keeps a forwarded series
+        acquisitions enriched (the header marked ``pulserver_enriched``) and
+        the sequence description beside them; a replay plays such a file as it
+        is. A server keeps a forwarded series
         as the proxy sent it, enriched too. The header is written as this is
         called, into a file named with :data:`PART` appended, which takes its
         own name once the stream has ended: whoever collects the directory
@@ -404,7 +405,11 @@ class ReconProxy(_Listener):
         plugin = _config_plugin(config)
         enrich_header(header, design.table)
         enriched = self._kept(
-            header, _enriched(_received(client), design, header_fov_offset_m(header))
+            header,
+            itertools.chain(
+                (design.description,),
+                _enriched(_received(client), design, header_fov_offset_m(header)),
+            ),
         )
         _log.info(
             "series on %s: %s, %d readouts",
@@ -418,7 +423,7 @@ class ReconProxy(_Listener):
                 config,
                 header,
                 plugin,
-                itertools.chain((design.description,), enriched),
+                enriched,
                 motion=design.directory.parent / FILENAME
                 if design.prospective_motion
                 else None,

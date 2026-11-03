@@ -263,3 +263,77 @@ def test_an_event_an_hour_into_the_scan_keeps_its_microsecond():
     )
     ((_, rows, _),) = _decoded(message([description]))
     assert rows["timestamp_us"][0] == late_us
+
+
+def lines(steps=(-2, -1, 0, 1, 2), navigator=False):
+    """A spoiled line per repetition, phase-encoded through ``steps``; a navigator before each."""
+    seq = pp.Sequence(SYSTEM)
+    rf = pp.make_block_pulse(np.deg2rad(10.0), duration=0.2e-3, system=SYSTEM, use="excitation")
+    encode = pp.make_trapezoid("y", area=100.0, duration=1e-3, system=SYSTEM)
+    readout = pp.make_trapezoid("x", flat_area=2000, flat_time=2.56e-3, system=SYSTEM)
+    adc = pp.make_adc(64, duration=2.56e-3, delay=readout.rise_time, system=SYSTEM)
+    probe = pp.make_adc(16, duration=0.16e-3, system=SYSTEM)
+    nav = pp.make_label(type="SET", label="NAV", value=True)
+    image = pp.make_label(type="SET", label="NAV", value=False)
+    for step in steps:
+        seq.add_block(rf)
+        if navigator:
+            seq.add_block(probe, nav)
+        seq.add_block(pp.scale_grad(encode, step / 2.0))
+        seq.add_block(readout, adc, image)
+    return seq
+
+
+def test_a_scan_is_described_by_the_repetition_sampling_the_centre_of_k_space():
+    seq = lines()
+    description = describe(seq)
+    assert len(description) == 3
+    start = float(seq.block_durations[1]) + float(seq.block_durations[2]) + float(
+        seq.block_durations[3]
+    )
+    rf = description.events[0]
+    assert rf.timestamp_us == pytest.approx(
+        (float(seq.rf_times(compat=False).t[2]) - 2 * start) * 1e6
+    )
+    assert description.tr_duration_us == pytest.approx(start * 1e6)
+    # Only the centre line passes k = 0: its readout is the one described.
+    adc = description.events[2]
+    assert adc.type == EventType.ADC and 0.0 < adc.timestamp_us < description.tr_duration_us
+
+
+def test_a_navigator_at_the_centre_does_not_choose_the_repetition():
+    """A navigator passes k = 0 in every repetition; the first is not the centre's."""
+    seq = lines(navigator=True)
+    description = describe(seq)
+    assert len(description) == 4
+    rf_centre = float(seq.rf_times(compat=False).t[2]) * 1e6
+    assert description.events[0].timestamp_us == pytest.approx(
+        rf_centre - 2 * description.tr_duration_us
+    )
+
+
+def test_a_readout_without_an_echo_is_timed_at_its_first_sample():
+    seq = pp.Sequence(SYSTEM)
+    seq.add_block(pp.make_block_pulse(np.pi / 18, duration=1e-4, system=SYSTEM))
+    seq.add_block(pp.make_adc(32, dwell=10e-6, system=SYSTEM))
+    description = describe(seq)
+    samples = np.asarray(seq.adc_times()[0])
+    assert description.events[1].timestamp_us == pytest.approx(float(samples[0]) * 1e6)
+
+
+def test_a_kept_series_holds_the_description_and_replays_it_first(tmp_path):
+    from pulserver.proxy._queue import DESCRIPTION, QueueFile
+
+    text = message([describe(gre())])
+    kept = QueueFile(tmp_path / "series.h5")
+    kept.append(text)
+    kept.append(ismrmrd.Acquisition.from_array(np.ones((1, 4), np.complex64)))
+    kept.close()
+
+    import h5py
+
+    with h5py.File(tmp_path / "series.h5", "r") as stored:
+        assert stored["dataset"][DESCRIPTION][()].decode() == text
+    replayed = list(kept)
+    assert replayed[0] == text
+    assert isinstance(replayed[1], ismrmrd.Acquisition)

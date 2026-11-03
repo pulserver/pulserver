@@ -130,7 +130,11 @@ class SequenceEvent:
 
 @dataclass(frozen=True)
 class SequenceDescription:
-    """The stream of one subsequence and the pulses it names."""
+    """The stream of one repetition of a subsequence and the pulses it names.
+
+    Times run from the start of the repetition, whose length is
+    ``tr_duration_us``.
+    """
 
     subsequence_index: int
     tr_duration_us: float
@@ -143,10 +147,15 @@ class SequenceDescription:
 
 
 def describe(seq: Any, *, subsequence_index: int = 0) -> SequenceDescription:
-    """Read the event stream of a sequence.
+    """Read the event stream of one repetition of a sequence.
 
-    One row per block, in play order: the pulse a block turns the magnetization
-    through, the readout it samples with, or a wait where it does neither.
+    The repetition is the one whose readout passes nearest the centre of
+    k-space, navigators aside: in a dual-region echo train, the train that
+    samples the centre. Repetitions are ``pypulseqpp.Sequence.repetition``'s,
+    so a sequence that does not repeat, such as a fingerprinting train, is
+    described whole. One row per block of it, in play order: the pulse a block
+    turns the magnetization through, the readout it samples with, or a wait
+    where it does neither.
 
     An RF row is timed at the pulse's centre, and a readout at the sample
     passing nearest the centre of k-space -- the time a simulation has to place
@@ -171,6 +180,9 @@ def describe(seq: Any, *, subsequence_index: int = 0) -> SequenceDescription:
     starts = np.concatenate(([0.0], np.cumsum(durations)))
     pulses = seq.rf_times(compat=False)
     echoes = seq.adc_echoes()
+    first_block, last_block = _central_repetition(seq, echoes)
+    origin = starts[first_block - 1]
+    within = range(first_block, last_block + 1)
     gradients = seq.rf_gradients()
     slice_select = _slice_select(gradients)
 
@@ -183,6 +195,8 @@ def describe(seq: Any, *, subsequence_index: int = 0) -> SequenceDescription:
     rows: dict[int, SequenceEvent] = {}
 
     for at, block in enumerate(np.asarray(pulses.block, dtype=int)):
+        if not first_block <= block <= last_block:
+            continue
         pulse = seq.get_block(int(block)).rf
         definition = int(library_ids[block - 1])
         if definition not in definitions:
@@ -191,7 +205,7 @@ def describe(seq: Any, *, subsequence_index: int = 0) -> SequenceDescription:
             )
         rows[int(block)] = SequenceEvent(
             EventType.RF,
-            float(pulses.t[at]) * 1e6,
+            (float(pulses.t[at]) - origin) * 1e6,
             (
                 definition,
                 int(_USE_TAGS.get(str(pulses.use[at]).lower(), RfUse.UNKNOWN)),
@@ -205,12 +219,16 @@ def describe(seq: Any, *, subsequence_index: int = 0) -> SequenceDescription:
 
     samples = np.asarray(seq.adc_times()[0])
     for at, block in enumerate(np.asarray(echoes.block, dtype=int)):
+        if not first_block <= block <= last_block:
+            continue
         adc = seq.get_block(int(block)).adc
-        centre = int(np.asarray(echoes.echo)[at].min())
+        # A readout with no echo, one played without a gradient, is at the
+        # centre from its first sample.
+        centre = max(int(np.asarray(echoes.echo)[at].min()), 0)
         first = int(np.asarray(echoes.first_sample)[at])
         rows[int(block)] = SequenceEvent(
             EventType.ADC,
-            float(samples[first + centre]) * 1e6,
+            (float(samples[first + centre]) - origin) * 1e6,
             (
                 int(AdcRole.SINGLE),
                 pp.calc_absolute_offsets(adc, system=seq.system)[1],
@@ -219,16 +237,48 @@ def describe(seq: Any, *, subsequence_index: int = 0) -> SequenceDescription:
         )
 
     events = tuple(
-        rows.get(block, SequenceEvent(EventType.WAIT, float(starts[block - 1]) * 1e6))
-        for block in range(1, seq.num_blocks + 1)
+        rows.get(
+            block,
+            SequenceEvent(EventType.WAIT, (float(starts[block - 1]) - origin) * 1e6),
+        )
+        for block in within
     )
     return SequenceDescription(
         subsequence_index=subsequence_index,
-        tr_duration_us=float(np.sum(durations)) * 1e6,
+        tr_duration_us=float(starts[last_block] - origin) * 1e6,
         events=events,
         rf_definitions=definitions,
         rf_raster_time_s=float(seq.rf_raster_time),
     )
+
+
+def _central_repetition(seq: Any, echoes: Any) -> tuple[int, int]:
+    """Return the first and last block of the repetition sampling the centre of k-space.
+
+    The readout nearest the centre is the one whose sample at its echo is,
+    among readouts not labelled ``NAV``; the whole sequence when it has no
+    such readout or does not repeat.
+    """
+    size, _ = seq.repetition()
+    blocks = np.asarray(echoes.block, dtype=int)
+    if size <= 0 or size >= seq.num_blocks or not blocks.size:
+        return 1, seq.num_blocks
+    k = np.asarray(seq.calculate_kspace()[0])
+    centres = np.asarray(echoes.first_sample, dtype=int) + np.asarray(
+        [max(int(np.asarray(echo).min()), 0) for echo in echoes.echo]
+    )
+    radius = np.linalg.norm(k[:, centres], axis=0)
+    navigator = np.asarray(
+        seq.evaluate_labels(evolution="adc").get("NAV", np.zeros(blocks.size)), dtype=bool
+    ).reshape(-1)
+    candidates = np.flatnonzero(~navigator) if navigator.size == blocks.size else []
+    if not len(candidates):
+        candidates = np.arange(blocks.size)
+    # The first repetition reaching the centre, within rounding of k.
+    reach = radius[candidates]
+    nearest = int(candidates[np.flatnonzero(reach <= reach.min() + 1e-6 * (reach.max() or 1.0))[0]])
+    first = (int(blocks[nearest]) - 1) // size * size + 1
+    return first, min(first + size - 1, seq.num_blocks)
 
 
 def _slice_select(gradients: Any) -> dict[int, float]:
