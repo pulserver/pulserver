@@ -35,9 +35,13 @@ extern "C"
 /* A block definition's row: the duration in block rasters, and the definition
  * of each event the block plays, -1 for one it does not. */
 #define BLOCK_DEF_COLS 6
-/* What makes a block definition here: the one pypulseqpp published, and the
- * ADC definition it digitises with. */
-#define BLOCK_KEY_COLS 2
+/* What makes a block definition here: the one pypulseqpp published, the
+ * ADC definition it digitises with, and the channel, delay and duration of
+ * the output trigger it fires, -1 for none. A pulse generator places an
+ * output trigger once per definition, so two triggers timed apart are two
+ * definitions. */
+#define BLOCK_KEY_COLS 5
+#define BLOCK_KEY_TRIGGER 2
 
 /* ================================================================== */
 /*  Tiny helpers                                                      */
@@ -1559,6 +1563,14 @@ int pulseg__get_unique_blocks(
         }
         key_rows[n][0] = seq->block_definitions[n];
         key_rows[n][1] = (raw.adc >= 0 && tmp_adc_tab) ? tmp_adc_tab[raw.adc].id : -1;
+        {
+            const int t = pulseq_block_trigger(seq, &raw);
+            const int out = t >= 0 && t < seq->trigger_library_size &&
+                (int)seq->trigger_library[t][0] == PULSEQ_TRIGGER_TYPE_OUTPUT;
+            key_rows[n][2] = out ? (int)seq->trigger_library[t][1] : -1;
+            key_rows[n][3] = out ? (int)seq->trigger_library[t][2] : -1;
+            key_rows[n][4] = out ? (int)seq->trigger_library[t][3] : -1;
+        }
 
         tmp_blk_tab[n].rf_id = raw.rf;
         tmp_blk_tab[n].gx_id = raw.gx;
@@ -1649,7 +1661,10 @@ int pulseg__get_unique_blocks(
             if (key_rows[unique_defs[k]][1] >= 0)
                 continue;
             g = geometry_defs[geometry_of[k]];
-            if (g >= 0)
+            if (g >= 0 &&
+                memcmp(&key_rows[unique_defs[k]][BLOCK_KEY_TRIGGER],
+                       &key_rows[unique_defs[g]][BLOCK_KEY_TRIGGER],
+                       (BLOCK_KEY_COLS - BLOCK_KEY_TRIGGER) * sizeof(int)) == 0)
                 def_map[k] = g;
         }
 

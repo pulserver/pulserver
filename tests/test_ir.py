@@ -550,6 +550,37 @@ def test_a_block_carrying_only_a_digital_output_keeps_its_own_duration(
     assert 2000 in single
 
 
+def test_each_instance_plays_its_own_output_trigger_timing(tmp_path, scanner_build):
+    """An output trigger is placed once per block definition.
+
+    Blocks that differ only in their trigger's duration are therefore
+    different definitions, each played with its own timing.
+    """
+    widths = (500, 1000, 2000, 5000)
+    sequence = pp.Sequence(SYSTEM)
+    for width in widths * 2:
+        sequence.add_block(pp.make_trapezoid("x", amplitude=1000, flat_time=1e-3))
+        sequence.add_block(
+            pp.make_delay(6e-3),
+            pp.make_digital_output_pulse("ext1", delay=20e-6, duration=width * 1e-6),
+        )
+    seq = tmp_path / "trigger_widths.seq"
+    sequence.write(seq)
+    cache = convert(
+        seq, SYSTEM, vendor=VENDOR, label_column_map=LABELS, cache_ext=".cache"
+    )
+    printer = scanner_build(
+        tmp_path, "print_output_triggers.c", "print_output_triggers"
+    )
+    printed = subprocess.run(
+        [str(printer), str(cache), str(seq.stat().st_size)],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    assert printed.splitlines() == [f"trigger 20 {width}" for width in widths * 2]
+
+
 def _plan_lines(plan):
     lines = [
         f"wave_plan rc 1 mode {('none', 'resident', 'streamed').index(plan['mode'])} "
