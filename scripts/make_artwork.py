@@ -496,17 +496,19 @@ def context(theme: str) -> str:
                 60,
                 "Exam cache: noise covariance, coil maps, B0 and B1 maps",
             ),
-            _arrow(250, 200, 250, 277, "every field equal"),
-            _arrow(750, 200, 750, 277, "a field differs"),
-            _box("box", 40, 280, 420, 70, "Maps reused", "as measured"),
+            _arrow(250, 200, 250, 277, "same coils, whitening, frame"),
+            _arrow(750, 200, 750, 277, "otherwise"),
+            _box(
+                "box", 40, 280, 420, 70, "Maps reused, resliced", "onto the unit's grid"
+            ),
             _box(
                 "box",
                 540,
                 280,
                 420,
                 70,
-                "Refused, naming the field;",
-                "nothing resampled",
+                "Refused, naming",
+                "the reason",
             ),
         )
     )
@@ -514,9 +516,9 @@ def context(theme: str) -> str:
         "0 0 1000 370",
         "Calibration shared across an exam",
         "A noise series and a calibration series store their whitening and coil "
-        "maps in the exam cache; an imaging series reads them, and stored maps "
-        "are reused only when every recorded field equals the unit's, otherwise "
-        "refused with the differing field named, and never resampled",
+        "maps in the exam cache; an imaging series reads them, and the exam's maps "
+        "are reused with the same coils, whitening and frame of reference, "
+        "resliced onto the unit's grid, otherwise refused with the reason named",
         body,
         theme,
     )

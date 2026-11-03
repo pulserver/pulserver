@@ -86,7 +86,11 @@ nex: 2
 The offset is in mm along the logical readout, phase and slice axes, zero along
 an axis left out, and the rotation is given by the `fov_rotation_ij` lines of
 {doc}`../explanations/protocol`. `nex`, a whole number from 1, plays the main
-sequence, the last file of the chain, that many times. The chain is copied,
+sequence, the last file of the chain, that many times, numbering the averages
+in the `AVG` counter: blocks under the label `ONCE` 1 play before the first
+average only, under `ONCE` 2 after the last only
+({meth}`pypulseqpp.Sequence.expand_repeats`). A file that already writes `AVG`
+is refused with `nex` above 1, as is one with no block played every time. The chain is copied,
 then checked and converted as `generate` checks and converts a design.
 
 (scanner-limits)=
@@ -185,7 +189,7 @@ gradient heating from it.
 | `pns_<axis>_<field>` | SAFE nerve model, for the axes `x`, `y` and `z` and the fields `a1` to `a3`, `tau1` to `tau3` in ms, `stim_limit` in T/m/s and `g_scale` |
 | `pns_limit` | Largest PNS response allowed, as a fraction of the model's threshold; 1 when left out |
 | `forbidden_band_<n>` | One forbidden band: its physical axis (`x`, `y`, `z` or `all`), its lowest and highest frequency in Hz and, optionally, the readout gradient amplitude in mT/m above which it is locked, as an echo-spacing lockout table states it, separated by spaces. Without an amplitude, the band is held to 8 mT/m (`RESONANCE_FLOOR`) |
-| `vop_file` | `.mat` or `.npz` file of VOPs and the head SAR matrix of each body model, at a path the design calls can read; its `safety_factor` multiplies local SAR |
+| `vop_file` | `.mat` or `.npz` file of VOPs and the head SAR matrix of each body model, at a path the design calls can read; its `safety_factor` multiplies local SAR and its `global_safety_factor`, 1 when absent, global SAR |
 | `vop_head_limit`, `vop_local_limit` | The scanner's head and local SAR limits in W/kg in its current operating mode |
 | `vop_drive_per_hz` | Channel drive per Hz of RF amplitude, one value or one per channel separated by spaces; a scale common to every channel cancels. Equal drives when left out |
 | `vop_default_shim` | Magnitude and phase in rad of each channel's weight for a pulse played without an RF shim, separated by spaces; equal weights whose squares sum to 1 when left out |
