@@ -26,6 +26,10 @@ FRAMES = 2
 #: magnetization.
 REST = 3.0
 
+#: Shortest rest the tour plays after a visit, s: a pure delay played as a
+#: segment of its own must last this long for the sequencer to take it.
+SHORTEST_REST = 1e-3
+
 #: Definition that marks the generated subsequence in the cache.
 PRESCAN_ONLY = "PrescanOnly"
 
@@ -360,19 +364,21 @@ def _events(f: _File, span: _Span, zeroed: bool) -> list[list]:
 def _build(files, tour, calibration, system) -> pp.Sequence:
     sequence = pp.Sequence(system)
     if tour:
-        sequence.add_block(
-            pp.make_delay(system.block_duration_raster * 25),
-            pp.make_label(label="NOPRESCAN", type="SET", value=1),
-        )
-        for span, lasts in tour:
+        for visit, (span, lasts) in enumerate(tour):
             plays = _events(files[span.file], span, zeroed=True)
+            if visit == 0:
+                plays[0] = [
+                    *plays[0],
+                    pp.make_label(label="NOPRESCAN", type="SET", value=1),
+                ]
             for events in plays:
                 sequence.add_block(*events)
             played = float(files[span.file].durations[span.first : span.stop].sum())
             if lasts > played:
                 raster = system.block_duration_raster
+                rest = max(lasts - played, SHORTEST_REST)
                 sequence.add_block(
-                    pp.make_delay(math.ceil((lasts - played) / raster - 1e-6) * raster)
+                    pp.make_delay(math.ceil(rest / raster - 1e-6) * raster)
                 )
     if calibration is not None:
         plays = _events(files[calibration.file], calibration, zeroed=True)

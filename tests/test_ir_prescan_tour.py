@@ -85,6 +85,25 @@ def test_a_ptx_sequence_that_repeats_alike_prescans_after_a_tour_of_its_channels
     )
 
 
+def test_the_tour_opens_on_an_rf_block_and_rests_no_shorter_than_the_sequencer_takes(
+    tmp_path,
+):
+    _, generated = _converted(tmp_path, _alike())
+    blocks = [generated.get_block(i) for i in range(1, generated.num_blocks + 1)]
+    waits = [
+        b.block_duration
+        for b in blocks
+        if b.rf is None
+        and b.adc is None
+        and b.gx is None
+        and b.gy is None
+        and b.gz is None
+    ]
+
+    assert blocks[0].rf is not None
+    assert min(waits) >= ir._calibration.SHORTEST_REST - 1e-9
+
+
 def test_the_tour_drives_each_channel_where_the_scan_drives_it_hardest(tmp_path):
     adc = pp.make_adc(64, duration=2e-3, system=SYSTEM)
     seq = pp.Sequence(SYSTEM)
