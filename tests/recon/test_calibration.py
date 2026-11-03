@@ -409,28 +409,6 @@ def test_exam_maps_a_later_series_reaches_outside_of_are_refused(tmp_path, torch
         maps_for(tmp_path, 32, 220.0)
 
 
-def test_the_exam_is_consulted_first_where_a_series_prefers_it(tmp_path, torch):
-    calibrate_exam(tmp_path, MATRIX)
-    estimate = Estimate()
-    plugin = stream_plugin(maps_of(estimate, prefer_exam=True))
-
-    play(
-        plugin,
-        calibration_header(COILS, MATRIX, measurement="8"),
-        readouts(
-            coil_phantom(COILS, MATRIX, seed=1)[2],
-            CALIBRATION,
-            last=LAST,
-            geometry=AXIAL,
-        ),
-        exam=recon.ExamCache("exam-1", tmp_path),
-    )
-
-    assert estimate.calls == [], "the series estimated maps of its own"
-    (maps,) = plugin.results
-    np.testing.assert_allclose(maps.numpy(), coil_phantom(COILS, MATRIX)[1], atol=1e-6)
-
-
 def test_exam_maps_at_another_table_position_are_refused(tmp_path, torch):
     calibrate_exam(tmp_path, MATRIX)
 

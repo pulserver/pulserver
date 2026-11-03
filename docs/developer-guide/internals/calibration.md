@@ -114,9 +114,8 @@ these sources, the location being the unit's `slice` counter:
 4. No source: {class}`~pulserver.recon.MissingCalibration` is raised, or
    `None` returned for `required=False`.
 
-With `prefer_exam=True` the exam is consulted first, so a series with
-calibration readouts of its own takes the maps of a calibration series. The
-default leaves the exam as the last source.
+A sequence with calibration readouts of its own always uses them; a sequence
+designed without them takes the maps of the exam's calibration series.
 
 The slice is the location because a calibration unit and the imaging units that
 use its maps may be in different encoding spaces. A unit that needs maps before

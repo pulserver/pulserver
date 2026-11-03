@@ -149,7 +149,6 @@ def coil_maps(
     *,
     estimate: Any,
     required: bool = True,
-    prefer_exam: bool = False,
 ) -> Any:
     """Return the coil sensitivities of a unit from the first source that has them.
 
@@ -160,9 +159,6 @@ def coil_maps(
        counter, replacing the maps stored there.
     2. ``context.coil_maps`` for the unit's slice.
     3. The exam's ``COIL_SENSITIVITIES``, as a calibration series stored them.
-
-    With ``prefer_exam`` the exam is consulted first, so a calibration series
-    serves a unit that holds calibration readouts of its own.
 
     Maps of the stream serve only where
     :meth:`CoilSensitivities.incompatibility` finds nothing. Maps of the exam
@@ -191,8 +187,6 @@ def coil_maps(
         same grid.
     required : bool, default=True
         Return ``None``, rather than raise, when no source has usable maps.
-    prefer_exam : bool, default=False
-        Consult the exam's maps before the unit's calibration k-space.
 
     Returns
     -------
@@ -215,11 +209,6 @@ def coil_maps(
     found: CoilSensitivities | None = None
     rejected: list[str] = []
 
-    if prefer_exam:
-        maps = _fitted(context.exam.get(COIL_SENSITIVITIES), data, context, rejected)
-        if maps is not None:
-            return torch.tensor(maps)
-
     if data.ref is None:
         rejected.append("this unit: it holds no calibration readouts")
     else:
@@ -233,10 +222,9 @@ def coil_maps(
         )
     if found is not None:
         return torch.tensor(found.maps)
-    if not prefer_exam:
-        maps = _fitted(context.exam.get(COIL_SENSITIVITIES), data, context, rejected)
-        if maps is not None:
-            return torch.tensor(maps)
+    maps = _fitted(context.exam.get(COIL_SENSITIVITIES), data, context, rejected)
+    if maps is not None:
+        return torch.tensor(maps)
 
     if not required:
         return None
