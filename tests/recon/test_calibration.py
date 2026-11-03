@@ -400,6 +400,20 @@ def test_exam_maps_are_resliced_onto_a_later_series_shifted_along_the_readout(
     assert relative_difference(maps, expected) < 1e-5
 
 
+def test_an_autocalibrated_series_leaves_no_maps_to_the_exam_unless_its_plugin_stores_them(
+    tmp_path, torch
+):
+    play(
+        stream_plugin(maps_of(PhantomMaps())),
+        calibration_header(COILS, 16, measurement="7"),
+        readouts(coil_phantom(COILS, 16)[2], CALIBRATION, last=LAST, geometry=AXIAL),
+        exam=recon.ExamCache("exam-1", tmp_path),
+    )
+
+    with pytest.raises(recon.MissingCalibration, match="this exam: no maps stored"):
+        maps_for(tmp_path, 16, 220.0)
+
+
 def test_exam_maps_a_later_series_reaches_outside_of_are_refused(tmp_path, torch):
     calibrate_exam(tmp_path, 16, fov=110.0)
 

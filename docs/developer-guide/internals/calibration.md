@@ -115,7 +115,10 @@ these sources, the location being the unit's `slice` counter:
    `None` returned for `required=False`.
 
 A sequence with calibration readouts of its own always uses them; a sequence
-designed without them takes the maps of the exam's calibration series.
+designed without them takes the maps of the exam's calibration series. Maps
+reach the exam only from a reconstruction plugin that assigns
+`context.coil_sensitivities`; maps a series estimates from its own calibration
+readouts stay in that series.
 
 The slice is the location because a calibration unit and the imaging units that
 use its maps may be in different encoding spaces. A unit that needs maps before
