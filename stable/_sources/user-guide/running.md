@@ -254,8 +254,9 @@ pulserver design serve --plugins DIR --socket PATH
 
 A call answered in its own process spends most of its time importing the
 design engine. A warm server imports it once, designs, checks and converts one
-sequence of its own, designs one refocusing train with blochsim, which imports
-PyTorch, and imports every plugin of its `--plugins` directories.
+sequence of its own, imports blochsim and PyTorch without designing a
+refocusing train with them, since a forked child cannot differentiate after its
+parent has, and imports every plugin of its `--plugins` directories.
 It answers each call forwarded to its socket in a child process forked from
 it, so nothing a call does outlives the call, and a plugin that ends its
 process fails only its own call, with
@@ -279,13 +280,13 @@ scan beside the rest of that scan's log.
 ## Reconstruction proxy
 
 ```bash
-pulserver proxy --store DIR --port N --plugins DIR [--host ADDR] [--intake-port N] [--queue DIR] [--exams DIR] [--slots N] [--gpu-slots 1] [--spares 1] [--recon-timeout S] [--dicom] [--dicom-receiver HOST:PORT --dicom-receiver-title AE [--dicom-title AE]] [--save-data DIR] [--idle-timeout S] [--logfile FILE] [--log-level LEVEL]
-pulserver proxy --store DIR --port N --forward HOST:PORT [--forward-config NAME] [--host ADDR] [--intake-port N] [--recon-timeout S] [--dicom] [--dicom-receiver HOST:PORT --dicom-receiver-title AE [--dicom-title AE]] [--save-data DIR] [--idle-timeout S] [--logfile FILE] [--log-level LEVEL]
+pulserver proxy --store DIR --port N --plugins DIR [--host ADDR] [--intake-port N] [--queue DIR] [--exams DIR] [--slots N] [--gpu-slots 1] [--spares 1] [--recon-timeout S] [--dicom] [--dicom-receiver HOST:PORT --dicom-receiver-title AE [--dicom-title AE] [--viewer-port N]] [--save-data DIR] [--idle-timeout S] [--logfile FILE] [--log-level LEVEL]
+pulserver proxy --store DIR --port N --forward HOST:PORT [--forward-config NAME] [--host ADDR] [--intake-port N] [--recon-timeout S] [--dicom] [--dicom-receiver HOST:PORT --dicom-receiver-title AE [--dicom-title AE] [--viewer-port N]] [--save-data DIR] [--idle-timeout S] [--logfile FILE] [--log-level LEVEL]
 ```
 
 | Option | Meaning |
 | --- | --- |
-| `--store` | The design store the proxy reads: the one the design calls write, or the one the intake writes. It also holds each scan's pose file, `<store>/<scan>/motion.buf`, for a scan corrected for motion |
+| `--store` | The design store the proxy reads: the one the design calls write, or the one the intake writes. It also holds each scan's pose file, `<store>/<scan>/motion.buf`, for a scan corrected for motion, and beside it the poses published, `motion.csv` (pitch, roll and yaw about x, y and z in degrees, translation in mm) and their plot `motion.png` |
 | `--port` | TCP port the scanner's reconstruction client connects to |
 | `--host` | Address to listen on; the loopback interface when unset, `0.0.0.0` for every interface |
 | `--intake-port` | TCP port of the design intake, on the `--host` address; no intake when unset |
@@ -301,6 +302,7 @@ pulserver proxy --store DIR --port N --forward HOST:PORT [--forward-config NAME]
 | `--dicom` | Convert each image to DICOM before it is relayed, whatever reconstructed it; for a client that reads DICOM only |
 | `--dicom-receiver` | `HOST:PORT` of a DICOM storage service the images of a series whose client has gone are stored to by C-STORE; held for the client's return when unset. Needs `pynetdicom` (`pulserver[dicom]`) |
 | `--dicom-receiver-title` | Application entity title of the `--dicom-receiver`; required with it |
+| `--viewer-port` | Port on the `--dicom-receiver`'s host of a viewer each stored image is also sent to, as an `AVR1` message (four bytes `AVR1`, three -1 and the file's length as big-endian 32-bit integers, then the DICOM file), so a series whose client has gone is still shown; none when unset |
 | `--dicom-title` | Application entity title the proxy calls the `--dicom-receiver` as; `PULSERVER` when unset |
 | `--save-data` | Directory each series is kept in, enriched; kept nowhere when unset |
 | `--idle-timeout` | Seconds without a client after which the proxy closes, never while a series is reconstructed. Unlimited when unset |
@@ -320,9 +322,10 @@ a bare plugin name or the path of its file, or as either under
 `parameters.config`; the design names none. A series whose config names none
 is refused unless the proxy forwards with `--forward-config`.
 
-A series that finds every slot busy is written to the queue directory as it
-arrives and reconstructed once a slot frees; the client stays connected
-meanwhile. What goes back to a client whose connection has dropped is kept for
+A series that finds every slot busy, or the host's available memory short of
+one reconstruction's budget while another series runs, is written to the queue
+directory as it arrives and reconstructed once a slot and the memory are free;
+the client stays connected meanwhile. What goes back to a client whose connection has dropped is kept for
 a day: a client that opens a series with the same `measurementID` is sent it in
 place of a new reconstruction. With `--dicom-receiver`, the series' DICOM
 images are stored to the receiver instead once its reconstruction ends, all of
@@ -375,13 +378,20 @@ ends the relay, and the client receives a `pulserver:` text naming the type.
 ### Sequence description
 
 Whether forwarded or reconstructed by a worker, the series carries, after its
-header and before its first acquisition, one `TEXT` message (5) describing the
-sequence chain for a signal simulation: a JSON object under the key
-`pulserver_sequence_description`, holding per file of the chain one row per
-block, RF at the pulse centre and ADC at the sample nearest the k-space centre,
-and the pulses the RF rows name. It is meant for a reconstruction that
-simulates the signal, which chooses the signal model the rows drive, and is not
-relayed back to the client.
+header and before its first acquisition, ISMRMRD waveforms describing the
+sequence chain for a signal simulation, so that every MRD writer keeps them
+with the series: per file of the chain a header (`waveform_id` 1024) and an
+event list (1025), and one waveform per RF definition (1026), in the word
+layout {func}`~pulserver.proxy._seqdesc.waveforms` documents. The event list
+holds one row per block of one repetition, RF at the pulse centre and ADC at
+the sample nearest the k-space centre. The repetition is the one whose readout
+passes nearest the k-space centre, navigators aside, as
+`pypulseqpp.Sequence.repetition` divides the file; a file that does not repeat
+is described whole. An RF definition states the bandwidth its slice is
+selected over, which with the event's slice-select gradient gives the
+thickness. The description is meant for a reconstruction that simulates the
+signal, which chooses the signal model the rows drive, and is not relayed back
+to the client.
 
 ### Design intake
 

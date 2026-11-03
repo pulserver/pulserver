@@ -44,7 +44,7 @@
   <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../../../_static/documentation_options.js?v=f4c53e65"></script>
+    <script src="../../../_static/documentation_options.js?v=4f39bc78"></script>
     <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -55,7 +55,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.10';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.11';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -67,7 +67,7 @@
     <link rel="search" title="Search" href="../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.4.10" />
+  <meta name="docsearch:version" content="v0.4.11" />
   
     
     <script src="../../../_static/searchtools.js"></script>
@@ -491,10 +491,12 @@
 <span class="k">class</span><span class="w"> </span><span class="nc">CoilSensitivities</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Receive coil sensitivity maps, with what they were estimated from.</span>
 
-<span class="sd">    Maps are reused only for data with the coils, prewhitening, compression</span>
-<span class="sd">    and geometry of the calibration data they were estimated from;</span>
-<span class="sd">    :meth:`incompatibility` states the comparison. Nothing is resampled,</span>
-<span class="sd">    regridded or resliced to make maps fit.</span>
+<span class="sd">    Maps stored in the stream serve only data with the coils, prewhitening,</span>
+<span class="sd">    compression and geometry of the calibration data they were estimated</span>
+<span class="sd">    from; :meth:`incompatibility` states the comparison. Maps stored in the</span>
+<span class="sd">    exam also serve data at another position, orientation or grid, resliced</span>
+<span class="sd">    onto it, and data compressed by a basis of its own when they were</span>
+<span class="sd">    estimated from uncompressed channels; :func:`coil_maps` states when.</span>
 
 <span class="sd">    Attributes</span>
 <span class="sd">    ----------</span>
@@ -518,9 +520,10 @@
 <span class="sd">        ``table_position``, ``position`` in mm, and ``read_dir``,</span>
 <span class="sd">        ``phase_dir`` and ``slice_dir`` of the calibration k-space's reference</span>
 <span class="sd">        acquisition; ``fov`` in metres and ``matrix`` of the reconstruction</span>
-<span class="sd">        space, ordered as ``(z,) y, x``; and ``grid``, the shape of the voxel</span>
-<span class="sd">        axes of ``maps``. A component the header or acquisition does not state</span>
-<span class="sd">        is ``None``.</span>
+<span class="sd">        space, ordered as ``(z,) y, x``; ``grid``, the shape of the voxel</span>
+<span class="sd">        axes of ``maps``; and ``extent``, the size of that grid in mm as</span>
+<span class="sd">        ``(z, y, x)``, ``z`` the slice thickness for a plane. A component the</span>
+<span class="sd">        header or acquisition does not state is ``None``.</span>
 <span class="sd">    method : str</span>
 <span class="sd">        The estimate that produced the maps.</span>
 <span class="sd">    source : str or None</span>
@@ -591,12 +594,19 @@
 <span class="sd">       from it and stored in ``context.coil_maps`` under the unit's slice</span>
 <span class="sd">       counter, replacing the maps stored there.</span>
 <span class="sd">    2. ``context.coil_maps`` for the unit's slice.</span>
-<span class="sd">    3. The exam's ``COIL_SENSITIVITIES``.</span>
+<span class="sd">    3. The exam's ``COIL_SENSITIVITIES``, as a calibration series stored them.</span>
 
-<span class="sd">    Stored maps serve only where :meth:`CoilSensitivities.incompatibility`</span>
-<span class="sd">    finds nothing. The location is the slice counter, not the encoding space,</span>
-<span class="sd">    so maps estimated from a calibration unit in an encoding space of its own</span>
-<span class="sd">    serve the imaging units of its slice.</span>
+<span class="sd">    Maps of the stream serve only where</span>
+<span class="sd">    :meth:`CoilSensitivities.incompatibility` finds nothing. Maps of the exam</span>
+<span class="sd">    serve a unit with the same coils, prewhitening, frame of reference and</span>
+<span class="sd">    table position; on another grid, position or orientation they are</span>
+<span class="sd">    resliced onto the unit's grid from the two geometries,</span>
+<span class="sd">    :func:`bartorch.tools.reslice`, and refused where the unit's grid reaches</span>
+<span class="sd">    outside theirs. Maps estimated from uncompressed channels are projected</span>
+<span class="sd">    onto the unit's compression basis, as its k-space was. The location is the</span>
+<span class="sd">    slice counter, not the encoding space, so maps estimated from a</span>
+<span class="sd">    calibration unit in an encoding space of its own serve the imaging units</span>
+<span class="sd">    of its slice.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
@@ -646,18 +656,18 @@
         <span class="n">found</span> <span class="o">=</span> <span class="n">_usable</span><span class="p">(</span>
             <span class="n">stored</span><span class="p">,</span> <span class="sa">f</span><span class="s2">"this series, slice </span><span class="si">{</span><span class="n">location</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">context</span><span class="p">,</span> <span class="n">rejected</span>
         <span class="p">)</span>
-    <span class="k">if</span> <span class="n">found</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">stored</span> <span class="o">=</span> <span class="n">context</span><span class="o">.</span><span class="n">exam</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">COIL_SENSITIVITIES</span><span class="p">)</span>
-        <span class="n">found</span> <span class="o">=</span> <span class="n">_usable</span><span class="p">(</span><span class="n">stored</span><span class="p">,</span> <span class="s2">"this exam"</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">context</span><span class="p">,</span> <span class="n">rejected</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">found</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">found</span><span class="o">.</span><span class="n">maps</span><span class="p">)</span>
+    <span class="n">maps</span> <span class="o">=</span> <span class="n">_fitted</span><span class="p">(</span><span class="n">context</span><span class="o">.</span><span class="n">exam</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">COIL_SENSITIVITIES</span><span class="p">),</span> <span class="n">data</span><span class="p">,</span> <span class="n">context</span><span class="p">,</span> <span class="n">rejected</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">maps</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">maps</span><span class="p">)</span>
 
-    <span class="k">if</span> <span class="n">found</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="n">required</span><span class="p">:</span>
-            <span class="k">return</span> <span class="kc">None</span>
-        <span class="k">raise</span> <span class="n">MissingCalibration</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">"no coil sensitivities for slice </span><span class="si">{</span><span class="n">location</span><span class="si">}</span><span class="s2">; sources consulted:</span><span class="se">\n</span><span class="s2">  "</span>
-            <span class="o">+</span> <span class="s2">"</span><span class="se">\n</span><span class="s2">  "</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">rejected</span><span class="p">)</span>
-        <span class="p">)</span>
-    <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">found</span><span class="o">.</span><span class="n">maps</span><span class="p">)</span></div>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">required</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="k">raise</span> <span class="n">MissingCalibration</span><span class="p">(</span>
+        <span class="sa">f</span><span class="s2">"no coil sensitivities for slice </span><span class="si">{</span><span class="n">location</span><span class="si">}</span><span class="s2">; sources consulted:</span><span class="se">\n</span><span class="s2">  "</span>
+        <span class="o">+</span> <span class="s2">"</span><span class="se">\n</span><span class="s2">  "</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">rejected</span><span class="p">)</span>
+    <span class="p">)</span></div>
 
 
 
@@ -788,7 +798,31 @@
         <span class="s2">"fov"</span><span class="p">:</span> <span class="n">buffer</span><span class="o">.</span><span class="n">space</span><span class="o">.</span><span class="n">recon_fov</span><span class="p">,</span>
         <span class="s2">"matrix"</span><span class="p">:</span> <span class="n">buffer</span><span class="o">.</span><span class="n">space</span><span class="o">.</span><span class="n">recon_matrix</span><span class="p">,</span>
         <span class="s2">"grid"</span><span class="p">:</span> <span class="n">_grid</span><span class="p">(</span><span class="n">buffer</span><span class="p">),</span>
+        <span class="s2">"extent"</span><span class="p">:</span> <span class="n">_extent</span><span class="p">(</span><span class="n">header</span><span class="p">,</span> <span class="n">buffer</span><span class="p">),</span>
     <span class="p">}</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_extent</span><span class="p">(</span><span class="n">header</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">buffer</span><span class="p">:</span> <span class="n">ReconBuffer</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the size in mm of the grid of :func:`_grid` as ``(z, y, x)``, from the encoded space.</span>
+
+<span class="sd">    ``z`` is the slice thickness for a grid of one plane. ``None`` when the</span>
+<span class="sd">    header states no encoded field of view.</span>
+<span class="sd">    """</span>
+    <span class="n">encodings</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">header</span><span class="p">,</span> <span class="s2">"encoding"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">or</span> <span class="p">()</span>
+    <span class="k">if</span> <span class="n">buffer</span><span class="o">.</span><span class="n">space</span><span class="o">.</span><span class="n">index</span> <span class="o">&gt;=</span> <span class="nb">len</span><span class="p">(</span><span class="n">encodings</span><span class="p">):</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="n">encoded</span> <span class="o">=</span> <span class="n">encodings</span><span class="p">[</span><span class="n">buffer</span><span class="o">.</span><span class="n">space</span><span class="o">.</span><span class="n">index</span><span class="p">]</span><span class="o">.</span><span class="n">encodedSpace</span>
+    <span class="n">fov</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">encoded</span><span class="p">,</span> <span class="s2">"fieldOfView_mm"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">fov</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="n">matrix</span> <span class="o">=</span> <span class="n">encoded</span><span class="o">.</span><span class="n">matrixSize</span>
+    <span class="n">shape</span> <span class="o">=</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="o">*</span><span class="n">_grid</span><span class="p">(</span><span class="n">buffer</span><span class="p">))[</span><span class="o">-</span><span class="mi">3</span><span class="p">:]</span>
+    <span class="n">counts</span> <span class="o">=</span> <span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">matrix</span><span class="o">.</span><span class="n">z</span><span class="p">),</span> <span class="nb">int</span><span class="p">(</span><span class="n">matrix</span><span class="o">.</span><span class="n">y</span><span class="p">),</span> <span class="nb">int</span><span class="p">(</span><span class="n">matrix</span><span class="o">.</span><span class="n">x</span><span class="p">))</span>
+    <span class="n">sizes</span> <span class="o">=</span> <span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">fov</span><span class="o">.</span><span class="n">z</span><span class="p">),</span> <span class="nb">float</span><span class="p">(</span><span class="n">fov</span><span class="o">.</span><span class="n">y</span><span class="p">),</span> <span class="nb">float</span><span class="p">(</span><span class="n">fov</span><span class="o">.</span><span class="n">x</span><span class="p">))</span>
+    <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span>
+        <span class="n">size</span> <span class="k">if</span> <span class="n">n</span> <span class="o">==</span> <span class="mi">1</span> <span class="k">else</span> <span class="n">size</span> <span class="o">*</span> <span class="n">n</span> <span class="o">/</span> <span class="nb">max</span><span class="p">(</span><span class="n">count</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">size</span><span class="p">,</span> <span class="n">n</span><span class="p">,</span> <span class="n">count</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">sizes</span><span class="p">,</span> <span class="n">shape</span><span class="p">,</span> <span class="n">counts</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="p">)</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_method</span><span class="p">(</span><span class="n">estimate</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
@@ -873,6 +907,122 @@
     <span class="k">return</span> <span class="kc">None</span>
 
 
+<span class="c1">#: Components of :attr:`CoilSensitivities.geometry` that place the maps on a</span>
+<span class="c1">#: grid; maps of the exam that differ only in these are resliced.</span>
+<span class="n">_PLACEMENT</span> <span class="o">=</span> <span class="p">(</span><span class="s2">"position"</span><span class="p">,</span> <span class="s2">"read_dir"</span><span class="p">,</span> <span class="s2">"phase_dir"</span><span class="p">,</span> <span class="s2">"slice_dir"</span><span class="p">,</span> <span class="s2">"grid"</span><span class="p">,</span> <span class="s2">"extent"</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_fitted</span><span class="p">(</span>
+    <span class="n">stored</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="n">data</span><span class="p">:</span> <span class="n">ReconData</span><span class="p">,</span>
+    <span class="n">context</span><span class="p">:</span> <span class="n">ReconContext</span><span class="p">,</span>
+    <span class="n">rejected</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the exam's maps on the grid and channels of ``data``, else record why they do not serve it."""</span>
+    <span class="n">where</span> <span class="o">=</span> <span class="s2">"this exam"</span>
+    <span class="k">if</span> <span class="n">stored</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">rejected</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">where</span><span class="si">}</span><span class="s2">: no maps stored"</span><span class="p">)</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">stored</span><span class="p">,</span> <span class="n">CoilSensitivities</span><span class="p">):</span>
+        <span class="n">rejected</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">where</span><span class="si">}</span><span class="s2">: holds a </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">stored</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">, not CoilSensitivities"</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="n">origin</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="sa">f</span><span class="s2">"measurement </span><span class="si">{</span><span class="n">stored</span><span class="o">.</span><span class="n">source</span><span class="si">}</span><span class="s2">"</span> <span class="k">if</span> <span class="n">stored</span><span class="o">.</span><span class="n">source</span> <span class="k">else</span> <span class="s2">"an unnamed measurement"</span>
+    <span class="p">)</span>
+    <span class="n">buffer</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">data</span> <span class="k">if</span> <span class="n">data</span><span class="o">.</span><span class="n">data</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">data</span><span class="o">.</span><span class="n">ref</span>
+    <span class="k">if</span> <span class="n">buffer</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">rejected</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">where</span><span class="si">}</span><span class="s2">: the unit holds no k-space, so its geometry is not known"</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="n">wanted</span> <span class="o">=</span> <span class="n">_geometry</span><span class="p">(</span><span class="n">context</span><span class="o">.</span><span class="n">header</span><span class="p">,</span> <span class="n">buffer</span><span class="p">)</span>
+    <span class="n">basis</span> <span class="o">=</span> <span class="n">context</span><span class="o">.</span><span class="n">coil_compression</span>
+    <span class="n">project</span> <span class="o">=</span> <span class="n">stored</span><span class="o">.</span><span class="n">basis</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">basis</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+    <span class="n">fields</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="p">(</span><span class="s2">"coils"</span><span class="p">,</span> <span class="n">stored</span><span class="o">.</span><span class="n">coils</span><span class="p">,</span> <span class="n">coil_labels</span><span class="p">(</span><span class="n">context</span><span class="o">.</span><span class="n">header</span><span class="p">)),</span>
+        <span class="p">(</span><span class="s2">"noise"</span><span class="p">,</span> <span class="n">stored</span><span class="o">.</span><span class="n">noise</span><span class="p">,</span> <span class="n">_id</span><span class="p">(</span><span class="n">context</span><span class="o">.</span><span class="n">noise</span><span class="p">)),</span>
+        <span class="o">*</span><span class="p">(()</span> <span class="k">if</span> <span class="n">project</span> <span class="k">else</span> <span class="p">((</span><span class="s2">"basis"</span><span class="p">,</span> <span class="n">stored</span><span class="o">.</span><span class="n">basis</span><span class="p">,</span> <span class="n">_id</span><span class="p">(</span><span class="n">basis</span><span class="p">)),)),</span>
+        <span class="o">*</span><span class="p">(</span>
+            <span class="p">(</span><span class="sa">f</span><span class="s2">"geometry.</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span> <span class="n">stored</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">),</span> <span class="n">wanted</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">))</span>
+            <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"frame_of_reference"</span><span class="p">,</span> <span class="s2">"table_position"</span><span class="p">)</span>
+        <span class="p">),</span>
+    <span class="p">)</span>
+    <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">value</span><span class="p">,</span> <span class="n">requested</span> <span class="ow">in</span> <span class="n">fields</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">value</span> <span class="o">!=</span> <span class="n">requested</span><span class="p">:</span>
+            <span class="n">rejected</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">where</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> differs: stored </span><span class="si">{</span><span class="n">value</span><span class="si">!r}</span><span class="s2">, this unit "</span>
+                <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">requested</span><span class="si">!r}</span><span class="s2"> (estimated by </span><span class="si">{</span><span class="n">stored</span><span class="o">.</span><span class="n">method</span><span class="si">}</span><span class="s2"> from </span><span class="si">{</span><span class="n">origin</span><span class="si">}</span><span class="s2">)"</span>
+            <span class="p">)</span>
+            <span class="k">return</span> <span class="kc">None</span>
+
+    <span class="n">maps</span> <span class="o">=</span> <span class="n">stored</span><span class="o">.</span><span class="n">maps</span>
+    <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">stored</span><span class="o">.</span><span class="n">geometry</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">)</span> <span class="o">!=</span> <span class="n">wanted</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">)</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">_PLACEMENT</span><span class="p">):</span>
+        <span class="n">source</span><span class="p">,</span> <span class="n">target</span> <span class="o">=</span> <span class="n">_placement</span><span class="p">(</span><span class="n">stored</span><span class="o">.</span><span class="n">geometry</span><span class="p">),</span> <span class="n">_placement</span><span class="p">(</span><span class="n">wanted</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">source</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">target</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">rejected</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">where</span><span class="si">}</span><span class="s2">: the geometry of the maps or of this unit is not fully "</span>
+                <span class="sa">f</span><span class="s2">"stated, so the maps cannot be resliced (estimated by "</span>
+                <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">stored</span><span class="o">.</span><span class="n">method</span><span class="si">}</span><span class="s2"> from </span><span class="si">{</span><span class="n">origin</span><span class="si">}</span><span class="s2">)"</span>
+            <span class="p">)</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">bartorch.tools</span><span class="w"> </span><span class="kn">import</span> <span class="n">reslice</span>
+
+        <span class="n">planes</span> <span class="o">=</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="o">*</span><span class="n">stored</span><span class="o">.</span><span class="n">geometry</span><span class="p">[</span><span class="s2">"grid"</span><span class="p">])[</span><span class="o">-</span><span class="mi">3</span><span class="p">:]</span>
+        <span class="n">maps</span> <span class="o">=</span> <span class="n">reslice</span><span class="p">(</span>
+            <span class="n">maps</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">maps</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="o">*</span><span class="n">planes</span><span class="p">),</span> <span class="n">source</span><span class="p">,</span> <span class="n">target</span><span class="p">,</span> <span class="n">fill</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="s2">"nan"</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="n">maps</span> <span class="o">=</span> <span class="n">maps</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">maps</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="o">*</span><span class="n">wanted</span><span class="p">[</span><span class="s2">"grid"</span><span class="p">])</span>
+        <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">maps</span><span class="p">)</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+            <span class="n">rejected</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">where</span><span class="si">}</span><span class="s2">: this unit's grid reaches outside the calibration "</span>
+                <span class="sa">f</span><span class="s2">"volume (estimated by </span><span class="si">{</span><span class="n">stored</span><span class="o">.</span><span class="n">method</span><span class="si">}</span><span class="s2"> from </span><span class="si">{</span><span class="n">origin</span><span class="si">}</span><span class="s2">)"</span>
+            <span class="p">)</span>
+            <span class="k">return</span> <span class="kc">None</span>
+    <span class="k">if</span> <span class="n">project</span><span class="p">:</span>
+        <span class="n">maps</span> <span class="o">=</span> <span class="n">_projected</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">maps</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">complex64</span><span class="p">),</span> <span class="n">basis</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">maps</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">complex64</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_placement</span><span class="p">(</span><span class="n">geometry</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the grid of a :attr:`CoilSensitivities.geometry` as :func:`bartorch.tools.reslice` reads it.</span>
+
+<span class="sd">    ``None`` when a component it needs is not stated.</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">geometry</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">_PLACEMENT</span><span class="p">):</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">geometry</span><span class="p">[</span><span class="n">name</span><span class="p">])</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">_PLACEMENT</span><span class="p">[</span><span class="mi">1</span><span class="p">:</span><span class="mi">4</span><span class="p">]):</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="n">shape</span> <span class="o">=</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="o">*</span><span class="n">geometry</span><span class="p">[</span><span class="s2">"grid"</span><span class="p">])[</span><span class="o">-</span><span class="mi">3</span><span class="p">:]</span>
+    <span class="n">extent</span> <span class="o">=</span> <span class="n">geometry</span><span class="p">[</span><span class="s2">"extent"</span><span class="p">]</span>
+    <span class="k">return</span> <span class="p">{</span>
+        <span class="o">**</span><span class="p">{</span><span class="n">name</span><span class="p">:</span> <span class="n">geometry</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">_PLACEMENT</span><span class="p">[:</span><span class="mi">4</span><span class="p">]},</span>
+        <span class="s2">"field_of_view"</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">extent</span><span class="p">[::</span><span class="o">-</span><span class="mi">1</span><span class="p">]),</span>
+        <span class="s2">"matrix_size"</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">n</span><span class="p">)</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">shape</span><span class="p">[::</span><span class="o">-</span><span class="mi">1</span><span class="p">]),</span>
+    <span class="p">}</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_projected</span><span class="p">(</span><span class="n">maps</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">basis</span><span class="p">:</span> <span class="n">Basis</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return maps of the physical channels on the virtual channels of ``basis``, as k-space is projected."""</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">bartorch</span><span class="w"> </span><span class="kn">import</span> <span class="n">tools</span>
+
+    <span class="n">coils</span> <span class="o">=</span> <span class="n">maps</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">coils</span> <span class="o">!=</span> <span class="n">basis</span><span class="o">.</span><span class="n">matrix</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">coils</span><span class="si">}</span><span class="s2"> channels cannot be projected onto a basis of "</span>
+            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">basis</span><span class="o">.</span><span class="n">matrix</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">}</span><span class="s2">"</span>
+        <span class="p">)</span>
+    <span class="n">virtual</span> <span class="o">=</span> <span class="n">tools</span><span class="o">.</span><span class="n">ccapply</span><span class="p">(</span>
+        <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">maps</span><span class="p">))</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">coils</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+        <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">basis</span><span class="o">.</span><span class="n">matrix</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">coils</span><span class="p">,</span> <span class="n">coils</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+        <span class="n">p</span><span class="o">=</span><span class="n">basis</span><span class="o">.</span><span class="n">n_virtual</span><span class="p">,</span>
+        <span class="n">S</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">virtual</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">basis</span><span class="o">.</span><span class="n">n_virtual</span><span class="p">,</span> <span class="o">*</span><span class="n">maps</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">:])</span>
+
+
 <span class="k">def</span><span class="w"> </span><span class="nf">_basis</span><span class="p">(</span><span class="n">buffer</span><span class="p">:</span> <span class="n">ReconBuffer</span><span class="p">,</span> <span class="n">n_virtual</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Basis</span><span class="p">:</span>
     <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
     <span class="kn">from</span><span class="w"> </span><span class="nn">bartorch</span><span class="w"> </span><span class="kn">import</span> <span class="n">tools</span>
@@ -895,25 +1045,9 @@
 <span class="k">def</span><span class="w"> </span><span class="nf">_compressed</span><span class="p">(</span><span class="n">buffer</span><span class="p">:</span> <span class="n">ReconBuffer</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">basis</span><span class="p">:</span> <span class="n">Basis</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ReconBuffer</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
     <span class="k">if</span> <span class="n">buffer</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">return</span> <span class="kc">None</span>
-    <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
-    <span class="kn">from</span><span class="w"> </span><span class="nn">bartorch</span><span class="w"> </span><span class="kn">import</span> <span class="n">tools</span>
-
-    <span class="n">coils</span> <span class="o">=</span> <span class="n">buffer</span><span class="o">.</span><span class="n">kspace</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
-    <span class="k">if</span> <span class="n">coils</span> <span class="o">!=</span> <span class="n">basis</span><span class="o">.</span><span class="n">matrix</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">"a unit of </span><span class="si">{</span><span class="n">coils</span><span class="si">}</span><span class="s2"> channels cannot be projected onto a basis of "</span>
-            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">basis</span><span class="o">.</span><span class="n">matrix</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">}</span><span class="s2">"</span>
-        <span class="p">)</span>
-    <span class="n">kspace</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">buffer</span><span class="o">.</span><span class="n">kspace</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">complex64</span><span class="p">)</span>
-    <span class="n">virtual</span> <span class="o">=</span> <span class="n">tools</span><span class="o">.</span><span class="n">ccapply</span><span class="p">(</span>
-        <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">kspace</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">coils</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
-        <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">basis</span><span class="o">.</span><span class="n">matrix</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">coils</span><span class="p">,</span> <span class="n">coils</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
-        <span class="n">p</span><span class="o">=</span><span class="n">basis</span><span class="o">.</span><span class="n">n_virtual</span><span class="p">,</span>
-        <span class="n">S</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-    <span class="p">)</span>
     <span class="n">compressed</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">copy</span><span class="p">(</span><span class="n">buffer</span><span class="p">)</span>
-    <span class="n">compressed</span><span class="o">.</span><span class="n">kspace</span> <span class="o">=</span> <span class="p">(</span>
-        <span class="n">virtual</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">basis</span><span class="o">.</span><span class="n">n_virtual</span><span class="p">,</span> <span class="o">*</span><span class="n">kspace</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">:])</span>
+    <span class="n">compressed</span><span class="o">.</span><span class="n">kspace</span> <span class="o">=</span> <span class="n">_projected</span><span class="p">(</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">buffer</span><span class="o">.</span><span class="n">kspace</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">complex64</span><span class="p">),</span> <span class="n">basis</span>
     <span class="p">)</span>
     <span class="n">compressed</span><span class="o">.</span><span class="n">coils</span> <span class="o">=</span> <span class="n">basis</span><span class="o">.</span><span class="n">n_virtual</span>
     <span class="k">return</span> <span class="n">compressed</span>

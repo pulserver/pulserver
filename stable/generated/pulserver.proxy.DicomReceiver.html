@@ -45,7 +45,7 @@
   <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../_static/documentation_options.js?v=f4c53e65"></script>
+    <script src="../_static/documentation_options.js?v=4f39bc78"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -56,7 +56,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.10';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.11';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -68,7 +68,7 @@
     <link rel="search" title="Search" href="../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.4.10" />
+  <meta name="docsearch:version" content="v0.4.11" />
   
     
     <script src="../_static/searchtools.js"></script>
@@ -512,6 +512,11 @@
 <li><p><strong>calling</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a>) – Application entity title the proxy calls as, which the receiver may
 have to be told to accept.</p></li>
 <li><p><strong>timeout</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><em>float</em></a>) – Seconds the association, and each store, may take.</p></li>
+<li><p><strong>viewer_port</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em> | </em><em>None</em>) – Port on the receiver’s host of a viewer that shows each stored image,
+sent to it as an <code class="docutils literal notranslate"><span class="pre">AVR1</span></code> message: the four bytes <code class="docutils literal notranslate"><span class="pre">AVR1</span></code>, then -1
+three times and the file’s length as big-endian 32-bit integers, then
+the image as a DICOM file. The viewer answers a big-endian 32-bit
+status, 0 when shown, and a line. <code class="docutils literal notranslate"><span class="pre">None</span></code> sends nothing.</p></li>
 </ul>
 </dd>
 </dl>
@@ -520,7 +525,10 @@ have to be told to accept.</p></li>
 <p class="rubric">Methods</p>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.proxy.DicomReceiver.store.html#pulserver.proxy.DicomReceiver.store" title="pulserver.proxy.DicomReceiver.store"><code class="xref py py-obj docutils literal notranslate"><span class="pre">store</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.proxy.DicomReceiver.show.html#pulserver.proxy.DicomReceiver.show" title="pulserver.proxy.DicomReceiver.show"><code class="xref py py-obj docutils literal notranslate"><span class="pre">show</span></code></a></p></td>
+<td><p>Send <code class="docutils literal notranslate"><span class="pre">dataset</span></code> to the viewer at <code class="docutils literal notranslate"><span class="pre">viewer_port</span></code>; return whether it was shown.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.proxy.DicomReceiver.store.html#pulserver.proxy.DicomReceiver.store" title="pulserver.proxy.DicomReceiver.store"><code class="xref py py-obj docutils literal notranslate"><span class="pre">store</span></code></a></p></td>
 <td><p>Store <code class="docutils literal notranslate"><span class="pre">images</span></code> over one association; return how many the receiver kept.</p></td>
 </tr>
 </tbody>
@@ -535,13 +543,16 @@ have to be told to accept.</p></li>
 <tr class="row-even"><td><p><a class="reference internal" href="pulserver.proxy.DicomReceiver.timeout.html#pulserver.proxy.DicomReceiver.timeout" title="pulserver.proxy.DicomReceiver.timeout"><code class="xref py py-obj docutils literal notranslate"><span class="pre">timeout</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.proxy.DicomReceiver.host.html#pulserver.proxy.DicomReceiver.host" title="pulserver.proxy.DicomReceiver.host"><code class="xref py py-obj docutils literal notranslate"><span class="pre">host</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.proxy.DicomReceiver.viewer_port.html#pulserver.proxy.DicomReceiver.viewer_port" title="pulserver.proxy.DicomReceiver.viewer_port"><code class="xref py py-obj docutils literal notranslate"><span class="pre">viewer_port</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.proxy.DicomReceiver.port.html#pulserver.proxy.DicomReceiver.port" title="pulserver.proxy.DicomReceiver.port"><code class="xref py py-obj docutils literal notranslate"><span class="pre">port</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.proxy.DicomReceiver.host.html#pulserver.proxy.DicomReceiver.host" title="pulserver.proxy.DicomReceiver.host"><code class="xref py py-obj docutils literal notranslate"><span class="pre">host</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.proxy.DicomReceiver.title.html#pulserver.proxy.DicomReceiver.title" title="pulserver.proxy.DicomReceiver.title"><code class="xref py py-obj docutils literal notranslate"><span class="pre">title</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.proxy.DicomReceiver.port.html#pulserver.proxy.DicomReceiver.port" title="pulserver.proxy.DicomReceiver.port"><code class="xref py py-obj docutils literal notranslate"><span class="pre">port</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.proxy.DicomReceiver.title.html#pulserver.proxy.DicomReceiver.title" title="pulserver.proxy.DicomReceiver.title"><code class="xref py py-obj docutils literal notranslate"><span class="pre">title</span></code></a></p></td>
 <td><p></p></td>
 </tr>
 </tbody>

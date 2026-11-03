@@ -39,6 +39,15 @@ patient safety.
 - **Checks gradient amplitude and slew rate on the physical axes.**
 
   Code: `pypulseqpp.safety.check_max_grad`, `check_max_slew`. Test: *limits without check limits check timing and gradients only* (`test_limits.py`).
+- **Refuses an RF pulse peaking above the transmit chain's peak B1, `max_b1`.**
+
+  Code: `_peak_b1` in {func}`~pulserver.ir.check`. Test: *an RF pulse peaking above the coil's B1 limit is refused* (`test_ir_checks.py`).
+- **Refuses readouts that open less than `adc_gap_us` after the previous one ends, and a block that plays an RF pulse and an ADC together.**
+
+  Code: `CheckLimits(adc_gap=...)`. Tests: *readouts closer than the receiver restarts are refused*; *a block playing an RF pulse and an ADC is refused* (`test_ir_checks.py`).
+- **Refuses an arbitrary gradient longer than one axis's waveform memory, `ir_wave_max_samples` at `ir_wave_raster_us`.**
+
+  Code: `CheckLimits(wave_memory=...)`. Test: *an arbitrary gradient longer than the waveform memory is refused* (`test_ir_checks.py`).
 - **Checks PNS under the scanner's nerve model (chronaxie or SAFE), up to a fraction of its threshold.**
 
   Code: `CheckLimits(pns=..., pns_limit=...)`, `pypulseqpp.safety.check_pns`. Test: *PNS is refused from the fraction of threshold the limits allow* (`test_ir_checks.py`).

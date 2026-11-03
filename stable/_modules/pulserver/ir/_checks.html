@@ -44,7 +44,7 @@
   <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../../../_static/documentation_options.js?v=f4c53e65"></script>
+    <script src="../../../_static/documentation_options.js?v=4f39bc78"></script>
     <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -55,7 +55,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.10';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.11';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -67,7 +67,7 @@
     <link rel="search" title="Search" href="../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.4.10" />
+  <meta name="docsearch:version" content="v0.4.11" />
   
     
     <script src="../../../_static/searchtools.js"></script>
@@ -501,6 +501,13 @@
 <span class="sd">    vop_head_limit, vop_local_limit</span>
 <span class="sd">        The scanner's head and local SAR limits, W/kg, in its current</span>
 <span class="sd">        operating mode; :func:`sar_ratios` needs both.</span>
+<span class="sd">    adc_gap</span>
+<span class="sd">        Least time in s from the end of one ADC to the start of the next: the</span>
+<span class="sd">        receiver's start packet for a readout must not fall inside, or just</span>
+<span class="sd">        after, the previous readout's window. 0 leaves the check out.</span>
+<span class="sd">    wave_memory</span>
+<span class="sd">        Longest arbitrary gradient in s one axis's waveform memory holds:</span>
+<span class="sd">        its samples at the playout's raster. 0 leaves the check out.</span>
 <span class="sd">    acoustic</span>
 <span class="sd">        The gradient coil's acoustic transfer function on the physical axes,</span>
 <span class="sd">        or the HDF5 file ``pypulseqpp.safety.read_acoustic_response`` reads</span>
@@ -530,6 +537,8 @@
     <span class="n">vop_coil</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">vop_head_limit</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">vop_local_limit</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">adc_gap</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span>
+    <span class="n">wave_memory</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span>
     <span class="n">acoustic</span><span class="p">:</span> <span class="n">safety</span><span class="o">.</span><span class="n">AcousticResponse</span> <span class="o">|</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">acoustic_interval</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span>
     <span class="n">spl_peak_limit</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">140.0</span>
@@ -597,6 +606,10 @@
 
 
 
+<span class="c1">#: The ADC column of ``Sequence.libraries().blocks``.</span>
+<span class="n">_ADC_COLUMN</span> <span class="o">=</span> <span class="mi">4</span>
+
+
 <div class="viewcode-block" id="check">
 <a class="viewcode-back" href="../../../generated/pulserver.ir.check.html#pulserver.ir.check">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">check</span><span class="p">(</span>
@@ -615,7 +628,9 @@
 <span class="sd">    exempt, as the scanner plays it. It is then checked with</span>
 <span class="sd">    ``pypulseqpp.check_timing``, gradient continuity included, and with</span>
 <span class="sd">    ``pypulseqpp.safety.check_max_grad`` and ``check_max_slew``, against the</span>
-<span class="sd">    gradient limits, dead times and ringdown time of ``system``; and with</span>
+<span class="sd">    gradient limits, dead times and ringdown time of ``system``; the RF</span>
+<span class="sd">    peaks against its ``max_b1`` where it has one, and each arbitrary</span>
+<span class="sd">    gradient's length against ``limits.wave_memory``; and with</span>
 <span class="sd">    ``check_pns``, ``check_mech_resonance`` and ``check_spl`` where ``limits``</span>
 <span class="sd">    carries a nerve model, forbidden bands or an acoustic transfer function;</span>
 <span class="sd">    the gradient spectrum is read over windows of ``RESONANCE_WINDOW``, a</span>
@@ -703,6 +718,13 @@
     <span class="n">is_ok</span><span class="p">,</span> <span class="n">report</span> <span class="o">=</span> <span class="n">pp</span><span class="o">.</span><span class="n">check_timing</span><span class="p">(</span><span class="n">sequence</span><span class="p">)</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="n">is_ok</span><span class="p">:</span>
         <span class="n">problems</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">_timing</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">report</span><span class="p">))</span>
+    <span class="n">problems</span> <span class="o">+=</span> <span class="n">_rf_with_adc</span><span class="p">(</span><span class="n">sequence</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">limits</span><span class="o">.</span><span class="n">adc_gap</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="n">problems</span> <span class="o">+=</span> <span class="n">_adc_gaps</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">limits</span><span class="o">.</span><span class="n">adc_gap</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">opts</span><span class="p">,</span> <span class="s2">"max_b1"</span><span class="p">,</span> <span class="kc">None</span><span class="p">):</span>
+        <span class="n">problems</span> <span class="o">+=</span> <span class="n">_peak_b1</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">opts</span><span class="o">.</span><span class="n">max_b1</span><span class="p">,</span> <span class="n">opts</span><span class="o">.</span><span class="n">gamma</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">limits</span><span class="o">.</span><span class="n">wave_memory</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="n">problems</span> <span class="o">+=</span> <span class="n">_long_gradients</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">limits</span><span class="o">.</span><span class="n">wave_memory</span><span class="p">)</span>
     <span class="n">checks</span> <span class="o">=</span> <span class="p">[</span>
         <span class="p">(</span><span class="n">_limit</span><span class="p">,</span> <span class="n">safety</span><span class="o">.</span><span class="n">check_max_grad</span><span class="p">,</span> <span class="s2">"gradient amplitude"</span><span class="p">,</span> <span class="s2">"mT/m"</span><span class="p">,</span> <span class="mf">1e3</span><span class="p">),</span>
         <span class="p">(</span><span class="n">_limit</span><span class="p">,</span> <span class="n">safety</span><span class="o">.</span><span class="n">check_max_slew</span><span class="p">,</span> <span class="s2">"slew rate"</span><span class="p">,</span> <span class="s2">"T/m/s"</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">),</span>
@@ -720,6 +742,113 @@
     <span class="k">for</span> <span class="n">result</span> <span class="ow">in</span> <span class="n">found</span><span class="p">:</span>
         <span class="n">problems</span> <span class="o">+=</span> <span class="n">result</span><span class="o">.</span><span class="n">result</span><span class="p">()</span>
     <span class="k">return</span> <span class="n">problems</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_rf_with_adc</span><span class="p">(</span><span class="n">sequence</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Sequence</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Return the problem of blocks playing an RF pulse and an ADC together, which Pulseq does not allow."""</span>
+    <span class="n">blocks</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">sequence</span><span class="o">.</span><span class="n">libraries</span><span class="p">()</span><span class="o">.</span><span class="n">blocks</span><span class="p">)</span>
+    <span class="n">both</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">flatnonzero</span><span class="p">(</span><span class="n">blocks</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">&amp;</span> <span class="n">blocks</span><span class="p">[:,</span> <span class="n">_ADC_COLUMN</span><span class="p">])</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">both</span><span class="o">.</span><span class="n">size</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">[]</span>
+    <span class="k">return</span> <span class="p">[</span>
+        <span class="sa">f</span><span class="s2">"RF pulse and ADC in one block, block </span><span class="si">{</span><span class="nb">int</span><span class="p">(</span><span class="n">both</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="si">}</span><span class="s2"> "</span>
+        <span class="sa">f</span><span class="s2">"(</span><span class="si">{</span><span class="n">both</span><span class="o">.</span><span class="n">size</span><span class="si">}</span><span class="s2"> such blocks)"</span>
+    <span class="p">]</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_adc_gaps</span><span class="p">(</span><span class="n">sequence</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Sequence</span><span class="p">,</span> <span class="n">least</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Return the problem of ADCs closer than ``least`` s, end to start, in play order."""</span>
+    <span class="n">tables</span> <span class="o">=</span> <span class="n">sequence</span><span class="o">.</span><span class="n">libraries</span><span class="p">()</span>
+    <span class="n">blocks</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">tables</span><span class="o">.</span><span class="n">blocks</span><span class="p">)</span>
+    <span class="n">with_adc</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">flatnonzero</span><span class="p">(</span><span class="n">blocks</span><span class="p">[:,</span> <span class="n">_ADC_COLUMN</span><span class="p">])</span>
+    <span class="k">if</span> <span class="n">with_adc</span><span class="o">.</span><span class="n">size</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">[]</span>
+    <span class="n">durations</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">tables</span><span class="o">.</span><span class="n">block_durations</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+    <span class="n">starts</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(([</span><span class="mf">0.0</span><span class="p">],</span> <span class="n">np</span><span class="o">.</span><span class="n">cumsum</span><span class="p">(</span><span class="n">durations</span><span class="p">)[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]))</span>
+    <span class="n">adc</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">tables</span><span class="o">.</span><span class="n">adc</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">8</span><span class="p">)</span>
+    <span class="n">rows</span> <span class="o">=</span> <span class="n">adc</span><span class="p">[</span><span class="n">blocks</span><span class="p">[</span><span class="n">with_adc</span><span class="p">,</span> <span class="n">_ADC_COLUMN</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span>
+    <span class="n">opens</span> <span class="o">=</span> <span class="n">starts</span><span class="p">[</span><span class="n">with_adc</span><span class="p">]</span> <span class="o">+</span> <span class="n">rows</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">]</span>
+    <span class="n">closes</span> <span class="o">=</span> <span class="n">opens</span> <span class="o">+</span> <span class="n">rows</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="n">rows</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">]</span>
+    <span class="n">gaps</span> <span class="o">=</span> <span class="n">opens</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span> <span class="o">-</span> <span class="n">closes</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+    <span class="c1"># A rounding's margin: the times are sums of raster multiples.</span>
+    <span class="n">short</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">flatnonzero</span><span class="p">(</span><span class="n">gaps</span> <span class="o">&lt;</span> <span class="n">least</span> <span class="o">-</span> <span class="mf">1e-9</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">short</span><span class="o">.</span><span class="n">size</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">[]</span>
+    <span class="n">first</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">short</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+    <span class="k">return</span> <span class="p">[</span>
+        <span class="sa">f</span><span class="s2">"ADC gap of </span><span class="si">{</span><span class="n">gaps</span><span class="p">[</span><span class="n">first</span><span class="p">]</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mf">1e6</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> us before block "</span>
+        <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="nb">int</span><span class="p">(</span><span class="n">with_adc</span><span class="p">[</span><span class="n">first</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="p">])</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="si">}</span><span class="s2"> is under </span><span class="si">{</span><span class="n">least</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mf">1e6</span><span class="si">:</span><span class="s2">.0f</span><span class="si">}</span><span class="s2"> us "</span>
+        <span class="sa">f</span><span class="s2">"(</span><span class="si">{</span><span class="n">short</span><span class="o">.</span><span class="n">size</span><span class="si">}</span><span class="s2"> such gaps)"</span>
+    <span class="p">]</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_peak_b1</span><span class="p">(</span><span class="n">sequence</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Sequence</span><span class="p">,</span> <span class="n">limit</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">gamma</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Return the problem of RF pulses peaking above ``limit`` Hz."""</span>
+    <span class="n">tables</span> <span class="o">=</span> <span class="n">sequence</span><span class="o">.</span><span class="n">libraries</span><span class="p">()</span>
+    <span class="n">rf</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">atleast_2d</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">tables</span><span class="o">.</span><span class="n">rf</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">))</span>
+    <span class="n">blocks</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">tables</span><span class="o">.</span><span class="n">blocks</span><span class="p">)</span>
+    <span class="c1"># The pulses the blocks play: the library can hold more than those.</span>
+    <span class="n">played</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">blocks</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">])</span>
+    <span class="n">played</span> <span class="o">=</span> <span class="n">played</span><span class="p">[(</span><span class="n">played</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">played</span> <span class="o">&lt;=</span> <span class="n">rf</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])]</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">played</span><span class="o">.</span><span class="n">size</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">[]</span>
+    <span class="n">peaks</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span>
+        <span class="p">[</span>
+            <span class="nb">abs</span><span class="p">(</span><span class="n">rf</span><span class="p">[</span><span class="n">i</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">])</span>
+            <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">tables</span><span class="o">.</span><span class="n">shapes</span><span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">rf</span><span class="p">[</span><span class="n">i</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">decompressed</span><span class="p">()))</span>
+            <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">played</span>
+        <span class="p">]</span>
+    <span class="p">)</span>
+    <span class="c1"># The amplitudes are written to a few significant digits.</span>
+    <span class="n">worst</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="n">peaks</span><span class="p">))</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">peaks</span><span class="p">[</span><span class="n">worst</span><span class="p">]</span> <span class="o">&gt;</span> <span class="n">limit</span> <span class="o">*</span> <span class="p">(</span><span class="mf">1.0</span> <span class="o">+</span> <span class="mf">1e-6</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">[]</span>
+    <span class="n">first</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">flatnonzero</span><span class="p">(</span><span class="n">blocks</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="n">played</span><span class="p">[</span><span class="n">worst</span><span class="p">])[</span><span class="mi">0</span><span class="p">])</span> <span class="o">+</span> <span class="mi">1</span>
+    <span class="k">return</span> <span class="p">[</span>
+        <span class="sa">f</span><span class="s2">"peak B1 of </span><span class="si">{</span><span class="n">peaks</span><span class="p">[</span><span class="n">worst</span><span class="p">]</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="n">gamma</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mf">1e6</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> uT in block </span><span class="si">{</span><span class="n">first</span><span class="si">}</span><span class="s2"> exceeds "</span>
+        <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">limit</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="n">gamma</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mf">1e6</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> uT"</span>
+    <span class="p">]</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_long_gradients</span><span class="p">(</span><span class="n">sequence</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Sequence</span><span class="p">,</span> <span class="n">longest</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Return the problem of arbitrary gradients longer than ``longest`` s."""</span>
+    <span class="n">tables</span> <span class="o">=</span> <span class="n">sequence</span><span class="o">.</span><span class="n">libraries</span><span class="p">()</span>
+    <span class="n">ids</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">tables</span><span class="o">.</span><span class="n">arbitrary_gradient_ids</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">ids</span><span class="o">.</span><span class="n">size</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">[]</span>
+    <span class="n">rows</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">tables</span><span class="o">.</span><span class="n">arbitrary_gradients</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span>
+        <span class="n">ids</span><span class="o">.</span><span class="n">size</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span>
+    <span class="p">)</span>
+    <span class="n">raster</span> <span class="o">=</span> <span class="n">sequence</span><span class="o">.</span><span class="n">grad_raster_time</span>
+    <span class="n">lengths</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">raster</span> <span class="o">*</span> <span class="n">_raster_steps</span><span class="p">(</span><span class="n">tables</span><span class="o">.</span><span class="n">shapes</span><span class="p">,</span> <span class="n">row</span><span class="p">)</span> <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">rows</span><span class="p">])</span>
+    <span class="n">over</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">flatnonzero</span><span class="p">(</span><span class="n">lengths</span> <span class="o">&gt;</span> <span class="n">longest</span> <span class="o">*</span> <span class="p">(</span><span class="mf">1.0</span> <span class="o">+</span> <span class="mf">1e-9</span><span class="p">))</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">over</span><span class="o">.</span><span class="n">size</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">[]</span>
+    <span class="n">blocks</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">tables</span><span class="o">.</span><span class="n">blocks</span><span class="p">)</span>
+    <span class="c1"># The gradients the blocks play: the library can hold more than those.</span>
+    <span class="n">over</span> <span class="o">=</span> <span class="n">over</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">isin</span><span class="p">(</span><span class="n">ids</span><span class="p">[</span><span class="n">over</span><span class="p">],</span> <span class="n">blocks</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">:</span><span class="mi">4</span><span class="p">])]</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">over</span><span class="o">.</span><span class="n">size</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">[]</span>
+    <span class="n">worst</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">over</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="n">lengths</span><span class="p">[</span><span class="n">over</span><span class="p">])])</span>
+    <span class="n">where</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">argwhere</span><span class="p">(</span><span class="n">blocks</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">:</span><span class="mi">4</span><span class="p">]</span> <span class="o">==</span> <span class="n">ids</span><span class="p">[</span><span class="n">worst</span><span class="p">])[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">return</span> <span class="p">[</span>
+        <span class="sa">f</span><span class="s2">"arbitrary gradient of </span><span class="si">{</span><span class="n">lengths</span><span class="p">[</span><span class="n">worst</span><span class="p">]</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mf">1e3</span><span class="si">:</span><span class="s2">.0f</span><span class="si">}</span><span class="s2"> ms on </span><span class="si">{</span><span class="s1">'xyz'</span><span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">where</span><span class="p">[</span><span class="mi">1</span><span class="p">])]</span><span class="si">}</span><span class="s2"> "</span>
+        <span class="sa">f</span><span class="s2">"in block </span><span class="si">{</span><span class="nb">int</span><span class="p">(</span><span class="n">where</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="si">}</span><span class="s2"> exceeds </span><span class="si">{</span><span class="n">longest</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mf">1e3</span><span class="si">:</span><span class="s2">.0f</span><span class="si">}</span><span class="s2"> ms of memory"</span>
+    <span class="p">]</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_raster_steps</span><span class="p">(</span><span class="n">shapes</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">row</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return an arbitrary gradient's length in gradient rasters.</span>
+
+<span class="sd">    Its time shape is 0 for samples on the raster, -1 for samples on the half</span>
+<span class="sd">    raster, or the shape of its sample times in rasters.</span>
+<span class="sd">    """</span>
+    <span class="n">samples</span><span class="p">,</span> <span class="n">times</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="mi">3</span><span class="p">]),</span> <span class="nb">int</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="mi">4</span><span class="p">])</span>
+    <span class="k">if</span> <span class="n">times</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">shapes</span><span class="p">[</span><span class="n">samples</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">num_samples</span>
+    <span class="k">if</span> <span class="n">times</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">shapes</span><span class="p">[</span><span class="n">samples</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">num_samples</span> <span class="o">/</span> <span class="mi">2</span>
+    <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">shapes</span><span class="p">[</span><span class="n">times</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">decompressed</span><span class="p">()))</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_limit</span><span class="p">(</span>
@@ -748,9 +877,8 @@
         <span class="k">return</span> <span class="p">[]</span>
     <span class="n">axis</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">found</span><span class="o">.</span><span class="n">axes</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">reading</span><span class="p">:</span> <span class="n">reading</span><span class="o">.</span><span class="n">value</span><span class="p">)</span><span class="o">.</span><span class="n">axis</span>
     <span class="k">return</span> <span class="p">[</span>
-        <span class="sa">f</span><span class="s2">"PNS of </span><span class="si">{</span><span class="n">peak</span><span class="o">.</span><span class="n">value</span><span class="si">:</span><span class="s2">.0%</span><span class="si">}</span><span class="s2"> of the </span><span class="si">{</span><span class="n">found</span><span class="o">.</span><span class="n">model</span><span class="si">}</span><span class="s2"> threshold, largest on "</span>
-        <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">axis</span><span class="si">}</span><span class="s2">, at </span><span class="si">{</span><span class="n">peak</span><span class="o">.</span><span class="n">time</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2"> s in block </span><span class="si">{</span><span class="n">peak</span><span class="o">.</span><span class="n">block</span><span class="si">}</span><span class="s2"> reaches "</span>
-        <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">limits</span><span class="o">.</span><span class="n">pns_limit</span><span class="si">:</span><span class="s2">.0%</span><span class="si">}</span><span class="s2">"</span>
+        <span class="sa">f</span><span class="s2">"PNS of </span><span class="si">{</span><span class="n">peak</span><span class="o">.</span><span class="n">value</span><span class="si">:</span><span class="s2">.0%</span><span class="si">}</span><span class="s2"> of the </span><span class="si">{</span><span class="n">found</span><span class="o">.</span><span class="n">model</span><span class="si">}</span><span class="s2"> threshold exceeds "</span>
+        <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">limits</span><span class="o">.</span><span class="n">pns_limit</span><span class="si">:</span><span class="s2">.0%</span><span class="si">}</span><span class="s2">, on </span><span class="si">{</span><span class="n">axis</span><span class="si">}</span><span class="s2"> in block </span><span class="si">{</span><span class="n">peak</span><span class="o">.</span><span class="n">block</span><span class="si">}</span><span class="s2">"</span>
     <span class="p">]</span>
 
 
@@ -766,16 +894,15 @@
         <span class="n">system</span><span class="o">=</span><span class="n">system</span><span class="p">,</span>
     <span class="p">)</span>
     <span class="k">return</span> <span class="p">[</span>
-        <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">band</span><span class="o">.</span><span class="n">peak</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> mT/m at </span><span class="si">{</span><span class="n">band</span><span class="o">.</span><span class="n">frequency</span><span class="si">:</span><span class="s2">.0f</span><span class="si">}</span><span class="s2"> Hz on </span><span class="si">{</span><span class="n">band</span><span class="o">.</span><span class="n">peak_axis</span><span class="si">}</span><span class="s2"> in "</span>
-        <span class="sa">f</span><span class="s2">"the window at </span><span class="si">{</span><span class="n">band</span><span class="o">.</span><span class="n">window_start</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2"> s "</span>
-        <span class="o">+</span> <span class="p">(</span>
-            <span class="sa">f</span><span class="s2">"with the gradient at </span><span class="si">{</span><span class="n">band</span><span class="o">.</span><span class="n">gradient</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> mT/m exceeds the "</span>
-            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">band</span><span class="o">.</span><span class="n">tolerance</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> mT/m"</span>
+        <span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"gradient </span><span class="si">{</span><span class="n">band</span><span class="o">.</span><span class="n">gradient</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> mT/m on </span><span class="si">{</span><span class="n">band</span><span class="o">.</span><span class="n">peak_axis</span><span class="si">}</span><span class="s2"> exceeds "</span>
+            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">band</span><span class="o">.</span><span class="n">tolerance</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> mT/m, band </span><span class="si">{</span><span class="n">band</span><span class="o">.</span><span class="n">f_min</span><span class="si">:</span><span class="s2">.0f</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="n">band</span><span class="o">.</span><span class="n">f_max</span><span class="si">:</span><span class="s2">.0f</span><span class="si">}</span><span class="s2"> Hz "</span>
+            <span class="sa">f</span><span class="s2">"at </span><span class="si">{</span><span class="n">band</span><span class="o">.</span><span class="n">peak</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> mT/m"</span>
             <span class="k">if</span> <span class="n">band</span><span class="o">.</span><span class="n">tolerance</span> <span class="o">&gt;</span> <span class="mf">0.0</span>
-            <span class="k">else</span> <span class="sa">f</span><span class="s2">"exceeds the </span><span class="si">{</span><span class="n">band</span><span class="o">.</span><span class="n">threshold</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> mT/m"</span>
+            <span class="k">else</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">band</span><span class="o">.</span><span class="n">peak</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> mT/m at </span><span class="si">{</span><span class="n">band</span><span class="o">.</span><span class="n">frequency</span><span class="si">:</span><span class="s2">.0f</span><span class="si">}</span><span class="s2"> Hz on </span><span class="si">{</span><span class="n">band</span><span class="o">.</span><span class="n">peak_axis</span><span class="si">}</span><span class="s2"> "</span>
+            <span class="sa">f</span><span class="s2">"exceeds </span><span class="si">{</span><span class="n">band</span><span class="o">.</span><span class="n">threshold</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> mT/m of band "</span>
+            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">band</span><span class="o">.</span><span class="n">f_min</span><span class="si">:</span><span class="s2">.0f</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="n">band</span><span class="o">.</span><span class="n">f_max</span><span class="si">:</span><span class="s2">.0f</span><span class="si">}</span><span class="s2"> Hz"</span>
         <span class="p">)</span>
-        <span class="o">+</span> <span class="sa">f</span><span class="s2">" of the forbidden band </span><span class="si">{</span><span class="n">band</span><span class="o">.</span><span class="n">f_min</span><span class="si">:</span><span class="s2">.0f</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="n">band</span><span class="o">.</span><span class="n">f_max</span><span class="si">:</span><span class="s2">.0f</span><span class="si">}</span><span class="s2"> Hz"</span>
-        <span class="o">+</span> <span class="p">(</span><span class="s2">""</span> <span class="k">if</span> <span class="n">band</span><span class="o">.</span><span class="n">axis</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="sa">f</span><span class="s2">" on </span><span class="si">{</span><span class="n">band</span><span class="o">.</span><span class="n">axis</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
         <span class="k">for</span> <span class="n">band</span> <span class="ow">in</span> <span class="n">found</span><span class="o">.</span><span class="n">bands</span>
         <span class="k">if</span> <span class="n">band</span><span class="o">.</span><span class="n">violations</span>
     <span class="p">]</span>
@@ -959,10 +1086,44 @@
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_timing</span><span class="p">(</span><span class="n">sequence</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Sequence</span><span class="p">,</span> <span class="n">report</span><span class="p">:</span> <span class="nb">list</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the first timing problem in a line the scanner console shows whole."""</span>
+    <span class="n">more</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">" (+</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">report</span><span class="p">)</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mi">1</span><span class="si">}</span><span class="s2"> more)"</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">report</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span> <span class="k">else</span> <span class="s2">""</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">"timing: </span><span class="si">{</span><span class="n">_finding</span><span class="p">(</span><span class="n">report</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span><span class="w"> </span><span class="n">sequence</span><span class="o">.</span><span class="n">system</span><span class="o">.</span><span class="n">gamma</span><span class="p">)</span><span class="si">}{</span><span class="n">more</span><span class="si">}</span><span class="s2">"</span>
+    <span class="k">except</span> <span class="p">(</span><span class="ne">AttributeError</span><span class="p">,</span> <span class="ne">KeyError</span><span class="p">,</span> <span class="ne">TypeError</span><span class="p">):</span>
+        <span class="k">pass</span>
     <span class="n">printed</span> <span class="o">=</span> <span class="n">io</span><span class="o">.</span><span class="n">StringIO</span><span class="p">()</span>
     <span class="k">with</span> <span class="n">contextlib</span><span class="o">.</span><span class="n">redirect_stdout</span><span class="p">(</span><span class="n">printed</span><span class="p">):</span>
         <span class="n">pp</span><span class="o">.</span><span class="n">print_error_report</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">report</span><span class="p">,</span> <span class="n">max_errors</span><span class="o">=</span><span class="n">_LISTED</span><span class="p">,</span> <span class="n">colored</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
     <span class="k">return</span> <span class="s2">"timing: "</span> <span class="o">+</span> <span class="s2">" "</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">printed</span><span class="o">.</span><span class="n">getvalue</span><span class="p">()</span><span class="o">.</span><span class="n">split</span><span class="p">())</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_finding</span><span class="p">(</span><span class="n">found</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">gamma</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return one ``pypulseqpp.check_timing`` finding as its value and its limit."""</span>
+    <span class="n">kind</span><span class="p">,</span> <span class="n">block</span> <span class="o">=</span> <span class="n">found</span><span class="o">.</span><span class="n">error_type</span><span class="p">,</span> <span class="n">found</span><span class="o">.</span><span class="n">block</span>
+    <span class="k">if</span> <span class="n">kind</span> <span class="o">==</span> <span class="s2">"RASTER"</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">found</span><span class="o">.</span><span class="n">event</span><span class="si">}</span><span class="s2">.</span><span class="si">{</span><span class="n">found</span><span class="o">.</span><span class="n">field</span><span class="si">}</span><span class="s2"> of </span><span class="si">{</span><span class="n">found</span><span class="o">.</span><span class="n">value</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mf">1e6</span><span class="si">:</span><span class="s2">g</span><span class="si">}</span><span class="s2"> us in block </span><span class="si">{</span><span class="n">block</span><span class="si">}</span><span class="s2"> "</span>
+            <span class="sa">f</span><span class="s2">"is off </span><span class="si">{</span><span class="n">found</span><span class="o">.</span><span class="n">raster</span><span class="si">}</span><span class="s2">"</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="n">kind</span> <span class="o">==</span> <span class="s2">"GRADIENT_DISCONTINUITY"</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">found</span><span class="o">.</span><span class="n">event</span><span class="si">}</span><span class="s2"> steps </span><span class="si">{</span><span class="nb">abs</span><span class="p">(</span><span class="n">found</span><span class="o">.</span><span class="n">value</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">found</span><span class="o">.</span><span class="n">before</span><span class="p">)</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="n">gamma</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mf">1e3</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> mT/m "</span>
+            <span class="sa">f</span><span class="s2">"into block </span><span class="si">{</span><span class="n">block</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="n">found</span><span class="o">.</span><span class="n">slew</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="n">gamma</span><span class="si">:</span><span class="s2">.0f</span><span class="si">}</span><span class="s2"> &gt; </span><span class="si">{</span><span class="n">found</span><span class="o">.</span><span class="n">limit</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="n">gamma</span><span class="si">:</span><span class="s2">.0f</span><span class="si">}</span><span class="s2"> T/m/s"</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="n">kind</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"ADC_DEAD_TIME"</span><span class="p">,</span> <span class="s2">"RF_DEAD_TIME"</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">found</span><span class="o">.</span><span class="n">event</span><span class="si">}</span><span class="s2"> delay of </span><span class="si">{</span><span class="n">found</span><span class="o">.</span><span class="n">value</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mf">1e6</span><span class="si">:</span><span class="s2">g</span><span class="si">}</span><span class="s2"> us in block </span><span class="si">{</span><span class="n">block</span><span class="si">}</span><span class="s2"> is under "</span>
+            <span class="sa">f</span><span class="s2">"the </span><span class="si">{</span><span class="n">found</span><span class="o">.</span><span class="n">dead_time</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mf">1e6</span><span class="si">:</span><span class="s2">g</span><span class="si">}</span><span class="s2"> us dead time"</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="n">kind</span> <span class="o">==</span> <span class="s2">"RF_RINGDOWN_TIME"</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"RF ends </span><span class="si">{</span><span class="p">(</span><span class="n">found</span><span class="o">.</span><span class="n">duration</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">found</span><span class="o">.</span><span class="n">value</span><span class="p">)</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mf">1e6</span><span class="si">:</span><span class="s2">g</span><span class="si">}</span><span class="s2"> us before block </span><span class="si">{</span><span class="n">block</span><span class="si">}</span><span class="s2"> "</span>
+            <span class="sa">f</span><span class="s2">"ends, under the </span><span class="si">{</span><span class="n">found</span><span class="o">.</span><span class="n">ringdown_time</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mf">1e6</span><span class="si">:</span><span class="s2">g</span><span class="si">}</span><span class="s2"> us ringdown"</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="n">kind</span> <span class="o">==</span> <span class="s2">"GRADIENT_NOT_RAMPED_DOWN"</span><span class="p">:</span>
+        <span class="k">return</span> <span class="s2">"the sequence ends with a gradient on"</span>
+    <span class="k">return</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">found</span><span class="o">.</span><span class="n">event</span><span class="si">}</span><span class="s2">.</span><span class="si">{</span><span class="n">found</span><span class="o">.</span><span class="n">field</span><span class="si">}</span><span class="s2"> in block </span><span class="si">{</span><span class="n">block</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">kind</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s1">'_'</span><span class="p">,</span><span class="w"> </span><span class="s1">' '</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span>
 </pre></div>
 
                 </article>

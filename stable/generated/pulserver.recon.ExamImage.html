@@ -45,7 +45,7 @@
   <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../_static/documentation_options.js?v=f4c53e65"></script>
+    <script src="../_static/documentation_options.js?v=4f39bc78"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -56,7 +56,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.10';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.11';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -68,7 +68,7 @@
     <link rel="search" title="Search" href="../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.4.10" />
+  <meta name="docsearch:version" content="v0.4.11" />
   
     
     <script src="../_static/searchtools.js"></script>
@@ -506,7 +506,8 @@
 <p>A calibration series stores a map with the geometry it was measured on,
 as <code class="docutils literal notranslate"><span class="pre">context.b1_map</span> <span class="pre">=</span> <span class="pre">ExamImage.measured(b1,</span> <span class="pre">context,</span> <span class="pre">data)</span></code>, and a
 later series reads it resampled onto its own grid with
-<code class="docutils literal notranslate"><span class="pre">context.b1_map.on(context,</span> <span class="pre">data)</span></code>. The resampling uses the two
+<code class="docutils literal notranslate"><span class="pre">context.b1_map.on(context,</span> <span class="pre">data)</span></code>, and a design plugin onto a
+prescription with <a class="reference internal" href="pulserver.recon.ExamImage.resample.html#pulserver.recon.ExamImage.resample" title="pulserver.recon.ExamImage.resample"><code class="xref py py-meth docutils literal notranslate"><span class="pre">resample()</span></code></a>. The resampling uses the two
 geometries alone, no registration: <code class="xref py py-func docutils literal notranslate"><span class="pre">bartorch.tools.reslice()</span></code>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Attributes<span class="colon">:</span></dt>
@@ -533,6 +534,9 @@ slices.</p></li>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="pulserver.recon.ExamImage.on.html#pulserver.recon.ExamImage.on" title="pulserver.recon.ExamImage.on"><code class="xref py py-obj docutils literal notranslate"><span class="pre">on</span></code></a></p></td>
 <td><p>Return the image resampled onto the reconstruction grid of <code class="docutils literal notranslate"><span class="pre">unit</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.recon.ExamImage.resample.html#pulserver.recon.ExamImage.resample" title="pulserver.recon.ExamImage.resample"><code class="xref py py-obj docutils literal notranslate"><span class="pre">resample</span></code></a></p></td>
+<td><p>Return the image resampled onto the grid <code class="docutils literal notranslate"><span class="pre">geometry</span></code> describes.</p></td>
 </tr>
 </tbody>
 </table>

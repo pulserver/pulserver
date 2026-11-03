@@ -45,7 +45,7 @@
   <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../_static/documentation_options.js?v=f4c53e65"></script>
+    <script src="../_static/documentation_options.js?v=4f39bc78"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -58,7 +58,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.10';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.11';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -72,7 +72,7 @@
     <link rel="prev" title="Protocol resolution" href="protocol.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.4.10" />
+  <meta name="docsearch:version" content="v0.4.11" />
   
     
     <script src="../_static/searchtools.js"></script>
@@ -546,6 +546,15 @@ patient safety.</p>
 </li>
 <li><p><strong>Checks gradient amplitude and slew rate on the physical axes.</strong></p>
 <p>Code: <code class="docutils literal notranslate"><span class="pre">pypulseqpp.safety.check_max_grad</span></code>, <code class="docutils literal notranslate"><span class="pre">check_max_slew</span></code>. Test: <em>limits without check limits check timing and gradients only</em> (<code class="docutils literal notranslate"><span class="pre">test_limits.py</span></code>).</p>
+</li>
+<li><p><strong>Refuses an RF pulse peaking above the transmit chain’s peak B1, <code class="docutils literal notranslate"><span class="pre">max_b1</span></code>.</strong></p>
+<p>Code: <code class="docutils literal notranslate"><span class="pre">_peak_b1</span></code> in <a class="reference internal" href="../generated/pulserver.ir.check.html#pulserver.ir.check" title="pulserver.ir.check"><code class="xref py py-func docutils literal notranslate"><span class="pre">check()</span></code></a>. Test: <em>an RF pulse peaking above the coil’s B1 limit is refused</em> (<code class="docutils literal notranslate"><span class="pre">test_ir_checks.py</span></code>).</p>
+</li>
+<li><p><strong>Refuses readouts that open less than <code class="docutils literal notranslate"><span class="pre">adc_gap_us</span></code> after the previous one ends, and a block that plays an RF pulse and an ADC together.</strong></p>
+<p>Code: <code class="docutils literal notranslate"><span class="pre">CheckLimits(adc_gap=...)</span></code>. Tests: <em>readouts closer than the receiver restarts are refused</em>; <em>a block playing an RF pulse and an ADC is refused</em> (<code class="docutils literal notranslate"><span class="pre">test_ir_checks.py</span></code>).</p>
+</li>
+<li><p><strong>Refuses an arbitrary gradient longer than one axis’s waveform memory, <code class="docutils literal notranslate"><span class="pre">ir_wave_max_samples</span></code> at <code class="docutils literal notranslate"><span class="pre">ir_wave_raster_us</span></code>.</strong></p>
+<p>Code: <code class="docutils literal notranslate"><span class="pre">CheckLimits(wave_memory=...)</span></code>. Test: <em>an arbitrary gradient longer than the waveform memory is refused</em> (<code class="docutils literal notranslate"><span class="pre">test_ir_checks.py</span></code>).</p>
 </li>
 <li><p><strong>Checks PNS under the scanner’s nerve model (chronaxie or SAFE), up to a fraction of its threshold.</strong></p>
 <p>Code: <code class="docutils literal notranslate"><span class="pre">CheckLimits(pns=...,</span> <span class="pre">pns_limit=...)</span></code>, <code class="docutils literal notranslate"><span class="pre">pypulseqpp.safety.check_pns</span></code>. Test: <em>PNS is refused from the fraction of threshold the limits allow</em> (<code class="docutils literal notranslate"><span class="pre">test_ir_checks.py</span></code>).</p>

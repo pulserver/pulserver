@@ -45,7 +45,7 @@
   <link rel="preload" as="script" href="../../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../../_static/documentation_options.js?v=f4c53e65"></script>
+    <script src="../../_static/documentation_options.js?v=4f39bc78"></script>
     <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -56,7 +56,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.10';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.11';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -70,7 +70,7 @@
     <link rel="prev" title="Protocol text blocks" href="protocol-wire.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.4.10" />
+  <meta name="docsearch:version" content="v0.4.11" />
   
     
     <script src="../../_static/searchtools.js"></script>
@@ -659,9 +659,10 @@ has measured it yet.</p>
 stored as an <a class="reference internal" href="../../generated/pulserver.recon.ExamImage.html#pulserver.recon.ExamImage" title="pulserver.recon.ExamImage"><code class="xref py py-class docutils literal notranslate"><span class="pre">ExamImage</span></code></a> carries that geometry, and a
 series acquired at another position, orientation, field of view or matrix
 reads it resliced onto its own grid with
-<a class="reference internal" href="../../generated/pulserver.recon.ExamImage.on.html#pulserver.recon.ExamImage.on" title="pulserver.recon.ExamImage.on"><code class="xref py py-meth docutils literal notranslate"><span class="pre">ExamImage.on</span></code></a>. Coil sensitivities are
-never resampled: <a class="reference internal" href="../../generated/pulserver.recon.coil_maps.html#pulserver.recon.coil_maps" title="pulserver.recon.coil_maps"><code class="xref py py-func docutils literal notranslate"><span class="pre">coil_maps()</span></code></a> returns them only to a
-unit on the grid they were estimated on, as <a class="reference internal" href="calibration.html"><span class="doc">Calibration, noise and coil compression</span></a> states.</p>
+<a class="reference internal" href="../../generated/pulserver.recon.ExamImage.on.html#pulserver.recon.ExamImage.on" title="pulserver.recon.ExamImage.on"><code class="xref py py-meth docutils literal notranslate"><span class="pre">ExamImage.on</span></code></a>; a design plugin reads it
+on a prescription with <a class="reference internal" href="../../generated/pulserver.recon.ExamImage.resample.html#pulserver.recon.ExamImage.resample" title="pulserver.recon.ExamImage.resample"><code class="xref py py-meth docutils literal notranslate"><span class="pre">ExamImage.resample</span></code></a>. Coil sensitivities of the exam are
+resliced the same way by <a class="reference internal" href="../../generated/pulserver.recon.coil_maps.html#pulserver.recon.coil_maps" title="pulserver.recon.coil_maps"><code class="xref py py-func docutils literal notranslate"><span class="pre">coil_maps()</span></code></a>, as
+<a class="reference internal" href="calibration.html"><span class="doc">Calibration, noise and coil compression</span></a> states.</p>
 <p>No other attribute name is accepted, so a misspelt name raises instead of
 storing a map under a key no series reads. An artifact a
 plugin carries for itself goes in <code class="docutils literal notranslate"><span class="pre">context.exam</span></code> under a key of its own, as

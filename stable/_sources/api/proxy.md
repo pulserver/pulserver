@@ -11,7 +11,7 @@ and runs it on a reconstruction worker.
 The proxy listens on a TCP port and is started with
 
 ```bash
-pulserver proxy --store DIR --port N --plugins DIR [--intake-port N] [--slots N] [--spares 1] [--dicom-receiver HOST:PORT --dicom-receiver-title AE] [--save-data DIR] [--idle-timeout S]
+pulserver proxy --store DIR --port N --plugins DIR [--intake-port N] [--slots N] [--spares 1] [--dicom-receiver HOST:PORT --dicom-receiver-title AE [--viewer-port N]] [--save-data DIR] [--idle-timeout S]
 pulserver proxy --store DIR --port N --forward HOST:PORT [--forward-config NAME] [--dicom]
 ```
 
