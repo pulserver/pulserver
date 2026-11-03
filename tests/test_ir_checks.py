@@ -72,9 +72,9 @@ def test_a_gradient_train_in_a_forbidden_band_is_refused_on_the_axis_it_plays(tr
     # rounding; the window it names is not part of the claim.
     (problem,) = ir.check(train, SYSTEM, limits=ir.CheckLimits(bands=(BAND_X,)))
     assert re.fullmatch(
-        r"17\.9 mT/m at 1000 Hz on x in the window at \d+\.\d{3} s with the "
-        r"gradient at 15\.0 mT/m exceeds the 5\.0 mT/m of the forbidden band "
-        r"900-1100 Hz on x",
+        r"gradient of 15\.0 mT/m on x exceeds 5\.0 mT/m while the forbidden band "
+        r"900-1100 Hz on x holds 17\.9 mT/m at 1000 Hz, in the window at "
+        r"\d+\.\d{3} s",
         problem,
     )
     assert ir.check(train, SYSTEM, limits=ir.CheckLimits(bands=(BAND_Y,))) == []
@@ -152,8 +152,8 @@ def test_pns_is_refused_from_the_fraction_of_threshold_the_limits_allow(
     )
     assert problems == (
         [
-            "PNS of 87% of the chronaxie threshold, largest on x, at 0.0002 s in "
-            "block 1 reaches 80%"
+            "PNS of 87% of the chronaxie threshold exceeds 80%, largest on x, at "
+            "0.0002 s in block 1"
         ]
         if refused
         else []
@@ -406,10 +406,7 @@ def test_readouts_closer_than_the_receiver_restarts_are_refused(tmp_path):
     adc = pp.make_adc(100, dwell=10e-6, system=SYSTEM)
     path = _written(tmp_path, [(adc,), (adc,)])
     (problem,) = ir.check(path, SYSTEM, limits=ir.CheckLimits(adc_gap=16e-6))
-    assert problem.startswith(
-        "ADC timing: 1 readout(s) open less than 16 us after the previous one ends, "
-        "the first in block 2"
-    )
+    assert problem.startswith("ADC gap of 0.0 us is under 16 us, from block 1 to 2 (1 such gaps)")
     spaced = _written(tmp_path, [(adc,), (pp.make_delay(20e-6),), (adc,)])
     assert ir.check(spaced, SYSTEM, limits=ir.CheckLimits(adc_gap=16e-6)) == []
 
@@ -419,7 +416,7 @@ def test_a_block_playing_an_rf_pulse_and_an_adc_is_refused(tmp_path):
     adc = pp.make_adc(10, dwell=10e-6, delay=pp.calc_duration(rf), system=SYSTEM)
     problems = ir.check(_written(tmp_path, [(rf, adc)]), SYSTEM)
     assert any(
-        p.startswith("block timing: 1 block(s) play an RF pulse and an ADC together")
+        p.startswith("RF pulse and ADC in one block, block 1 (1 such blocks)")
         for p in problems
     )
 
@@ -444,7 +441,7 @@ def test_an_arbitrary_gradient_longer_than_the_waveform_memory_is_refused(tmp_pa
     path = _written(tmp_path, [(grad,)])
     # 1000 samples on the 20 us raster: 20 ms.
     assert ir.check(path, SYSTEM, limits=ir.CheckLimits(wave_memory=10e-3)) == [
-        "arbitrary gradient of 20 ms on z in block 1 exceeds the 10 ms an axis's "
-        "waveform memory holds; split it over several blocks"
+        "arbitrary gradient of 20 ms on z in block 1 exceeds 10 ms of memory; "
+        "split it over several blocks"
     ]
     assert ir.check(path, SYSTEM, limits=ir.CheckLimits(wave_memory=20e-3)) == []

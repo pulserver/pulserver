@@ -311,8 +311,8 @@ def _rf_with_adc(sequence: pp.Sequence) -> list[str]:
     if not both.size:
         return []
     return [
-        f"block timing: {both.size} block(s) play an RF pulse and an ADC together, "
-        f"the first block {int(both[0]) + 1}; put the readout in a block of its own"
+        f"RF pulse and ADC in one block, block {int(both[0]) + 1} ({both.size} such "
+        "blocks); put the readout in a block of its own"
     ]
 
 
@@ -336,11 +336,10 @@ def _adc_gaps(sequence: pp.Sequence, least: float) -> list[str]:
         return []
     first = int(short[0])
     return [
-        f"ADC timing: {short.size} readout(s) open less than {least * 1e6:.0f} us "
-        f"after the previous one ends, the first in block {int(with_adc[first + 1]) + 1}, "
-        f"{gaps[first] * 1e6:.1f} us after the ADC of block {int(with_adc[first]) + 1}; "
-        "the scanner needs that time to start the next readout. Leave the gap, or "
-        "split the readout where a gap is allowed"
+        f"ADC gap of {gaps[first] * 1e6:.1f} us is under {least * 1e6:.0f} us, from "
+        f"block {int(with_adc[first]) + 1} to {int(with_adc[first + 1]) + 1} "
+        f"({short.size} such gaps); the scanner needs that time to start the next "
+        "readout. Leave the gap, or split the readout where a gap is allowed"
     ]
 
 
@@ -386,8 +385,8 @@ def _long_gradients(sequence: pp.Sequence, longest: float) -> list[str]:
     where = np.argwhere(blocks[:, 1:4] == ids[worst])[0]
     return [
         f"arbitrary gradient of {lengths[worst] * 1e3:.0f} ms on {'xyz'[int(where[1])]} "
-        f"in block {int(where[0]) + 1} exceeds the {longest * 1e3:.0f} ms an axis's "
-        "waveform memory holds; split it over several blocks"
+        f"in block {int(where[0]) + 1} exceeds {longest * 1e3:.0f} ms of memory; "
+        "split it over several blocks"
     ]
 
 
@@ -431,9 +430,9 @@ def _pns(sequence: pp.Sequence, system: pp.Opts, limits: CheckLimits) -> list[st
         return []
     axis = max(found.axes, key=lambda reading: reading.value).axis
     return [
-        f"PNS of {peak.value:.0%} of the {found.model} threshold, largest on "
-        f"{axis}, at {peak.time:.4f} s in block {peak.block} reaches "
-        f"{limits.pns_limit:.0%}"
+        f"PNS of {peak.value:.0%} of the {found.model} threshold exceeds "
+        f"{limits.pns_limit:.0%}, largest on {axis}, at {peak.time:.4f} s in block "
+        f"{peak.block}"
     ]
 
 
@@ -449,16 +448,19 @@ def _resonance(
         system=system,
     )
     return [
-        f"{band.peak:.1f} mT/m at {band.frequency:.0f} Hz on {band.peak_axis} in "
-        f"the window at {band.window_start:.3f} s "
-        + (
-            f"with the gradient at {band.gradient:.1f} mT/m exceeds the "
-            f"{band.tolerance:.1f} mT/m"
+        (
+            f"gradient of {band.gradient:.1f} mT/m on {band.peak_axis} exceeds "
+            f"{band.tolerance:.1f} mT/m while the forbidden band "
+            f"{band.f_min:.0f}-{band.f_max:.0f} Hz"
+            + ("" if band.axis is None else f" on {band.axis}")
+            + f" holds {band.peak:.1f} mT/m at {band.frequency:.0f} Hz"
             if band.tolerance > 0.0
-            else f"exceeds the {band.threshold:.1f} mT/m"
+            else f"{band.peak:.1f} mT/m at {band.frequency:.0f} Hz on {band.peak_axis} "
+            f"exceeds {band.threshold:.1f} mT/m in the forbidden band "
+            f"{band.f_min:.0f}-{band.f_max:.0f} Hz"
+            + ("" if band.axis is None else f" on {band.axis}")
         )
-        + f" of the forbidden band {band.f_min:.0f}-{band.f_max:.0f} Hz"
-        + ("" if band.axis is None else f" on {band.axis}")
+        + f", in the window at {band.window_start:.3f} s"
         for band in found.bands
         if band.violations
     ]

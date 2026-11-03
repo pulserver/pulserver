@@ -587,7 +587,7 @@ def test_a_design_in_a_forbidden_band_is_refused(store, monkeypatch):
     limits = {**LIMITS, "forbidden_band_1": "all 1 5000"}
     status, text = generate(store, "gre2d", GRE, limits=limits)
     assert status == 1
-    assert "of the forbidden band 1-5000 Hz" in text
+    assert "in the forbidden band 1-5000 Hz" in text
 
 
 def test_limits_that_cannot_be_read_are_refused(store):
