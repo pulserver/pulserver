@@ -82,6 +82,11 @@ Base blocks, virtual segments and the execution stream of segment instances.
 - A **segment instance** is one occurrence of a segment: gradient scales and rotation, swapped gradient waveforms, RF amplitude, offsets and shim, ADC offsets or no acquisition, triggers, outputs and block durations.
 - The **execution stream** is the ordered list of instances, and it is the whole scan.
 
+An output trigger's delay and duration belong to the base block. Blocks that
+differ only in them share one, and every instance fires the first block's
+trigger. To vary the trigger timing, give each timing a block of its own
+duration.
+
 An instance plays $\mathbf{g}(t) = R\, s\, \hat{\mathbf{g}}(t)$: the base
 block's normalised waveform, scaled by $s$ and rotated by $R$.
 
