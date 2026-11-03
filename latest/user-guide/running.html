@@ -618,7 +618,11 @@ nex: 2
 <p>The offset is in mm along the logical readout, phase and slice axes, zero along
 an axis left out, and the rotation is given by the <code class="docutils literal notranslate"><span class="pre">fov_rotation_ij</span></code> lines of
 <a class="reference internal" href="../explanations/protocol.html"><span class="doc">Protocol resolution</span></a>. <code class="docutils literal notranslate"><span class="pre">nex</span></code>, a whole number from 1, plays the main
-sequence, the last file of the chain, that many times. The chain is copied,
+sequence, the last file of the chain, that many times, numbering the averages
+in the <code class="docutils literal notranslate"><span class="pre">AVG</span></code> counter: blocks under the label <code class="docutils literal notranslate"><span class="pre">ONCE</span></code> 1 play before the first
+average only, under <code class="docutils literal notranslate"><span class="pre">ONCE</span></code> 2 after the last only
+(<a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.Sequence.expand_repeats.html#pypulseqpp.Sequence.expand_repeats" title="(in pypulseqpp latest)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">pypulseqpp.Sequence.expand_repeats()</span></code></a>). A file that already writes <code class="docutils literal notranslate"><span class="pre">AVG</span></code>
+is refused with <code class="docutils literal notranslate"><span class="pre">nex</span></code> above 1, as is one with no block played every time. The chain is copied,
 then checked and converted as <code class="docutils literal notranslate"><span class="pre">generate</span></code> checks and converts a design.</p>
 </section>
 <section id="scanner-limits">
@@ -763,7 +767,7 @@ gradient heating from it.</p>
 <td><p>One forbidden band: its physical axis (<code class="docutils literal notranslate"><span class="pre">x</span></code>, <code class="docutils literal notranslate"><span class="pre">y</span></code>, <code class="docutils literal notranslate"><span class="pre">z</span></code> or <code class="docutils literal notranslate"><span class="pre">all</span></code>), its lowest and highest frequency in Hz and, optionally, the readout gradient amplitude in mT/m above which it is locked, as an echo-spacing lockout table states it, separated by spaces. Without an amplitude, the band is held to 8 mT/m (<code class="docutils literal notranslate"><span class="pre">RESONANCE_FLOOR</span></code>)</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">vop_file</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">.mat</span></code> or <code class="docutils literal notranslate"><span class="pre">.npz</span></code> file of VOPs and the head SAR matrix of each body model, at a path the design calls can read; its <code class="docutils literal notranslate"><span class="pre">safety_factor</span></code> multiplies local SAR</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">.mat</span></code> or <code class="docutils literal notranslate"><span class="pre">.npz</span></code> file of VOPs and the head SAR matrix of each body model, at a path the design calls can read; its <code class="docutils literal notranslate"><span class="pre">safety_factor</span></code> multiplies local SAR and its <code class="docutils literal notranslate"><span class="pre">global_safety_factor</span></code>, 1 when absent, global SAR</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">vop_head_limit</span></code>, <code class="docutils literal notranslate"><span class="pre">vop_local_limit</span></code></p></td>
 <td><p>The scanner’s head and local SAR limits in W/kg in its current operating mode</p></td>

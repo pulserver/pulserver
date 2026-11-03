@@ -580,13 +580,13 @@ write such a plugin.</p>
 <figure class="only-light align-default" id="id1">
 <img alt="../_images/context.svg" src="../_images/context.svg" />
 <figcaption>
-<p><span class="caption-text">Calibration stored by one series of an exam and reused by the next only on an exact match.</span><a class="headerlink" href="#id1" title="Link to this image">#</a></p>
+<p><span class="caption-text">Calibration stored by one series of an exam and reused by the next with the same coils, whitening and frame of reference, resliced onto its grid.</span><a class="headerlink" href="#id1" title="Link to this image">#</a></p>
 </figcaption>
 </figure>
 <figure class="only-dark align-default" id="id2">
 <img alt="../_images/context-dark.svg" src="../_images/context-dark.svg" />
 <figcaption>
-<p><span class="caption-text">Calibration stored by one series of an exam and reused by the next only on an exact match.</span><a class="headerlink" href="#id2" title="Link to this image">#</a></p>
+<p><span class="caption-text">Calibration stored by one series of an exam and reused by the next with the same coils, whitening and frame of reference, resliced onto its grid.</span><a class="headerlink" href="#id2" title="Link to this image">#</a></p>
 </figcaption>
 </figure>
 <section id="units">
@@ -611,10 +611,15 @@ are those of the reconstruction.</p>
 <h3>Calibration context<a class="headerlink" href="#calibration-context" title="Link to this heading">#</a></h3>
 <p>Maps estimated from whitened, compressed data describe only data with the same
 channels, whitening, compression and voxel grid. So a stored set records all
-of them, and <a class="reference internal" href="../generated/pulserver.recon.coil_maps.html#pulserver.recon.coil_maps" title="pulserver.recon.coil_maps"><code class="xref py py-func docutils literal notranslate"><span class="pre">coil_maps()</span></code></a> hands it to a unit only where
-every field is equal; otherwise it raises
-<a class="reference internal" href="../generated/pulserver.recon.MissingCalibration.html#pulserver.recon.MissingCalibration" title="pulserver.recon.MissingCalibration"><code class="xref py py-class docutils literal notranslate"><span class="pre">MissingCalibration</span></code></a>, naming each source and the field
-that differed. Nothing is resampled. The model and the comparison are in
+of them. <a class="reference internal" href="../generated/pulserver.recon.coil_maps.html#pulserver.recon.coil_maps" title="pulserver.recon.coil_maps"><code class="xref py py-func docutils literal notranslate"><span class="pre">coil_maps()</span></code></a> hands maps a series stored for
+itself to a unit only where every field is equal. Maps of the exam, measured
+by a calibration series, serve a unit with the same coils, whitening, frame of
+reference and table position: on another position, orientation or grid they
+are resliced onto the unit’s grid, and maps of uncompressed channels are
+projected onto the unit’s compression basis. A unit’s own calibration readouts
+always win over both. Where no source serves, it raises
+<a class="reference internal" href="../generated/pulserver.recon.MissingCalibration.html#pulserver.recon.MissingCalibration" title="pulserver.recon.MissingCalibration"><code class="xref py py-class docutils literal notranslate"><span class="pre">MissingCalibration</span></code></a>, naming each source and why it
+was not used, a unit reaching outside the calibration volume among them. The model and the comparison are in
 <a class="reference internal" href="../developer-guide/internals/calibration.html"><span class="doc">Calibration, noise and coil compression</span></a>; units and image headers in
 <a class="reference internal" href="../developer-guide/internals/reconstruction-proxy.html"><span class="doc">Reconstruction proxy</span></a>.</p>
 </section>

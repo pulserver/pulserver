@@ -227,14 +227,21 @@ never in the scan.
 In a parallel-transmit chain it opens with a tour: for every transmit channel,
 the RF block that drives it hardest anywhere in the chain (the RF amplitude
 times the channel's waveform peak and shim magnitude; a single waveform with no
-shim drives every channel), with its blocks up to the next RF pulse, its
-readouts under `NOPRESCAN`, then a rest until it has lasted the shortest
-interval at which its file plays that pulse. Where exactly one file reads out
-and it repeats with the same RF amplitudes, the prescan then calibrates on that
-file from its start, the scan's own steady state, and the subsequence is the
-tour alone, or is not generated without parallel transmit. Otherwise no
-repetition stands for the scan, and the tour is followed by the calibration:
-the excitation scoring highest on the sine of its flip angle, capped at 90
+shim drives every channel), with its blocks up to the next RF pulse, then, where
+its RF energy over its duration exceeds the highest mean RF power of any file
+of the chain, a rest that brings it down to that power, of at least 1 ms
+(`SHORTEST_REST`): a pure delay played as a segment of its own must last that
+long for a sequencer to take it.
+A pulse is its RF definition and amplitude, with its shim; the phase and
+frequency that RF spoiling changes from play to play are not part of it. Where
+exactly one file reads out and it repeats with the same RF amplitudes, the
+prescan then calibrates on that file from its start, the scan's own steady
+state, the tour's readouts play under `NOPRESCAN`, labelled on its first block,
+and the subsequence is the tour alone, or is not generated without parallel
+transmit. Otherwise no repetition stands for the scan, and the tour is followed
+by the calibration, and the tour's readouts set the gain with the
+calibration's: a parallel-transmit pulse a prescan plays without acquiring
+still distorts in the scan. The calibration is the excitation scoring highest on the sine of its flip angle, capped at 90
 degrees, times the thickness it excites (the RF bandwidth over the slice-select
 gradient, a head coil's 0.3 m without one), with its blocks up to the next
 excitation, every gradient that varies across the file's repetitions at zero,

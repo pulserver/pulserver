@@ -715,7 +715,7 @@ Two offsets give two caches, and two designs.</p>
 </tr>
 <tr class="row-odd"><td><p>Multishot gradient variants</p></td>
 <td><p>One base block with shot variants, chosen per instance by the optional <code class="docutils literal notranslate"><span class="pre">gradient_shot_index</span></code></p></td>
-<td><p>No shot index: a gradient that differs between instances is played as a wave from waveform memory, or the run is a variant of its virtual segment</p></td>
+<td><p>Supported without a shot index: each block instance names the shape its arbitrary gradient plays (<code class="docutils literal notranslate"><span class="pre">gx_shape_id</span></code>, <code class="docutils literal notranslate"><span class="pre">gy_shape_id</span></code>, <code class="docutils literal notranslate"><span class="pre">gz_shape_id</span></code>; the first through <code class="docutils literal notranslate"><span class="pre">pulseg_get_grad_initial_shape_id</span></code>), and the shapes are held in waveform memory, all resident or streamed through slots, so one base block plays a different shape per instance</p></td>
 </tr>
 </tbody>
 </table>
