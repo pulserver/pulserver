@@ -78,6 +78,9 @@ class CheckLimits:
         Least time in s from the end of one ADC to the start of the next: the
         receiver's start packet for a readout must not fall inside, or just
         after, the previous readout's window. 0 leaves the check out.
+    wave_memory
+        Longest arbitrary gradient in s one axis's waveform memory holds:
+        its samples at the playout's raster. 0 leaves the check out.
     acoustic
         The gradient coil's acoustic transfer function on the physical axes,
         or the HDF5 file ``pypulseqpp.safety.read_acoustic_response`` reads
@@ -108,6 +111,7 @@ class CheckLimits:
     vop_head_limit: float | None = None
     vop_local_limit: float | None = None
     adc_gap: float = 0.0
+    wave_memory: float = 0.0
     acoustic: safety.AcousticResponse | Path | str | None = None
     acoustic_interval: float = 0.0
     spl_peak_limit: float = 140.0
@@ -185,7 +189,9 @@ def check(
     exempt, as the scanner plays it. It is then checked with
     ``pypulseqpp.check_timing``, gradient continuity included, and with
     ``pypulseqpp.safety.check_max_grad`` and ``check_max_slew``, against the
-    gradient limits, dead times and ringdown time of ``system``; and with
+    gradient limits, dead times and ringdown time of ``system``; the RF
+    peaks against its ``max_b1`` where it has one, and each arbitrary
+    gradient's length against ``limits.wave_memory``; and with
     ``check_pns``, ``check_mech_resonance`` and ``check_spl`` where ``limits``
     carries a nerve model, forbidden bands or an acoustic transfer function;
     the gradient spectrum is read over windows of ``RESONANCE_WINDOW``, a
@@ -275,6 +281,10 @@ def _problems(
     problems += _rf_with_adc(sequence)
     if limits.adc_gap > 0:
         problems += _adc_gaps(sequence, limits.adc_gap)
+    if getattr(opts, "max_b1", None):
+        problems += _peak_b1(sequence, opts.max_b1, opts.gamma)
+    if limits.wave_memory > 0:
+        problems += _long_gradients(sequence, limits.wave_memory)
     checks = [
         (_limit, safety.check_max_grad, "gradient amplitude", "mT/m", 1e3),
         (_limit, safety.check_max_slew, "slew rate", "T/m/s", 1.0),
@@ -331,6 +341,63 @@ def _adc_gaps(sequence: pp.Sequence, least: float) -> list[str]:
         f"{gaps[first] * 1e6:.1f} us after the ADC of block {int(with_adc[first]) + 1}; "
         "the scanner needs that time to start the next readout. Leave the gap, or "
         "split the readout where a gap is allowed"
+    ]
+
+
+def _peak_b1(sequence: pp.Sequence, limit: float, gamma: float) -> list[str]:
+    """Return the problem of RF pulses peaking above ``limit`` Hz."""
+    tables = sequence.libraries()
+    rf = np.atleast_2d(np.asarray(tables.rf, dtype=np.float64))
+    if not rf.size:
+        return []
+    peaks = np.array(
+        [
+            abs(row[0]) * np.max(np.abs(tables.shapes[int(row[1]) - 1].decompressed()))
+            for row in rf
+        ]
+    )
+    # The amplitudes are written to a few significant digits.
+    over = np.flatnonzero(peaks > limit * (1.0 + 1e-6))
+    if not over.size:
+        return []
+    worst = int(over[np.argmax(peaks[over])])
+    blocks = np.asarray(tables.blocks)
+    first = int(np.flatnonzero(blocks[:, 0] == worst + 1)[0]) + 1
+    return [
+        f"peak B1 of {peaks[worst] / gamma * 1e6:.1f} uT in block {first} exceeds "
+        f"{limit / gamma * 1e6:.1f} uT; lengthen the pulse or lower its flip angle"
+    ]
+
+
+def _long_gradients(sequence: pp.Sequence, longest: float) -> list[str]:
+    """Return the problem of arbitrary gradients longer than ``longest`` s."""
+    tables = sequence.libraries()
+    ids = np.asarray(tables.arbitrary_gradient_ids, dtype=np.int64)
+    if not ids.size:
+        return []
+    rows = np.asarray(tables.arbitrary_gradients, dtype=np.float64).reshape(ids.size, -1)
+    raster = sequence.grad_raster_time
+    lengths = np.array(
+        [
+            raster
+            * (
+                tables.shapes[int(row[3]) - 1].num_samples
+                if int(row[4]) == 0
+                else np.max(tables.shapes[int(row[4]) - 1].decompressed())
+            )
+            for row in rows
+        ]
+    )
+    over = np.flatnonzero(lengths > longest * (1.0 + 1e-9))
+    if not over.size:
+        return []
+    worst = int(over[np.argmax(lengths[over])])
+    blocks = np.asarray(tables.blocks)
+    where = np.argwhere(blocks[:, 1:4] == ids[worst])[0]
+    return [
+        f"arbitrary gradient of {lengths[worst] * 1e3:.0f} ms on {'xyz'[int(where[1])]} "
+        f"in block {int(where[0]) + 1} exceeds the {longest * 1e3:.0f} ms an axis's "
+        "waveform memory holds; split it over several blocks"
     ]
 
 

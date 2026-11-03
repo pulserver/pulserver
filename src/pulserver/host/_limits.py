@@ -247,6 +247,9 @@ def check_limits(limits: Mapping[str, Any]) -> ir.CheckLimits:
       local SAR limits in W/kg in its current operating mode.
     - ``adc_gap_us`` is the least time in µs from the end of one ADC to the
       start of the next that the scanner's receiver can start a readout in.
+    - ``ir_wave_max_samples`` and ``ir_wave_raster_us``, the waveform memory
+      :func:`split_limits` also reads, bound the length of one arbitrary
+      gradient.
     - ``acoustic_file`` is an HDF5 file of the gradient coil's acoustic
       transfer function the host can read, and ``acoustic_interval_us`` the
       sampling interval in µs its bins refer to; :func:`pulserver.ir.check`
@@ -294,6 +297,10 @@ def check_limits(limits: Mapping[str, Any]) -> ir.CheckLimits:
         raise ValueError("acoustic_file and acoustic_interval_us are given together")
     if "adc_gap_us" in limits:
         arguments["adc_gap"] = float(limits["adc_gap_us"]) / 1e6
+    if "ir_wave_max_samples" in limits and "ir_wave_raster_us" in limits:
+        arguments["wave_memory"] = (
+            int(limits["ir_wave_max_samples"]) * float(limits["ir_wave_raster_us"]) / 1e6
+        )
     if "acoustic_file" in limits:
         arguments["acoustic"] = Path(str(limits["acoustic_file"]))
         arguments["acoustic_interval"] = float(limits["acoustic_interval_us"]) / 1e6
