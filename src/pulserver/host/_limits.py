@@ -23,7 +23,7 @@ _WAVE_BUDGET = {
     "ir_wave_headroom": ("headroom", float),
     "ir_wave_slots": ("slots", int),
 }
-_CHECK_PREFIXES = ("pns_", "forbidden_band_", "vop_", "acoustic_")
+_CHECK_PREFIXES = ("pns_", "forbidden_band_", "vop_", "acoustic_", "adc_gap")
 _DESIGN_LIMITS = {"design_max_grad": "max_grad", "design_max_slew": "max_slew"}
 _DESIGN_TIMES = {
     "design_rf_dead_time": "rf_dead_time",
@@ -221,7 +221,7 @@ def _design_times(limits: Mapping[str, Any]) -> dict[str, float]:
 
 
 def check_limits(limits: Mapping[str, Any]) -> ir.CheckLimits:
-    """Read the check limits among a call's limits: PNS model, forbidden bands, VOP and acoustic entries.
+    """Read the check limits among a call's limits: PNS model, forbidden bands, ADC spacing, VOP and acoustic entries.
 
     - ``pns_chronaxie`` (s), ``pns_rheobase`` (T/m/s) and optionally
       ``pns_alpha`` give a chronaxie nerve model. The chronaxie is one value;
@@ -245,6 +245,11 @@ def check_limits(limits: Mapping[str, Any]) -> ir.CheckLimits:
       scanner reports, which the VOP file's ``transmit`` metadata must name.
       ``vop_head_limit`` and ``vop_local_limit`` are the scanner's head and
       local SAR limits in W/kg in its current operating mode.
+    - ``adc_gap_us`` is the least time in µs from the end of one ADC to the
+      start of the next that the scanner's receiver can start a readout in.
+    - ``ir_wave_max_samples`` and ``ir_wave_raster_us``, the waveform memory
+      :func:`split_limits` also reads, bound the length of one arbitrary
+      gradient.
     - ``acoustic_file`` is an HDF5 file of the gradient coil's acoustic
       transfer function the host can read, and ``acoustic_interval_us`` the
       sampling interval in µs its bins refer to; :func:`pulserver.ir.check`
@@ -262,7 +267,7 @@ def check_limits(limits: Mapping[str, Any]) -> ir.CheckLimits:
     unknown = [
         k
         for k in keys
-        if k not in (*_CHRONAXIE, "pns_limit", *_VOP, *_ACOUSTIC)
+        if k not in (*_CHRONAXIE, "pns_limit", *_VOP, *_ACOUSTIC, "adc_gap_us")
         and not _SAFE.fullmatch(k)
         and not _BAND.fullmatch(k)
     ]
@@ -290,6 +295,14 @@ def check_limits(limits: Mapping[str, Any]) -> ir.CheckLimits:
         raise ValueError("the vop_ limits need a vop_file")
     if ("acoustic_file" in limits) != ("acoustic_interval_us" in limits):
         raise ValueError("acoustic_file and acoustic_interval_us are given together")
+    if "adc_gap_us" in limits:
+        arguments["adc_gap"] = float(limits["adc_gap_us"]) / 1e6
+    if "ir_wave_max_samples" in limits and "ir_wave_raster_us" in limits:
+        arguments["wave_memory"] = (
+            int(limits["ir_wave_max_samples"])
+            * float(limits["ir_wave_raster_us"])
+            / 1e6
+        )
     if "acoustic_file" in limits:
         arguments["acoustic"] = Path(str(limits["acoustic_file"]))
         arguments["acoustic_interval"] = float(limits["acoustic_interval_us"]) / 1e6

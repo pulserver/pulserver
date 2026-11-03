@@ -929,8 +929,8 @@ def test_a_dead_time_the_file_does_not_leave_is_a_timing_problem():
     slow = copy.copy(SYSTEM)
     slow.adc_dead_time = 1e-3
     (problem,) = ir.check(FIXTURES / "gre_2d_3sl.seq", slow)
-    assert problem.startswith("timing: Block ")
-    assert "more errors" in problem
+    assert problem.startswith("timing: ")
+    assert "more)" in problem
 
 
 @pytest.mark.parametrize(("raster", "converts"), [(20e-6, True), (15e-6, False)])

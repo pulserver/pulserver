@@ -74,6 +74,13 @@ class CheckLimits:
     vop_head_limit, vop_local_limit
         The scanner's head and local SAR limits, W/kg, in its current
         operating mode; :func:`sar_ratios` needs both.
+    adc_gap
+        Least time in s from the end of one ADC to the start of the next: the
+        receiver's start packet for a readout must not fall inside, or just
+        after, the previous readout's window. 0 leaves the check out.
+    wave_memory
+        Longest arbitrary gradient in s one axis's waveform memory holds:
+        its samples at the playout's raster. 0 leaves the check out.
     acoustic
         The gradient coil's acoustic transfer function on the physical axes,
         or the HDF5 file ``pypulseqpp.safety.read_acoustic_response`` reads
@@ -103,6 +110,8 @@ class CheckLimits:
     vop_coil: str | None = None
     vop_head_limit: float | None = None
     vop_local_limit: float | None = None
+    adc_gap: float = 0.0
+    wave_memory: float = 0.0
     acoustic: safety.AcousticResponse | Path | str | None = None
     acoustic_interval: float = 0.0
     spl_peak_limit: float = 140.0
@@ -160,6 +169,10 @@ class SarRatio:
     global_sar: float
 
 
+#: The ADC column of ``Sequence.libraries().blocks``.
+_ADC_COLUMN = 4
+
+
 def check(
     seq_path: Path | str,
     system: pp.Opts,
@@ -176,7 +189,9 @@ def check(
     exempt, as the scanner plays it. It is then checked with
     ``pypulseqpp.check_timing``, gradient continuity included, and with
     ``pypulseqpp.safety.check_max_grad`` and ``check_max_slew``, against the
-    gradient limits, dead times and ringdown time of ``system``; and with
+    gradient limits, dead times and ringdown time of ``system``; the RF
+    peaks against its ``max_b1`` where it has one, and each arbitrary
+    gradient's length against ``limits.wave_memory``; and with
     ``check_pns``, ``check_mech_resonance`` and ``check_spl`` where ``limits``
     carries a nerve model, forbidden bands or an acoustic transfer function;
     the gradient spectrum is read over windows of ``RESONANCE_WINDOW``, a
@@ -263,6 +278,13 @@ def _problems(
     is_ok, report = pp.check_timing(sequence)
     if not is_ok:
         problems.append(_timing(sequence, report))
+    problems += _rf_with_adc(sequence)
+    if limits.adc_gap > 0:
+        problems += _adc_gaps(sequence, limits.adc_gap)
+    if getattr(opts, "max_b1", None):
+        problems += _peak_b1(sequence, opts.max_b1, opts.gamma)
+    if limits.wave_memory > 0:
+        problems += _long_gradients(sequence, limits.wave_memory)
     checks = [
         (_limit, safety.check_max_grad, "gradient amplitude", "mT/m", 1e3),
         (_limit, safety.check_max_slew, "slew rate", "T/m/s", 1.0),
@@ -280,6 +302,113 @@ def _problems(
     for result in found:
         problems += result.result()
     return problems
+
+
+def _rf_with_adc(sequence: pp.Sequence) -> list[str]:
+    """Return the problem of blocks playing an RF pulse and an ADC together, which Pulseq does not allow."""
+    blocks = np.asarray(sequence.libraries().blocks)
+    both = np.flatnonzero(blocks[:, 0] & blocks[:, _ADC_COLUMN])
+    if not both.size:
+        return []
+    return [
+        f"RF pulse and ADC in one block, block {int(both[0]) + 1} "
+        f"({both.size} such blocks)"
+    ]
+
+
+def _adc_gaps(sequence: pp.Sequence, least: float) -> list[str]:
+    """Return the problem of ADCs closer than ``least`` s, end to start, in play order."""
+    tables = sequence.libraries()
+    blocks = np.asarray(tables.blocks)
+    with_adc = np.flatnonzero(blocks[:, _ADC_COLUMN])
+    if with_adc.size < 2:
+        return []
+    durations = np.asarray(tables.block_durations, dtype=np.float64)
+    starts = np.concatenate(([0.0], np.cumsum(durations)[:-1]))
+    adc = np.asarray(tables.adc, dtype=np.float64).reshape(-1, 8)
+    rows = adc[blocks[with_adc, _ADC_COLUMN].astype(np.int64) - 1]
+    opens = starts[with_adc] + rows[:, 2]
+    closes = opens + rows[:, 0] * rows[:, 1]
+    gaps = opens[1:] - closes[:-1]
+    # A rounding's margin: the times are sums of raster multiples.
+    short = np.flatnonzero(gaps < least - 1e-9)
+    if not short.size:
+        return []
+    first = int(short[0])
+    return [
+        f"ADC gap of {gaps[first] * 1e6:.1f} us before block "
+        f"{int(with_adc[first + 1]) + 1} is under {least * 1e6:.0f} us "
+        f"({short.size} such gaps)"
+    ]
+
+
+def _peak_b1(sequence: pp.Sequence, limit: float, gamma: float) -> list[str]:
+    """Return the problem of RF pulses peaking above ``limit`` Hz."""
+    tables = sequence.libraries()
+    rf = np.atleast_2d(np.asarray(tables.rf, dtype=np.float64))
+    blocks = np.asarray(tables.blocks)
+    # The pulses the blocks play: the library can hold more than those.
+    played = np.unique(blocks[:, 0])
+    played = played[(played > 0) & (played <= rf.shape[0])]
+    if not played.size:
+        return []
+    peaks = np.array(
+        [
+            abs(rf[i - 1, 0])
+            * np.max(np.abs(tables.shapes[int(rf[i - 1, 1]) - 1].decompressed()))
+            for i in played
+        ]
+    )
+    # The amplitudes are written to a few significant digits.
+    worst = int(np.argmax(peaks))
+    if not peaks[worst] > limit * (1.0 + 1e-6):
+        return []
+    first = int(np.flatnonzero(blocks[:, 0] == played[worst])[0]) + 1
+    return [
+        f"peak B1 of {peaks[worst] / gamma * 1e6:.1f} uT in block {first} exceeds "
+        f"{limit / gamma * 1e6:.1f} uT"
+    ]
+
+
+def _long_gradients(sequence: pp.Sequence, longest: float) -> list[str]:
+    """Return the problem of arbitrary gradients longer than ``longest`` s."""
+    tables = sequence.libraries()
+    ids = np.asarray(tables.arbitrary_gradient_ids, dtype=np.int64)
+    if not ids.size:
+        return []
+    rows = np.asarray(tables.arbitrary_gradients, dtype=np.float64).reshape(
+        ids.size, -1
+    )
+    raster = sequence.grad_raster_time
+    lengths = np.array([raster * _raster_steps(tables.shapes, row) for row in rows])
+    over = np.flatnonzero(lengths > longest * (1.0 + 1e-9))
+    if not over.size:
+        return []
+    blocks = np.asarray(tables.blocks)
+    # The gradients the blocks play: the library can hold more than those.
+    over = over[np.isin(ids[over], blocks[:, 1:4])]
+    if not over.size:
+        return []
+    worst = int(over[np.argmax(lengths[over])])
+    where = np.argwhere(blocks[:, 1:4] == ids[worst])[0]
+    return [
+        f"arbitrary gradient of {lengths[worst] * 1e3:.0f} ms on {'xyz'[int(where[1])]} "
+        f"in block {int(where[0]) + 1} exceeds {longest * 1e3:.0f} ms of memory"
+    ]
+
+
+def _raster_steps(shapes: Any, row: np.ndarray) -> float:
+    """Return an arbitrary gradient's length in gradient rasters.
+
+    Its time shape is 0 for samples on the raster, -1 for samples on the half
+    raster, or the shape of its sample times in rasters.
+    """
+    samples, times = int(row[3]), int(row[4])
+    if times == 0:
+        return shapes[samples - 1].num_samples
+    if times == -1:
+        return shapes[samples - 1].num_samples / 2
+    return float(np.max(shapes[times - 1].decompressed()))
 
 
 def _limit(
@@ -308,9 +437,8 @@ def _pns(sequence: pp.Sequence, system: pp.Opts, limits: CheckLimits) -> list[st
         return []
     axis = max(found.axes, key=lambda reading: reading.value).axis
     return [
-        f"PNS of {peak.value:.0%} of the {found.model} threshold, largest on "
-        f"{axis}, at {peak.time:.4f} s in block {peak.block} reaches "
-        f"{limits.pns_limit:.0%}"
+        f"PNS of {peak.value:.0%} of the {found.model} threshold exceeds "
+        f"{limits.pns_limit:.0%}, on {axis} in block {peak.block}"
     ]
 
 
@@ -326,16 +454,15 @@ def _resonance(
         system=system,
     )
     return [
-        f"{band.peak:.1f} mT/m at {band.frequency:.0f} Hz on {band.peak_axis} in "
-        f"the window at {band.window_start:.3f} s "
-        + (
-            f"with the gradient at {band.gradient:.1f} mT/m exceeds the "
-            f"{band.tolerance:.1f} mT/m"
+        (
+            f"gradient {band.gradient:.1f} mT/m on {band.peak_axis} exceeds "
+            f"{band.tolerance:.1f} mT/m, band {band.f_min:.0f}-{band.f_max:.0f} Hz "
+            f"at {band.peak:.1f} mT/m"
             if band.tolerance > 0.0
-            else f"exceeds the {band.threshold:.1f} mT/m"
+            else f"{band.peak:.1f} mT/m at {band.frequency:.0f} Hz on {band.peak_axis} "
+            f"exceeds {band.threshold:.1f} mT/m of band "
+            f"{band.f_min:.0f}-{band.f_max:.0f} Hz"
         )
-        + f" of the forbidden band {band.f_min:.0f}-{band.f_max:.0f} Hz"
-        + ("" if band.axis is None else f" on {band.axis}")
         for band in found.bands
         if band.violations
     ]
@@ -513,7 +640,41 @@ def _ratio(sequence: pp.Sequence, found: Any, limit_ratio: float) -> SarRatio:
 
 
 def _timing(sequence: pp.Sequence, report: list) -> str:
+    """Return the first timing problem in a line the scanner console shows whole."""
+    more = f" (+{len(report) - 1} more)" if len(report) > 1 else ""
+    try:
+        return f"timing: {_finding(report[0], sequence.system.gamma)}{more}"
+    except (AttributeError, KeyError, TypeError):
+        pass
     printed = io.StringIO()
     with contextlib.redirect_stdout(printed):
         pp.print_error_report(sequence, report, max_errors=_LISTED, colored=False)
     return "timing: " + " ".join(printed.getvalue().split())
+
+
+def _finding(found: Any, gamma: float) -> str:
+    """Return one ``pypulseqpp.check_timing`` finding as its value and its limit."""
+    kind, block = found.error_type, found.block
+    if kind == "RASTER":
+        return (
+            f"{found.event}.{found.field} of {found.value * 1e6:g} us in block {block} "
+            f"is off {found.raster}"
+        )
+    if kind == "GRADIENT_DISCONTINUITY":
+        return (
+            f"{found.event} steps {abs(found.value - found.before) / gamma * 1e3:.1f} mT/m "
+            f"into block {block}, {found.slew / gamma:.0f} > {found.limit / gamma:.0f} T/m/s"
+        )
+    if kind in ("ADC_DEAD_TIME", "RF_DEAD_TIME"):
+        return (
+            f"{found.event} delay of {found.value * 1e6:g} us in block {block} is under "
+            f"the {found.dead_time * 1e6:g} us dead time"
+        )
+    if kind == "RF_RINGDOWN_TIME":
+        return (
+            f"RF ends {(found.duration - found.value) * 1e6:g} us before block {block} "
+            f"ends, under the {found.ringdown_time * 1e6:g} us ringdown"
+        )
+    if kind == "GRADIENT_NOT_RAMPED_DOWN":
+        return "the sequence ends with a gradient on"
+    return f"{found.event}.{found.field} in block {block}: {kind.lower().replace('_', ' ')}"
