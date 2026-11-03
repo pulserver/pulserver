@@ -22,7 +22,7 @@ import ismrmrd.xsd as xsd
 
 from .._plugins import NAME, PluginPath, directories, find
 from ..recon._runtime import constants
-from ..recon._runtime.concurrency import HostSlots, Slot, slot_devices
+from ..recon._runtime.concurrency import HostSlots, Slot, memory_allows, slot_devices
 from ..recon._runtime.connection import Connection
 from ..recon._runtime.exam import (
     DEFAULT_EXAM_DIRECTORY,
@@ -42,6 +42,8 @@ from ._workers import WorkerPool
 
 _log = logging.getLogger("pulserver.proxy")
 
+# How often a series held for memory checks again while none finishes.
+_MEMORY_POLL = 1.0
 # A worker spawns, imports its plugin and connects; past this it is not coming.
 # Also how long a reconstruction server may take to accept a forwarded series.
 _CONNECT_TIMEOUT = 120.0
@@ -248,10 +250,11 @@ class ReconProxy(_Listener):
     A local series holds a slot while it runs. On a host with GPUs, found
     through ``CUDA_VISIBLE_DEVICES`` or ``nvidia-smi``, each slot holds one GPU,
     ``gpu_slots`` slots per GPU, and the reconstruction reads it as
-    ``context.device``. A series that finds every slot busy is queued: its
-    enriched stream is written to a file of ``queue`` while it arrives, its
-    client stays connected, and the file is replayed to a worker and deleted
-    once a slot frees.
+    ``context.device``. A series that finds every slot busy, or the host's
+    available memory short of one reconstruction's budget while another series
+    of this proxy runs, is queued: its enriched stream is written to a file of
+    ``queue`` while it arrives, its client stays connected, and the file is
+    replayed to a worker and deleted once a slot and the memory are free.
 
     The series of one exam share a directory under the system's temporary
     directory, through which a reconstruction reads what an earlier series of
@@ -589,6 +592,8 @@ class _Workers:
         # other's. Held across proxies, like the slots.
         self._alone = HostSlots([None], Path(self._slots.directory) / "motion")
         self._queued = itertools.count(1)
+        self._running = 0
+        self._finished = threading.Condition()
 
     def run(
         self,
@@ -632,7 +637,7 @@ class _Workers:
             finally:
                 self._alone.release(alone)
             return
-        slot = self._slots.take(wait=False)
+        slot = self._slots.take(wait=False) if self._admits() else None
         if slot is not None:
             try:
                 self._run(
@@ -651,6 +656,7 @@ class _Workers:
         _log.info("queued %s", queued.path.name)
         try:
             others = _record(items, header, queued)
+            self._wait_for_memory()
             slot = self._slots.take(wait=True)
             try:
                 self._run(
@@ -666,6 +672,17 @@ class _Workers:
                 self._slots.release(slot)
         finally:
             queued.unlink()
+
+    def _admits(self) -> bool:
+        """Return whether a series may start now: memory holds it, or this proxy runs none."""
+        with self._finished:
+            return self._running == 0 or memory_allows()
+
+    def _wait_for_memory(self) -> None:
+        """Wait until :meth:`_admits` a series, rechecking as series finish and every second."""
+        with self._finished:
+            while self._running and not memory_allows():
+                self._finished.wait(timeout=_MEMORY_POLL)
 
     def close(self) -> None:
         self._closing.set()
@@ -691,6 +708,25 @@ class _Workers:
         poses: Callable[[Pose], None] | None = None,
     ) -> None:
         """Give a worker the config, the header and whatever ``feed`` sends it."""
+        with self._finished:
+            self._running += 1
+        try:
+            self._run_in_slot(client, config, header, plugin, slot, feed, poses)
+        finally:
+            with self._finished:
+                self._running -= 1
+                self._finished.notify_all()
+
+    def _run_in_slot(
+        self,
+        client: Connection,
+        config: str,
+        header: Any,
+        plugin: Path,
+        slot: Slot,
+        feed: Callable[[Connection], None],
+        poses: Callable[[Pose], None] | None = None,
+    ) -> None:
         convert = MrdDicomBuilder(header) if self.dicom else None
         with self.exams.lease(header) as exam:
             channel = _WorkerChannel(self.workers, plugin, exam.directory, slot.device)
