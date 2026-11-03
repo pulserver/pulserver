@@ -311,8 +311,8 @@ def _rf_with_adc(sequence: pp.Sequence) -> list[str]:
     if not both.size:
         return []
     return [
-        f"RF pulse and ADC in one block, block {int(both[0]) + 1} ({both.size} such "
-        "blocks); put the readout in a block of its own"
+        f"RF pulse and ADC in one block, block {int(both[0]) + 1} "
+        f"({both.size} such blocks)"
     ]
 
 
@@ -336,10 +336,9 @@ def _adc_gaps(sequence: pp.Sequence, least: float) -> list[str]:
         return []
     first = int(short[0])
     return [
-        f"ADC gap of {gaps[first] * 1e6:.1f} us is under {least * 1e6:.0f} us, from "
-        f"block {int(with_adc[first]) + 1} to {int(with_adc[first + 1]) + 1} "
-        f"({short.size} such gaps); the scanner needs that time to start the next "
-        "readout. Leave the gap, or split the readout where a gap is allowed"
+        f"ADC gap of {gaps[first] * 1e6:.1f} us before block "
+        f"{int(with_adc[first + 1]) + 1} is under {least * 1e6:.0f} us "
+        f"({short.size} such gaps)"
     ]
 
 
@@ -364,7 +363,7 @@ def _peak_b1(sequence: pp.Sequence, limit: float, gamma: float) -> list[str]:
     first = int(np.flatnonzero(blocks[:, 0] == worst + 1)[0]) + 1
     return [
         f"peak B1 of {peaks[worst] / gamma * 1e6:.1f} uT in block {first} exceeds "
-        f"{limit / gamma * 1e6:.1f} uT; lengthen the pulse or lower its flip angle"
+        f"{limit / gamma * 1e6:.1f} uT"
     ]
 
 
@@ -385,8 +384,7 @@ def _long_gradients(sequence: pp.Sequence, longest: float) -> list[str]:
     where = np.argwhere(blocks[:, 1:4] == ids[worst])[0]
     return [
         f"arbitrary gradient of {lengths[worst] * 1e3:.0f} ms on {'xyz'[int(where[1])]} "
-        f"in block {int(where[0]) + 1} exceeds {longest * 1e3:.0f} ms of memory; "
-        "split it over several blocks"
+        f"in block {int(where[0]) + 1} exceeds {longest * 1e3:.0f} ms of memory"
     ]
 
 
@@ -431,8 +429,7 @@ def _pns(sequence: pp.Sequence, system: pp.Opts, limits: CheckLimits) -> list[st
     axis = max(found.axes, key=lambda reading: reading.value).axis
     return [
         f"PNS of {peak.value:.0%} of the {found.model} threshold exceeds "
-        f"{limits.pns_limit:.0%}, largest on {axis}, at {peak.time:.4f} s in block "
-        f"{peak.block}"
+        f"{limits.pns_limit:.0%}, on {axis} in block {peak.block}"
     ]
 
 
@@ -449,18 +446,14 @@ def _resonance(
     )
     return [
         (
-            f"gradient of {band.gradient:.1f} mT/m on {band.peak_axis} exceeds "
-            f"{band.tolerance:.1f} mT/m while the forbidden band "
-            f"{band.f_min:.0f}-{band.f_max:.0f} Hz"
-            + ("" if band.axis is None else f" on {band.axis}")
-            + f" holds {band.peak:.1f} mT/m at {band.frequency:.0f} Hz"
+            f"gradient {band.gradient:.1f} mT/m on {band.peak_axis} exceeds "
+            f"{band.tolerance:.1f} mT/m, band {band.f_min:.0f}-{band.f_max:.0f} Hz "
+            f"at {band.peak:.1f} mT/m"
             if band.tolerance > 0.0
             else f"{band.peak:.1f} mT/m at {band.frequency:.0f} Hz on {band.peak_axis} "
-            f"exceeds {band.threshold:.1f} mT/m in the forbidden band "
+            f"exceeds {band.threshold:.1f} mT/m of band "
             f"{band.f_min:.0f}-{band.f_max:.0f} Hz"
-            + ("" if band.axis is None else f" on {band.axis}")
         )
-        + f", in the window at {band.window_start:.3f} s"
         for band in found.bands
         if band.violations
     ]
@@ -638,6 +631,18 @@ def _ratio(sequence: pp.Sequence, found: Any, limit_ratio: float) -> SarRatio:
 
 
 def _timing(sequence: pp.Sequence, report: list) -> str:
+    """Return the first timing problem in a line the scanner console shows whole."""
+    first = report[0]
+    try:
+        event = f"{first.event}.{first.field} of {first.value * 1e6:g} us"
+        if first.error_type == "RASTER":
+            what = f"is off {first.raster}"
+        else:
+            what = first.error_type.lower().replace("_", " ")
+        more = f" (+{len(report) - 1} more)" if len(report) > 1 else ""
+        return f"timing: {event} in block {first.block} {what}{more}"
+    except (AttributeError, TypeError):
+        pass
     printed = io.StringIO()
     with contextlib.redirect_stdout(printed):
         pp.print_error_report(sequence, report, max_errors=_LISTED, colored=False)
