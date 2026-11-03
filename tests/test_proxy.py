@@ -32,6 +32,7 @@ from pulserver.proxy import (
     SequenceTable,
     _designs,
     _held,
+    _proxy,
 )
 from pulserver.proxy._enrich import is_enriched
 from pulserver.proxy._proxy import _config_plugin
@@ -568,6 +569,49 @@ def test_a_series_with_every_slot_busy_is_held_on_disk_until_one_frees(
     assert set(received) == {"held", "queued"}
     assert all(len(images(items)) == 1 for items in received.values())
     assert not list(queue.glob("*.h5"))
+
+
+def test_a_series_arriving_while_memory_is_short_is_held_on_disk_until_a_series_finishes(
+    start_proxy, bucket, tmp_path, monkeypatch
+):
+    _, series = bucket
+    monkeypatch.setattr(_proxy, "memory_allows", lambda: False)
+    proxy = start_proxy(slots=2)
+    gate = tmp_path / "go"
+    trace = tmp_path / "trace"
+    trace.mkdir()
+    held = json.dumps(
+        {"parameters": {"config": "gre2d", "gate": str(gate), "trace": str(trace)}}
+    )
+    received = {}
+
+    def play(name, config):
+        received[name] = stream(proxy.port, series["gre2d"], config=config)
+
+    first = threading.Thread(target=play, args=("held", held))
+    first.start()
+    _wait_until(gate.with_name("go.waiting").exists, "the held series never started")
+
+    second = threading.Thread(
+        target=play,
+        args=(
+            "queued",
+            json.dumps({"parameters": {"config": "gre2d", "trace": str(trace)}}),
+        ),
+    )
+    second.start()
+    _wait_until(
+        lambda: len(list(proxy.queue.glob("*.h5"))) == 1, "no series was queued"
+    )
+    time.sleep(0.5)
+    assert "queued" not in received
+
+    gate.touch()
+    for thread in (first, second):
+        thread.join(timeout=DEADLINE)
+
+    assert all(len(images(received[name])) == 1 for name in ("held", "queued"))
+    assert not list(proxy.queue.glob("*.h5"))
 
 
 def _wait_until(condition, message, timeout=DEADLINE):
@@ -1776,3 +1820,57 @@ def test_the_idle_timeout_counts_from_the_last_client_leaving(bucket):
         assert not thread.is_alive(), "the proxy was still waiting"
     finally:
         proxy.close()
+
+
+class _ClosesAfterLastReadout:
+    """A reconstruction that stops reading once it holds the last readout."""
+
+    def __init__(self):
+        self.received = []
+        self.closed = False
+
+    def send(self, item):
+        if self.closed:
+            raise BrokenPipeError(32, "Broken pipe")
+        self.received.append(item)
+        self.closed = isinstance(item, ismrmrd.Acquisition) and item.isFlagSet(
+            ismrmrd.ACQ_LAST_IN_MEASUREMENT
+        )
+
+
+def _readout(last=False):
+    acquisition = ismrmrd.Acquisition.from_array(np.zeros((1, 4), np.complex64))
+    if last:
+        acquisition.setFlag(ismrmrd.ACQ_LAST_IN_MEASUREMENT)
+    return acquisition
+
+
+def _ecg():
+    return ismrmrd.Waveform.from_array(np.zeros((1, 8), np.uint32))
+
+
+def test_a_waveform_trailing_the_last_readout_of_a_closed_reconstruction_is_dropped():
+    reconstruction = _ClosesAfterLastReadout()
+
+    _proxy._send(iter([_readout(), _readout(last=True), _ecg()]), reconstruction)
+
+    assert len(reconstruction.received) == 2
+
+
+def test_a_reconstruction_that_stops_before_the_last_readout_fails_the_series():
+    reconstruction = _ClosesAfterLastReadout()
+    reconstruction.closed = True
+
+    with pytest.raises(_proxy._StoppedReading):
+        _proxy._send(iter([_readout(), _readout(last=True)]), reconstruction)
+
+
+@pytest.mark.parametrize(
+    ("available_gb", "allows"), [(70.0, True), (50.0, False), (0.0, True)]
+)
+def test_memory_allows_a_reconstruction_when_its_budget_fits_the_headroom_or_memory_is_unknown(
+    monkeypatch, available_gb, allows
+):
+    monkeypatch.setattr(concurrency, "_available_ram_gb", lambda: available_gb)
+
+    assert concurrency.memory_allows(per_recon_gb=48.0, headroom_fraction=0.8) is allows
