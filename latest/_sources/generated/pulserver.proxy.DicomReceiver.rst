@@ -14,6 +14,7 @@
    :toctree:
    :nosignatures:
 
+   ~DicomReceiver.show
    ~DicomReceiver.store
 
 
@@ -26,6 +27,7 @@
 
    ~DicomReceiver.calling
    ~DicomReceiver.timeout
+   ~DicomReceiver.viewer_port
    ~DicomReceiver.host
    ~DicomReceiver.port
    ~DicomReceiver.title

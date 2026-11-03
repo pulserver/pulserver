@@ -519,9 +519,12 @@ the part of a shifted field of view a receiver cannot apply itself: under a
 gradient that holds one value, a shift is a phase and a frequency offset,
 but under one that does not, the phase curves over the readout and is
 applied here; and the half voxel that centres the grid.</p>
+<p>A readout shorter than the scanner’s frame arrives padded to the frame,
+the longest readout of the scan, its own samples first: it is cut to the
+row’s count.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Raises<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.15)"><strong>ValueError</strong></a> – If the acquisition’s sample count differs from the row’s.</p>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.15)"><strong>ValueError</strong></a> – If the acquisition has fewer samples than the row.</p>
 </dd>
 </dl>
 </dd></dl>

@@ -429,7 +429,10 @@
 
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"DicomReceiver"</span><span class="p">]</span>
 
+<span class="kn">import</span><span class="w"> </span><span class="nn">io</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">socket</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">struct</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Sequence</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
 
@@ -460,6 +463,12 @@
 <span class="sd">        have to be told to accept.</span>
 <span class="sd">    timeout</span>
 <span class="sd">        Seconds the association, and each store, may take.</span>
+<span class="sd">    viewer_port</span>
+<span class="sd">        Port on the receiver's host of a viewer that shows each stored image,</span>
+<span class="sd">        sent to it as an ``AVR1`` message: the four bytes ``AVR1``, then -1</span>
+<span class="sd">        three times and the file's length as big-endian 32-bit integers, then</span>
+<span class="sd">        the image as a DICOM file. The viewer answers a big-endian 32-bit</span>
+<span class="sd">        status, 0 when shown, and a line. ``None`` sends nothing.</span>
 <span class="sd">    """</span>
 
     <span class="n">host</span><span class="p">:</span> <span class="nb">str</span>
@@ -467,6 +476,7 @@
     <span class="n">title</span><span class="p">:</span> <span class="nb">str</span>
     <span class="n">calling</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"PULSERVER"</span>
     <span class="n">timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">30.0</span>
+    <span class="n">viewer_port</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__str__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
         <span class="k">return</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">title</span><span class="si">}</span><span class="s2"> at </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">host</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">port</span><span class="si">}</span><span class="s2"> called as </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">calling</span><span class="si">}</span><span class="s2">"</span>
@@ -514,6 +524,7 @@
                 <span class="n">code</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">status</span><span class="p">,</span> <span class="s2">"Status"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
                 <span class="k">if</span> <span class="n">code</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">int</span><span class="p">(</span><span class="n">code</span><span class="p">)</span> <span class="ow">in</span> <span class="n">_STORED</span><span class="p">:</span>
                     <span class="n">stored</span> <span class="o">+=</span> <span class="mi">1</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">show</span><span class="p">(</span><span class="n">dataset</span><span class="p">)</span>
                 <span class="k">else</span><span class="p">:</span>
                     <span class="n">_log</span><span class="o">.</span><span class="n">error</span><span class="p">(</span>
                         <span class="s2">"</span><span class="si">%s</span><span class="s2"> did not store image </span><span class="si">%s</span><span class="s2">: </span><span class="si">%s</span><span class="s2">"</span><span class="p">,</span>
@@ -524,6 +535,56 @@
         <span class="k">finally</span><span class="p">:</span>
             <span class="n">association</span><span class="o">.</span><span class="n">release</span><span class="p">()</span>
         <span class="k">return</span> <span class="n">stored</span></div>
+
+
+<div class="viewcode-block" id="DicomReceiver.show">
+<a class="viewcode-back" href="../../../generated/pulserver.proxy.DicomReceiver.show.html#pulserver.proxy.DicomReceiver.show">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">show</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dataset</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Send ``dataset`` to the viewer at ``viewer_port``; return whether it was shown.</span>
+
+<span class="sd">        Nothing raises: a viewer that cannot be reached, or refuses, is logged.</span>
+<span class="sd">        """</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">viewer_port</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">False</span>
+        <span class="n">buffer</span> <span class="o">=</span> <span class="n">io</span><span class="o">.</span><span class="n">BytesIO</span><span class="p">()</span>
+        <span class="n">dataset</span><span class="o">.</span><span class="n">save_as</span><span class="p">(</span><span class="n">buffer</span><span class="p">,</span> <span class="n">enforce_file_format</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">image</span> <span class="o">=</span> <span class="n">buffer</span><span class="o">.</span><span class="n">getvalue</span><span class="p">()</span>
+        <span class="n">request</span> <span class="o">=</span> <span class="sa">b</span><span class="s2">"AVR1"</span> <span class="o">+</span> <span class="n">struct</span><span class="o">.</span><span class="n">pack</span><span class="p">(</span><span class="s2">"&gt;iiiI"</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">image</span><span class="p">))</span> <span class="o">+</span> <span class="n">image</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">with</span> <span class="n">socket</span><span class="o">.</span><span class="n">create_connection</span><span class="p">(</span>
+                <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">host</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">viewer_port</span><span class="p">),</span> <span class="n">timeout</span><span class="o">=</span><span class="mf">5.0</span>
+            <span class="p">)</span> <span class="k">as</span> <span class="n">connection</span><span class="p">:</span>
+                <span class="n">connection</span><span class="o">.</span><span class="n">sendall</span><span class="p">(</span><span class="n">request</span><span class="p">)</span>
+                <span class="n">connection</span><span class="o">.</span><span class="n">shutdown</span><span class="p">(</span><span class="n">socket</span><span class="o">.</span><span class="n">SHUT_WR</span><span class="p">)</span>
+                <span class="n">reply</span> <span class="o">=</span> <span class="sa">b</span><span class="s2">""</span>
+                <span class="k">while</span> <span class="n">chunk</span> <span class="o">:=</span> <span class="n">connection</span><span class="o">.</span><span class="n">recv</span><span class="p">(</span><span class="mi">512</span><span class="p">):</span>
+                    <span class="n">reply</span> <span class="o">+=</span> <span class="n">chunk</span>
+        <span class="k">except</span> <span class="ne">OSError</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
+            <span class="n">_log</span><span class="o">.</span><span class="n">error</span><span class="p">(</span>
+                <span class="s2">"the viewer at </span><span class="si">%s</span><span class="s2">:</span><span class="si">%d</span><span class="s2"> cannot be reached: </span><span class="si">%s</span><span class="s2">"</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">host</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">viewer_port</span><span class="p">,</span>
+                <span class="n">error</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">return</span> <span class="kc">False</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">reply</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">4</span><span class="p">:</span>
+            <span class="n">_log</span><span class="o">.</span><span class="n">error</span><span class="p">(</span>
+                <span class="s2">"the viewer at </span><span class="si">%s</span><span class="s2">:</span><span class="si">%d</span><span class="s2"> did not answer"</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">host</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">viewer_port</span>
+            <span class="p">)</span>
+            <span class="k">return</span> <span class="kc">False</span>
+        <span class="n">status</span> <span class="o">=</span> <span class="n">struct</span><span class="o">.</span><span class="n">unpack</span><span class="p">(</span><span class="s2">"&gt;I"</span><span class="p">,</span> <span class="n">reply</span><span class="p">[:</span><span class="mi">4</span><span class="p">])[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">line</span> <span class="o">=</span> <span class="n">reply</span><span class="p">[</span><span class="mi">4</span><span class="p">:]</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="n">errors</span><span class="o">=</span><span class="s2">"replace"</span><span class="p">)</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">status</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">_log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">"viewer: </span><span class="si">%s</span><span class="s2">"</span><span class="p">,</span> <span class="n">line</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">_log</span><span class="o">.</span><span class="n">error</span><span class="p">(</span>
+                <span class="s2">"the viewer at </span><span class="si">%s</span><span class="s2">:</span><span class="si">%d</span><span class="s2"> did not show image </span><span class="si">%s</span><span class="s2">: </span><span class="si">%s</span><span class="s2">"</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">host</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">viewer_port</span><span class="p">,</span>
+                <span class="n">dataset</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"InstanceNumber"</span><span class="p">,</span> <span class="s2">"?"</span><span class="p">),</span>
+                <span class="n">line</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">status</span> <span class="o">==</span> <span class="mi">0</span></div>
 </div>
 
 </pre></div>

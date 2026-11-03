@@ -971,12 +971,24 @@
 <span class="sd">    but under one that does not, the phase curves over the readout and is</span>
 <span class="sd">    applied here; and the half voxel that centres the grid.</span>
 
+<span class="sd">    A readout shorter than the scanner's frame arrives padded to the frame,</span>
+<span class="sd">    the longest readout of the scan, its own samples first: it is cut to the</span>
+<span class="sd">    row's count.</span>
+
 <span class="sd">    Raises</span>
 <span class="sd">    ------</span>
 <span class="sd">    ValueError</span>
-<span class="sd">        If the acquisition's sample count differs from the row's.</span>
+<span class="sd">        If the acquisition has fewer samples than the row.</span>
 <span class="sd">    """</span>
     <span class="n">count</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">table</span><span class="o">.</span><span class="n">num_samples</span><span class="p">[</span><span class="n">index</span><span class="p">])</span>
+    <span class="k">if</span> <span class="nb">int</span><span class="p">(</span><span class="n">acquisition</span><span class="o">.</span><span class="n">number_of_samples</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">count</span><span class="p">:</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">acquisition</span><span class="o">.</span><span class="n">data</span><span class="p">)[:,</span> <span class="p">:</span><span class="n">count</span><span class="p">]</span>
+        <span class="n">acquisition</span><span class="o">.</span><span class="n">resize</span><span class="p">(</span>
+            <span class="n">count</span><span class="p">,</span>
+            <span class="nb">int</span><span class="p">(</span><span class="n">acquisition</span><span class="o">.</span><span class="n">active_channels</span><span class="p">),</span>
+            <span class="nb">int</span><span class="p">(</span><span class="n">acquisition</span><span class="o">.</span><span class="n">trajectory_dimensions</span><span class="p">),</span>
+        <span class="p">)</span>
+        <span class="n">acquisition</span><span class="o">.</span><span class="n">data</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">data</span>
     <span class="k">if</span> <span class="nb">int</span><span class="p">(</span><span class="n">acquisition</span><span class="o">.</span><span class="n">number_of_samples</span><span class="p">)</span> <span class="o">!=</span> <span class="n">count</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
             <span class="sa">f</span><span class="s2">"acquisition </span><span class="si">{</span><span class="n">index</span><span class="si">}</span><span class="s2"> has </span><span class="si">{</span><span class="n">acquisition</span><span class="o">.</span><span class="n">number_of_samples</span><span class="si">}</span><span class="s2"> samples; "</span>

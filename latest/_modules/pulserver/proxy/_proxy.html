@@ -459,7 +459,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">.</span><span class="w"> </span><span class="kn">import</span> <span class="n">_held</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._designs</span><span class="w"> </span><span class="kn">import</span> <span class="n">Design</span><span class="p">,</span> <span class="n">DesignCache</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._enrich</span><span class="w"> </span><span class="kn">import</span> <span class="n">enrich_acquisition</span><span class="p">,</span> <span class="n">enrich_header</span><span class="p">,</span> <span class="n">header_fov_offset_m</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">._motion</span><span class="w"> </span><span class="kn">import</span> <span class="n">FILENAME</span><span class="p">,</span> <span class="n">MotionWriter</span><span class="p">,</span> <span class="n">Pose</span><span class="p">,</span> <span class="n">pose_of</span><span class="p">,</span> <span class="n">pose_waveform</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">._motion</span><span class="w"> </span><span class="kn">import</span> <span class="n">FILENAME</span><span class="p">,</span> <span class="n">MotionLog</span><span class="p">,</span> <span class="n">MotionWriter</span><span class="p">,</span> <span class="n">Pose</span><span class="p">,</span> <span class="n">pose_of</span><span class="p">,</span> <span class="n">pose_waveform</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._queue</span><span class="w"> </span><span class="kn">import</span> <span class="n">QueueFile</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._receiver</span><span class="w"> </span><span class="kn">import</span> <span class="n">DicomReceiver</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._seqdesc</span><span class="w"> </span><span class="kn">import</span> <span class="n">is_message</span>
@@ -1059,7 +1059,10 @@
             <span class="k">try</span><span class="p">:</span>
                 <span class="n">slot</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_slots</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">wait</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
                 <span class="k">try</span><span class="p">:</span>
-                    <span class="k">with</span> <span class="n">MotionWriter</span><span class="p">(</span><span class="n">motion</span><span class="p">)</span> <span class="k">as</span> <span class="n">writer</span><span class="p">:</span>
+                    <span class="k">with</span> <span class="p">(</span>
+                        <span class="n">MotionWriter</span><span class="p">(</span><span class="n">motion</span><span class="p">)</span> <span class="k">as</span> <span class="n">writer</span><span class="p">,</span>
+                        <span class="n">MotionLog</span><span class="p">(</span><span class="n">motion</span><span class="o">.</span><span class="n">parent</span><span class="p">)</span> <span class="k">as</span> <span class="n">log</span><span class="p">,</span>
+                    <span class="p">):</span>
                         <span class="bp">self</span><span class="o">.</span><span class="n">_run</span><span class="p">(</span>
                             <span class="n">client</span><span class="p">,</span>
                             <span class="n">config</span><span class="p">,</span>
@@ -1067,7 +1070,7 @@
                             <span class="n">path</span><span class="p">,</span>
                             <span class="n">slot</span><span class="p">,</span>
                             <span class="k">lambda</span> <span class="n">w</span><span class="p">:</span> <span class="n">_send</span><span class="p">(</span><span class="n">items</span><span class="p">,</span> <span class="n">w</span><span class="p">),</span>
-                            <span class="n">_publisher</span><span class="p">(</span><span class="n">writer</span><span class="p">),</span>
+                            <span class="n">_publisher</span><span class="p">(</span><span class="n">writer</span><span class="p">,</span> <span class="n">log</span><span class="p">),</span>
                         <span class="p">)</span>
                 <span class="k">finally</span><span class="p">:</span>
                     <span class="bp">self</span><span class="o">.</span><span class="n">_slots</span><span class="o">.</span><span class="n">release</span><span class="p">(</span><span class="n">slot</span><span class="p">)</span>
@@ -1239,7 +1242,10 @@
             <span class="n">poses</span> <span class="o">=</span> <span class="p">(</span>
                 <span class="kc">None</span>
                 <span class="k">if</span> <span class="n">motion</span> <span class="ow">is</span> <span class="kc">None</span>
-                <span class="k">else</span> <span class="n">_publisher</span><span class="p">(</span><span class="n">stack</span><span class="o">.</span><span class="n">enter_context</span><span class="p">(</span><span class="n">MotionWriter</span><span class="p">(</span><span class="n">motion</span><span class="p">)))</span>
+                <span class="k">else</span> <span class="n">_publisher</span><span class="p">(</span>
+                    <span class="n">stack</span><span class="o">.</span><span class="n">enter_context</span><span class="p">(</span><span class="n">MotionWriter</span><span class="p">(</span><span class="n">motion</span><span class="p">)),</span>
+                    <span class="n">stack</span><span class="o">.</span><span class="n">enter_context</span><span class="p">(</span><span class="n">MotionLog</span><span class="p">(</span><span class="n">motion</span><span class="o">.</span><span class="n">parent</span><span class="p">)),</span>
+                <span class="p">)</span>
             <span class="p">)</span>
             <span class="n">server</span><span class="o">.</span><span class="n">send_config_file</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
             <span class="n">server</span><span class="o">.</span><span class="n">send_header</span><span class="p">(</span><span class="n">header</span><span class="p">)</span>
@@ -1657,11 +1663,15 @@
     <span class="n">_send</span><span class="p">(</span><span class="n">itertools</span><span class="o">.</span><span class="n">chain</span><span class="p">(</span><span class="n">others</span><span class="p">,</span> <span class="n">queued</span><span class="p">),</span> <span class="n">worker</span><span class="p">)</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_publisher</span><span class="p">(</span><span class="n">writer</span><span class="p">:</span> <span class="n">MotionWriter</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Pose</span><span class="p">],</span> <span class="kc">None</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">"""Return what publishes each pose a reconstruction states into ``writer``."""</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_publisher</span><span class="p">(</span>
+    <span class="n">writer</span><span class="p">:</span> <span class="n">MotionWriter</span><span class="p">,</span> <span class="n">log</span><span class="p">:</span> <span class="n">MotionLog</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Pose</span><span class="p">],</span> <span class="kc">None</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Return what publishes each pose a reconstruction states into ``writer``, and logs it to ``log``."""</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">publish</span><span class="p">(</span><span class="n">pose</span><span class="p">:</span> <span class="n">Pose</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">writer</span><span class="o">.</span><span class="n">publish</span><span class="p">(</span><span class="n">pose</span><span class="o">.</span><span class="n">rotation</span><span class="p">,</span> <span class="n">rescan</span><span class="o">=</span><span class="n">pose</span><span class="o">.</span><span class="n">rescan</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">log</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">log</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">pose</span><span class="p">)</span>
 
     <span class="k">return</span> <span class="n">publish</span>
 
