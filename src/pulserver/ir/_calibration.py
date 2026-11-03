@@ -161,15 +161,15 @@ def receive_calibration_sequence(
     It opens, in a parallel-transmit chain, with a tour: for every transmit
     channel, the RF block that drives it hardest anywhere in the chain (a
     single waveform with no shim drives every channel), with its blocks up to
-    the next RF pulse, its readouts under ``NOPRESCAN``, then a rest until its
-    RF energy over its duration is the highest mean RF power of a file of the
-    chain. A pulse is its shape and amplitude, with its shim; its phase and
+    the next RF pulse, then a rest until its RF energy over its duration is the
+    highest mean RF power of a file of the chain. A pulse is its shape and amplitude, with its shim; its phase and
     frequency, which RF spoiling changes from play to play, are not part of
     it.
 
     Where exactly one file reads out and it repeats with the same RF
     amplitudes, the prescan calibrates on that file from its start after the
-    tour, and the subsequence is the tour alone, or None without pTx.
+    tour, and the subsequence is the tour alone, its readouts under
+    ``NOPRESCAN``, or None without pTx.
     Otherwise no repetition stands for the scan, and the tour is followed by
     the calibration: the excitation scoring highest on the sine of its flip
     angle, capped at 90 degrees, times the thickness it excites, the RF
@@ -178,8 +178,9 @@ def receive_calibration_sequence(
     reference drive. Its blocks up to the next excitation are played
     :data:`FRAMES` times, each after a rest of :data:`REST`, at their own
     amplitudes, every gradient that varies across the file's repetitions at
-    zero. Read from relaxed magnetization they carry at least the signal of
-    every readout of the scan the excitation outscores: a steady state,
+    zero. The tour's readouts are then acquired with the calibration's: a pTx
+    pulse a prescan plays without acquiring it distorts in the scan. Read from
+    relaxed magnetization they carry at least the signal of every readout of the scan the excitation outscores: a steady state,
     spoiled or balanced, never exceeds the equilibrium magnetization times the
     sine of its flip. A winner with balanced gradients is logged.
 
@@ -363,14 +364,16 @@ def _events(f: _File, span: _Span, zeroed: bool) -> list[list]:
 
 def _build(files, tour, calibration, system) -> pp.Sequence:
     sequence = pp.Sequence(system)
+    acquired = 0
     if tour:
         for visit, (span, lasts) in enumerate(tour):
             plays = _events(files[span.file], span, zeroed=True)
-            if visit == 0:
+            if calibration is None and visit == 0:
                 plays[0] = [
                     *plays[0],
                     pp.make_label(label="NOPRESCAN", type="SET", value=1),
                 ]
+            acquired += int(files[span.file].reads[span.first : span.stop].sum())
             for events in plays:
                 sequence.add_block(*events)
             played = float(files[span.file].durations[span.first : span.stop].sum())
@@ -382,18 +385,12 @@ def _build(files, tour, calibration, system) -> pp.Sequence:
                 )
     if calibration is not None:
         plays = _events(files[calibration.file], calibration, zeroed=True)
-        for frame in range(FRAMES):
-            if frame == 0 and tour:
-                sequence.add_block(
-                    pp.make_delay(REST),
-                    pp.make_label(label="NOPRESCAN", type="SET", value=0),
-                )
-            else:
-                sequence.add_block(pp.make_delay(REST))
+        for _ in range(FRAMES):
+            sequence.add_block(pp.make_delay(REST))
             for events in plays:
                 sequence.add_block(*events)
         sequence.set_definition(
-            "NumGainCalibrationReadouts", FRAMES * calibration.readouts
+            "NumGainCalibrationReadouts", acquired + FRAMES * calibration.readouts
         )
     sequence.set_definition(PRESCAN_ONLY, 1)
     sequence.set_definition("Name", "prescan_calibration")
