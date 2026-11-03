@@ -346,21 +346,24 @@ def _peak_b1(sequence: pp.Sequence, limit: float, gamma: float) -> list[str]:
     """Return the problem of RF pulses peaking above ``limit`` Hz."""
     tables = sequence.libraries()
     rf = np.atleast_2d(np.asarray(tables.rf, dtype=np.float64))
-    if not rf.size:
+    blocks = np.asarray(tables.blocks)
+    # The pulses the blocks play: the library can hold more than those.
+    played = np.unique(blocks[:, 0])
+    played = played[(played > 0) & (played <= rf.shape[0])]
+    if not played.size:
         return []
     peaks = np.array(
         [
-            abs(row[0]) * np.max(np.abs(tables.shapes[int(row[1]) - 1].decompressed()))
-            for row in rf
+            abs(rf[i - 1, 0])
+            * np.max(np.abs(tables.shapes[int(rf[i - 1, 1]) - 1].decompressed()))
+            for i in played
         ]
     )
     # The amplitudes are written to a few significant digits.
-    over = np.flatnonzero(peaks > limit * (1.0 + 1e-6))
-    if not over.size:
+    worst = int(np.argmax(peaks))
+    if not peaks[worst] > limit * (1.0 + 1e-6):
         return []
-    worst = int(over[np.argmax(peaks[over])])
-    blocks = np.asarray(tables.blocks)
-    first = int(np.flatnonzero(blocks[:, 0] == worst + 1)[0]) + 1
+    first = int(np.flatnonzero(blocks[:, 0] == played[worst])[0]) + 1
     return [
         f"peak B1 of {peaks[worst] / gamma * 1e6:.1f} uT in block {first} exceeds "
         f"{limit / gamma * 1e6:.1f} uT"
@@ -379,8 +382,12 @@ def _long_gradients(sequence: pp.Sequence, longest: float) -> list[str]:
     over = np.flatnonzero(lengths > longest * (1.0 + 1e-9))
     if not over.size:
         return []
-    worst = int(over[np.argmax(lengths[over])])
     blocks = np.asarray(tables.blocks)
+    # The gradients the blocks play: the library can hold more than those.
+    over = over[np.isin(ids[over], blocks[:, 1:4])]
+    if not over.size:
+        return []
+    worst = int(over[np.argmax(lengths[over])])
     where = np.argwhere(blocks[:, 1:4] == ids[worst])[0]
     return [
         f"arbitrary gradient of {lengths[worst] * 1e3:.0f} ms on {'xyz'[int(where[1])]} "
