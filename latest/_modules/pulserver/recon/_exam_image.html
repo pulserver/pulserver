@@ -457,7 +457,8 @@
 <span class="sd">    A calibration series stores a map with the geometry it was measured on,</span>
 <span class="sd">    as ``context.b1_map = ExamImage.measured(b1, context, data)``, and a</span>
 <span class="sd">    later series reads it resampled onto its own grid with</span>
-<span class="sd">    ``context.b1_map.on(context, data)``. The resampling uses the two</span>
+<span class="sd">    ``context.b1_map.on(context, data)``, and a design plugin onto a</span>
+<span class="sd">    prescription with :meth:`resample`. The resampling uses the two</span>
 <span class="sd">    geometries alone, no registration: :func:`bartorch.tools.reslice`.</span>
 
 <span class="sd">    Attributes</span>
@@ -505,11 +506,23 @@
 <span class="sd">        Keyword arguments go to :func:`bartorch.tools.reslice`: ``interpolation``</span>
 <span class="sd">        and ``fill``. bartorch is imported here, and SimpleITK by it.</span>
 <span class="sd">        """</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">resample</span><span class="p">(</span><span class="n">_unit_geometry</span><span class="p">(</span><span class="n">context</span><span class="p">,</span> <span class="n">unit</span><span class="p">),</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="ExamImage.resample">
+<a class="viewcode-back" href="../../../generated/pulserver.recon.ExamImage.resample.html#pulserver.recon.ExamImage.resample">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">resample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">geometry</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Return the image resampled onto the grid ``geometry`` describes.</span>
+
+<span class="sd">        For a design plugin, which has a prescription and no reconstruction</span>
+<span class="sd">        unit: ``geometry`` has the fields of :attr:`geometry`, one for a</span>
+<span class="sd">        volume or one per plane. ``(..., z, y, x)`` on that grid. Keyword</span>
+<span class="sd">        arguments go to :func:`bartorch.tools.reslice`: ``interpolation`` and</span>
+<span class="sd">        ``fill``.</span>
+<span class="sd">        """</span>
         <span class="kn">from</span><span class="w"> </span><span class="nn">bartorch.tools</span><span class="w"> </span><span class="kn">import</span> <span class="n">reslice</span>
 
-        <span class="k">return</span> <span class="n">reslice</span><span class="p">(</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">geometry</span><span class="p">,</span> <span class="n">_unit_geometry</span><span class="p">(</span><span class="n">context</span><span class="p">,</span> <span class="n">unit</span><span class="p">),</span> <span class="o">**</span><span class="n">kwargs</span>
-        <span class="p">)</span></div>
+        <span class="k">return</span> <span class="n">reslice</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">geometry</span><span class="p">,</span> <span class="n">geometry</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span></div>
 </div>
 
 

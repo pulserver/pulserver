@@ -506,7 +506,8 @@
 <p>A calibration series stores a map with the geometry it was measured on,
 as <code class="docutils literal notranslate"><span class="pre">context.b1_map</span> <span class="pre">=</span> <span class="pre">ExamImage.measured(b1,</span> <span class="pre">context,</span> <span class="pre">data)</span></code>, and a
 later series reads it resampled onto its own grid with
-<code class="docutils literal notranslate"><span class="pre">context.b1_map.on(context,</span> <span class="pre">data)</span></code>. The resampling uses the two
+<code class="docutils literal notranslate"><span class="pre">context.b1_map.on(context,</span> <span class="pre">data)</span></code>, and a design plugin onto a
+prescription with <a class="reference internal" href="pulserver.recon.ExamImage.resample.html#pulserver.recon.ExamImage.resample" title="pulserver.recon.ExamImage.resample"><code class="xref py py-meth docutils literal notranslate"><span class="pre">resample()</span></code></a>. The resampling uses the two
 geometries alone, no registration: <code class="xref py py-func docutils literal notranslate"><span class="pre">bartorch.tools.reslice()</span></code>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Attributes<span class="colon">:</span></dt>
@@ -533,6 +534,9 @@ slices.</p></li>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="pulserver.recon.ExamImage.on.html#pulserver.recon.ExamImage.on" title="pulserver.recon.ExamImage.on"><code class="xref py py-obj docutils literal notranslate"><span class="pre">on</span></code></a></p></td>
 <td><p>Return the image resampled onto the reconstruction grid of <code class="docutils literal notranslate"><span class="pre">unit</span></code>.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.recon.ExamImage.resample.html#pulserver.recon.ExamImage.resample" title="pulserver.recon.ExamImage.resample"><code class="xref py py-obj docutils literal notranslate"><span class="pre">resample</span></code></a></p></td>
+<td><p>Return the image resampled onto the grid <code class="docutils literal notranslate"><span class="pre">geometry</span></code> describes.</p></td>
 </tr>
 </tbody>
 </table>

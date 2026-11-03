@@ -16,6 +16,7 @@
 
    ~ExamImage.measured
    ~ExamImage.on
+   ~ExamImage.resample
 
 
 

@@ -508,12 +508,19 @@
 from it and stored in <code class="docutils literal notranslate"><span class="pre">context.coil_maps</span></code> under the unit’s slice
 counter, replacing the maps stored there.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">context.coil_maps</span></code> for the unit’s slice.</p></li>
-<li><p>The exam’s <code class="docutils literal notranslate"><span class="pre">COIL_SENSITIVITIES</span></code>.</p></li>
+<li><p>The exam’s <code class="docutils literal notranslate"><span class="pre">COIL_SENSITIVITIES</span></code>, as a calibration series stored them.</p></li>
 </ol>
-<p>Stored maps serve only where <a class="reference internal" href="pulserver.recon.CoilSensitivities.incompatibility.html#pulserver.recon.CoilSensitivities.incompatibility" title="pulserver.recon.CoilSensitivities.incompatibility"><code class="xref py py-meth docutils literal notranslate"><span class="pre">CoilSensitivities.incompatibility()</span></code></a>
-finds nothing. The location is the slice counter, not the encoding space,
-so maps estimated from a calibration unit in an encoding space of its own
-serve the imaging units of its slice.</p>
+<p>Maps of the stream serve only where
+<a class="reference internal" href="pulserver.recon.CoilSensitivities.incompatibility.html#pulserver.recon.CoilSensitivities.incompatibility" title="pulserver.recon.CoilSensitivities.incompatibility"><code class="xref py py-meth docutils literal notranslate"><span class="pre">CoilSensitivities.incompatibility()</span></code></a> finds nothing. Maps of the exam
+serve a unit with the same coils, prewhitening, frame of reference and
+table position; on another grid, position or orientation they are
+resliced onto the unit’s grid from the two geometries,
+<code class="xref py py-func docutils literal notranslate"><span class="pre">bartorch.tools.reslice()</span></code>, and refused where the unit’s grid reaches
+outside theirs. Maps estimated from uncompressed channels are projected
+onto the unit’s compression basis, as its k-space was. The location is the
+slice counter, not the encoding space, so maps estimated from a
+calibration unit in an encoding space of its own serve the imaging units
+of its slice.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">

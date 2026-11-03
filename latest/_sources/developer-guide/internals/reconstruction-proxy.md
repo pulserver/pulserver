@@ -166,9 +166,11 @@ A map is stored as measured, in the frame and on the grid of its series. A map
 stored as an {class}`~pulserver.recon.ExamImage` carries that geometry, and a
 series acquired at another position, orientation, field of view or matrix
 reads it resliced onto its own grid with
-{meth}`ExamImage.on <pulserver.recon.ExamImage.on>`. Coil sensitivities are
-never resampled: {func}`~pulserver.recon.coil_maps` returns them only to a
-unit on the grid they were estimated on, as {doc}`calibration` states.
+{meth}`ExamImage.on <pulserver.recon.ExamImage.on>`; a design plugin reads it
+on a prescription with {meth}`ExamImage.resample
+<pulserver.recon.ExamImage.resample>`. Coil sensitivities of the exam are
+resliced the same way by {func}`~pulserver.recon.coil_maps`, as
+{doc}`calibration` states.
 
 No other attribute name is accepted, so a misspelt name raises instead of
 storing a map under a key no series reads. An artifact a
