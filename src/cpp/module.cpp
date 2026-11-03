@@ -350,6 +350,9 @@ py::dict play(pulseg_collection *coll, bool waveforms)
     std::vector<float> rf_amp, rf_freq, rf_phase, rf_freq_mean, adc_freq, adc_phase, gradient;
     std::vector<float> rf_grad_level;
     std::vector<int> rf_delay_us, adc_delay_us, adc_dwell_ns, adc_samples;
+    std::vector<int> trigger_channel, trigger_delay_us, trigger_duration_us;
+    std::vector<std::complex<float>> shim_weights;
+    std::vector<py::ssize_t> shim_span;
     std::vector<float> rf_centre_us, rf_time, modulation;
     std::vector<std::complex<float>> rf_value;
     std::vector<py::ssize_t> rf_span, modulation_span;
@@ -395,6 +398,21 @@ py::dict play(pulseg_collection *coll, bool waveforms)
         adc_delay_us.push_back(block.adc_flag ? b.adc_delay_us : 0);
         adc_dwell_ns.push_back(window.dwell_ns);
         adc_samples.push_back(window.num_samples);
+        const bool fires = block.digitalout_flag && b.has_digitalout;
+        trigger_channel.push_back(fires ? block.digitalout_channel : -1);
+        trigger_delay_us.push_back(fires ? b.digitalout_delay_us : 0);
+        trigger_duration_us.push_back(fires ? b.digitalout_duration_us : 0);
+        shim_span.push_back(static_cast<py::ssize_t>(shim_weights.size()));
+        if (b.has_rf && block.rf_shim_id >= 0)
+        {
+            pulseg_rf_shim_def shim = PULSEG_RF_SHIM_DEF_INIT;
+            require(
+                pulseg_get_rf_shim_def(coll, &shim, info.subseq_idx, block.rf_shim_id),
+                "RF shim definition");
+            for (int c = 0; c < shim.num_channels; ++c)
+                shim_weights.push_back(std::polar(shim.magnitudes[c], shim.phases[c]));
+        }
+        shim_span.push_back(static_cast<py::ssize_t>(shim_weights.size()));
         if (!waveforms)
             continue;
         rf_centre_us.push_back(
@@ -437,6 +455,11 @@ py::dict play(pulseg_collection *coll, bool waveforms)
     out["adc_dwell_ns"] = as_array(adc_dwell_ns, {count});
     out["adc_samples"] = as_array(adc_samples, {count});
     out["trid"] = as_array(trid, {count});
+    out["trigger_channel"] = as_array(trigger_channel, {count});
+    out["trigger_delay_us"] = as_array(trigger_delay_us, {count});
+    out["trigger_duration_us"] = as_array(trigger_duration_us, {count});
+    out["rf_shim"] = as_array(shim_weights, {static_cast<py::ssize_t>(shim_weights.size())});
+    out["rf_shim_span"] = as_array(shim_span, {count, 2});
     if (waveforms)
     {
         const auto corners = static_cast<py::ssize_t>(gradients.time_us.size());

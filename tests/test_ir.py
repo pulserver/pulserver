@@ -1047,3 +1047,34 @@ def test_an_offset_chain_counts_the_gradient_area_on_across_its_files(tmp_path):
             np.mod(played[1][name], 2.0 * np.pi),
             atol=1e-5,
         )
+
+
+def test_play_returns_the_output_trigger_each_block_fires(tmp_path):
+    sequence = pp.Sequence(SYSTEM)
+    sequence.add_block(pp.make_trapezoid("x", amplitude=1000, flat_time=1e-3))
+    sequence.add_block(
+        pp.make_delay(2e-3),
+        pp.make_digital_output_pulse("ext1", delay=20e-6, duration=100e-6),
+    )
+    seq = tmp_path / "trigger.seq"
+    sequence.write(seq)
+    convert(seq, SYSTEM)
+    played = ir.play(seq)
+    assert played["trigger_channel"].tolist() == [-1, 3]
+    assert played["trigger_delay_us"].tolist() == [0, 20]
+    assert played["trigger_duration_us"].tolist() == [0, 100]
+
+
+def test_play_returns_the_rf_shim_weights_of_each_rf_block(tmp_path):
+    weights = np.array([1.0, 0.5 * np.exp(1j * np.pi / 3)])
+    sequence = pp.Sequence(SYSTEM)
+    pulse = pp.make_block_pulse(np.pi / 2, duration=1e-3, system=SYSTEM)
+    sequence.add_block(pulse, pp.make_rf_shim(weights))
+    sequence.add_block(pp.make_delay(1e-3))
+    seq = tmp_path / "shim.seq"
+    sequence.write(seq)
+    convert(seq, SYSTEM)
+    played = ir.play(seq)
+    first, stop = played["rf_shim_span"][0]
+    np.testing.assert_allclose(played["rf_shim"][first:stop], weights, atol=1e-5)
+    assert played["rf_shim_span"][1, 0] == played["rf_shim_span"][1, 1]

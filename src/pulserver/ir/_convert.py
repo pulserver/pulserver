@@ -565,7 +565,15 @@ def play(
           acquires, and its frequency and phase offsets;
         - ``adc_delay_us``, ``adc_dwell_ns``, ``adc_samples``: the ADC delay
           from the block's start, dwell time and sample count; 0 without ADC;
-        - ``trid``: the TRID group in force, 0 when ungrouped.
+        - ``trid``: the TRID group in force, 0 when ungrouped;
+        - ``trigger_channel``, ``trigger_delay_us``, ``trigger_duration_us``:
+          the Pulseq channel code of the output trigger the block fires (1
+          ``osc0``, 2 ``osc1``, 3 ``ext1``), its delay from the block's start
+          and its duration, in µs; -1, 0 and 0 where it fires none;
+        - ``rf_shim``, ``rf_shim_span``: the complex weight per transmit
+          channel of every RF shim played, concatenated in play order, and
+          ``(blocks, 2)``, the start and stop of each block's weights in it;
+          an empty span for a block without one.
 
         With ``waveforms``, also:
 
