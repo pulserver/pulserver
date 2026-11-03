@@ -564,7 +564,15 @@ prescription’s rotation is the only one the scanner applies;</p></li>
 acquires, and its frequency and phase offsets;</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">adc_delay_us</span></code>, <code class="docutils literal notranslate"><span class="pre">adc_dwell_ns</span></code>, <code class="docutils literal notranslate"><span class="pre">adc_samples</span></code>: the ADC delay
 from the block’s start, dwell time and sample count; 0 without ADC;</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">trid</span></code>: the TRID group in force, 0 when ungrouped.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">trid</span></code>: the TRID group in force, 0 when ungrouped;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">trigger_channel</span></code>, <code class="docutils literal notranslate"><span class="pre">trigger_delay_us</span></code>, <code class="docutils literal notranslate"><span class="pre">trigger_duration_us</span></code>:
+the Pulseq channel code of the output trigger the block fires (1
+<code class="docutils literal notranslate"><span class="pre">osc0</span></code>, 2 <code class="docutils literal notranslate"><span class="pre">osc1</span></code>, 3 <code class="docutils literal notranslate"><span class="pre">ext1</span></code>), its delay from the block’s start
+and its duration, in µs; -1, 0 and 0 where it fires none;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">rf_shim</span></code>, <code class="docutils literal notranslate"><span class="pre">rf_shim_span</span></code>: the complex weight per transmit
+channel of every RF shim played, concatenated in play order, and
+<code class="docutils literal notranslate"><span class="pre">(blocks,</span> <span class="pre">2)</span></code>, the start and stop of each block’s weights in it;
+an empty span for a block without one.</p></li>
 </ul>
 <p>With <code class="docutils literal notranslate"><span class="pre">waveforms</span></code>, also:</p>
 <ul class="simple">
