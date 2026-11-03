@@ -376,7 +376,9 @@ def _long_gradients(sequence: pp.Sequence, longest: float) -> list[str]:
     ids = np.asarray(tables.arbitrary_gradient_ids, dtype=np.int64)
     if not ids.size:
         return []
-    rows = np.asarray(tables.arbitrary_gradients, dtype=np.float64).reshape(ids.size, -1)
+    rows = np.asarray(tables.arbitrary_gradients, dtype=np.float64).reshape(
+        ids.size, -1
+    )
     raster = sequence.grad_raster_time
     lengths = np.array([raster * _raster_steps(tables.shapes, row) for row in rows])
     over = np.flatnonzero(lengths > longest * (1.0 + 1e-9))

@@ -299,7 +299,9 @@ def check_limits(limits: Mapping[str, Any]) -> ir.CheckLimits:
         arguments["adc_gap"] = float(limits["adc_gap_us"]) / 1e6
     if "ir_wave_max_samples" in limits and "ir_wave_raster_us" in limits:
         arguments["wave_memory"] = (
-            int(limits["ir_wave_max_samples"]) * float(limits["ir_wave_raster_us"]) / 1e6
+            int(limits["ir_wave_max_samples"])
+            * float(limits["ir_wave_raster_us"])
+            / 1e6
         )
     if "acoustic_file" in limits:
         arguments["acoustic"] = Path(str(limits["acoustic_file"]))

@@ -149,9 +149,7 @@ def test_pns_is_refused_from_the_fraction_of_threshold_the_limits_allow(
         path, SYSTEM, limits=ir.CheckLimits(pns=nerve, pns_limit=pns_limit)
     )
     assert problems == (
-        [
-            "PNS of 87% of the chronaxie threshold exceeds 80%, on x in block 1"
-        ]
+        ["PNS of 87% of the chronaxie threshold exceeds 80%, on x in block 1"]
         if refused
         else []
     )
@@ -413,8 +411,7 @@ def test_a_block_playing_an_rf_pulse_and_an_adc_is_refused(tmp_path):
     adc = pp.make_adc(10, dwell=10e-6, delay=pp.calc_duration(rf), system=SYSTEM)
     problems = ir.check(_written(tmp_path, [(rf, adc)]), SYSTEM)
     assert any(
-        p == "RF pulse and ADC in one block, block 1 (1 such blocks)"
-        for p in problems
+        p == "RF pulse and ADC in one block, block 1 (1 such blocks)" for p in problems
     )
 
 
@@ -422,12 +419,14 @@ def test_an_rf_pulse_peaking_above_the_coil_s_b1_limit_is_refused(tmp_path):
     rf = pp.make_block_pulse(np.pi / 2, duration=200e-6, system=SYSTEM)
     path = _written(tmp_path, [(rf,)])
     limited = pp.Opts(
-        max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s",
-        max_b1=25, b1_unit="uT",
+        max_grad=40,
+        grad_unit="mT/m",
+        max_slew=150,
+        slew_unit="T/m/s",
+        max_b1=25,
+        b1_unit="uT",
     )
-    assert ir.check(path, limited) == [
-        "peak B1 of 29.4 uT in block 1 exceeds 25.0 uT"
-    ]
+    assert ir.check(path, limited) == ["peak B1 of 29.4 uT in block 1 exceeds 25.0 uT"]
     assert ir.check(path, SYSTEM) == []
 
 
