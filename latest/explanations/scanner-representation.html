@@ -597,6 +597,10 @@ its segments.</p>
 <li><p>A <strong>segment instance</strong> is one occurrence of a segment: gradient scales and rotation, swapped gradient waveforms, RF amplitude, offsets and shim, ADC offsets or no acquisition, triggers, outputs and block durations.</p></li>
 <li><p>The <strong>execution stream</strong> is the ordered list of instances, and it is the whole scan.</p></li>
 </ul>
+<p>An output trigger’s delay and duration belong to the base block. Blocks that
+differ only in them share one, and every instance fires the first block’s
+trigger. To vary the trigger timing, give each timing a block of its own
+duration.</p>
 <p>An instance plays <span class="math notranslate nohighlight">\(\mathbf{g}(t) = R\, s\, \hat{\mathbf{g}}(t)\)</span>: the base
 block’s normalised waveform, scaled by <span class="math notranslate nohighlight">\(s\)</span> and rotated by <span class="math notranslate nohighlight">\(R\)</span>.</p>
 </section>
