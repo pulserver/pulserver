@@ -185,8 +185,10 @@ importing a GPU library, each slot holds one of them, one series per GPU unless
 more are allowed, and the reconstruction finds its GPU in `context.device`. A
 worker is an ordinary process, so a reconstruction may start processes of its
 own. A series that
-arrives when every slot is occupied is written to disk, enriched, as it
-arrives, and replayed to a worker once a slot is released. The client remains
+arrives when every slot is occupied, or when another series runs and the
+available memory is short of one reconstruction's budget, is written to disk,
+enriched, as it arrives, and replayed to a worker once a slot is released and
+the memory holds it; a series arriving while none runs always starts. The client remains
 connected meanwhile, and the images are returned through its connection.
 
 Images, DICOM datasets and text produced by the worker are relayed to the
@@ -196,7 +198,10 @@ produces before, such as a unit that closes on the last readout, is held until
 then. A stream that ends otherwise is refused and the held output dropped, so a
 scan the scanner stopped after its last readout returns nothing. A worker that
 stops reading, as one whose plugin failed, has the rest of the stream read and
-dropped, so what it said reaches the client of a whole stream. Closing either
+dropped, so what it said reaches the client of a whole stream. A worker that
+stops once it holds the acquisition flagged `LAST_IN_MEASUREMENT` lost nothing:
+a physiological waveform trailing the last readout is dropped, and the series
+stands. Closing either
 connection closes the other. Once the client's stream ends, the proxy waits for
 the worker to close however long the reconstruction takes, unless it was
 started with a reconstruction timeout, past which the worker is terminated and

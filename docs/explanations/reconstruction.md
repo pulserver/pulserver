@@ -71,13 +71,13 @@ write such a plugin.
 ```{figure} ../_static/context.svg
 :figclass: only-light
 
-Calibration stored by one series of an exam and reused by the next only on an exact match.
+Calibration stored by one series of an exam and reused by the next with the same coils, whitening and frame of reference, resliced onto its grid.
 ```
 
 ```{figure} ../_static/context-dark.svg
 :figclass: only-dark
 
-Calibration stored by one series of an exam and reused by the next only on an exact match.
+Calibration stored by one series of an exam and reused by the next with the same coils, whitening and frame of reference, resliced onto its grid.
 ```
 
 ### Units
@@ -102,10 +102,15 @@ are those of the reconstruction.
 
 Maps estimated from whitened, compressed data describe only data with the same
 channels, whitening, compression and voxel grid. So a stored set records all
-of them, and {func}`~pulserver.recon.coil_maps` hands it to a unit only where
-every field is equal; otherwise it raises
-{class}`~pulserver.recon.MissingCalibration`, naming each source and the field
-that differed. Nothing is resampled. The model and the comparison are in
+of them. {func}`~pulserver.recon.coil_maps` hands maps a series stored for
+itself to a unit only where every field is equal. Maps of the exam, measured
+by a calibration series, serve a unit with the same coils, whitening, frame of
+reference and table position: on another position, orientation or grid they
+are resliced onto the unit's grid, and maps of uncompressed channels are
+projected onto the unit's compression basis. A unit's own calibration readouts
+always win over both. Where no source serves, it raises
+{class}`~pulserver.recon.MissingCalibration`, naming each source and why it
+was not used, a unit reaching outside the calibration volume among them. The model and the comparison are in
 {doc}`../developer-guide/internals/calibration`; units and image headers in
 {doc}`../developer-guide/internals/reconstruction-proxy`.
 

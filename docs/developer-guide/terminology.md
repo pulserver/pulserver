@@ -186,6 +186,7 @@ Every documented quantity carries its unit.
 | SAR limits (`vop_head_limit`, `vop_local_limit`) | W/kg |
 | Default channel weights (`vop_default_shim`) | unitless magnitude, phase in rad |
 | VOP safety factor (`safety_factor` of a VOP file) | unitless, at least 1, on local SAR |
+| VOP global safety factor (`global_safety_factor` of a VOP file) | unitless, at least 1, on global SAR |
 | Transmit configuration (`vop_coil`, `transmit` of a VOP file) | an opaque string the scanner reports |
 | Dwell time in an enriched acquisition (`sample_time_us`) | µs |
 | k-space trajectory | 1/m, as pypulseqpp reports it |
