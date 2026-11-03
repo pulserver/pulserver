@@ -321,9 +321,10 @@ a bare plugin name or the path of its file, or as either under
 `parameters.config`; the design names none. A series whose config names none
 is refused unless the proxy forwards with `--forward-config`.
 
-A series that finds every slot busy is written to the queue directory as it
-arrives and reconstructed once a slot frees; the client stays connected
-meanwhile. What goes back to a client whose connection has dropped is kept for
+A series that finds every slot busy, or the host's available memory short of
+one reconstruction's budget while another series runs, is written to the queue
+directory as it arrives and reconstructed once a slot and the memory are free;
+the client stays connected meanwhile. What goes back to a client whose connection has dropped is kept for
 a day: a client that opens a series with the same `measurementID` is sent it in
 place of a new reconstruction. With `--dicom-receiver`, the series' DICOM
 images are stored to the receiver instead once its reconstruction ends, all of
