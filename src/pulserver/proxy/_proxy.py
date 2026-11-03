@@ -1136,10 +1136,12 @@ def _send(items: Iterator[Any], destination: Connection) -> None:
     Raises
     ------
     _StoppedReading
-        If ``destination`` stops reading, once the rest of ``items`` is read
-        and dropped: an error the stream raises meanwhile is raised instead.
+        If ``destination`` stops reading before it holds the acquisition
+        flagged ``LAST_IN_MEASUREMENT``, once the rest of ``items`` is read and
+        dropped: an error the stream raises meanwhile is raised instead.
     """
     stopped: OSError | None = None
+    last_sent = False
     for item in items:
         if stopped is not None:
             continue
@@ -1147,7 +1149,16 @@ def _send(items: Iterator[Any], destination: Connection) -> None:
             destination.send(item)
         except OSError as error:
             stopped = error
-    if stopped is not None:
+            continue
+        last_sent = last_sent or (
+            isinstance(item, ismrmrd.Acquisition)
+            and item.isFlagSet(ismrmrd.ACQ_LAST_IN_MEASUREMENT)
+        )
+    if stopped is not None and last_sent:
+        # A physiological waveform can trail the last readout; a
+        # reconstruction that closes once it holds every readout lost nothing.
+        _log.info("dropped what followed the last readout: %s", stopped)
+    elif stopped is not None:
         raise _StoppedReading(
             f"the reconstruction stopped reading the series: {stopped}"
         ) from stopped
