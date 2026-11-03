@@ -588,15 +588,15 @@
 <span class="sd">    It opens, in a parallel-transmit chain, with a tour: for every transmit</span>
 <span class="sd">    channel, the RF block that drives it hardest anywhere in the chain (a</span>
 <span class="sd">    single waveform with no shim drives every channel), with its blocks up to</span>
-<span class="sd">    the next RF pulse, its readouts under ``NOPRESCAN``, then a rest until its</span>
-<span class="sd">    RF energy over its duration is the highest mean RF power of a file of the</span>
-<span class="sd">    chain. A pulse is its shape and amplitude, with its shim; its phase and</span>
+<span class="sd">    the next RF pulse, then a rest until its RF energy over its duration is the</span>
+<span class="sd">    highest mean RF power of a file of the chain. A pulse is its shape and amplitude, with its shim; its phase and</span>
 <span class="sd">    frequency, which RF spoiling changes from play to play, are not part of</span>
 <span class="sd">    it.</span>
 
 <span class="sd">    Where exactly one file reads out and it repeats with the same RF</span>
 <span class="sd">    amplitudes, the prescan calibrates on that file from its start after the</span>
-<span class="sd">    tour, and the subsequence is the tour alone, or None without pTx.</span>
+<span class="sd">    tour, and the subsequence is the tour alone, its readouts under</span>
+<span class="sd">    ``NOPRESCAN``, or None without pTx.</span>
 <span class="sd">    Otherwise no repetition stands for the scan, and the tour is followed by</span>
 <span class="sd">    the calibration: the excitation scoring highest on the sine of its flip</span>
 <span class="sd">    angle, capped at 90 degrees, times the thickness it excites, the RF</span>
@@ -605,8 +605,9 @@
 <span class="sd">    reference drive. Its blocks up to the next excitation are played</span>
 <span class="sd">    :data:`FRAMES` times, each after a rest of :data:`REST`, at their own</span>
 <span class="sd">    amplitudes, every gradient that varies across the file's repetitions at</span>
-<span class="sd">    zero. Read from relaxed magnetization they carry at least the signal of</span>
-<span class="sd">    every readout of the scan the excitation outscores: a steady state,</span>
+<span class="sd">    zero. The tour's readouts are then acquired with the calibration's: a pTx</span>
+<span class="sd">    pulse a prescan plays without acquiring it distorts in the scan. Read from</span>
+<span class="sd">    relaxed magnetization they carry at least the signal of every readout of the scan the excitation outscores: a steady state,</span>
 <span class="sd">    spoiled or balanced, never exceeds the equilibrium magnetization times the</span>
 <span class="sd">    sine of its flip. A winner with balanced gradients is logged.</span>
 
@@ -791,14 +792,16 @@
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_build</span><span class="p">(</span><span class="n">files</span><span class="p">,</span> <span class="n">tour</span><span class="p">,</span> <span class="n">calibration</span><span class="p">,</span> <span class="n">system</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pp</span><span class="o">.</span><span class="n">Sequence</span><span class="p">:</span>
     <span class="n">sequence</span> <span class="o">=</span> <span class="n">pp</span><span class="o">.</span><span class="n">Sequence</span><span class="p">(</span><span class="n">system</span><span class="p">)</span>
+    <span class="n">acquired</span> <span class="o">=</span> <span class="mi">0</span>
     <span class="k">if</span> <span class="n">tour</span><span class="p">:</span>
         <span class="k">for</span> <span class="n">visit</span><span class="p">,</span> <span class="p">(</span><span class="n">span</span><span class="p">,</span> <span class="n">lasts</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">tour</span><span class="p">):</span>
             <span class="n">plays</span> <span class="o">=</span> <span class="n">_events</span><span class="p">(</span><span class="n">files</span><span class="p">[</span><span class="n">span</span><span class="o">.</span><span class="n">file</span><span class="p">],</span> <span class="n">span</span><span class="p">,</span> <span class="n">zeroed</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-            <span class="k">if</span> <span class="n">visit</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">calibration</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">visit</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
                 <span class="n">plays</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span>
                     <span class="o">*</span><span class="n">plays</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
                     <span class="n">pp</span><span class="o">.</span><span class="n">make_label</span><span class="p">(</span><span class="n">label</span><span class="o">=</span><span class="s2">"NOPRESCAN"</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="s2">"SET"</span><span class="p">,</span> <span class="n">value</span><span class="o">=</span><span class="mi">1</span><span class="p">),</span>
                 <span class="p">]</span>
+            <span class="n">acquired</span> <span class="o">+=</span> <span class="nb">int</span><span class="p">(</span><span class="n">files</span><span class="p">[</span><span class="n">span</span><span class="o">.</span><span class="n">file</span><span class="p">]</span><span class="o">.</span><span class="n">reads</span><span class="p">[</span><span class="n">span</span><span class="o">.</span><span class="n">first</span> <span class="p">:</span> <span class="n">span</span><span class="o">.</span><span class="n">stop</span><span class="p">]</span><span class="o">.</span><span class="n">sum</span><span class="p">())</span>
             <span class="k">for</span> <span class="n">events</span> <span class="ow">in</span> <span class="n">plays</span><span class="p">:</span>
                 <span class="n">sequence</span><span class="o">.</span><span class="n">add_block</span><span class="p">(</span><span class="o">*</span><span class="n">events</span><span class="p">)</span>
             <span class="n">played</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">files</span><span class="p">[</span><span class="n">span</span><span class="o">.</span><span class="n">file</span><span class="p">]</span><span class="o">.</span><span class="n">durations</span><span class="p">[</span><span class="n">span</span><span class="o">.</span><span class="n">first</span> <span class="p">:</span> <span class="n">span</span><span class="o">.</span><span class="n">stop</span><span class="p">]</span><span class="o">.</span><span class="n">sum</span><span class="p">())</span>
@@ -810,18 +813,12 @@
                 <span class="p">)</span>
     <span class="k">if</span> <span class="n">calibration</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">plays</span> <span class="o">=</span> <span class="n">_events</span><span class="p">(</span><span class="n">files</span><span class="p">[</span><span class="n">calibration</span><span class="o">.</span><span class="n">file</span><span class="p">],</span> <span class="n">calibration</span><span class="p">,</span> <span class="n">zeroed</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-        <span class="k">for</span> <span class="n">frame</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">FRAMES</span><span class="p">):</span>
-            <span class="k">if</span> <span class="n">frame</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">tour</span><span class="p">:</span>
-                <span class="n">sequence</span><span class="o">.</span><span class="n">add_block</span><span class="p">(</span>
-                    <span class="n">pp</span><span class="o">.</span><span class="n">make_delay</span><span class="p">(</span><span class="n">REST</span><span class="p">),</span>
-                    <span class="n">pp</span><span class="o">.</span><span class="n">make_label</span><span class="p">(</span><span class="n">label</span><span class="o">=</span><span class="s2">"NOPRESCAN"</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="s2">"SET"</span><span class="p">,</span> <span class="n">value</span><span class="o">=</span><span class="mi">0</span><span class="p">),</span>
-                <span class="p">)</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="n">sequence</span><span class="o">.</span><span class="n">add_block</span><span class="p">(</span><span class="n">pp</span><span class="o">.</span><span class="n">make_delay</span><span class="p">(</span><span class="n">REST</span><span class="p">))</span>
+        <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">FRAMES</span><span class="p">):</span>
+            <span class="n">sequence</span><span class="o">.</span><span class="n">add_block</span><span class="p">(</span><span class="n">pp</span><span class="o">.</span><span class="n">make_delay</span><span class="p">(</span><span class="n">REST</span><span class="p">))</span>
             <span class="k">for</span> <span class="n">events</span> <span class="ow">in</span> <span class="n">plays</span><span class="p">:</span>
                 <span class="n">sequence</span><span class="o">.</span><span class="n">add_block</span><span class="p">(</span><span class="o">*</span><span class="n">events</span><span class="p">)</span>
         <span class="n">sequence</span><span class="o">.</span><span class="n">set_definition</span><span class="p">(</span>
-            <span class="s2">"NumGainCalibrationReadouts"</span><span class="p">,</span> <span class="n">FRAMES</span> <span class="o">*</span> <span class="n">calibration</span><span class="o">.</span><span class="n">readouts</span>
+            <span class="s2">"NumGainCalibrationReadouts"</span><span class="p">,</span> <span class="n">acquired</span> <span class="o">+</span> <span class="n">FRAMES</span> <span class="o">*</span> <span class="n">calibration</span><span class="o">.</span><span class="n">readouts</span>
         <span class="p">)</span>
     <span class="n">sequence</span><span class="o">.</span><span class="n">set_definition</span><span class="p">(</span><span class="n">PRESCAN_ONLY</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
     <span class="n">sequence</span><span class="o">.</span><span class="n">set_definition</span><span class="p">(</span><span class="s2">"Name"</span><span class="p">,</span> <span class="s2">"prescan_calibration"</span><span class="p">)</span>
