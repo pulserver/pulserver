@@ -440,3 +440,14 @@ def test_an_arbitrary_gradient_longer_than_the_waveform_memory_is_refused(tmp_pa
         "arbitrary gradient of 20 ms on z in block 1 exceeds 10 ms of memory"
     ]
     assert ir.check(path, SYSTEM, limits=ir.CheckLimits(wave_memory=20e-3)) == []
+
+
+def test_a_gradient_step_at_a_block_boundary_is_a_timing_problem(tmp_path):
+    ramp = pp.make_extended_trapezoid(
+        "x", times=[0.0, 500e-6, 1e-3], amplitudes=[0.0, 3e5, 3e5], system=SYSTEM
+    )
+    (problem,) = ir.check(_written(tmp_path, [(ramp,), (pp.make_delay(1e-3),)]), SYSTEM)
+    assert re.fullmatch(
+        r"timing: gx steps 7\.0 mT/m into block 2, \d+ > 150 T/m/s", problem
+    )
+    assert len(problem) <= 79

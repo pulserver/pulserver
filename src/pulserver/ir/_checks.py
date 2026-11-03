@@ -632,18 +632,40 @@ def _ratio(sequence: pp.Sequence, found: Any, limit_ratio: float) -> SarRatio:
 
 def _timing(sequence: pp.Sequence, report: list) -> str:
     """Return the first timing problem in a line the scanner console shows whole."""
-    first = report[0]
+    more = f" (+{len(report) - 1} more)" if len(report) > 1 else ""
     try:
-        event = f"{first.event}.{first.field} of {first.value * 1e6:g} us"
-        if first.error_type == "RASTER":
-            what = f"is off {first.raster}"
-        else:
-            what = first.error_type.lower().replace("_", " ")
-        more = f" (+{len(report) - 1} more)" if len(report) > 1 else ""
-        return f"timing: {event} in block {first.block} {what}{more}"
-    except (AttributeError, TypeError):
+        return f"timing: {_finding(report[0], sequence.system.gamma)}{more}"
+    except (AttributeError, KeyError, TypeError):
         pass
     printed = io.StringIO()
     with contextlib.redirect_stdout(printed):
         pp.print_error_report(sequence, report, max_errors=_LISTED, colored=False)
     return "timing: " + " ".join(printed.getvalue().split())
+
+
+def _finding(found: Any, gamma: float) -> str:
+    """Return one ``pypulseqpp.check_timing`` finding as its value and its limit."""
+    kind, block = found.error_type, found.block
+    if kind == "RASTER":
+        return (
+            f"{found.event}.{found.field} of {found.value * 1e6:g} us in block {block} "
+            f"is off {found.raster}"
+        )
+    if kind == "GRADIENT_DISCONTINUITY":
+        return (
+            f"{found.event} steps {abs(found.value - found.before) / gamma * 1e3:.1f} mT/m "
+            f"into block {block}, {found.slew / gamma:.0f} > {found.limit / gamma:.0f} T/m/s"
+        )
+    if kind in ("ADC_DEAD_TIME", "RF_DEAD_TIME"):
+        return (
+            f"{found.event} delay of {found.value * 1e6:g} us in block {block} is under "
+            f"the {found.dead_time * 1e6:g} us dead time"
+        )
+    if kind == "RF_RINGDOWN_TIME":
+        return (
+            f"RF ends {(found.duration - found.value) * 1e6:g} us before block {block} "
+            f"ends, under the {found.ringdown_time * 1e6:g} us ringdown"
+        )
+    if kind == "GRADIENT_NOT_RAMPED_DOWN":
+        return "the sequence ends with a gradient on"
+    return f"{found.event}.{found.field} in block {block}: {kind.lower().replace('_', ' ')}"
