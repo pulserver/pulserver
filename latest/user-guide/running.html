@@ -1014,13 +1014,20 @@ ends the relay, and the client receives a <code class="docutils literal notransl
 <section id="sequence-description">
 <h3>Sequence description<a class="headerlink" href="#sequence-description" title="Link to this heading">#</a></h3>
 <p>Whether forwarded or reconstructed by a worker, the series carries, after its
-header and before its first acquisition, one <code class="docutils literal notranslate"><span class="pre">TEXT</span></code> message (5) describing the
-sequence chain for a signal simulation: a JSON object under the key
-<code class="docutils literal notranslate"><span class="pre">pulserver_sequence_description</span></code>, holding per file of the chain one row per
-block, RF at the pulse centre and ADC at the sample nearest the k-space centre,
-and the pulses the RF rows name. It is meant for a reconstruction that
-simulates the signal, which chooses the signal model the rows drive, and is not
-relayed back to the client.</p>
+header and before its first acquisition, ISMRMRD waveforms describing the
+sequence chain for a signal simulation, so that every MRD writer keeps them
+with the series: per file of the chain a header (<code class="docutils literal notranslate"><span class="pre">waveform_id</span></code> 1024) and an
+event list (1025), and one waveform per RF definition (1026), in the word
+layout <code class="xref py py-func docutils literal notranslate"><span class="pre">waveforms()</span></code> documents. The event list
+holds one row per block of one repetition, RF at the pulse centre and ADC at
+the sample nearest the k-space centre. The repetition is the one whose readout
+passes nearest the k-space centre, navigators aside, as
+<code class="docutils literal notranslate"><span class="pre">pypulseqpp.Sequence.repetition</span></code> divides the file; a file that does not repeat
+is described whole. An RF definition states the bandwidth its slice is
+selected over, which with the event’s slice-select gradient gives the
+thickness. The description is meant for a reconstruction that simulates the
+signal, which chooses the signal model the rows drive, and is not relayed back
+to the client.</p>
 </section>
 <section id="design-intake">
 <h3>Design intake<a class="headerlink" href="#design-intake" title="Link to this heading">#</a></h3>

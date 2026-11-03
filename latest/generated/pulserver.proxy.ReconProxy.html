@@ -510,10 +510,10 @@ names the design of the store the series was played from. Its readout
 table enriches the header and every acquisition; the samples are passed on
 as received, demodulated to the prescribed field-of-view centre by the
 playout (<a class="reference internal" href="pulserver.ir.prescribe.html#pulserver.ir.prescribe" title="pulserver.ir.prescribe"><code class="xref py py-func docutils literal notranslate"><span class="pre">pulserver.ir.prescribe()</span></code></a>). The reconstruction receives the
-chain’s sequence description as a text message, after the header and
+chain’s sequence description as ISMRMRD waveforms, after the header and
 before the first acquisition
-(<code class="xref py py-func docutils literal notranslate"><span class="pre">message()</span></code>); the message is not sent back
-to the client. The reconstruction plugin is the one the client’s config
+(<code class="xref py py-func docutils literal notranslate"><span class="pre">waveforms()</span></code>); they are not sent back to
+the client. The reconstruction plugin is the one the client’s config
 text names. A series that breaks these rules, or whose stream ends without
 its <code class="docutils literal notranslate"><span class="pre">CLOSE</span></code> or an acquisition flagged <code class="docutils literal notranslate"><span class="pre">LAST_IN_MEASUREMENT</span></code>, is refused
 with a text naming the reason and a <code class="docutils literal notranslate"><span class="pre">CLOSE</span></code>, and what the client still
