@@ -243,7 +243,10 @@ def _decoded(waves):
                 at += 3
             for name in ("magnitude", "phase", "time"):
                 if shapes[name] is not None:
-                    shapes[name], at = words[at : at + shapes[name]].view("<f4"), at + shapes[name]
+                    shapes[name], at = (
+                        words[at : at + shapes[name]].view("<f4"),
+                        at + shapes[name],
+                    )
             definitions[int(words[1])] = (float(words[2:3].view("<f4")[0]), shapes)
     return header, events, definitions
 
@@ -309,7 +312,9 @@ def test_a_description_longer_than_a_channel_spans_several():
 def lines(steps=(-2, -1, 0, 1, 2), navigator=False):
     """A spoiled line per repetition, phase-encoded through ``steps``; a navigator before each."""
     seq = pp.Sequence(SYSTEM)
-    rf = pp.make_block_pulse(np.deg2rad(10.0), duration=0.2e-3, system=SYSTEM, use="excitation")
+    rf = pp.make_block_pulse(
+        np.deg2rad(10.0), duration=0.2e-3, system=SYSTEM, use="excitation"
+    )
     encode = pp.make_trapezoid("y", area=100.0, duration=1e-3, system=SYSTEM)
     readout = pp.make_trapezoid("x", flat_area=2000, flat_time=2.56e-3, system=SYSTEM)
     adc = pp.make_adc(64, duration=2.56e-3, delay=readout.rise_time, system=SYSTEM)
@@ -329,8 +334,10 @@ def test_a_scan_is_described_by_the_repetition_sampling_the_centre_of_k_space():
     seq = lines()
     description = describe(seq)
     assert len(description) == 3
-    start = float(seq.block_durations[1]) + float(seq.block_durations[2]) + float(
-        seq.block_durations[3]
+    start = (
+        float(seq.block_durations[1])
+        + float(seq.block_durations[2])
+        + float(seq.block_durations[3])
     )
     rf = description.events[0]
     assert rf.timestamp_us == pytest.approx(
@@ -339,7 +346,10 @@ def test_a_scan_is_described_by_the_repetition_sampling_the_centre_of_k_space():
     assert description.tr_duration_us == pytest.approx(start * 1e6)
     # Only the centre line passes k = 0: its readout is the one described.
     adc = description.events[2]
-    assert adc.type == EventType.ADC and 0.0 < adc.timestamp_us < description.tr_duration_us
+    assert (
+        adc.type == EventType.ADC
+        and 0.0 < adc.timestamp_us < description.tr_duration_us
+    )
 
 
 def test_a_navigator_at_the_centre_does_not_choose_the_repetition():

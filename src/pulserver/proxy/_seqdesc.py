@@ -278,14 +278,19 @@ def _central_repetition(seq: Any, echoes: Any) -> tuple[int, int]:
     )
     radius = np.linalg.norm(k[:, centres], axis=0)
     navigator = np.asarray(
-        seq.evaluate_labels(evolution="adc").get("NAV", np.zeros(blocks.size)), dtype=bool
+        seq.evaluate_labels(evolution="adc").get("NAV", np.zeros(blocks.size)),
+        dtype=bool,
     ).reshape(-1)
     candidates = np.flatnonzero(~navigator) if navigator.size == blocks.size else []
     if not len(candidates):
         candidates = np.arange(blocks.size)
     # The first repetition reaching the centre, within rounding of k.
     reach = radius[candidates]
-    nearest = int(candidates[np.flatnonzero(reach <= reach.min() + 1e-6 * (reach.max() or 1.0))[0]])
+    nearest = int(
+        candidates[
+            np.flatnonzero(reach <= reach.min() + 1e-6 * (reach.max() or 1.0))[0]
+        ]
+    )
     first = (int(blocks[nearest]) - 1) // size * size + 1
     return first, min(first + size - 1, seq.num_blocks)
 
@@ -398,7 +403,9 @@ def waveforms(
         count = rows["type"].size
         events = np.empty((count, EVENT_WORDS), dtype=np.uint32)
         events[:, 0] = rows["type"].astype(np.uint32)
-        events[:, 1:3] = rows["timestamp_us"].astype("<f8").view("<u4").reshape(count, 2)
+        events[:, 1:3] = (
+            rows["timestamp_us"].astype("<f8").view("<u4").reshape(count, 2)
+        )
         events[:, 3:] = rows["params"].astype("<f4").view("<u4")
         found.append(
             _waveform(
