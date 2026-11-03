@@ -522,11 +522,22 @@ def test_a_non_cartesian_space_keeps_its_matrix_and_field_of_view_along_the_read
         assert space.fieldOfView_mm.x == pytest.approx(220.0)
 
 
-def test_an_acquisition_of_the_wrong_length_is_refused():
+def test_an_acquisition_shorter_than_its_row_is_refused():
     table = fixture("gre_2d_3sl.seq")
-    samples = np.ones((2, int(table.num_samples[0]) + 1), np.complex64)
+    samples = np.ones((2, int(table.num_samples[0]) - 1), np.complex64)
     with pytest.raises(ValueError, match="samples"):
         enrich_acquisition(ismrmrd.Acquisition.from_array(samples), table, 0)
+
+
+def test_a_readout_padded_to_the_frame_is_cut_to_its_own_samples():
+    table = fixture("gre_2d_3sl.seq")
+    count = int(table.num_samples[0])
+    samples = np.zeros((2, count + 7), np.complex64)
+    samples[:, :count] = 1.0
+    acquisition = ismrmrd.Acquisition.from_array(samples)
+    enrich_acquisition(acquisition, table, 0)
+    assert int(acquisition.number_of_samples) == count
+    assert np.abs(np.asarray(acquisition.data)).min() > 0.0
 
 
 def curving(tmp_path, shift_m):

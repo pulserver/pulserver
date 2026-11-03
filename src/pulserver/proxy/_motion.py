@@ -15,13 +15,18 @@ which the reconstruction applies.
 
 from __future__ import annotations
 
+import logging
+import math
 import os
 import struct
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import numpy as np
+
+_log = logging.getLogger("pulserver.proxy")
 
 #: The file's first four bytes, as the writer's byte order lays them.
 MAGIC = 0x504D4342  # 'PMCB'
@@ -132,8 +137,30 @@ def _blank(path: Path) -> int:
     return fd
 
 
+#: The first bytes of a sequence file in the Pulseq binary format.
+_BINARY_MAGIC = b"\x01pulseq"
+
+
 def asks_for_motion_correction(entry: Path) -> bool:
-    """Whether a sequence file sets ``EnablePmc``, read from its definitions."""
+    """Whether a sequence file sets ``EnablePmc``, read from its definitions.
+
+    A file in the Pulseq binary format, as the design service writes, is read
+    through pypulseqpp; a text file is scanned for its definitions alone.
+    """
+    try:
+        with Path(entry).open("rb") as f:
+            binary = f.read(len(_BINARY_MAGIC)) == _BINARY_MAGIC
+    except OSError:
+        return False
+    if binary:
+        import pypulseqpp as pp
+
+        seq = pp.Sequence()
+        seq.read(str(entry))
+        value = seq.definitions.get("EnablePmc")
+        if value is None:
+            return False
+        return bool(np.any(np.asarray(value, dtype=float) != 0))
     try:
         with Path(entry).open("r", errors="replace") as f:
             inside = False
@@ -287,6 +314,125 @@ class MotionWriter:
 
     def __enter__(self) -> MotionWriter:
         return self.create() if self._fd < 0 else self
+
+    def __exit__(self, *_: object) -> None:
+        self.close()
+
+
+#: The motion log beside the pose file, and its plot.
+LOG_FILENAME = "motion.csv"
+PLOT_FILENAME = "motion.png"
+
+_LOG_COLUMNS = (
+    "pose",
+    "time_s",
+    "pitch_deg",
+    "roll_deg",
+    "yaw_deg",
+    "tx_mm",
+    "ty_mm",
+    "tz_mm",
+    "rescan",
+)
+
+
+def euler_deg(rotation: tuple[float, ...]) -> tuple[float, float, float]:
+    """Rotations about x, y and z (degrees) of a row-major rotation, ``R = Rz @ Ry @ Rx``."""
+    r = np.asarray(rotation, dtype=float).reshape(3, 3)
+    rx = math.atan2(r[2, 1], r[2, 2])
+    ry = -math.asin(max(-1.0, min(1.0, r[2, 0])))
+    rz = math.atan2(r[1, 0], r[0, 0])
+    return math.degrees(rx), math.degrees(ry), math.degrees(rz)
+
+
+class MotionLog:
+    """The poses a scan was given, as a table and a plot beside its pose file.
+
+    Each pose is appended to ``motion.csv`` as it is published: its index, the
+    seconds since the first, the rotations (degrees, ``R = Rz @ Ry @ Rx``)
+    as pitch about x (left-right), roll about y (anterior-posterior) and yaw
+    about z (superior-inferior), the translation (mm) and the rescan flag. The table
+    is written as ``motion.csv.part`` while the scan runs, so that whatever
+    exports the scan's directory waits for it, and on :meth:`close` the six
+    parameters are plotted against time into ``motion.png`` and the table is
+    renamed. Nothing raises: a table that cannot be written is logged.
+    """
+
+    def __init__(self, directory: Path | str) -> None:
+        self.path = Path(directory) / LOG_FILENAME
+        self._part = self.path.with_name(self.path.name + ".part")
+        self._rows: list[tuple[float, ...]] = []
+        self._start: float | None = None
+        self._file = None
+        try:
+            self._file = self._part.open("w")
+            self._file.write(",".join(_LOG_COLUMNS) + "\n")
+            self._file.flush()
+        except OSError as error:
+            _log.error("the motion log %s cannot be written: %s", self._part, error)
+
+    def add(self, pose: Pose) -> None:
+        now = time.monotonic()
+        if self._start is None:
+            self._start = now
+        row = (
+            float(len(self._rows)),
+            now - self._start,
+            *euler_deg(pose.rotation),
+            *(1e3 * float(value) for value in pose.translation_m),
+            float(pose.rescan),
+        )
+        self._rows.append(row)
+        if self._file is not None:
+            self._file.write(
+                f"{int(row[0])},{row[1]:.3f},"
+                + ",".join(f"{value:.4f}" for value in row[2:8])
+                + f",{int(row[8])}\n"
+            )
+            self._file.flush()
+
+    def close(self) -> None:
+        if self._file is None:
+            return
+        self._file.close()
+        self._file = None
+        if self._rows:
+            self._plot()
+        try:
+            self._part.replace(self.path)
+        except OSError as error:
+            _log.error("the motion log %s cannot be kept: %s", self.path, error)
+
+    def _plot(self) -> None:
+        try:
+            import matplotlib
+
+            matplotlib.use("Agg")
+            import matplotlib.pyplot as plt
+        except ImportError:
+            return
+        rows = np.asarray(self._rows)
+        fig, (rot, trans) = plt.subplots(2, 1, sharex=True, figsize=(9, 5))
+        for column, name in zip(
+            range(2, 5), ("pitch (x)", "roll (y)", "yaw (z)"), strict=True
+        ):
+            rot.plot(rows[:, 1], rows[:, column], label=name)
+        for column, name in zip(range(5, 8), "xyz", strict=True):
+            trans.plot(rows[:, 1], rows[:, column], label=name)
+        rot.set_ylabel("rotation (deg)")
+        trans.set_ylabel("translation (mm)")
+        trans.set_xlabel("time since the first pose (s)")
+        rot.legend(loc="upper left", bbox_to_anchor=(1.01, 1.0), frameon=False)
+        trans.legend(loc="upper left", bbox_to_anchor=(1.01, 1.0), frameon=False)
+        fig.tight_layout()
+        try:
+            fig.savefig(self.path.with_name(PLOT_FILENAME), dpi=100)
+        except OSError as error:
+            _log.error("the motion plot cannot be written: %s", error)
+        plt.close(fig)
+
+    def __enter__(self) -> MotionLog:
+        return self
 
     def __exit__(self, *_: object) -> None:
         self.close()

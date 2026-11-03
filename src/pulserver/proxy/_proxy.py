@@ -34,7 +34,7 @@ from ..recon._runtime.readers import deserialize_config, read_text
 from . import _held
 from ._designs import Design, DesignCache
 from ._enrich import enrich_acquisition, enrich_header, header_fov_offset_m
-from ._motion import FILENAME, MotionWriter, Pose, pose_of, pose_waveform
+from ._motion import FILENAME, MotionLog, MotionWriter, Pose, pose_of, pose_waveform
 from ._queue import QueueFile
 from ._receiver import DicomReceiver
 from ._seqdesc import is_message
@@ -622,7 +622,10 @@ class _Workers:
             try:
                 slot = self._slots.take(wait=True)
                 try:
-                    with MotionWriter(motion) as writer:
+                    with (
+                        MotionWriter(motion) as writer,
+                        MotionLog(motion.parent) as log,
+                    ):
                         self._run(
                             client,
                             config,
@@ -630,7 +633,7 @@ class _Workers:
                             path,
                             slot,
                             lambda w: _send(items, w),
-                            _publisher(writer),
+                            _publisher(writer, log),
                         )
                 finally:
                     self._slots.release(slot)
@@ -802,7 +805,10 @@ class _Remote:
             poses = (
                 None
                 if motion is None
-                else _publisher(stack.enter_context(MotionWriter(motion)))
+                else _publisher(
+                    stack.enter_context(MotionWriter(motion)),
+                    stack.enter_context(MotionLog(motion.parent)),
+                )
             )
             server.send_config_file(name)
             server.send_header(header)
@@ -1220,11 +1226,15 @@ def _replay(queued: QueueFile, others: list[Any], worker: Connection) -> None:
     _send(itertools.chain(others, queued), worker)
 
 
-def _publisher(writer: MotionWriter) -> Callable[[Pose], None]:
-    """Return what publishes each pose a reconstruction states into ``writer``."""
+def _publisher(
+    writer: MotionWriter, log: MotionLog | None = None
+) -> Callable[[Pose], None]:
+    """Return what publishes each pose a reconstruction states into ``writer``, and logs it to ``log``."""
 
     def publish(pose: Pose) -> None:
         writer.publish(pose.rotation, rescan=pose.rescan)
+        if log is not None:
+            log.add(pose)
 
     return publish
 

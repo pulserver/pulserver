@@ -12,6 +12,8 @@ import functools
 import hashlib
 import inspect
 import logging
+import math
+import re
 import shutil
 from collections.abc import Callable, Mapping
 from concurrent.futures import ThreadPoolExecutor
@@ -36,6 +38,7 @@ from ..mrd._sequence import designed_chain
 from ..protocol import (
     Parameter,
     ProtocolKey,
+    TRPreset,
     UIParam,
     Validation,
     format_listing,
@@ -235,7 +238,7 @@ def generate(
     listing = _listing(variant)
     request = _request(block, listing)
     limits = _read(limits)
-    system, options, checked = split_limits(limits)
+    _, options, _ = split_limits(limits)
     design = design_system(limits)
     scanner = _plugin(variant)
     requested = {key: p.value for key, p in listing.items() if p.editable}
@@ -247,6 +250,65 @@ def generate(
         validation = scanner.validate(design, validation.values, exam)
     if not validation.valid:
         raise CallError(validation.info)
+    shortest = requested.get(UIParam.TR) == TRPreset.MINIMUM
+    for _ in range(_WAVE_RETRIES):
+        try:
+            return _generate(
+                plugin, limits, listing, scanner, variant, validation, store, push, exam
+            )
+        except (CallError, ValueError) as error:
+            # The conversion raises a waveform memory it cannot load in time.
+            longer = _tr_for_wave_loading(str(error), validation.values, options)
+            if longer is None:
+                raise
+            if not shortest:
+                raise CallError(
+                    f"{error}; the waves stream in at a TR of about "
+                    f"{1e-3 * longer:.1f} ms or more"
+                ) from None
+            retried = scanner.validate(
+                design, {**validation.values, UIParam.TR: longer}, exam
+            )
+            if not retried.valid:
+                raise
+            _log.info(
+                "%s: the shortest TR leaves no time to stream the waves in; "
+                "designing at TR %.3f ms",
+                plugin,
+                1e-3 * longer,
+            )
+            validation = retried
+    raise CallError(f"the waves of {plugin} cannot be streamed in at any TR tried")
+
+
+#: Designs generate tries, lengthening the shortest TR, before it gives up on
+#: streaming the waves in.
+_WAVE_RETRIES = 6
+
+_WAVE_LATE = re.compile(r"loading its waves ends ([0-9.]+) us after it starts")
+
+
+def _tr_for_wave_loading(
+    problem: str, values: Mapping[Any, Any], options: Mapping[str, Any]
+) -> int | None:
+    """Return the TR (us) at which the waves a problem says load late would load in time, or None.
+
+    The loading may take ``headroom`` of the playout's time, so each microsecond
+    late takes ``1 / headroom`` more of TR, and a tenth more as margin.
+    """
+    found = _WAVE_LATE.search(problem)
+    budget = options.get("wave_budget")
+    tr = values.get(UIParam.TR)
+    if found is None or budget is None or tr is None or float(tr) <= 0:
+        return None
+    late_us = float(found.group(1))
+    return math.ceil(float(tr) + 1.1 * late_us / float(budget.headroom))
+
+
+def _generate(plugin, limits, listing, scanner, variant, validation, store, push, exam):
+    """Design, check, convert and store ``validation``'s values; see :func:`generate`."""
+    system, options, checked = split_limits(limits)
+    design = design_system(limits)
     source = _source(variant)
     identified = dict(validation.values)
     if scanner.options:

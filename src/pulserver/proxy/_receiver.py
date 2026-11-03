@@ -4,7 +4,10 @@ from __future__ import annotations
 
 __all__ = ["DicomReceiver"]
 
+import io
 import logging
+import socket
+import struct
 from collections.abc import Sequence
 from dataclasses import dataclass
 
@@ -33,6 +36,12 @@ class DicomReceiver:
         have to be told to accept.
     timeout
         Seconds the association, and each store, may take.
+    viewer_port
+        Port on the receiver's host of a viewer that shows each stored image,
+        sent to it as an ``AVR1`` message: the four bytes ``AVR1``, then -1
+        three times and the file's length as big-endian 32-bit integers, then
+        the image as a DICOM file. The viewer answers a big-endian 32-bit
+        status, 0 when shown, and a line. ``None`` sends nothing.
     """
 
     host: str
@@ -40,6 +49,7 @@ class DicomReceiver:
     title: str
     calling: str = "PULSERVER"
     timeout: float = 30.0
+    viewer_port: int | None = None
 
     def __str__(self) -> str:
         return f"{self.title} at {self.host}:{self.port} called as {self.calling}"
@@ -85,6 +95,7 @@ class DicomReceiver:
                 code = getattr(status, "Status", None)
                 if code is not None and int(code) in _STORED:
                     stored += 1
+                    self.show(dataset)
                 else:
                     _log.error(
                         "%s did not store image %s: %s",
@@ -95,3 +106,50 @@ class DicomReceiver:
         finally:
             association.release()
         return stored
+
+    def show(self, dataset) -> bool:
+        """Send ``dataset`` to the viewer at ``viewer_port``; return whether it was shown.
+
+        Nothing raises: a viewer that cannot be reached, or refuses, is logged.
+        """
+        if self.viewer_port is None:
+            return False
+        buffer = io.BytesIO()
+        dataset.save_as(buffer, enforce_file_format=True)
+        image = buffer.getvalue()
+        request = b"AVR1" + struct.pack(">iiiI", -1, -1, -1, len(image)) + image
+        try:
+            with socket.create_connection(
+                (self.host, self.viewer_port), timeout=5.0
+            ) as connection:
+                connection.sendall(request)
+                connection.shutdown(socket.SHUT_WR)
+                reply = b""
+                while chunk := connection.recv(512):
+                    reply += chunk
+        except OSError as error:
+            _log.error(
+                "the viewer at %s:%d cannot be reached: %s",
+                self.host,
+                self.viewer_port,
+                error,
+            )
+            return False
+        if len(reply) < 4:
+            _log.error(
+                "the viewer at %s:%d did not answer", self.host, self.viewer_port
+            )
+            return False
+        status = struct.unpack(">I", reply[:4])[0]
+        line = reply[4:].decode(errors="replace").strip()
+        if status == 0:
+            _log.info("viewer: %s", line)
+        else:
+            _log.error(
+                "the viewer at %s:%d did not show image %s: %s",
+                self.host,
+                self.viewer_port,
+                dataset.get("InstanceNumber", "?"),
+                line,
+            )
+        return status == 0
