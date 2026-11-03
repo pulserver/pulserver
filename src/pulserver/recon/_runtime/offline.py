@@ -41,8 +41,17 @@ class _FileConnection:
 
     def _items(self) -> Any:
         # Waveforms first, so the first unit to close carries all of them.
-        for index in range(_count(self._dataset.number_of_waveforms)):
-            yield self._dataset.read_waveform(index)
+        # A series kept by the proxy holds its sequence description among
+        # them; one that does not is sent the design's, as the proxy sends it.
+        from ...proxy._seqdesc import is_description
+
+        stored = [
+            self._dataset.read_waveform(index)
+            for index in range(_count(self._dataset.number_of_waveforms))
+        ]
+        if self._design is not None and not any(map(is_description, stored)):
+            yield from self._design.description
+        yield from stored
         for index in range(_count(self._dataset.number_of_acquisitions)):
             yield self._dataset.read_acquisition(index)
 

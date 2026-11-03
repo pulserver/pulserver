@@ -37,7 +37,7 @@ from ._enrich import enrich_acquisition, enrich_header, header_fov_offset_m
 from ._motion import FILENAME, MotionLog, MotionWriter, Pose, pose_of, pose_waveform
 from ._queue import QueueFile
 from ._receiver import DicomReceiver
-from ._seqdesc import is_message
+from ._seqdesc import is_description
 from ._workers import WorkerPool
 
 _log = logging.getLogger("pulserver.proxy")
@@ -199,8 +199,9 @@ class _Listener:
         """Return a series, written where it can be received again.
 
         The proxy keeps the series as it reconstructs it, header and
-        acquisitions enriched (the header marked ``pulserver_enriched``); a
-        replay plays such a file as it is. A server keeps a forwarded series
+        acquisitions enriched (the header marked ``pulserver_enriched``), the
+        sequence description among its waveforms; a replay plays such a file
+        as it is. A server keeps a forwarded series
         as the proxy sent it, enriched too. The header is written as this is
         called, into a file named with :data:`PART` appended, which takes its
         own name once the stream has ended: whoever collects the directory
@@ -226,10 +227,10 @@ class ReconProxy(_Listener):
     table enriches the header and every acquisition; the samples are passed on
     as received, demodulated to the prescribed field-of-view centre by the
     playout (:func:`pulserver.ir.prescribe`). The reconstruction receives the
-    chain's sequence description as a text message, after the header and
+    chain's sequence description as ISMRMRD waveforms, after the header and
     before the first acquisition
-    (:func:`~pulserver.proxy._seqdesc.message`); the message is not sent back
-    to the client. The reconstruction plugin is the one the client's config
+    (:func:`~pulserver.proxy._seqdesc.waveforms`); they are not sent back to
+    the client. The reconstruction plugin is the one the client's config
     text names. A series that breaks these rules, or whose stream ends without
     its ``CLOSE`` or an acquisition flagged ``LAST_IN_MEASUREMENT``, is refused
     with a text naming the reason and a ``CLOSE``, and what the client still
@@ -407,7 +408,11 @@ class ReconProxy(_Listener):
         plugin = _config_plugin(config)
         enrich_header(header, design.table)
         enriched = self._kept(
-            header, _enriched(_received(client), design, header_fov_offset_m(header))
+            header,
+            itertools.chain(
+                design.description,
+                _enriched(_received(client), design, header_fov_offset_m(header)),
+            ),
         )
         _log.info(
             "series on %s: %s, %d readouts",
@@ -421,7 +426,7 @@ class ReconProxy(_Listener):
                 config,
                 header,
                 plugin,
-                itertools.chain((design.description,), enriched),
+                enriched,
                 motion=design.directory.parent / FILENAME
                 if design.prospective_motion
                 else None,
@@ -1295,7 +1300,7 @@ def _relay(
         for item in source:
             if _is_close_marker(item):
                 break
-            if is_message(item):
+            if is_description(item):
                 continue
             if isinstance(item, ismrmrd.Waveform):
                 found = pose_of(item)

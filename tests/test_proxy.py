@@ -37,7 +37,7 @@ from pulserver.proxy import (
 from pulserver.proxy._enrich import is_enriched
 from pulserver.proxy._proxy import _config_plugin
 from pulserver.proxy._receiver import DicomReceiver
-from pulserver.proxy._seqdesc import is_message
+from pulserver.proxy._seqdesc import EVENTS_ID, HEADER_ID, is_description
 from pulserver.recon import load_plugin
 from pulserver.recon._runtime import concurrency
 from pulserver.recon._runtime.connection import Connection
@@ -1172,9 +1172,11 @@ def test_a_forwarded_series_names_its_reconstruction_in_a_config_file_message(
     received = stream(proxy.port, series["gre2d"], config=config)
     recording.join()
 
-    name, header, description, *acquisitions = recording.received
+    name, header, *rest = recording.received
+    description = [item for item in rest if is_description(item)]
+    acquisitions = [item for item in rest if isinstance(item, ismrmrd.Acquisition)]
     assert name == (configured or "gre2d")
-    assert is_message(description)
+    assert [int(w.waveform_id) for w in description[:2]] == [HEADER_ID, EVENTS_ID]
     encoding = header.encoding[0]
     assert encoding.reconSpace.matrixSize.x == MATRIX["nx"]
     oversampling = encoding.encodedSpace.matrixSize.x / MATRIX["nx"]
@@ -1218,11 +1220,13 @@ def test_the_reconstruction_reads_the_sequence_description_before_any_acquisitio
     recording.join()
 
     kinds = [
-        "description" if is_message(item) else type(item).__name__
+        "description" if is_description(item) else type(item).__name__
         for item in recording.received
     ]
-    assert kinds.count("description") == 1
-    assert kinds.index("description") < kinds.index("Acquisition")
+    assert kinds.count("description") >= 3
+    assert max(i for i, k in enumerate(kinds) if k == "description") < kinds.index(
+        "Acquisition"
+    )
 
 
 def test_the_sequence_description_is_not_sent_back_to_the_client(start_proxy, bucket):
@@ -1231,7 +1235,7 @@ def test_the_sequence_description_is_not_sent_back_to_the_client(start_proxy, bu
     proxy = start_proxy(slots=1)
     received = stream(proxy.port, series["gre2d"])
     assert images(received)
-    assert not any(is_message(item) for item in received)
+    assert not any(is_description(item) for item in received)
 
 
 def test_images_come_back_as_dicom_when_asked(start_proxy, bucket):
