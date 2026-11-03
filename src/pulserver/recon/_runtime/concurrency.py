@@ -6,6 +6,7 @@ __all__ = [
     "Slots",
     "compute_max_concurrent",
     "gpu_devices",
+    "memory_allows",
     "slot_devices",
 ]
 
@@ -83,6 +84,20 @@ def compute_max_concurrent(
         per_recon_gb,
     )
     return slots
+
+
+def memory_allows(
+    per_recon_gb: float = _DEFAULT_PER_RECON_GB,
+    headroom_fraction: float = _DEFAULT_HEADROOM_FRACTION,
+) -> bool:
+    """Return whether the memory available now holds one more reconstruction.
+
+    The budget of :func:`compute_max_concurrent`, measured at the moment of
+    asking: ``available * headroom_fraction >= per_recon_gb``. ``True`` when
+    available memory cannot be read.
+    """
+    available = _available_ram_gb()
+    return available <= 0.0 or available * headroom_fraction >= per_recon_gb
 
 
 def gpu_devices() -> tuple[str, ...]:

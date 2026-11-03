@@ -30,7 +30,8 @@ class ExamImage:
     A calibration series stores a map with the geometry it was measured on,
     as ``context.b1_map = ExamImage.measured(b1, context, data)``, and a
     later series reads it resampled onto its own grid with
-    ``context.b1_map.on(context, data)``. The resampling uses the two
+    ``context.b1_map.on(context, data)``, and a design plugin onto a
+    prescription with :meth:`resample`. The resampling uses the two
     geometries alone, no registration: :func:`bartorch.tools.reslice`.
 
     Attributes
@@ -73,11 +74,20 @@ class ExamImage:
         Keyword arguments go to :func:`bartorch.tools.reslice`: ``interpolation``
         and ``fill``. bartorch is imported here, and SimpleITK by it.
         """
+        return self.resample(_unit_geometry(context, unit), **kwargs)
+
+    def resample(self, geometry: Any, **kwargs: Any) -> np.ndarray:
+        """Return the image resampled onto the grid ``geometry`` describes.
+
+        For a design plugin, which has a prescription and no reconstruction
+        unit: ``geometry`` has the fields of :attr:`geometry`, one for a
+        volume or one per plane. ``(..., z, y, x)`` on that grid. Keyword
+        arguments go to :func:`bartorch.tools.reslice`: ``interpolation`` and
+        ``fill``.
+        """
         from bartorch.tools import reslice
 
-        return reslice(
-            self.data, self.geometry, _unit_geometry(context, unit), **kwargs
-        )
+        return reslice(self.data, self.geometry, geometry, **kwargs)
 
 
 def _xml(header: Any) -> str:

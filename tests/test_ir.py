@@ -516,6 +516,40 @@ def test_a_repetition_past_a_32_bit_count_of_microseconds_reads_the_same_in_the_
     )
 
 
+def test_a_block_carrying_only_a_digital_output_keeps_its_own_duration(
+    tmp_path, scanner_reader
+):
+    """A block with nothing but a trigger out is not a pure delay.
+
+    A pure delay plays as one block raster with each instance's own wait, but
+    an output trigger is placed inside its block, so the block keeps the
+    duration its file gives it.
+    """
+    sequence = pp.Sequence(SYSTEM)
+    for _ in range(2):
+        sequence.add_block(pp.make_trapezoid("x", amplitude=1000, flat_time=1e-3))
+        sequence.add_block(
+            pp.make_delay(2e-3),
+            pp.make_digital_output_pulse("ext1", delay=20e-6, duration=100e-6),
+        )
+    seq = tmp_path / "trigger_out.seq"
+    sequence.write(seq)
+    cache = convert(
+        seq, SYSTEM, vendor=VENDOR, label_column_map=LABELS, cache_ext=".cache"
+    )
+    printed = subprocess.run(
+        [str(scanner_reader), str(cache), str(seq.stat().st_size)],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    single = [
+        int(m.group(1))
+        for m in re.finditer(r"segment \d+ duration_us (\d+) num_blocks 1 ", printed)
+    ]
+    assert 2000 in single
+
+
 def _plan_lines(plan):
     lines = [
         f"wave_plan rc 1 mode {('none', 'resident', 'streamed').index(plan['mode'])} "

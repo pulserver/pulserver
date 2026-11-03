@@ -1248,7 +1248,7 @@ static int get_segment_duration_us(const pulseg_collection *coll, int seg_idx)
     {
         bdef = &desc->base_blocks[seg->unique_block_indices[0]];
         if (bdef->rf_id == -1 && bdef->gx_id == -1 && bdef->gy_id == -1 && bdef->gz_id == -1 &&
-            bdef->adc_id == -1)
+            bdef->adc_id == -1 && !seg->has_digitalout[0])
         {
             if (desc->block_raster_us > 0.0f)
                 return (int)(desc->block_raster_us);
@@ -1470,7 +1470,7 @@ static int get_block_duration_us(const pulseg_collection *coll, int seg_idx, int
     {
         bdef = &desc->base_blocks[seg->unique_block_indices[0]];
         if (bdef->rf_id == -1 && bdef->gx_id == -1 && bdef->gy_id == -1 && bdef->gz_id == -1 &&
-            bdef->adc_id == -1)
+            bdef->adc_id == -1 && !seg->has_digitalout[0])
         {
             if (desc->block_raster_us > 0.0f)
                 return (int)(desc->block_raster_us);

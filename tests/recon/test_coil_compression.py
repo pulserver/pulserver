@@ -17,6 +17,7 @@ from conftest import (
 )
 
 from pulserver import recon
+from pulserver.recon._calibration import _geometry
 
 pytest.importorskip("bartorch")
 
@@ -212,16 +213,11 @@ def request_maps(n_virtual):
     return step
 
 
-@pytest.mark.parametrize(
-    ("measured", "asked", "reason"),
-    [
-        (None, 3, r"basis differs: stored None, this unit '\w+'"),
-        (3, None, r"basis differs: stored '\w+', this unit None"),
-    ],
-)
-def test_exam_maps_are_refused_by_a_series_in_another_basis(
-    tmp_path, device, measured, asked, reason
+def test_exam_maps_of_a_compressed_series_are_refused_by_an_uncompressed_one(
+    tmp_path, device
 ):
+    measured, asked = 3, None
+    reason = r"basis differs: stored '\w+', this unit None"
     _, _, kspace = coil_phantom(COILS, MATRIX)
     header = calibration_header(COILS, MATRIX)
     play(
@@ -277,3 +273,50 @@ def test_a_stream_keeps_one_basis(device):
 def test_fewer_than_one_virtual_channel_is_refused(n_virtual):
     with pytest.raises(ValueError, match="at least 1"):
         recon.CoilCompression(n_virtual)
+
+
+def test_uncompressed_exam_maps_are_projected_onto_the_basis_a_later_series_compresses_by(
+    tmp_path, device
+):
+    """Projected maps times the object are the compressed coil images, as SENSE needs."""
+    image, maps, kspace = coil_phantom(COILS, MATRIX)
+    header = calibration_header(COILS, MATRIX)
+    exam = recon.ExamCache("exam-1", tmp_path)
+    exam[recon.COIL_SENSITIVITIES] = recon.CoilSensitivities(
+        maps=maps,
+        coils=tuple(f"H{index}" for index in range(COILS)),
+        noise=None,
+        basis=None,
+        geometry=_geometry(header, capture_ref(header, kspace)),
+        method="phantom",
+        source="7",
+    )
+
+    def step(context, data):
+        data = recon.CoilCompression(3)(context, data)
+        return data, recon.coil_maps(context, data, estimate=estimate())
+
+    plugin = stream_plugin(step)
+    play(
+        plugin,
+        header,
+        readouts(kspace, last=("ACQ_LAST_IN_SLICE",)),
+        exam=exam,
+        device=device,
+    )
+    ((data, projected),) = plugin.results
+
+    coil_images = np.fft.fftshift(
+        np.fft.ifft2(np.fft.ifftshift(data.data.kspace, axes=(-2, -1)), norm="ortho"),
+        axes=(-2, -1),
+    )
+    assert projected.shape == (3, MATRIX, MATRIX)
+    assert relative_difference(projected.numpy() * image, coil_images) < 1e-4
+
+
+def capture_ref(header, kspace):
+    """The imaging k-space buffer a stream of ``kspace`` closes, for its geometry."""
+    plugin = stream_plugin()
+    play(plugin, header, readouts(kspace, last=("ACQ_LAST_IN_SLICE",)))
+    (data,) = plugin.results
+    return data.data
