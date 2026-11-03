@@ -60,7 +60,9 @@ def explicit_bands(app: Callable[..., Any], count: int) -> Callable[..., Any]:
 
     A band is in the physical frame, as the console prescribes it and as
     ``app`` plays it: its normal along the physical axes, its position from
-    the isocentre and its thickness, in metres. The bands ``exsat_mask``
+    the isocentre and its thickness, in metres. The position runs along the
+    band's axis in the direction its largest normal component is positive,
+    whichever way the console's normal points. The bands ``exsat_mask``
     sets are played and the others are passed at zero thickness, which
     ``app`` leaves off. A mask setting a band past ``count`` raises
     ``ValueError``.
@@ -107,8 +109,16 @@ def explicit_bands(app: Callable[..., Any], count: int) -> Callable[..., Any]:
             )
         for n in range(1, count + 1):
             on = bool(mask >> (n - 1) & 1)
-            for axis in "xyz":
-                values[f"sat{n}_normal_{axis}"] = values.pop(f"exsat{n}_normal_{axis}")
+            normal = [values.pop(f"exsat{n}_normal_{axis}") for axis in "xyz"]
+            # The console's location runs along the band's axis whatever way
+            # its normal points: a band whose normal points down its axis
+            # (7 T, 2 Nov: a superior band, normal -S, location +37 mm) is
+            # turned to point up it, so the location keeps its side.
+            dominant = max(range(3), key=lambda axis: abs(normal[axis]))
+            if normal[dominant] < 0:
+                normal = [-component for component in normal]
+            for axis, component in zip("xyz", normal, strict=True):
+                values[f"sat{n}_normal_{axis}"] = component
             values[f"sat{n}_position"] = values.pop(f"exsat{n}_loc")
             thickness = values.pop(f"exsat{n}_thickness")
             values[f"sat{n}_thickness"] = thickness if on else 0.0

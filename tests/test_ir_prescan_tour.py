@@ -85,7 +85,27 @@ def test_a_ptx_sequence_that_repeats_alike_prescans_after_a_tour_of_its_channels
     )
 
 
-def test_the_tour_drives_each_channel_where_the_scan_drives_it_hardest(tmp_path):
+def test_the_tour_opens_on_an_rf_block_and_rests_no_shorter_than_the_sequencer_takes(
+    tmp_path,
+):
+    _, generated = _converted(tmp_path, _alike())
+    blocks = [generated.get_block(i) for i in range(1, generated.num_blocks + 1)]
+    waits = [
+        b.block_duration
+        for b in blocks
+        if b.rf is None
+        and b.adc is None
+        and b.gx is None
+        and b.gy is None
+        and b.gz is None
+    ]
+
+    assert blocks[0].rf is not None
+    assert min(waits) >= ir._calibration.SHORTEST_REST - 1e-9
+
+
+def _varying():
+    """A pTx preparation and excitation whose amplitudes change from repetition to repetition."""
     adc = pp.make_adc(64, duration=2e-3, system=SYSTEM)
     seq = pp.Sequence(SYSTEM)
     for prepare, excite in zip(
@@ -96,7 +116,40 @@ def test_the_tour_drives_each_channel_where_the_scan_drives_it_hardest(tmp_path)
         seq.add_block(_ptx(1, excite))
         seq.add_block(adc)
         seq.add_block(pp.make_delay(5e-3))
-    path, _ = _converted(tmp_path, seq)
+    return seq
+
+
+def _labels(tmp_path, sequence):
+    path = tmp_path / "generated.seq"
+    sequence.write(str(path))
+    return str(pp.io.read(str(path)).get_definition("CustomLabels") or "")
+
+
+def _readouts(sequence):
+    return sum(
+        sequence.get_block(i).adc is not None for i in range(1, sequence.num_blocks + 1)
+    )
+
+
+def test_a_tour_before_a_generated_calibration_acquires_its_readouts_for_the_gain(
+    tmp_path,
+):
+    _, generated = _converted(tmp_path, _varying())
+
+    assert "NOPRESCAN" not in _labels(tmp_path, generated)
+    assert generated.get_definition("NumGainCalibrationReadouts") == [
+        _readouts(generated)
+    ]
+
+
+def test_a_tour_alone_before_the_scan_file_leaves_its_readouts_unacquired(tmp_path):
+    _, generated = _converted(tmp_path, _alike())
+
+    assert "NOPRESCAN" in _labels(tmp_path, generated)
+
+
+def test_the_tour_drives_each_channel_where_the_scan_drives_it_hardest(tmp_path):
+    path, _ = _converted(tmp_path, _varying())
     _, prescan = _prescan(path)
 
     np.testing.assert_allclose(

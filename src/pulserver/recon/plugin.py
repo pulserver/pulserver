@@ -158,9 +158,8 @@ class ReconResult:
 #: on. A map stored as an :class:`~pulserver.recon.ExamImage` carries that
 #: geometry, and a series with another orientation, centre, field of view or
 #: matrix reads it resampled onto its own grid with
-#: :meth:`~pulserver.recon.ExamImage.on`. Coil sensitivities are reused only
-#: on the grid they were estimated on, which
-#: :func:`~pulserver.recon.coil_maps` checks.
+#: :meth:`~pulserver.recon.ExamImage.on`. :func:`~pulserver.recon.coil_maps`
+#: reslices coil sensitivities onto a series' grid the same way.
 B0_MAP = "b0_map"
 B1_MAP = "b1_map"
 COIL_SENSITIVITIES = "coil_sensitivities"
