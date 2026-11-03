@@ -416,6 +416,39 @@ def test_the_averages_play_the_main_sequence_again_numbered_by_avg(tmp_path):
     ]
 
 
+def _closed(system, nx=3):
+    """A delay played once before ``nx`` delays that play on every average, and one once after them."""
+    seq = _prepared(system, nx)
+    seq.add_block(pp.make_delay(3e-3), pp.make_label("ONCE", "SET", 2))
+    return seq
+
+
+def test_a_once_two_block_plays_once_after_the_last_average(tmp_path):
+    plugin = type(
+        "Closed",
+        (SequencePlugin,),
+        {"app": _closed, "protocol": {UIParam.NX: IntParam("nx", range_max=9)}},
+    )()
+
+    reply, paths = plugin.design(SYSTEM, {UIParam.NEX: 2.0}, tmp_path)
+
+    seq = pp.io.read(paths[-1])
+    assert reply.valid
+    assert list(seq.libraries().block_durations * 1e3) == pytest.approx(
+        [1, 2, 2, 2, 2, 2, 2, 3]
+    )
+    assert list(seq.evaluate_labels(evolution="blocks")["AVG"]) == [
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1,
+    ]
+
+
 def test_one_average_writes_the_main_sequence_as_designed(tmp_path):
     plugin = type(
         "Prepared",
