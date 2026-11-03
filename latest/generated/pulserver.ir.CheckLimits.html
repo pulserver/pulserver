@@ -525,6 +525,11 @@ the reference pulse; equal weights whose squares sum to 1 when None.</p></li>
 file’s <code class="docutils literal notranslate"><span class="pre">metadata[&quot;transmit&quot;]</span></code> must name the same one.</p></li>
 <li><p><strong>vop_head_limit, vop_local_limit</strong> – The scanner’s head and local SAR limits, W/kg, in its current
 operating mode; <a class="reference internal" href="pulserver.ir.sar_ratios.html#pulserver.ir.sar_ratios" title="pulserver.ir.sar_ratios"><code class="xref py py-func docutils literal notranslate"><span class="pre">sar_ratios()</span></code></a> needs both.</p></li>
+<li><p><strong>adc_gap</strong> (<em>float</em>) – Least time in s from the end of one ADC to the start of the next: the
+receiver’s start packet for a readout must not fall inside, or just
+after, the previous readout’s window. 0 leaves the check out.</p></li>
+<li><p><strong>wave_memory</strong> (<em>float</em>) – Longest arbitrary gradient in s one axis’s waveform memory holds:
+its samples at the playout’s raster. 0 leaves the check out.</p></li>
 <li><p><strong>acoustic</strong> (<em>pypulseqpp.safety._acoustic.AcousticResponse | pathlib.Path | str | None</em>) – The gradient coil’s acoustic transfer function on the physical axes,
 or the HDF5 file <code class="docutils literal notranslate"><span class="pre">pypulseqpp.safety.read_acoustic_response</span></code> reads
 it from. <code class="docutils literal notranslate"><span class="pre">None</span></code> leaves out the sound pressure check.</p></li>
@@ -560,37 +565,43 @@ that of IEC 60601-2-33 by default.</p></li>
 <tr class="row-even"><td><p><a class="reference internal" href="pulserver.ir.CheckLimits.acoustic_interval.html#pulserver.ir.CheckLimits.acoustic_interval" title="pulserver.ir.CheckLimits.acoustic_interval"><code class="xref py py-obj docutils literal notranslate"><span class="pre">acoustic_interval</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.ir.CheckLimits.bands.html#pulserver.ir.CheckLimits.bands" title="pulserver.ir.CheckLimits.bands"><code class="xref py py-obj docutils literal notranslate"><span class="pre">bands</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.ir.CheckLimits.adc_gap.html#pulserver.ir.CheckLimits.adc_gap" title="pulserver.ir.CheckLimits.adc_gap"><code class="xref py py-obj docutils literal notranslate"><span class="pre">adc_gap</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.ir.CheckLimits.default_shim.html#pulserver.ir.CheckLimits.default_shim" title="pulserver.ir.CheckLimits.default_shim"><code class="xref py py-obj docutils literal notranslate"><span class="pre">default_shim</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.ir.CheckLimits.bands.html#pulserver.ir.CheckLimits.bands" title="pulserver.ir.CheckLimits.bands"><code class="xref py py-obj docutils literal notranslate"><span class="pre">bands</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.ir.CheckLimits.drive_per_hz.html#pulserver.ir.CheckLimits.drive_per_hz" title="pulserver.ir.CheckLimits.drive_per_hz"><code class="xref py py-obj docutils literal notranslate"><span class="pre">drive_per_hz</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.ir.CheckLimits.default_shim.html#pulserver.ir.CheckLimits.default_shim" title="pulserver.ir.CheckLimits.default_shim"><code class="xref py py-obj docutils literal notranslate"><span class="pre">default_shim</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.ir.CheckLimits.pns.html#pulserver.ir.CheckLimits.pns" title="pulserver.ir.CheckLimits.pns"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pns</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.ir.CheckLimits.drive_per_hz.html#pulserver.ir.CheckLimits.drive_per_hz" title="pulserver.ir.CheckLimits.drive_per_hz"><code class="xref py py-obj docutils literal notranslate"><span class="pre">drive_per_hz</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.ir.CheckLimits.pns_limit.html#pulserver.ir.CheckLimits.pns_limit" title="pulserver.ir.CheckLimits.pns_limit"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pns_limit</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.ir.CheckLimits.pns.html#pulserver.ir.CheckLimits.pns" title="pulserver.ir.CheckLimits.pns"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pns</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.ir.CheckLimits.spl_average_limit.html#pulserver.ir.CheckLimits.spl_average_limit" title="pulserver.ir.CheckLimits.spl_average_limit"><code class="xref py py-obj docutils literal notranslate"><span class="pre">spl_average_limit</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.ir.CheckLimits.pns_limit.html#pulserver.ir.CheckLimits.pns_limit" title="pulserver.ir.CheckLimits.pns_limit"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pns_limit</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.ir.CheckLimits.spl_peak_limit.html#pulserver.ir.CheckLimits.spl_peak_limit" title="pulserver.ir.CheckLimits.spl_peak_limit"><code class="xref py py-obj docutils literal notranslate"><span class="pre">spl_peak_limit</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.ir.CheckLimits.spl_average_limit.html#pulserver.ir.CheckLimits.spl_average_limit" title="pulserver.ir.CheckLimits.spl_average_limit"><code class="xref py py-obj docutils literal notranslate"><span class="pre">spl_average_limit</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.ir.CheckLimits.vop_coil.html#pulserver.ir.CheckLimits.vop_coil" title="pulserver.ir.CheckLimits.vop_coil"><code class="xref py py-obj docutils literal notranslate"><span class="pre">vop_coil</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.ir.CheckLimits.spl_peak_limit.html#pulserver.ir.CheckLimits.spl_peak_limit" title="pulserver.ir.CheckLimits.spl_peak_limit"><code class="xref py py-obj docutils literal notranslate"><span class="pre">spl_peak_limit</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.ir.CheckLimits.vop_head_limit.html#pulserver.ir.CheckLimits.vop_head_limit" title="pulserver.ir.CheckLimits.vop_head_limit"><code class="xref py py-obj docutils literal notranslate"><span class="pre">vop_head_limit</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.ir.CheckLimits.vop_coil.html#pulserver.ir.CheckLimits.vop_coil" title="pulserver.ir.CheckLimits.vop_coil"><code class="xref py py-obj docutils literal notranslate"><span class="pre">vop_coil</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.ir.CheckLimits.vop_local_limit.html#pulserver.ir.CheckLimits.vop_local_limit" title="pulserver.ir.CheckLimits.vop_local_limit"><code class="xref py py-obj docutils literal notranslate"><span class="pre">vop_local_limit</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.ir.CheckLimits.vop_head_limit.html#pulserver.ir.CheckLimits.vop_head_limit" title="pulserver.ir.CheckLimits.vop_head_limit"><code class="xref py py-obj docutils literal notranslate"><span class="pre">vop_head_limit</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.ir.CheckLimits.vops.html#pulserver.ir.CheckLimits.vops" title="pulserver.ir.CheckLimits.vops"><code class="xref py py-obj docutils literal notranslate"><span class="pre">vops</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.ir.CheckLimits.vop_local_limit.html#pulserver.ir.CheckLimits.vop_local_limit" title="pulserver.ir.CheckLimits.vop_local_limit"><code class="xref py py-obj docutils literal notranslate"><span class="pre">vop_local_limit</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.ir.CheckLimits.vops.html#pulserver.ir.CheckLimits.vops" title="pulserver.ir.CheckLimits.vops"><code class="xref py py-obj docutils literal notranslate"><span class="pre">vops</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.ir.CheckLimits.wave_memory.html#pulserver.ir.CheckLimits.wave_memory" title="pulserver.ir.CheckLimits.wave_memory"><code class="xref py py-obj docutils literal notranslate"><span class="pre">wave_memory</span></code></a></p></td>
 <td><p></p></td>
 </tr>
 </tbody>

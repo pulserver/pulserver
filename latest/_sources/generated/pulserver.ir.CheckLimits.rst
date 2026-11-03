@@ -26,6 +26,7 @@
 
    ~CheckLimits.acoustic
    ~CheckLimits.acoustic_interval
+   ~CheckLimits.adc_gap
    ~CheckLimits.bands
    ~CheckLimits.default_shim
    ~CheckLimits.drive_per_hz
@@ -37,3 +38,4 @@
    ~CheckLimits.vop_head_limit
    ~CheckLimits.vop_local_limit
    ~CheckLimits.vops
+   ~CheckLimits.wave_memory
