@@ -377,17 +377,7 @@ def _long_gradients(sequence: pp.Sequence, longest: float) -> list[str]:
         return []
     rows = np.asarray(tables.arbitrary_gradients, dtype=np.float64).reshape(ids.size, -1)
     raster = sequence.grad_raster_time
-    lengths = np.array(
-        [
-            raster
-            * (
-                tables.shapes[int(row[3]) - 1].num_samples
-                if int(row[4]) == 0
-                else np.max(tables.shapes[int(row[4]) - 1].decompressed())
-            )
-            for row in rows
-        ]
-    )
+    lengths = np.array([raster * _raster_steps(tables.shapes, row) for row in rows])
     over = np.flatnonzero(lengths > longest * (1.0 + 1e-9))
     if not over.size:
         return []
@@ -399,6 +389,20 @@ def _long_gradients(sequence: pp.Sequence, longest: float) -> list[str]:
         f"in block {int(where[0]) + 1} exceeds the {longest * 1e3:.0f} ms an axis's "
         "waveform memory holds; split it over several blocks"
     ]
+
+
+def _raster_steps(shapes: Any, row: np.ndarray) -> float:
+    """Return an arbitrary gradient's length in gradient rasters.
+
+    Its time shape is 0 for samples on the raster, -1 for samples on the half
+    raster, or the shape of its sample times in rasters.
+    """
+    samples, times = int(row[3]), int(row[4])
+    if times == 0:
+        return shapes[samples - 1].num_samples
+    if times == -1:
+        return shapes[samples - 1].num_samples / 2
+    return float(np.max(shapes[times - 1].decompressed()))
 
 
 def _limit(

@@ -400,3 +400,51 @@ def test_levels_handed_to_the_check_are_held_to_its_limits_in_place_of_a_respons
         "peak sound pressure level of 150.0 dB over blocks 1-2 played without end "
         "exceeds 140 dB"
     ]
+
+
+def test_readouts_closer_than_the_receiver_restarts_are_refused(tmp_path):
+    adc = pp.make_adc(100, dwell=10e-6, system=SYSTEM)
+    path = _written(tmp_path, [(adc,), (adc,)])
+    (problem,) = ir.check(path, SYSTEM, limits=ir.CheckLimits(adc_gap=16e-6))
+    assert problem.startswith(
+        "ADC timing: 1 readout(s) open less than 16 us after the previous one ends, "
+        "the first in block 2"
+    )
+    spaced = _written(tmp_path, [(adc,), (pp.make_delay(20e-6),), (adc,)])
+    assert ir.check(spaced, SYSTEM, limits=ir.CheckLimits(adc_gap=16e-6)) == []
+
+
+def test_a_block_playing_an_rf_pulse_and_an_adc_is_refused(tmp_path):
+    rf = pp.make_block_pulse(0.1, duration=200e-6, system=SYSTEM)
+    adc = pp.make_adc(10, dwell=10e-6, delay=pp.calc_duration(rf), system=SYSTEM)
+    problems = ir.check(_written(tmp_path, [(rf, adc)]), SYSTEM)
+    assert any(
+        p.startswith("block timing: 1 block(s) play an RF pulse and an ADC together")
+        for p in problems
+    )
+
+
+def test_an_rf_pulse_peaking_above_the_coil_s_b1_limit_is_refused(tmp_path):
+    rf = pp.make_block_pulse(np.pi / 2, duration=200e-6, system=SYSTEM)
+    path = _written(tmp_path, [(rf,)])
+    limited = pp.Opts(
+        max_grad=40, grad_unit="mT/m", max_slew=150, slew_unit="T/m/s",
+        max_b1=25, b1_unit="uT",
+    )
+    assert ir.check(path, limited) == [
+        "peak B1 of 29.4 uT in block 1 exceeds 25.0 uT; "
+        "lengthen the pulse or lower its flip angle"
+    ]
+    assert ir.check(path, SYSTEM) == []
+
+
+def test_an_arbitrary_gradient_longer_than_the_waveform_memory_is_refused(tmp_path):
+    wave = 1e-3 * SYSTEM.gamma * np.sin(np.linspace(0.0, np.pi, 1000))
+    grad = pp.make_arbitrary_grad("z", wave, first=0.0, last=0.0, system=SYSTEM)
+    path = _written(tmp_path, [(grad,)])
+    # 1000 samples on the 20 us raster: 20 ms.
+    assert ir.check(path, SYSTEM, limits=ir.CheckLimits(wave_memory=10e-3)) == [
+        "arbitrary gradient of 20 ms on z in block 1 exceeds the 10 ms an axis's "
+        "waveform memory holds; split it over several blocks"
+    ]
+    assert ir.check(path, SYSTEM, limits=ir.CheckLimits(wave_memory=20e-3)) == []

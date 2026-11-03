@@ -59,6 +59,9 @@ def test_the_check_limits_are_read_apart_from_the_scanner_limits():
         "vop_coil": "Head8Tx/8/0x1a2b3c4d",
         "vop_head_limit": "3.2",
         "vop_local_limit": "10",
+        "adc_gap_us": 16,
+        "ir_wave_max_samples": 262144,
+        "ir_wave_raster_us": 4,
     }
     system, _, checked = split_limits(limits)
     assert system.max_grad == pytest.approx(40e-3 * system.gamma)
@@ -75,6 +78,8 @@ def test_the_check_limits_are_read_apart_from_the_scanner_limits():
         vop_coil="Head8Tx/8/0x1a2b3c4d",
         vop_head_limit=3.2,
         vop_local_limit=10.0,
+        adc_gap=16e-6,
+        wave_memory=262144 * 4e-6,
     )
 
 
