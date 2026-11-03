@@ -272,6 +272,7 @@ def _problems(
     is_ok, report = pp.check_timing(sequence)
     if not is_ok:
         problems.append(_timing(sequence, report))
+    problems += _rf_with_adc(sequence)
     if limits.adc_gap > 0:
         problems += _adc_gaps(sequence, limits.adc_gap)
     checks = [
@@ -291,6 +292,18 @@ def _problems(
     for result in found:
         problems += result.result()
     return problems
+
+
+def _rf_with_adc(sequence: pp.Sequence) -> list[str]:
+    """Return the problem of blocks playing an RF pulse and an ADC together, which Pulseq does not allow."""
+    blocks = np.asarray(sequence.libraries().blocks)
+    both = np.flatnonzero(blocks[:, 0] & blocks[:, _ADC_COLUMN])
+    if not both.size:
+        return []
+    return [
+        f"block timing: {both.size} block(s) play an RF pulse and an ADC together, "
+        f"the first block {int(both[0]) + 1}; put the readout in a block of its own"
+    ]
 
 
 def _adc_gaps(sequence: pp.Sequence, least: float) -> list[str]:
