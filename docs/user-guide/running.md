@@ -376,17 +376,20 @@ ends the relay, and the client receives a `pulserver:` text naming the type.
 ### Sequence description
 
 Whether forwarded or reconstructed by a worker, the series carries, after its
-header and before its first acquisition, one `TEXT` message (5) describing the
-sequence chain for a signal simulation: a JSON object under the key
-`pulserver_sequence_description`, holding per file of the chain one row per
-block of one repetition, RF at the pulse centre and ADC at the sample nearest
-the k-space centre, and the pulses the RF rows name. The repetition is the one
-whose readout passes nearest the k-space centre, navigators aside, as
+header and before its first acquisition, ISMRMRD waveforms describing the
+sequence chain for a signal simulation, so that every MRD writer keeps them
+with the series: per file of the chain a header (`waveform_id` 1024) and an
+event list (1025), and one waveform per RF definition (1026), in the word
+layout {func}`~pulserver.proxy._seqdesc.waveforms` documents. The event list
+holds one row per block of one repetition, RF at the pulse centre and ADC at
+the sample nearest the k-space centre. The repetition is the one whose readout
+passes nearest the k-space centre, navigators aside, as
 `pypulseqpp.Sequence.repetition` divides the file; a file that does not repeat
-is described whole. It is meant for a reconstruction that simulates the signal,
-which chooses the signal model the rows drive, and is not relayed back to the
-client. The kept series holds the message as the string dataset
-`sequence_description` beside the header's `xml`.
+is described whole. An RF definition states the bandwidth its slice is
+selected over, which with the event's slice-select gradient gives the
+thickness. The description is meant for a reconstruction that simulates the
+signal, which chooses the signal model the rows drive, and is not relayed back
+to the client.
 
 ### Design intake
 

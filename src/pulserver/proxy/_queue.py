@@ -12,11 +12,8 @@ from typing import Any
 import ismrmrd
 
 from ..recon._runtime.writers import header_document
-from ._seqdesc import is_message
 
 _GROUP = "dataset"
-#: The dataset beside ``xml`` holding the sequence description's text message.
-DESCRIPTION = "sequence_description"
 
 
 class QueueFile:
@@ -24,8 +21,6 @@ class QueueFile:
 
     Acquisitions and waveforms are stored in separate tables, so replay yields
     the waveforms first, which is how every emitted unit carries all of them.
-    The sequence description's text message is stored as the string dataset
-    :data:`DESCRIPTION` of the group, and replayed before anything else.
     """
 
     def __init__(self, path: Path | str) -> None:
@@ -39,13 +34,8 @@ class QueueFile:
         self._dataset.write_xml_header(header_document(header))
 
     def append(self, item: Any) -> None:
-        """Store an acquisition, a waveform or the sequence description; anything else is not queued."""
-        if is_message(item):
-            group = self._dataset._file.require_group(_GROUP)
-            if DESCRIPTION in group:
-                del group[DESCRIPTION]
-            group[DESCRIPTION] = item
-        elif isinstance(item, ismrmrd.Acquisition):
+        """Store an acquisition or a waveform; anything else is not queued."""
+        if isinstance(item, ismrmrd.Acquisition):
             self._dataset.append_acquisition(item)
         elif isinstance(item, ismrmrd.Waveform):
             self._dataset.append_waveform(item)
@@ -64,9 +54,6 @@ class QueueFile:
     def __iter__(self) -> Iterator[Any]:
         dataset = ismrmrd.Dataset(str(self.path), _GROUP, create_if_needed=False)
         try:
-            if DESCRIPTION in dataset._dataset:
-                text = dataset._dataset[DESCRIPTION][()]
-                yield text.decode() if isinstance(text, bytes) else str(text)
             for index in range(_count(dataset.number_of_waveforms)):
                 yield dataset.read_waveform(index)
             for index in range(_count(dataset.number_of_acquisitions)):

@@ -40,19 +40,18 @@ class _FileConnection:
         return _enriched(self._items(), self._design, self._fov_offset_m)
 
     def _items(self) -> Any:
-        # The sequence description first, as the proxy sends it: the one kept
-        # with the series, else the design's.
-        from ...proxy._queue import DESCRIPTION
-
-        group = self._dataset._dataset
-        if DESCRIPTION in group:
-            text = group[DESCRIPTION][()]
-            yield text.decode() if isinstance(text, bytes) else str(text)
-        elif self._design is not None:
-            yield self._design.description
         # Waveforms first, so the first unit to close carries all of them.
-        for index in range(_count(self._dataset.number_of_waveforms)):
-            yield self._dataset.read_waveform(index)
+        # A series kept by the proxy holds its sequence description among
+        # them; one that does not is sent the design's, as the proxy sends it.
+        from ...proxy._seqdesc import is_description
+
+        stored = [
+            self._dataset.read_waveform(index)
+            for index in range(_count(self._dataset.number_of_waveforms))
+        ]
+        if self._design is not None and not any(map(is_description, stored)):
+            yield from self._design.description
+        yield from stored
         for index in range(_count(self._dataset.number_of_acquisitions)):
             yield self._dataset.read_acquisition(index)
 

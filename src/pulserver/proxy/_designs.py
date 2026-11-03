@@ -19,7 +19,7 @@ from ..mrd._metadata import user_parameter
 from ..mrd._sequence import read_chain
 from ._enrich import SequenceTable
 from ._motion import asks_for_motion_correction as _asks_for_motion_correction
-from ._seqdesc import describe, message
+from ._seqdesc import describe, waveforms
 
 #: Header user parameter naming the design a stream was played from: its
 #: identifier, as returned by ``GENERATED`` or ``IMPORTED``.
@@ -57,13 +57,13 @@ class Design:
     prospective_motion: bool = False
 
     @cached_property
-    def description(self) -> str:
-        """The MRD text message describing the chain to a simulation.
+    def description(self) -> list[Any]:
+        """The ISMRMRD waveforms describing the chain to a simulation.
 
-        See :func:`~pulserver.proxy._seqdesc.message`. Built on first use and
+        See :func:`~pulserver.proxy._seqdesc.waveforms`. Built on first use and
         kept with the design.
         """
-        return message(
+        return waveforms(
             [
                 describe(seq, subsequence_index=index)
                 for index, (_, seq) in enumerate(read_chain(self.directory / _ENTRY))

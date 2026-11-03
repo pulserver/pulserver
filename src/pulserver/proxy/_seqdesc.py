@@ -23,25 +23,34 @@ __all__ = [
     "SequenceDescription",
     "SequenceEvent",
     "describe",
-    "is_message",
-    "message",
+    "is_description",
+    "waveforms",
 ]
 
-import base64
-import json
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from enum import IntEnum
 from typing import Any
 
+import ismrmrd
 import numpy as np
 import pypulseqpp as pp
 
 #: Band offset slots every RF definition carries, filled or not.
 BANDS = 8
 
-#: The key an MRD text message carrying descriptions opens with.
-MESSAGE_KEY = "pulserver_sequence_description"
+#: Waveform ids of a description: one header and one event list per
+#: subsequence, one waveform per RF definition. ISMRMRD reserves ids below
+#: 1024 for its own physiological channels.
+HEADER_ID = 1024
+EVENTS_ID = 1025
+RF_DEFINITION_ID = 1026
+#: Layout of the words those waveforms carry.
+FORMAT_VERSION = 1
+#: Samples one waveform channel holds.
+_CHANNEL_SAMPLES = 65535
+#: Words an event takes in the event list: type, timestamp (two), parameters.
+EVENT_WORDS = 10
 
 
 class EventType(IntEnum):
@@ -309,9 +318,13 @@ def _definition_of(definition: int, pulse: Any, raster_s: float) -> RfDefinition
     # Turns, not radians: what reads this applies its own factor of 2 pi.
     phase = RfShape(signal.size, np.angle(signal) / (2.0 * np.pi))
     time = RfShape(signal.size, np.asarray(pulse.t) / raster_s)
+    try:
+        bandwidth = float(pp.calc_rf_bandwidth(pulse, compat=False).bandwidth)
+    except (ValueError, ZeroDivisionError):
+        bandwidth = 0.0
     return RfDefinition(
         id=definition,
-        bandwidth_hz=0.0,
+        bandwidth_hz=bandwidth if np.isfinite(bandwidth) else 0.0,
         num_bands=1,
         band_frequency_offsets_hz=(0.0,) * BANDS,
         band_bandwidth_hz=0.0,
@@ -342,61 +355,109 @@ def as_rows(description: SequenceDescription) -> dict[str, np.ndarray]:
     return {"type": kinds, "timestamp_us": times, "params": params}
 
 
-def message(descriptions: Sequence[SequenceDescription]) -> str:
-    """Return the MRD text message carrying the descriptions of a chain.
+def waveforms(
+    descriptions: Sequence[SequenceDescription], measurement_uid: int = 0
+) -> list[Any]:
+    """Return the ISMRMRD waveforms carrying the descriptions of a chain.
 
-    A JSON object holding one entry under :data:`MESSAGE_KEY`: a list with one
-    object per subsequence, carrying ``subsequence_index``,
-    ``tr_duration_us``, ``rf_raster_time_s``, the rows of :func:`as_rows` and
-    ``rf_definitions``. Arrays are base64 of their little-endian bytes:
-    ``type`` int32, ``timestamp_us`` float64, ``params`` float32 ``(n, 7)``
-    row-major, and each shape's ``samples`` float32 beside its
-    ``num_uncompressed``. A definition's ``phase`` and ``time`` may be
-    ``null``.
+    Per subsequence a header (:data:`HEADER_ID`), the event list
+    (:data:`EVENTS_ID`) and one waveform per RF definition
+    (:data:`RF_DEFINITION_ID`). Each holds one vector of 32-bit words, its
+    length first, laid over as many channels as keep a channel within the
+    65 535 samples a waveform allows, zero-padded; floats are bit-cast,
+    ``float64`` values take two words, low then high.
+
+    - Header: :data:`FORMAT_VERSION`, subsequence index, number of
+      subsequences, number of events, number of RF definitions,
+      ``tr_duration_us`` (float64), ``rf_raster_time_s`` (float64).
+    - Event list: subsequence index, number of events, then
+      :data:`EVENT_WORDS` words an event: type, ``timestamp_us`` (float64),
+      the seven parameters (float32) of :class:`SequenceEvent`.
+    - RF definition: subsequence index, id, ``bandwidth_hz``, ``num_bands``,
+      the :data:`BANDS` band offsets, ``band_bandwidth_hz``,
+      ``total_b1sq_power`` (0), then for the magnitude, phase and time shapes
+      in turn whether it is given, its uncompressed and its stored sample
+      counts, and then the samples (float32) of the shapes given, in that
+      order.
     """
-    return json.dumps({MESSAGE_KEY: [_subsequence(each) for each in descriptions]})
+    found = []
+    for description in descriptions:
+        index = description.subsequence_index
+        found.append(
+            _waveform(
+                HEADER_ID,
+                [
+                    _u32([FORMAT_VERSION, index, len(descriptions)]),
+                    _u32([len(description.events), len(description.rf_definitions)]),
+                    _f64([description.tr_duration_us, description.rf_raster_time_s]),
+                ],
+                measurement_uid,
+            )
+        )
+        rows = as_rows(description)
+        count = rows["type"].size
+        events = np.empty((count, EVENT_WORDS), dtype=np.uint32)
+        events[:, 0] = rows["type"].astype(np.uint32)
+        events[:, 1:3] = rows["timestamp_us"].astype("<f8").view("<u4").reshape(count, 2)
+        events[:, 3:] = rows["params"].astype("<f4").view("<u4")
+        found.append(
+            _waveform(
+                EVENTS_ID,
+                [_u32([index, count]), events.reshape(-1)],
+                measurement_uid,
+            )
+        )
+        for definition in description.rf_definitions.values():
+            shapes = (definition.magnitude, definition.phase, definition.time)
+            words = [
+                _u32([index, definition.id]),
+                _f32([definition.bandwidth_hz]),
+                _u32([definition.num_bands]),
+                _f32(list(definition.band_frequency_offsets_hz)),
+                _f32([definition.band_bandwidth_hz, 0.0]),
+            ]
+            for shape in shapes:
+                words.append(
+                    _u32([0, 0, 0])
+                    if shape is None
+                    else _u32([1, shape.num_uncompressed, len(shape.samples)])
+                )
+            words += [_f32(shape.samples) for shape in shapes if shape is not None]
+            found.append(_waveform(RF_DEFINITION_ID, words, measurement_uid))
+    return found
 
 
-def is_message(item: Any) -> bool:
-    """Whether a stream item is the text message :func:`message` writes."""
-    return isinstance(item, str) and item.startswith('{"' + MESSAGE_KEY + '"')
-
-
-def _subsequence(description: SequenceDescription) -> dict[str, Any]:
-    rows = as_rows(description)
-    return {
-        "subsequence_index": description.subsequence_index,
-        "tr_duration_us": description.tr_duration_us,
-        "rf_raster_time_s": description.rf_raster_time_s,
-        "type": _packed(rows["type"], "<i4"),
-        "timestamp_us": _packed(rows["timestamp_us"], "<f8"),
-        "params": _packed(rows["params"], "<f4"),
-        "rf_definitions": [
-            {
-                "id": definition.id,
-                "bandwidth_hz": definition.bandwidth_hz,
-                "num_bands": definition.num_bands,
-                "band_frequency_offsets_hz": list(definition.band_frequency_offsets_hz),
-                "band_bandwidth_hz": definition.band_bandwidth_hz,
-                "magnitude": _shape(definition.magnitude),
-                "phase": _shape(definition.phase),
-                "time": _shape(definition.time),
-            }
-            for definition in description.rf_definitions.values()
-        ],
-    }
-
-
-def _shape(shape: RfShape | None) -> dict[str, Any] | None:
-    if shape is None:
-        return None
-    return {
-        "num_uncompressed": shape.num_uncompressed,
-        "samples": _packed(shape.samples, "<f4"),
-    }
-
-
-def _packed(values: np.ndarray, dtype: str) -> str:
-    return base64.b64encode(np.ascontiguousarray(values, dtype=dtype).tobytes()).decode(
-        "ascii"
+def is_description(item: Any) -> bool:
+    """Whether a stream item is one of the waveforms :func:`waveforms` writes."""
+    return isinstance(item, ismrmrd.Waveform) and int(item.waveform_id) in (
+        HEADER_ID,
+        EVENTS_ID,
+        RF_DEFINITION_ID,
     )
+
+
+def _u32(values: Any) -> np.ndarray:
+    return np.asarray(values, dtype="<u4")
+
+
+def _f32(values: Any) -> np.ndarray:
+    return np.asarray(values, dtype="<f4").view("<u4")
+
+
+def _f64(values: Any) -> np.ndarray:
+    return np.asarray(values, dtype="<f8").view("<u4")
+
+
+def _waveform(identifier: int, words: list[np.ndarray], measurement_uid: int) -> Any:
+    """Lay ``words``, their count first, over the channels of one waveform."""
+    payload = np.concatenate([np.asarray(w, dtype="<u4").reshape(-1) for w in words])
+    payload = np.concatenate((_u32([payload.size]), payload))
+    channels = max(1, -(-payload.size // _CHANNEL_SAMPLES))
+    samples = -(-payload.size // channels)
+    data = np.zeros(channels * samples, dtype=np.uint32)
+    data[: payload.size] = payload
+    wave = ismrmrd.Waveform.from_array(data.reshape(channels, samples))
+    wave.waveform_id = identifier
+    wave.measurement_uid = measurement_uid
+    wave.sample_time_us = 1.0
+    return wave
