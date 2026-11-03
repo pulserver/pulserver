@@ -92,8 +92,8 @@ class CoilSensitivities:
         acquisition; ``fov`` in metres and ``matrix`` of the reconstruction
         space, ordered as ``(z,) y, x``; ``grid``, the shape of the voxel
         axes of ``maps``; and ``extent``, the size of that grid in mm as
-        ``(z, y, x)``, ``z`` the slice thickness for a plane. A component the header or acquisition does not state is
-        ``None``.
+        ``(z, y, x)``, ``z`` the slice thickness for a plane. A component the
+        header or acquisition does not state is ``None``.
     method : str
         The estimate that produced the maps.
     source : str or None

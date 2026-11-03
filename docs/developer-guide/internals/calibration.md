@@ -162,3 +162,31 @@ no coil sensitivities for slice 0; sources consulted:
   this series, slice 0: no maps stored
   this exam: this unit's grid reaches outside the calibration volume (estimated by nlinv_maps from measurement 7)
 ```
+
+## Interfaces
+
+| Quantity | Interface | State |
+| --- | --- | --- |
+| Whitening $W$ | {class}`~pulserver.recon.Prewhiten`, a gadget | `context.noise`; the exam key {obj}`~pulserver.recon.NOISE_COVARIANCE` |
+| Compression basis $A$ | {class}`~pulserver.recon.CoilCompression`, called from `recon` | `context.coil_compression` |
+| Maps $\mathbf{S}$ | {func}`~pulserver.recon.coil_maps`, called from `recon`; {class}`~pulserver.recon.CoilSensitivities` | `context.coil_maps` by slice; the exam key {obj}`~pulserver.recon.COIL_SENSITIVITIES`, read and written as `context.coil_sensitivities` |
+
+The state in `context` belongs to one stream. What a series leaves to the next
+is what it stores in `context.exam` under the exam keys, which
+{doc}`../../explanations/reconstruction` describes. A calibration series publishes its whitening
+with {meth}`Prewhiten.publish <pulserver.recon.Prewhiten.publish>` and its maps
+by assigning `context.coil_sensitivities`.
+
+Whitening runs on arrival, in the `gadgets` of the plugin. Within `recon`, a
+unit is compressed before its maps are requested, because the maps record the
+basis in force when they are estimated. The whitening, the compression basis
+and the estimate are bartorch's (`tools.whiten`, `tools.cc` and `tools.ccapply`,
+and the estimate the plugin names, such as `apps.nlinv_maps`); the interfaces
+above hold their results, compare them and route them between units and series.
+{doc}`../../user-guide/reconstruction-plugins` shows the calls.
+
+## See also
+
+* {doc}`../../user-guide/reconstruction-plugins` — requesting maps, prewhitening and compressing in a plugin.
+* {doc}`../../explanations/reconstruction` — units, the exam cache and workers.
+* {doc}`../../api/recon` — the interfaces named above.
