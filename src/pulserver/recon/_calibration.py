@@ -61,10 +61,12 @@ class Basis:
 class CoilSensitivities:
     """Receive coil sensitivity maps, with what they were estimated from.
 
-    Maps are reused only for data with the coils, prewhitening, compression
-    and geometry of the calibration data they were estimated from;
-    :meth:`incompatibility` states the comparison. Nothing is resampled,
-    regridded or resliced to make maps fit.
+    Maps stored in the stream serve only data with the coils, prewhitening,
+    compression and geometry of the calibration data they were estimated
+    from; :meth:`incompatibility` states the comparison. Maps stored in the
+    exam also serve data at another position, orientation or grid, resliced
+    onto it, and data compressed by a basis of its own when they were
+    estimated from uncompressed channels; :func:`coil_maps` states when.
 
     Attributes
     ----------
@@ -88,9 +90,10 @@ class CoilSensitivities:
         ``table_position``, ``position`` in mm, and ``read_dir``,
         ``phase_dir`` and ``slice_dir`` of the calibration k-space's reference
         acquisition; ``fov`` in metres and ``matrix`` of the reconstruction
-        space, ordered as ``(z,) y, x``; and ``grid``, the shape of the voxel
-        axes of ``maps``. A component the header or acquisition does not state
-        is ``None``.
+        space, ordered as ``(z,) y, x``; ``grid``, the shape of the voxel
+        axes of ``maps``; and ``extent``, the size of that grid in mm as
+        ``(z, y, x)``, ``z`` the slice thickness for a plane. A component the
+        header or acquisition does not state is ``None``.
     method : str
         The estimate that produced the maps.
     source : str or None
@@ -155,12 +158,19 @@ def coil_maps(
        from it and stored in ``context.coil_maps`` under the unit's slice
        counter, replacing the maps stored there.
     2. ``context.coil_maps`` for the unit's slice.
-    3. The exam's ``COIL_SENSITIVITIES``.
+    3. The exam's ``COIL_SENSITIVITIES``, as a calibration series stored them.
 
-    Stored maps serve only where :meth:`CoilSensitivities.incompatibility`
-    finds nothing. The location is the slice counter, not the encoding space,
-    so maps estimated from a calibration unit in an encoding space of its own
-    serve the imaging units of its slice.
+    Maps of the stream serve only where
+    :meth:`CoilSensitivities.incompatibility` finds nothing. Maps of the exam
+    serve a unit with the same coils, prewhitening, frame of reference and
+    table position; on another grid, position or orientation they are
+    resliced onto the unit's grid from the two geometries,
+    :func:`bartorch.tools.reslice`, and refused where the unit's grid reaches
+    outside theirs. Maps estimated from uncompressed channels are projected
+    onto the unit's compression basis, as its k-space was. The location is the
+    slice counter, not the encoding space, so maps estimated from a
+    calibration unit in an encoding space of its own serve the imaging units
+    of its slice.
 
     Parameters
     ----------
@@ -210,18 +220,18 @@ def coil_maps(
         found = _usable(
             stored, f"this series, slice {location}", data, context, rejected
         )
-    if found is None:
-        stored = context.exam.get(COIL_SENSITIVITIES)
-        found = _usable(stored, "this exam", data, context, rejected)
+    if found is not None:
+        return torch.tensor(found.maps)
+    maps = _fitted(context.exam.get(COIL_SENSITIVITIES), data, context, rejected)
+    if maps is not None:
+        return torch.tensor(maps)
 
-    if found is None:
-        if not required:
-            return None
-        raise MissingCalibration(
-            f"no coil sensitivities for slice {location}; sources consulted:\n  "
-            + "\n  ".join(rejected)
-        )
-    return torch.tensor(found.maps)
+    if not required:
+        return None
+    raise MissingCalibration(
+        f"no coil sensitivities for slice {location}; sources consulted:\n  "
+        + "\n  ".join(rejected)
+    )
 
 
 class CoilCompression:
@@ -348,7 +358,31 @@ def _geometry(header: Any, buffer: ReconBuffer) -> dict[str, Any]:
         "fov": buffer.space.recon_fov,
         "matrix": buffer.space.recon_matrix,
         "grid": _grid(buffer),
+        "extent": _extent(header, buffer),
     }
+
+
+def _extent(header: Any, buffer: ReconBuffer) -> tuple[float, float, float] | None:
+    """Return the size in mm of the grid of :func:`_grid` as ``(z, y, x)``, from the encoded space.
+
+    ``z`` is the slice thickness for a grid of one plane. ``None`` when the
+    header states no encoded field of view.
+    """
+    encodings = getattr(header, "encoding", None) or ()
+    if buffer.space.index >= len(encodings):
+        return None
+    encoded = encodings[buffer.space.index].encodedSpace
+    fov = getattr(encoded, "fieldOfView_mm", None)
+    if fov is None:
+        return None
+    matrix = encoded.matrixSize
+    shape = (1, 1, *_grid(buffer))[-3:]
+    counts = (int(matrix.z), int(matrix.y), int(matrix.x))
+    sizes = (float(fov.z), float(fov.y), float(fov.x))
+    return tuple(
+        size if n == 1 else size * n / max(count, 1)
+        for size, n, count in zip(sizes, shape, counts, strict=True)
+    )
 
 
 def _method(estimate: Any) -> str:
@@ -433,6 +467,122 @@ def _usable(
     return None
 
 
+#: Components of :attr:`CoilSensitivities.geometry` that place the maps on a
+#: grid; maps of the exam that differ only in these are resliced.
+_PLACEMENT = ("position", "read_dir", "phase_dir", "slice_dir", "grid", "extent")
+
+
+def _fitted(
+    stored: Any,
+    data: ReconData,
+    context: ReconContext,
+    rejected: list[str],
+) -> np.ndarray | None:
+    """Return the exam's maps on the grid and channels of ``data``, else record why they do not serve it."""
+    where = "this exam"
+    if stored is None:
+        rejected.append(f"{where}: no maps stored")
+        return None
+    if not isinstance(stored, CoilSensitivities):
+        rejected.append(
+            f"{where}: holds a {type(stored).__name__}, not CoilSensitivities"
+        )
+        return None
+    origin = (
+        f"measurement {stored.source}" if stored.source else "an unnamed measurement"
+    )
+    buffer = data.data if data.data is not None else data.ref
+    if buffer is None:
+        rejected.append(
+            f"{where}: the unit holds no k-space, so its geometry is not known"
+        )
+        return None
+    wanted = _geometry(context.header, buffer)
+    basis = context.coil_compression
+    project = stored.basis is None and basis is not None
+    fields = (
+        ("coils", stored.coils, coil_labels(context.header)),
+        ("noise", stored.noise, _id(context.noise)),
+        *(() if project else (("basis", stored.basis, _id(basis)),)),
+        *(
+            (f"geometry.{name}", stored.geometry.get(name), wanted.get(name))
+            for name in ("frame_of_reference", "table_position")
+        ),
+    )
+    for name, value, requested in fields:
+        if value != requested:
+            rejected.append(
+                f"{where}: {name} differs: stored {value!r}, this unit "
+                f"{requested!r} (estimated by {stored.method} from {origin})"
+            )
+            return None
+
+    maps = stored.maps
+    if any(stored.geometry.get(name) != wanted.get(name) for name in _PLACEMENT):
+        source, target = _placement(stored.geometry), _placement(wanted)
+        if source is None or target is None:
+            rejected.append(
+                f"{where}: the geometry of the maps or of this unit is not fully "
+                f"stated, so the maps cannot be resliced (estimated by "
+                f"{stored.method} from {origin})"
+            )
+            return None
+        from bartorch.tools import reslice
+
+        planes = (1, 1, *stored.geometry["grid"])[-3:]
+        maps = reslice(
+            maps.reshape(maps.shape[0], *planes), source, target, fill=float("nan")
+        )
+        maps = maps.reshape(maps.shape[0], *wanted["grid"])
+        if np.isnan(maps).any():
+            rejected.append(
+                f"{where}: this unit's grid reaches outside the calibration "
+                f"volume (estimated by {stored.method} from {origin})"
+            )
+            return None
+    if project:
+        maps = _projected(np.asarray(maps, dtype=np.complex64), basis)
+    return np.asarray(maps, dtype=np.complex64)
+
+
+def _placement(geometry: dict[str, Any]) -> dict[str, tuple] | None:
+    """Return the grid of a :attr:`CoilSensitivities.geometry` as :func:`bartorch.tools.reslice` reads it.
+
+    ``None`` when a component it needs is not stated.
+    """
+    if any(geometry.get(name) is None for name in _PLACEMENT):
+        return None
+    if any(not np.any(geometry[name]) for name in _PLACEMENT[1:4]):
+        return None
+    shape = (1, 1, *geometry["grid"])[-3:]
+    extent = geometry["extent"]
+    return {
+        **{name: geometry[name] for name in _PLACEMENT[:4]},
+        "field_of_view": tuple(float(v) for v in extent[::-1]),
+        "matrix_size": tuple(int(n) for n in shape[::-1]),
+    }
+
+
+def _projected(maps: np.ndarray, basis: Basis) -> np.ndarray:
+    """Return maps of the physical channels on the virtual channels of ``basis``, as k-space is projected."""
+    import torch
+    from bartorch import tools
+
+    coils = maps.shape[0]
+    if coils != basis.matrix.shape[0]:
+        raise ValueError(
+            f"{coils} channels cannot be projected onto a basis of "
+            f"{basis.matrix.shape[0]}"
+        )
+    virtual = tools.ccapply(
+        torch.from_numpy(np.ascontiguousarray(maps)).reshape(coils, -1, 1, 1),
+        torch.from_numpy(basis.matrix).reshape(coils, coils, 1, 1, 1),
+        p=basis.n_virtual,
+        S=True,
+    )
+    return virtual.cpu().numpy().reshape(basis.n_virtual, *maps.shape[1:])
+
+
 def _basis(buffer: ReconBuffer, n_virtual: int) -> Basis:
     import torch
     from bartorch import tools
@@ -455,25 +605,9 @@ def _basis(buffer: ReconBuffer, n_virtual: int) -> Basis:
 def _compressed(buffer: ReconBuffer | None, basis: Basis) -> ReconBuffer | None:
     if buffer is None:
         return None
-    import torch
-    from bartorch import tools
-
-    coils = buffer.kspace.shape[0]
-    if coils != basis.matrix.shape[0]:
-        raise ValueError(
-            f"a unit of {coils} channels cannot be projected onto a basis of "
-            f"{basis.matrix.shape[0]}"
-        )
-    kspace = np.ascontiguousarray(buffer.kspace, dtype=np.complex64)
-    virtual = tools.ccapply(
-        torch.from_numpy(kspace).reshape(coils, -1, 1, 1),
-        torch.from_numpy(basis.matrix).reshape(coils, coils, 1, 1, 1),
-        p=basis.n_virtual,
-        S=True,
-    )
     compressed = copy.copy(buffer)
-    compressed.kspace = (
-        virtual.cpu().numpy().reshape(basis.n_virtual, *kspace.shape[1:])
+    compressed.kspace = _projected(
+        np.ascontiguousarray(buffer.kspace, dtype=np.complex64), basis
     )
     compressed.coils = basis.n_virtual
     return compressed
