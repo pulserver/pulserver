@@ -315,68 +315,142 @@ def test_maps_are_none_where_they_are_not_required_and_no_source_has_them(torch)
     assert plugin.results == [None]
 
 
-def test_exam_maps_at_another_matrix_are_refused_not_resampled(tmp_path, torch):
-    small = MATRIX // 2
-    _, _, calibration = coil_phantom(COILS, small)
-    _, _, imaging = coil_phantom(COILS, MATRIX)
-    estimate = Estimate()
+#: Acquisition geometry of an axial plane at the isocentre.
+AXIAL = {
+    "position": (0.0, 0.0, 0.0),
+    "read_dir": (1.0, 0.0, 0.0),
+    "phase_dir": (0.0, 1.0, 0.0),
+    "slice_dir": (0.0, 0.0, 1.0),
+}
 
+
+class PhantomMaps:
+    """An estimate returning the phantom's sensitivities on the grid it is given, whatever the k-space."""
+
+    def __init__(self, seed=0):
+        self.seed = seed
+
+    def __call__(self, kspace):
+        import torch
+
+        return torch.from_numpy(coil_phantom(COILS, kspace.shape[-1], self.seed)[1])
+
+
+def calibrate_exam(tmp_path, matrix, *, geometry=AXIAL, fov=220.0):
+    """Leave the phantom's maps of an axial ``matrix`` grid of ``fov`` mm to the exam."""
+    header = with_fov(calibration_header(COILS, matrix, measurement="7"), fov)
     play(
-        stream_plugin(leave_maps_to_the_exam(estimate)),
-        calibration_header(COILS, small, measurement="7"),
-        readouts(calibration, CALIBRATION, last=LAST),
+        stream_plugin(leave_maps_to_the_exam(PhantomMaps())),
+        header,
+        readouts(
+            coil_phantom(COILS, matrix)[2], CALIBRATION, last=LAST, geometry=geometry
+        ),
         exam=recon.ExamCache("exam-1", tmp_path),
     )
-    exam = recon.ExamCache("exam-1", tmp_path)
-
-    with pytest.raises(recon.MissingCalibration) as failure:
-        play(
-            stream_plugin(maps_of(estimate)),
-            calibration_header(COILS, MATRIX, measurement="8"),
-            readouts(imaging, last=LAST),
-            exam=exam,
-        )
-
-    assert (
-        f"this exam: geometry.matrix differs: stored ({small}, {small}), this unit "
-        f"({MATRIX}, {MATRIX}) (estimated by Estimate from measurement 7)"
-    ) in str(failure.value)
-    assert len(estimate.calls) == 1, "the later series made maps of its own"
-    assert exam[recon.COIL_SENSITIVITIES].maps.shape == (COILS, small, small)
 
 
-@pytest.mark.parametrize(
-    ("attribute", "component", "value"),
-    [
-        ("patient_table_position", "table_position", (0.0, 0.0, 10.0)),
-        ("position", "position", (0.0, 0.0, 5.0)),
-        ("read_dir", "read_dir", (1.0, 0.0, 0.0)),
-        ("phase_dir", "phase_dir", (0.0, 1.0, 0.0)),
-        ("slice_dir", "slice_dir", (0.0, 0.0, 1.0)),
-    ],
-)
-def test_exam_maps_at_another_position_or_orientation_are_refused(
-    tmp_path, torch, attribute, component, value
+def with_fov(header, fov):
+    """``header`` with an in-plane field of view of ``fov`` mm."""
+    for region in (header.encoding[0].encodedSpace, header.encoding[0].reconSpace):
+        region.fieldOfView_mm.x = region.fieldOfView_mm.y = fov
+    return header
+
+
+def maps_for(tmp_path, matrix, fov, *, geometry=AXIAL, **options):
+    """The maps ``coil_maps`` gives a later axial series of ``matrix`` over ``fov`` mm without calibration readouts."""
+    plugin = stream_plugin(maps_of(Estimate(), **options))
+    play(
+        plugin,
+        with_fov(calibration_header(COILS, matrix, measurement="8"), fov),
+        readouts(coil_phantom(COILS, matrix)[2], last=LAST, geometry=geometry),
+        exam=recon.ExamCache("exam-1", tmp_path),
+    )
+    (maps,) = plugin.results
+    return maps.numpy()
+
+
+def test_exam_maps_are_resliced_onto_a_later_series_of_another_matrix_and_field_of_view(
+    tmp_path, torch
 ):
-    _, _, kspace = coil_phantom(COILS, MATRIX)
+    """The phantom's sensitivities are planes in position, which linear interpolation reproduces."""
+    calibrate_exam(tmp_path, 16, fov=220.0)
+
+    maps = maps_for(tmp_path, 32, 110.0)
+
+    # The later grid spans half the calibration's field of view, so its
+    # sensitivities are the calibration planes at half the normalised position.
+    plane = coil_phantom(COILS, 32)[1]
+    constant = plane[:, 16, 16]
+    expected = constant[:, None, None] + (plane - constant[:, None, None]) / 2
+    assert maps.shape == (COILS, 32, 32)
+    assert relative_difference(maps, expected) < 1e-5
+
+
+def test_exam_maps_are_resliced_onto_a_later_series_shifted_along_the_readout(
+    tmp_path, torch
+):
+    calibrate_exam(tmp_path, 32, fov=220.0)
+
+    maps = maps_for(
+        tmp_path, 16, 110.0, geometry={**AXIAL, "position": (27.5, 0.0, 0.0)}
+    )
+
+    # Both grids have 6.875 mm voxels; the later one is centred 4 voxels along x.
+    expected = coil_phantom(COILS, 32)[1][:, 8:24, 12:28]
+    assert relative_difference(maps, expected) < 1e-5
+
+
+def test_exam_maps_a_later_series_reaches_outside_of_are_refused(tmp_path, torch):
+    calibrate_exam(tmp_path, 16, fov=110.0)
+
+    with pytest.raises(
+        recon.MissingCalibration, match="reaches outside the calibration volume"
+    ):
+        maps_for(tmp_path, 32, 220.0)
+
+
+def test_the_exam_is_consulted_first_where_a_series_prefers_it(tmp_path, torch):
+    calibrate_exam(tmp_path, MATRIX)
     estimate = Estimate()
+    plugin = stream_plugin(maps_of(estimate, prefer_exam=True))
+
     play(
-        stream_plugin(leave_maps_to_the_exam(estimate)),
-        calibration_header(COILS, MATRIX),
-        readouts(kspace, CALIBRATION, last=LAST),
+        plugin,
+        calibration_header(COILS, MATRIX, measurement="8"),
+        readouts(
+            coil_phantom(COILS, MATRIX, seed=1)[2],
+            CALIBRATION,
+            last=LAST,
+            geometry=AXIAL,
+        ),
         exam=recon.ExamCache("exam-1", tmp_path),
     )
 
-    reason = (
-        f"geometry.{component} differs: stored (0.0, 0.0, 0.0), this unit {value!r}"
-    )
+    assert estimate.calls == [], "the series estimated maps of its own"
+    (maps,) = plugin.results
+    np.testing.assert_allclose(maps.numpy(), coil_phantom(COILS, MATRIX)[1], atol=1e-6)
+
+
+def test_exam_maps_at_another_table_position_are_refused(tmp_path, torch):
+    calibrate_exam(tmp_path, MATRIX)
+
+    reason = "geometry.table_position differs: stored (0.0, 0.0, 0.0), this unit (0.0, 0.0, 10.0)"
     with pytest.raises(recon.MissingCalibration, match=re.escape(reason)):
-        play(
-            stream_plugin(maps_of(estimate)),
-            calibration_header(COILS, MATRIX),
-            readouts(kspace, last=LAST, geometry={attribute: value}),
-            exam=recon.ExamCache("exam-1", tmp_path),
+        maps_for(
+            tmp_path,
+            MATRIX,
+            220.0,
+            geometry={**AXIAL, "patient_table_position": (0.0, 0.0, 10.0)},
         )
+
+
+def test_exam_maps_whose_orientation_is_not_stated_are_refused_rather_than_resliced(
+    tmp_path, torch
+):
+    calibrate_exam(tmp_path, MATRIX, geometry={})
+
+    with pytest.raises(recon.MissingCalibration, match="cannot be resliced"):
+        maps_for(tmp_path, MATRIX // 2, 220.0)
 
 
 def test_a_value_in_the_exam_that_is_not_coil_sensitivities_is_rejected_naming_its_type(

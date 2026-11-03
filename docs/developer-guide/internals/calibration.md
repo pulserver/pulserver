@@ -78,8 +78,10 @@ If the signal of the channels lies in a subspace of dimension at most $n$,
 compression discards none of it, and SENSE with compressed data and compressed
 maps reconstructs the image of the full set of channels to round-off.
 Otherwise the discarded signal is that of the $N_c - n$ smallest eigenvalues.
-Maps estimated from uncompressed data are in another basis than compressed
-data, and are not transformed into this one.
+Maps estimated in a series of its own from uncompressed data are transformed
+into the basis of a later series by the same projection as its k-space,
+$A\mathbf{S}$; maps estimated from compressed data are in the basis of their
+own series and are not transformed.
 
 ## Coil sensitivity maps
 
@@ -107,9 +109,14 @@ these sources, the location being the unit's `slice` counter:
 1. The unit's own calibration k-space, from which the maps are estimated and
    stored for the slice, replacing any stored there.
 2. The maps stored in the stream for the slice.
-3. The exam's `COIL_SENSITIVITIES`, which holds one set of maps.
+3. The exam's `COIL_SENSITIVITIES`, which holds one set of maps, stored by a
+   calibration series.
 4. No source: {class}`~pulserver.recon.MissingCalibration` is raised, or
    `None` returned for `required=False`.
+
+With `prefer_exam=True` the exam is consulted first, so a series with
+calibration readouts of its own takes the maps of a calibration series. The
+default leaves the exam as the last source.
 
 The slice is the location because a calibration unit and the imaging units that
 use its maps may be in different encoding spaces. A unit that needs maps before
@@ -117,9 +124,9 @@ the unit that estimates them has closed finds none in the first three sources.
 
 ### Reuse
 
-Stored maps are returned only to a unit for which every field of the
-{class}`~pulserver.recon.CoilSensitivities` is equal to that of the unit. The
-fields are compared in this order, and the first that differs is reported.
+Maps stored in the stream are returned only to a unit for which every field of
+the {class}`~pulserver.recon.CoilSensitivities` is equal to that of the unit.
+The fields are compared in this order, and the first that differs is reported.
 
 | Field | Equal to |
 | --- | --- |
@@ -129,49 +136,30 @@ fields are compared in this order, and the first that differs is reported.
 | `geometry.frame_of_reference` | The `frameOfReferenceUID` of the header |
 | `geometry.table_position`, `geometry.position`, `geometry.read_dir`, `geometry.phase_dir`, `geometry.slice_dir` | The same fields of the reference acquisition of the unit's k-space, in the units the acquisition states |
 | `geometry.fov`, `geometry.matrix` | The field of view in m and the matrix of the reconstruction space of the unit's encoding space |
-| `geometry.grid` | The shape of the voxel axes of the whole k-space of the unit's encoding space |
+| `geometry.grid`, `geometry.extent` | The shape of the voxel axes of the whole k-space of the unit's encoding space, and its size in mm |
+
+Maps of the exam, measured by another series, are returned to a unit with the
+same `coils`, `noise`, `frame_of_reference` and `table_position`. On another
+position, orientation, grid or extent they are resliced onto the unit's grid
+by {func}`bartorch.tools.reslice`, which takes the transform between the grids
+from the two geometries, without registration, and interpolates the real and
+imaginary parts linearly. A unit whose grid reaches outside the calibration
+volume is refused, as is one whose geometry or that of the maps does not state
+the orientation. Maps with `basis` `None` are projected onto the basis of a
+compressed unit; maps of a compressed series serve only units compressed by the
+same basis.
 
 `method` and `source`, the estimate and the `measurementID` of the series that
 measured the maps, are recorded and appear in a refusal; they are not compared.
 The comparison establishes that the maps and the unit share the listed
 quantities. It does not test the accuracy of the maps.
 
-Nothing is resampled, regridded or resliced to make maps fit. Maps on a grid or
-at a position other than the unit's are not returned, and the message of
-{class}`~pulserver.recon.MissingCalibration` names each source and why it was
-not used:
+Maps that are not returned are named, each source with why it was not used, in
+the message of {class}`~pulserver.recon.MissingCalibration`:
 
 ```text
 no coil sensitivities for slice 0; sources consulted:
   this unit: it holds no calibration readouts
   this series, slice 0: no maps stored
-  this exam: geometry.matrix differs: stored (96, 96), this unit (192, 192) (estimated by nlinv_maps from measurement 7)
+  this exam: this unit's grid reaches outside the calibration volume (estimated by nlinv_maps from measurement 7)
 ```
-
-## Interfaces
-
-| Quantity | Interface | State |
-| --- | --- | --- |
-| Whitening $W$ | {class}`~pulserver.recon.Prewhiten`, a gadget | `context.noise`; the exam key {obj}`~pulserver.recon.NOISE_COVARIANCE` |
-| Compression basis $A$ | {class}`~pulserver.recon.CoilCompression`, called from `recon` | `context.coil_compression` |
-| Maps $\mathbf{S}$ | {func}`~pulserver.recon.coil_maps`, called from `recon`; {class}`~pulserver.recon.CoilSensitivities` | `context.coil_maps` by slice; the exam key {obj}`~pulserver.recon.COIL_SENSITIVITIES`, read and written as `context.coil_sensitivities` |
-
-The state in `context` belongs to one stream. What a series leaves to the next
-is what it stores in `context.exam` under the exam keys, which
-{doc}`../../explanations/reconstruction` describes. A calibration series publishes its whitening
-with {meth}`Prewhiten.publish <pulserver.recon.Prewhiten.publish>` and its maps
-by assigning `context.coil_sensitivities`.
-
-Whitening runs on arrival, in the `gadgets` of the plugin. Within `recon`, a
-unit is compressed before its maps are requested, because the maps record the
-basis in force when they are estimated. The whitening, the compression basis
-and the estimate are bartorch's (`tools.whiten`, `tools.cc` and `tools.ccapply`,
-and the estimate the plugin names, such as `apps.nlinv_maps`); the interfaces
-above hold their results, compare them and route them between units and series.
-{doc}`../../user-guide/reconstruction-plugins` shows the calls.
-
-## See also
-
-* {doc}`../../user-guide/reconstruction-plugins` — requesting maps, prewhitening and compressing in a plugin.
-* {doc}`../../explanations/reconstruction` — units, the exam cache and workers.
-* {doc}`../../api/recon` — the interfaces named above.
