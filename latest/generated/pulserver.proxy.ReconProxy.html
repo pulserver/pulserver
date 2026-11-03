@@ -532,10 +532,11 @@ the reconstruction to close unless <code class="docutils literal notranslate"><s
 <p>A local series holds a slot while it runs. On a host with GPUs, found
 through <code class="docutils literal notranslate"><span class="pre">CUDA_VISIBLE_DEVICES</span></code> or <code class="docutils literal notranslate"><span class="pre">nvidia-smi</span></code>, each slot holds one GPU,
 <code class="docutils literal notranslate"><span class="pre">gpu_slots</span></code> slots per GPU, and the reconstruction reads it as
-<code class="docutils literal notranslate"><span class="pre">context.device</span></code>. A series that finds every slot busy is queued: its
-enriched stream is written to a file of <code class="docutils literal notranslate"><span class="pre">queue</span></code> while it arrives, its
-client stays connected, and the file is replayed to a worker and deleted
-once a slot frees.</p>
+<code class="docutils literal notranslate"><span class="pre">context.device</span></code>. A series that finds every slot busy, or the host’s
+available memory short of one reconstruction’s budget while another series
+of this proxy runs, is queued: its enriched stream is written to a file of
+<code class="docutils literal notranslate"><span class="pre">queue</span></code> while it arrives, its client stays connected, and the file is
+replayed to a worker and deleted once a slot and the memory are free.</p>
 <p>The series of one exam share a directory under the system’s temporary
 directory, through which a reconstruction reads what an earlier series of
 the exam stored in its <a class="reference internal" href="pulserver.recon.ExamCache.html#pulserver.recon.ExamCache" title="pulserver.recon.ExamCache"><code class="xref py py-class docutils literal notranslate"><span class="pre">ExamCache</span></code></a>. The directory

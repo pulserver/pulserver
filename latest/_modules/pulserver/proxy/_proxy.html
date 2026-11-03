@@ -447,7 +447,7 @@
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">.._plugins</span><span class="w"> </span><span class="kn">import</span> <span class="n">NAME</span><span class="p">,</span> <span class="n">PluginPath</span><span class="p">,</span> <span class="n">directories</span><span class="p">,</span> <span class="n">find</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..recon._runtime</span><span class="w"> </span><span class="kn">import</span> <span class="n">constants</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">..recon._runtime.concurrency</span><span class="w"> </span><span class="kn">import</span> <span class="n">HostSlots</span><span class="p">,</span> <span class="n">Slot</span><span class="p">,</span> <span class="n">slot_devices</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..recon._runtime.concurrency</span><span class="w"> </span><span class="kn">import</span> <span class="n">HostSlots</span><span class="p">,</span> <span class="n">Slot</span><span class="p">,</span> <span class="n">memory_allows</span><span class="p">,</span> <span class="n">slot_devices</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..recon._runtime.connection</span><span class="w"> </span><span class="kn">import</span> <span class="n">Connection</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..recon._runtime.exam</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">DEFAULT_EXAM_DIRECTORY</span><span class="p">,</span>
@@ -467,6 +467,8 @@
 
 <span class="n">_log</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="s2">"pulserver.proxy"</span><span class="p">)</span>
 
+<span class="c1"># How often a series held for memory checks again while none finishes.</span>
+<span class="n">_MEMORY_POLL</span> <span class="o">=</span> <span class="mf">1.0</span>
 <span class="c1"># A worker spawns, imports its plugin and connects; past this it is not coming.</span>
 <span class="c1"># Also how long a reconstruction server may take to accept a forwarded series.</span>
 <span class="n">_CONNECT_TIMEOUT</span> <span class="o">=</span> <span class="mf">120.0</span>
@@ -675,10 +677,11 @@
 <span class="sd">    A local series holds a slot while it runs. On a host with GPUs, found</span>
 <span class="sd">    through ``CUDA_VISIBLE_DEVICES`` or ``nvidia-smi``, each slot holds one GPU,</span>
 <span class="sd">    ``gpu_slots`` slots per GPU, and the reconstruction reads it as</span>
-<span class="sd">    ``context.device``. A series that finds every slot busy is queued: its</span>
-<span class="sd">    enriched stream is written to a file of ``queue`` while it arrives, its</span>
-<span class="sd">    client stays connected, and the file is replayed to a worker and deleted</span>
-<span class="sd">    once a slot frees.</span>
+<span class="sd">    ``context.device``. A series that finds every slot busy, or the host's</span>
+<span class="sd">    available memory short of one reconstruction's budget while another series</span>
+<span class="sd">    of this proxy runs, is queued: its enriched stream is written to a file of</span>
+<span class="sd">    ``queue`` while it arrives, its client stays connected, and the file is</span>
+<span class="sd">    replayed to a worker and deleted once a slot and the memory are free.</span>
 
 <span class="sd">    The series of one exam share a directory under the system's temporary</span>
 <span class="sd">    directory, through which a reconstruction reads what an earlier series of</span>
@@ -1026,6 +1029,8 @@
         <span class="c1"># other's. Held across proxies, like the slots.</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_alone</span> <span class="o">=</span> <span class="n">HostSlots</span><span class="p">([</span><span class="kc">None</span><span class="p">],</span> <span class="n">Path</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_slots</span><span class="o">.</span><span class="n">directory</span><span class="p">)</span> <span class="o">/</span> <span class="s2">"motion"</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_queued</span> <span class="o">=</span> <span class="n">itertools</span><span class="o">.</span><span class="n">count</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_running</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_finished</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Condition</span><span class="p">()</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">run</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
@@ -1069,7 +1074,7 @@
             <span class="k">finally</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_alone</span><span class="o">.</span><span class="n">release</span><span class="p">(</span><span class="n">alone</span><span class="p">)</span>
             <span class="k">return</span>
-        <span class="n">slot</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_slots</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">wait</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        <span class="n">slot</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_slots</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">wait</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_admits</span><span class="p">()</span> <span class="k">else</span> <span class="kc">None</span>
         <span class="k">if</span> <span class="n">slot</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">try</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_run</span><span class="p">(</span>
@@ -1088,6 +1093,7 @@
         <span class="n">_log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">"queued </span><span class="si">%s</span><span class="s2">"</span><span class="p">,</span> <span class="n">queued</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
         <span class="k">try</span><span class="p">:</span>
             <span class="n">others</span> <span class="o">=</span> <span class="n">_record</span><span class="p">(</span><span class="n">items</span><span class="p">,</span> <span class="n">header</span><span class="p">,</span> <span class="n">queued</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_wait_for_memory</span><span class="p">()</span>
             <span class="n">slot</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_slots</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">wait</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
             <span class="k">try</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_run</span><span class="p">(</span>
@@ -1103,6 +1109,17 @@
                 <span class="bp">self</span><span class="o">.</span><span class="n">_slots</span><span class="o">.</span><span class="n">release</span><span class="p">(</span><span class="n">slot</span><span class="p">)</span>
         <span class="k">finally</span><span class="p">:</span>
             <span class="n">queued</span><span class="o">.</span><span class="n">unlink</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_admits</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Return whether a series may start now: memory holds it, or this proxy runs none."""</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_finished</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_running</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">memory_allows</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_wait_for_memory</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Wait until :meth:`_admits` a series, rechecking as series finish and every second."""</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_finished</span><span class="p">:</span>
+            <span class="k">while</span> <span class="bp">self</span><span class="o">.</span><span class="n">_running</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">memory_allows</span><span class="p">():</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_finished</span><span class="o">.</span><span class="n">wait</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="n">_MEMORY_POLL</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">close</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_closing</span><span class="o">.</span><span class="n">set</span><span class="p">()</span>
@@ -1128,6 +1145,25 @@
         <span class="n">poses</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Pose</span><span class="p">],</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""Give a worker the config, the header and whatever ``feed`` sends it."""</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_finished</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_running</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_run_in_slot</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="n">config</span><span class="p">,</span> <span class="n">header</span><span class="p">,</span> <span class="n">plugin</span><span class="p">,</span> <span class="n">slot</span><span class="p">,</span> <span class="n">feed</span><span class="p">,</span> <span class="n">poses</span><span class="p">)</span>
+        <span class="k">finally</span><span class="p">:</span>
+            <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_finished</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_running</span> <span class="o">-=</span> <span class="mi">1</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_finished</span><span class="o">.</span><span class="n">notify_all</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_run_in_slot</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">client</span><span class="p">:</span> <span class="n">Connection</span><span class="p">,</span>
+        <span class="n">config</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">header</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+        <span class="n">plugin</span><span class="p">:</span> <span class="n">Path</span><span class="p">,</span>
+        <span class="n">slot</span><span class="p">:</span> <span class="n">Slot</span><span class="p">,</span>
+        <span class="n">feed</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Connection</span><span class="p">],</span> <span class="kc">None</span><span class="p">],</span>
+        <span class="n">poses</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Pose</span><span class="p">],</span> <span class="kc">None</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">convert</span> <span class="o">=</span> <span class="n">MrdDicomBuilder</span><span class="p">(</span><span class="n">header</span><span class="p">)</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">dicom</span> <span class="k">else</span> <span class="kc">None</span>
         <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">exams</span><span class="o">.</span><span class="n">lease</span><span class="p">(</span><span class="n">header</span><span class="p">)</span> <span class="k">as</span> <span class="n">exam</span><span class="p">:</span>
             <span class="n">channel</span> <span class="o">=</span> <span class="n">_WorkerChannel</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">workers</span><span class="p">,</span> <span class="n">plugin</span><span class="p">,</span> <span class="n">exam</span><span class="o">.</span><span class="n">directory</span><span class="p">,</span> <span class="n">slot</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
@@ -1573,10 +1609,12 @@
 <span class="sd">    Raises</span>
 <span class="sd">    ------</span>
 <span class="sd">    _StoppedReading</span>
-<span class="sd">        If ``destination`` stops reading, once the rest of ``items`` is read</span>
-<span class="sd">        and dropped: an error the stream raises meanwhile is raised instead.</span>
+<span class="sd">        If ``destination`` stops reading before it holds the acquisition</span>
+<span class="sd">        flagged ``LAST_IN_MEASUREMENT``, once the rest of ``items`` is read and</span>
+<span class="sd">        dropped: an error the stream raises meanwhile is raised instead.</span>
 <span class="sd">    """</span>
     <span class="n">stopped</span><span class="p">:</span> <span class="ne">OSError</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">last_sent</span> <span class="o">=</span> <span class="kc">False</span>
     <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">items</span><span class="p">:</span>
         <span class="k">if</span> <span class="n">stopped</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">continue</span>
@@ -1584,7 +1622,16 @@
             <span class="n">destination</span><span class="o">.</span><span class="n">send</span><span class="p">(</span><span class="n">item</span><span class="p">)</span>
         <span class="k">except</span> <span class="ne">OSError</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
             <span class="n">stopped</span> <span class="o">=</span> <span class="n">error</span>
-    <span class="k">if</span> <span class="n">stopped</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">continue</span>
+        <span class="n">last_sent</span> <span class="o">=</span> <span class="n">last_sent</span> <span class="ow">or</span> <span class="p">(</span>
+            <span class="nb">isinstance</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="n">ismrmrd</span><span class="o">.</span><span class="n">Acquisition</span><span class="p">)</span>
+            <span class="ow">and</span> <span class="n">item</span><span class="o">.</span><span class="n">isFlagSet</span><span class="p">(</span><span class="n">ismrmrd</span><span class="o">.</span><span class="n">ACQ_LAST_IN_MEASUREMENT</span><span class="p">)</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="n">stopped</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">last_sent</span><span class="p">:</span>
+        <span class="c1"># A physiological waveform can trail the last readout; a</span>
+        <span class="c1"># reconstruction that closes once it holds every readout lost nothing.</span>
+        <span class="n">_log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">"dropped what followed the last readout: </span><span class="si">%s</span><span class="s2">"</span><span class="p">,</span> <span class="n">stopped</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="n">stopped</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">raise</span> <span class="n">_StoppedReading</span><span class="p">(</span>
             <span class="sa">f</span><span class="s2">"the reconstruction stopped reading the series: </span><span class="si">{</span><span class="n">stopped</span><span class="si">}</span><span class="s2">"</span>
         <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">stopped</span>

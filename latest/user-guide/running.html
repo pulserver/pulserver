@@ -955,9 +955,10 @@ proxy refuses a series whose header names no design stored for that scan. The cl
 a bare plugin name or the path of its file, or as either under
 <code class="docutils literal notranslate"><span class="pre">parameters.config</span></code>; the design names none. A series whose config names none
 is refused unless the proxy forwards with <code class="docutils literal notranslate"><span class="pre">--forward-config</span></code>.</p>
-<p>A series that finds every slot busy is written to the queue directory as it
-arrives and reconstructed once a slot frees; the client stays connected
-meanwhile. What goes back to a client whose connection has dropped is kept for
+<p>A series that finds every slot busy, or the host’s available memory short of
+one reconstruction’s budget while another series runs, is written to the queue
+directory as it arrives and reconstructed once a slot and the memory are free;
+the client stays connected meanwhile. What goes back to a client whose connection has dropped is kept for
 a day: a client that opens a series with the same <code class="docutils literal notranslate"><span class="pre">measurementID</span></code> is sent it in
 place of a new reconstruction. With <code class="docutils literal notranslate"><span class="pre">--dicom-receiver</span></code>, the series’ DICOM
 images are stored to the receiver instead once its reconstruction ends, all of
