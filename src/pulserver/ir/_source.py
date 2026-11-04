@@ -140,9 +140,9 @@ class SequenceLibraries:
 
     Event and shape ids are the sequence's own, so a row's position is the id
     a block names and row 0 is id 1. Every row the sequence holds is here,
-    played or not. A time grid pypulseqpp states by rule rather than as a
-    shape, an arbitrary gradient sampled every half raster, is appended to
-    the shapes as a shape of its own.
+    played or not. An arbitrary gradient sampled every half raster plays its
+    raster-centre samples, which are appended to the shapes as a shape of
+    their own.
 
     Attributes
     ----------
@@ -449,21 +449,26 @@ def _sequence_libraries(sequence: Any, tables: Any) -> SequenceLibraries:
 
 
 class _ShapeTable:
-    """pypulseqpp's shapes under its own ids, then the time grids appended after them."""
+    """pypulseqpp's shapes under its own ids, then the decimated shapes appended after them."""
 
     def __init__(self, exported: Any) -> None:
         self._entries = [
             Shape(int(shape.num_samples), np.asarray(shape.data, dtype=np.float64))
             for shape in exported
         ]
-        self._grids: dict[int, int] = {}
+        self._decimated: dict[int, int] = {}
 
-    def half_raster(self, count: int) -> int:
-        """Return the id of a time shape of ``count`` samples every half raster."""
-        if count not in self._grids:
-            self._entries.append(Shape(count, 0.5 * np.arange(1.0, count + 1.0)))
-            self._grids[count] = len(self._entries)
-        return self._grids[count]
+    def raster_centres(self, identifier: int, exported: Any) -> int:
+        """Return the id of shape ``identifier``'s samples at the raster centres.
+
+        The shape is sampled every half raster from the first raster centre,
+        so the raster centres are its even samples.
+        """
+        if identifier not in self._decimated:
+            samples = np.asarray(exported.decompressed(), dtype=np.float64)[0::2]
+            self._entries.append(Shape(samples.size, samples))
+            self._decimated[identifier] = len(self._entries)
+        return self._decimated[identifier]
 
     def empty(self, identifiers: set[int]) -> None:
         """Replace the shapes with these ids by empty ones."""
@@ -578,15 +583,16 @@ def _grad_library(tables: Any, shapes: _ShapeTable) -> NDArray[np.float64]:
     for identifier, row in zip(
         tables.arbitrary_gradient_ids, tables.arbitrary_gradients, strict=True
     ):
-        time_shape = int(row[4])
+        shape, time_shape = int(row[3]), int(row[4])
         if time_shape == -1:
-            time_shape = shapes.half_raster(tables.shapes[int(row[3]) - 1].num_samples)
+            shape = shapes.raster_centres(shape, tables.shapes[shape - 1])
+            time_shape = 0
         rows[identifier - 1] = [
             _ARBITRARY,
             row[0],
             row[1],
             row[2],
-            row[3],
+            shape,
             time_shape,
             _micro(row[5]),
         ]

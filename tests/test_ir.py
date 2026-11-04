@@ -1078,3 +1078,25 @@ def test_play_returns_the_rf_shim_weights_of_each_rf_block(tmp_path):
     first, stop = played["rf_shim_span"][0]
     np.testing.assert_allclose(played["rf_shim"][first:stop], weights, atol=1e-5)
     assert played["rf_shim_span"][1, 0] == played["rf_shim_span"][1, 1]
+
+
+def test_a_half_raster_gradient_plays_its_raster_centre_samples(tmp_path):
+    """The scanner plays a gradient on its raster: every other sample."""
+    raster = SYSTEM.grad_raster_time
+    times = np.arange(1, 20) * raster / 2
+    samples = 1e5 * np.sin(np.pi * times / (10 * raster))
+    sequence = pp.Sequence(SYSTEM)
+    sequence.add_block(
+        pp.make_arbitrary_grad(
+            "x", samples, oversampling=True, first=0, last=0, system=SYSTEM
+        )
+    )
+    seq = tmp_path / "half.seq"
+    sequence.write(str(seq))
+    convert(seq, SYSTEM)
+
+    at, values = _played_gradient(ir.play(seq, waveforms=True), 0, 0)
+
+    centres = times[0::2]
+    np.testing.assert_allclose(at[1:-1], centres, atol=1e-9)
+    np.testing.assert_allclose(values[1:-1], samples[0::2], rtol=1e-5)
