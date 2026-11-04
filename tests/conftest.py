@@ -52,6 +52,7 @@ def calibration_header(
     calibration=None,
     partitions=1,
     repetitions=1,
+    averages=1,
     trajectory="cartesian",
 ):
     """A header of ``coils`` labelled coils and one encoding space of ``matrix`` by ``matrix`` voxels.
@@ -75,7 +76,11 @@ def calibration_header(
             limits["kspace_encoding_step_2"] = SimpleNamespace(
                 minimum=0, maximum=partitions - 1, center=partitions // 2
             )
-        for name, extent in (("slice", slices), ("repetition", repetitions)):
+        for name, extent in (
+            ("slice", slices),
+            ("repetition", repetitions),
+            ("average", averages),
+        ):
             if extent > 1:
                 limits[name] = SimpleNamespace(minimum=0, maximum=extent - 1, center=0)
         return SimpleNamespace(
@@ -162,6 +167,7 @@ def readouts(
     slice_index=0,
     partition=0,
     repetition=0,
+    average=0,
     space=0,
     dwell_us=None,
     geometry=None,
@@ -186,6 +192,7 @@ def readouts(
         acquisition.idx.kspace_encode_step_2 = partition
         acquisition.idx.slice = slice_index
         acquisition.idx.repetition = repetition
+        acquisition.idx.average = average
         acquisition.encoding_space_ref = space
         for name, value in (geometry or {}).items():
             setattr(acquisition, name, value)

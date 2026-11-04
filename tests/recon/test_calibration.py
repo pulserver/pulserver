@@ -570,6 +570,27 @@ def test_calibration_readouts_that_vary_along_another_axis_are_refused(torch):
         )
 
 
+def test_calibration_readouts_of_every_average_reach_the_estimate_as_their_mean(torch):
+    _, _, kspace = coil_phantom(COILS, MATRIX)
+    estimate = Estimate()
+    lines = range(4, 4 + ACS)
+
+    play(
+        stream_plugin(maps_of(estimate), axes=("average",)),
+        calibration_header(COILS, MATRIX, averages=2),
+        readouts(kspace, CALIBRATION, lines=lines, average=0, last=LAST)
+        + readouts(3 * kspace, CALIBRATION, lines=lines, average=1, last=LAST),
+    )
+
+    (given,) = estimate.calls
+    assert given.shape == (COILS, MATRIX, MATRIX)
+    np.testing.assert_allclose(
+        given.cpu().numpy()[:, lines.start : lines.stop],
+        2 * kspace[:, lines],
+        rtol=1e-6,
+    )
+
+
 def test_an_estimate_returning_maps_on_another_grid_is_refused(torch):
     _, _, kspace = coil_phantom(COILS, MATRIX)
 

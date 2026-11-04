@@ -405,7 +405,11 @@ def _estimated(
             f"encoding space {space.index} is not Cartesian, and coil_maps estimates "
             "maps from the calibration k-space of a Cartesian space only"
         )
+    calibration = ref.kspace
     placement = ref.axes[1:-1]
+    if "average" in placement:
+        calibration = calibration.mean(axis=ref.axes.index("average"))
+        placement = tuple(name for name in placement if name != "average")
     other = [name for name in placement if name not in _ENCODED]
     if other:
         raise ValueError(
@@ -417,9 +421,9 @@ def _estimated(
     kspace = np.zeros((ref.coils, *grid), dtype=np.complex64)
     lines = tuple(
         slice(ref.origin[name], ref.origin[name] + size)
-        for name, size in zip(placement, ref.kspace.shape[1:-1], strict=True)
+        for name, size in zip(placement, calibration.shape[1:-1], strict=True)
     )
-    kspace[(slice(None), *lines, slice(None))] = ref.kspace
+    kspace[(slice(None), *lines, slice(None))] = calibration
 
     maps = estimate(torch.from_numpy(kspace))
     maps = np.asarray(maps.detach().cpu().numpy(), dtype=np.complex64)
