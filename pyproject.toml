@@ -44,7 +44,9 @@ dev = [
   "pytest>=9.1.1",
   "pytest-cov>=7.1.0",
   "pytest-xdist>=3",
-  "coverage>=7.16.2",
+  # 7.17.1 aborts the combine when a child process ended before writing its
+  # data file, so a run whose tests all pass is reported as an internal error.
+  "coverage>=7.16.2,!=7.17.1",
   # Pinned, not ranged: a formatter that differs between a contributor and
   # CI makes "one entry point" a lie. Dependabot proposes the bumps.
   "ruff==0.17.3",
