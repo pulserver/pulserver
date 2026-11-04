@@ -72,6 +72,10 @@ STRING_VRS = {
 #: this many times larger before it clips.
 _HEADROOM = 2.0
 
+#: The least cosine between a plane's normal and a patient axis for the plane
+#: to be named axial, sagittal or coronal rather than oblique.
+_ALIGNED_COSINE = 0.999
+
 #: Prefix of the MRD ``userParameterString`` entries that state DICOM attributes.
 DICOM_PARAMETER = "dicom:"
 
@@ -182,7 +186,9 @@ class MrdDicomBuilder:
     (mm); ``location``, the centre's coordinate on the patient axis the normal
     lies closest to, positive towards right, anterior or superior (mm), for an
     oblique plane too; ``location_letter``, the side that location lies on
-    (``R``/``L``, ``A``/``P``, ``S``/``I``);
+    (``R``/``L``, ``A``/``P``, ``S``/``I``); ``plane_type``, GE's plane code of
+    the image, 2 axial, 4 sagittal or 8 coronal for a plane within about 2.5
+    degrees of one, 16 for any other;
     ``instance_number`` and ``series_number``, either of them plus or minus
     an integer, ``{instance_number+1000}``; ``{{`` and ``}}`` are literal
     braces. The private dictionary is the
@@ -1105,8 +1111,10 @@ def _image_quantities(
     # the positive side rather than on whichever a rounding error puts it.
     location = round(float(centre[axis] * ras[axis]), 4) + 0.0
     letter = ("RL", "AP", "SI")[axis][0 if location >= 0 else 1]
+    aligned = abs(float(normal[axis])) >= _ALIGNED_COSINE
     return {
         "slice_location": f"{float(dicomDset.SliceLocation):.6g}",
         "location": f"{round(location, 4):.6g}",
         "location_letter": letter,
+        "plane_type": (4, 8, 2)[axis] if aligned else 16,
     }
