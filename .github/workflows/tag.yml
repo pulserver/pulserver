@@ -1,0 +1,39 @@
+name: Tag
+
+# Starts a release from the Actions page: pushes the version tag on a commit of
+# main, then runs tags-release.yml on that tag. A tag pushed with the workflow
+# token does not start other workflows, so the release run is started here.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to release, as vX.Y.Z.
+        required: true
+        type: string
+      sha:
+        description: Commit to tag. It must be on main.
+        required: true
+        type: string
+
+permissions:
+  contents: write # push the tag
+  actions: write # start the release run
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - env:
+          VERSION: ${{ inputs.version }}
+          SHA: ${{ inputs.sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::version must look like v1.2.3"; exit 1; }
+          git merge-base --is-ancestor "$SHA" origin/main || { echo "::error::$SHA is not on main"; exit 1; }
+          git tag "$VERSION" "$SHA"
+          git push origin "refs/tags/$VERSION"
+          gh workflow run tags-release.yml --repo "$GITHUB_REPOSITORY" --ref "$VERSION"
