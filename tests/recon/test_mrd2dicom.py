@@ -1374,3 +1374,22 @@ def test_an_image_already_in_display_orientation_is_written_as_it_is(parsed_mrd_
     np.testing.assert_array_equal(
         MrdDicomBuilder(parsed_mrd_header)(image).dset.pixel_array, values
     )
+
+
+@pytest.mark.parametrize(
+    ("read", "phase", "code"),
+    [
+        ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0), 2),
+        ((0.0, 1.0, 0.0), (0.0, 0.0, -1.0), 4),
+        ((1.0, 0.0, 0.0), (0.0, 0.0, -1.0), 8),
+        ((0.4309, 0.5318, -0.7291), (0.9024, -0.2539, 0.3481), 16),
+    ],
+)
+def test_each_image_states_the_ge_plane_code_of_its_own_normal(
+    minimal_mrd_header, read, phase, code
+):
+    header = _explicit(minimal_mrd_header, [("(0011,1035)SS", "{plane_type}")])
+
+    dataset = _placed(MrdDicomBuilder(header), (0.0, 0.0, 0.0), read, phase)
+
+    assert dataset[0x0011, 0x1035].value == code
