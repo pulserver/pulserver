@@ -565,9 +565,9 @@
 
 <span class="sd">    Event and shape ids are the sequence's own, so a row's position is the id</span>
 <span class="sd">    a block names and row 0 is id 1. Every row the sequence holds is here,</span>
-<span class="sd">    played or not. A time grid pypulseqpp states by rule rather than as a</span>
-<span class="sd">    shape, an arbitrary gradient sampled every half raster, is appended to</span>
-<span class="sd">    the shapes as a shape of its own.</span>
+<span class="sd">    played or not. An arbitrary gradient sampled every half raster plays its</span>
+<span class="sd">    raster-centre samples, which are appended to the shapes as a shape of</span>
+<span class="sd">    their own.</span>
 
 <span class="sd">    Attributes</span>
 <span class="sd">    ----------</span>
@@ -874,21 +874,26 @@
 
 
 <span class="k">class</span><span class="w"> </span><span class="nc">_ShapeTable</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""pypulseqpp's shapes under its own ids, then the time grids appended after them."""</span>
+<span class="w">    </span><span class="sd">"""pypulseqpp's shapes under its own ids, then the decimated shapes appended after them."""</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">exported</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_entries</span> <span class="o">=</span> <span class="p">[</span>
             <span class="n">Shape</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">shape</span><span class="o">.</span><span class="n">num_samples</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">shape</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">))</span>
             <span class="k">for</span> <span class="n">shape</span> <span class="ow">in</span> <span class="n">exported</span>
         <span class="p">]</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_grids</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_decimated</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">half_raster</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">count</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Return the id of a time shape of ``count`` samples every half raster."""</span>
-        <span class="k">if</span> <span class="n">count</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_grids</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_entries</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">Shape</span><span class="p">(</span><span class="n">count</span><span class="p">,</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">count</span> <span class="o">+</span> <span class="mf">1.0</span><span class="p">)))</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_grids</span><span class="p">[</span><span class="n">count</span><span class="p">]</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_entries</span><span class="p">)</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_grids</span><span class="p">[</span><span class="n">count</span><span class="p">]</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">raster_centres</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">identifier</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">exported</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Return the id of shape ``identifier``'s samples at the raster centres.</span>
+
+<span class="sd">        The shape is sampled every half raster from the first raster centre,</span>
+<span class="sd">        so the raster centres are its even samples.</span>
+<span class="sd">        """</span>
+        <span class="k">if</span> <span class="n">identifier</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_decimated</span><span class="p">:</span>
+            <span class="n">samples</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">exported</span><span class="o">.</span><span class="n">decompressed</span><span class="p">(),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)[</span><span class="mi">0</span><span class="p">::</span><span class="mi">2</span><span class="p">]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_entries</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">Shape</span><span class="p">(</span><span class="n">samples</span><span class="o">.</span><span class="n">size</span><span class="p">,</span> <span class="n">samples</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_decimated</span><span class="p">[</span><span class="n">identifier</span><span class="p">]</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_entries</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_decimated</span><span class="p">[</span><span class="n">identifier</span><span class="p">]</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">empty</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">identifiers</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="nb">int</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""Replace the shapes with these ids by empty ones."""</span>
@@ -1003,15 +1008,16 @@
     <span class="k">for</span> <span class="n">identifier</span><span class="p">,</span> <span class="n">row</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span>
         <span class="n">tables</span><span class="o">.</span><span class="n">arbitrary_gradient_ids</span><span class="p">,</span> <span class="n">tables</span><span class="o">.</span><span class="n">arbitrary_gradients</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span>
     <span class="p">):</span>
-        <span class="n">time_shape</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="mi">4</span><span class="p">])</span>
+        <span class="n">shape</span><span class="p">,</span> <span class="n">time_shape</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="mi">3</span><span class="p">]),</span> <span class="nb">int</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="mi">4</span><span class="p">])</span>
         <span class="k">if</span> <span class="n">time_shape</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">:</span>
-            <span class="n">time_shape</span> <span class="o">=</span> <span class="n">shapes</span><span class="o">.</span><span class="n">half_raster</span><span class="p">(</span><span class="n">tables</span><span class="o">.</span><span class="n">shapes</span><span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">num_samples</span><span class="p">)</span>
+            <span class="n">shape</span> <span class="o">=</span> <span class="n">shapes</span><span class="o">.</span><span class="n">raster_centres</span><span class="p">(</span><span class="n">shape</span><span class="p">,</span> <span class="n">tables</span><span class="o">.</span><span class="n">shapes</span><span class="p">[</span><span class="n">shape</span> <span class="o">-</span> <span class="mi">1</span><span class="p">])</span>
+            <span class="n">time_shape</span> <span class="o">=</span> <span class="mi">0</span>
         <span class="n">rows</span><span class="p">[</span><span class="n">identifier</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span>
             <span class="n">_ARBITRARY</span><span class="p">,</span>
             <span class="n">row</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
             <span class="n">row</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span>
             <span class="n">row</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span>
-            <span class="n">row</span><span class="p">[</span><span class="mi">3</span><span class="p">],</span>
+            <span class="n">shape</span><span class="p">,</span>
             <span class="n">time_shape</span><span class="p">,</span>
             <span class="n">_micro</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="mi">5</span><span class="p">]),</span>
         <span class="p">]</span>
