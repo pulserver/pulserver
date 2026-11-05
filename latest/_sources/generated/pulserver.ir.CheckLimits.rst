@@ -30,6 +30,7 @@
    ~CheckLimits.bands
    ~CheckLimits.default_shim
    ~CheckLimits.drive_per_hz
+   ~CheckLimits.follows_poses
    ~CheckLimits.pns
    ~CheckLimits.pns_limit
    ~CheckLimits.spl_average_limit

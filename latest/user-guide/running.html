@@ -673,6 +673,12 @@ scanner for the prescription’s rotation:</p>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">design_max_slew</span></code></p></td>
 <td><p>Slew rate each logical axis is designed under, in the <code class="docutils literal notranslate"><span class="pre">slew_unit</span></code> of <code class="docutils literal notranslate"><span class="pre">max_slew</span></code></p></td>
 </tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">design_max_grad_any_rotation</span></code>, <code class="docutils literal notranslate"><span class="pre">design_max_slew_any_rotation</span></code></p></td>
+<td><p>The same for a design that must hold under any rotation: one whose scan follows motion-correction poses</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">pmc_enable</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">1</span></code> when the scan follows the poses its reconstruction publishes, <code class="docutils literal notranslate"><span class="pre">0</span></code> otherwise</p></td>
+</tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">design_rf_dead_time</span></code></p></td>
 <td><p>Least delay of an RF pulse in its block, in s</p></td>
 </tr>
@@ -685,6 +691,15 @@ scanner for the prescription’s rotation:</p>
 </tbody>
 </table>
 </div>
+<p>A sequence that sets <code class="docutils literal notranslate"><span class="pre">EnablePmc</span></code>, as the navigator option of <code class="docutils literal notranslate"><span class="pre">fse3d</span></code> and
+<code class="docutils literal notranslate"><span class="pre">mprage3d</span></code> does, is turned during the scan by the poses its reconstruction
+publishes when <code class="docutils literal notranslate"><span class="pre">pmc_enable</span></code> is <code class="docutils literal notranslate"><span class="pre">1</span></code>: rotations neither its design nor the
+check saw. Such a design is made under the <code class="docutils literal notranslate"><span class="pre">_any_rotation</span></code> limits, and the
+check also holds its gradient amplitude and slew rate summed over the three
+axes to <code class="docutils literal notranslate"><span class="pre">max_grad</span></code> and <code class="docutils literal notranslate"><span class="pre">max_slew</span></code>, since a rotation can put the whole vector
+on one physical axis. A sequence without <code class="docutils literal notranslate"><span class="pre">EnablePmc</span></code>, or a scan with
+<code class="docutils literal notranslate"><span class="pre">pmc_enable</span></code> <code class="docutils literal notranslate"><span class="pre">0</span></code>, is designed under <code class="docutils literal notranslate"><span class="pre">design_max_grad</span></code> and <code class="docutils literal notranslate"><span class="pre">design_max_slew</span></code>.
+The manifest’s <code class="docutils literal notranslate"><span class="pre">design_rotation</span></code> records which, <code class="docutils literal notranslate"><span class="pre">any</span></code> or <code class="docutils literal notranslate"><span class="pre">prescribed</span></code>.</p>
 <p>A design limit above the scanner’s leaves the scanner’s, and one left out is the
 scanner’s; a design dead time below the scanner’s leaves the scanner’s. The
 design dead times are the room a playout needs around an RF pulse or a readout
