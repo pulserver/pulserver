@@ -802,13 +802,15 @@ trajectory is, so a trajectory on <code class="docutils literal notranslate"><sp
 does the same; the <code class="docutils literal notranslate"><span class="pre">nufft</span></code> plugin solves so.</p>
 <p>The <code class="docutils literal notranslate"><span class="pre">pics</span></code> and <code class="docutils literal notranslate"><span class="pre">nufft</span></code> handlers fit the maps with
 <code class="docutils literal notranslate"><span class="pre">apps.nlinv_maps(kspace,</span> <span class="pre">phase_pole=0)</span></code>, <code class="docutils literal notranslate"><span class="pre">bart</span> <span class="pre">nlinv</span> <span class="pre">--phase-pole</span> <span class="pre">0</span></code>, on a grid
-of the central 24 lines, or of the trajectory’s samples within 12 grid units of
+of the central 48 lines, or of the trajectory’s samples within 24 grid units of
 the centre, and zero-fill them to the image grid: after every Gauss-Newton step
 the phase poles the maps share are moved into the image. Without it, maps that
 share a phase pole go to zero there in every coil, and the image has a dark
 spot at it. BART refuses the detection on a grid with an axis no longer than a
-twentieth of its longest, rounded up; a slab of fewer than 3 partitions is
-fitted without the correction.</p>
+twentieth of its longest, rounded up; a slab of 3 partitions or fewer, on a
+matrix of 48 or more, is fitted without the correction. A grid of 24 lines
+left a ghost at half the field of view of a scan undersampled by 2 along its
+partitions.</p>
 <p>A calibration unit, whose <code class="docutils literal notranslate"><span class="pre">data.data</span></code> is <code class="docutils literal notranslate"><span class="pre">None</span></code>, stores its maps for its slice,
 and the imaging units of that slice take them from the stream. A series that is
 only a calibration leaves its maps to the exam by assigning
