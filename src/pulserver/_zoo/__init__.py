@@ -12,7 +12,7 @@ ZOO_PAIRS: dict[str, str] = {
     "gre2d": "pics",
     "gre3d": "pics",
     "gre_multiecho2d": "pics",
-    "gre_multiecho3d": "pics",
+    "gre_multiecho3d": "qsm",
     "gre_propeller2d": "nufft",
     "gre_radial2d": "nufft",
     "gre_spiral2d": "nufft",

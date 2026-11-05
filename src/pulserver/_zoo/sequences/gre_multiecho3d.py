@@ -1,7 +1,9 @@
 """pypulseqpp's 3D multi-echo gradient echo bound to the scanner UI, its partitions counted by the number of slices."""
 
 import functools
+from typing import Any
 
+import pypulseqpp as pp
 from pypulseqpp.sequences.sequence.gre_multiecho3D_sequence import (
     SAMPLINGS,
     gre_multiecho3d,
@@ -24,6 +26,7 @@ from pulserver.design import (
     StatedParam,
     TimeParam,
     option,
+    recon_parameters,
 )
 from pulserver.protocol import Excitation, ImagingMode, TEPreset, TRPreset, UIParam
 
@@ -48,12 +51,40 @@ SAMPLING = option(
     "sampling", "lattice", choices=SAMPLINGS, user=OWN, label="View sampling"
 )
 
+#: The object the ``qsm`` reconstruction maps: ``"phantom"`` (T2* and a MEDI+0
+#: QSM of the whole object), ``"brain"`` (SWI, T2*, QSM in the brain and
+#: DECOMPOSE) or ``"body"``. The sequence states its index among these in its
+#: ``QsmAnatomy`` definition, which reaches the reconstruction in the MRD
+#: header.
+QSM_ANATOMIES = ("phantom", "brain", "body")
+QSM_ANATOMY = option(
+    "qsm_anatomy",
+    "phantom",
+    choices=QSM_ANATOMIES,
+    user=OWN + 1,
+    label="QSM anatomy",
+)
+
+
+def _stating_anatomy(app: Any) -> Any:
+    """Return ``app`` with its main sequence stating ``QsmAnatomy`` as a reconstruction parameter."""
+
+    @functools.wraps(app)
+    def design(*args: Any, **kwargs: Any) -> Any:
+        designed = app(*args, **kwargs)
+        main = designed if isinstance(designed, pp.Sequence) else designed[-1]
+        recon_parameters(main, QsmAnatomy=QSM_ANATOMIES.index(QSM_ANATOMY))
+        return designed
+
+    return design
+
 
 class GreMultiecho3D(SequencePlugin):
     app = shortest_at_zero(slab(gre_multiecho3d), "echo_spacing")
     app = functools.partial(
         app, elliptical_sampling=ELLIPTICAL, flyback=FLYBACK, sampling=SAMPLING
     )
+    app = _stating_anatomy(app)
     protocol = {
         UIParam.IMAGING_MODE: StatedParam(ImagingMode.THREE_D),
         UIParam.EXCITATION: ChoiceParam(

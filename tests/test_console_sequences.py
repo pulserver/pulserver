@@ -70,7 +70,15 @@ def _images(console, name, values, recon=None):
         for m in messages
         if "dicom" in m
     ]
-    return [dataset.pixel_array for dataset in datasets if _magnitude(dataset)]
+    # The magnitude images of the scan itself: its first series. A
+    # reconstruction that derives maps from them (qsm) sends each map as a
+    # later series.
+    first = min((int(d.SeriesNumber) for d in datasets), default=0)
+    return [
+        dataset.pixel_array
+        for dataset in datasets
+        if _magnitude(dataset) and int(dataset.SeriesNumber) == first
+    ]
 
 
 def _magnitude(dataset):

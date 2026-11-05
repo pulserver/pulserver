@@ -1373,6 +1373,35 @@ def test_the_sampling_option_sits_on_an_own_entry_the_console_reaches(zoo):
         assert UIParam.user_value(45) not in protocol
 
 
+def test_the_qsm_anatomy_option_sits_on_the_own_entry_after_the_sampling(zoo):
+    """QSM anatomy is user13 (user12 is the view sampling), its choices phantom, brain and body in that order."""
+    from pulserver._zoo._user import OWN
+    from pulserver._zoo.sequences.gre_multiecho3d import QSM_ANATOMIES
+
+    assert QSM_ANATOMIES == ("phantom", "brain", "body")
+    for name in ("gre_multiecho3d", "gre_multiecho3d+POISSON", "gre_multiecho3d+WAVE"):
+        protocol = zoo[name].protocol
+
+        assert type(protocol[UIParam.user_value(OWN + 1)]).__name__ == "OptionParam"
+        assert protocol[UIParam.user_name(OWN + 1)].text.startswith("QSM anatomy")
+
+
+def test_the_main_sequence_states_the_qsm_anatomy_for_the_reconstruction():
+    """The reconstruction reads the anatomy from the header: the sequence lists QsmAnatomy as a recon parameter, as the option's index."""
+    import pypulseqpp as pp
+
+    from pulserver._zoo.sequences import gre_multiecho3d as plugin
+    from pulserver.design import RECON_PARAMETERS
+
+    designed = plugin._stating_anatomy(lambda: [pp.Sequence(), pp.Sequence()])()
+
+    assert designed[0].get_definition(RECON_PARAMETERS) in (None, "")
+    assert designed[-1].get_definition(RECON_PARAMETERS) == "QsmAnatomy"
+    assert designed[-1].get_definition("QsmAnatomy") == [
+        plugin.QSM_ANATOMIES.index(plugin.QSM_ANATOMY)
+    ]
+
+
 @pytest.mark.skipif(
     importlib.util.find_spec("blochsim") is None, reason="blochsim is not installed"
 )
