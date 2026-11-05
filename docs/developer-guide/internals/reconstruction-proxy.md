@@ -184,9 +184,17 @@ GPUs, which the proxy finds from `CUDA_VISIBLE_DEVICES` or `nvidia-smi` without
 importing a GPU library, each slot holds one of them, one series per GPU unless
 more are allowed, and the reconstruction finds its GPU in `context.device`. A
 worker is an ordinary process, so a reconstruction may start processes of its
-own. A series that
+own. A series' budget
+is the k-space its buffers hold at once, sized from its header
+(channels, after
+the six virtual channels of `pics`, times contrasts, averages and slices, times
+the encoded phase encodes and partitions and the reconstructed readout, times
+8 bytes), and at least
+the default budget, 48 GiB. A series
+whose buffers the host's physical memory cannot hold even alone is logged as a
+warning when it starts. A series that
 arrives when every slot is occupied, or when another series runs and the
-available memory is short of one reconstruction's budget, is written to disk,
+available memory is short of its budget, is written to disk,
 enriched, as it arrives, and replayed to a worker once a slot is released and
 the memory holds it; a series arriving while none runs always starts. The client remains
 connected meanwhile, and the images are returned through its connection.

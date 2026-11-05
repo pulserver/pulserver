@@ -591,9 +591,16 @@ class Gadget(ABC):
 
         Returns
         -------
-        ndarray or None
-            The readout, or ``None`` to consume the acquisition.
+        ndarray, list or None
+            The readout; ``None`` to consume the acquisition, or to hold it;
+            or a list of ``(acquisition, readout)`` pairs, which gives on the
+            readouts the gadget held, each with the acquisition it was given,
+            followed or not by this one.
         """
+
+    def release(self) -> list[tuple[Any, Any]]:
+        """Return the ``(acquisition, readout)`` pairs still held when the stream ends; the default holds none."""
+        return []
 
 
 class ReconPlugin(ABC):
@@ -821,10 +828,11 @@ class ReconPlugin(ABC):
 
         In order: the acquisition must pass ``require_flags`` and
         ``reject_flags``; the ``gadgets`` run over a copy of it, any of which may
-        consume it; :meth:`branch_for` names its branch; it is added to its
-        unit, which places the readout the gadgets returned; the units that
-        close are removed from the plugin and reconstructed by :meth:`recon`,
-        in the order they opened. An acquisition carrying
+        consume it, hold it, or give on readouts it held before it;
+        :meth:`branch_for` names the branch of each readout given on; each is
+        added to its unit, which places it; the units that close are removed
+        from the plugin and reconstructed by :meth:`recon`, in the order they
+        opened. Readouts a gadget still holds are placed by :meth:`flush`. An acquisition carrying
         ``LAST_IN_MEASUREMENT`` closes every open unit instead, as :meth:`flush`
         does, whether or not it has samples: the stream's end marker has none.
 
@@ -836,17 +844,14 @@ class ReconPlugin(ABC):
         """
         emitted: list[tuple[ReconData | None, Any]] = []
         if self._accepts(acquisition):
-            readout, placed = self._process(acquisition)
-            branch = None if readout is None else self.branch_for(acquisition)
-            if branch is not None:
-                self._unit(branch, acquisition).add_acquisition(
-                    acquisition, readout, placed
-                )
-            if has_acquisition_flag(acquisition, "ACQ_LAST_IN_MEASUREMENT"):
-                emitted = self.flush(context)
-            elif branch is not None:
-                closed = self._closure.closed(self._units, acquisition, branch)
-                emitted = self._reconstruct(closed, context)
+            last = has_acquisition_flag(acquisition, "ACQ_LAST_IN_MEASUREMENT")
+            for received, readout, placed in self._process(acquisition):
+                branch = self._place(received, readout, placed)
+                if branch is not None and not last:
+                    closed = self._closure.closed(self._units, received, branch)
+                    emitted += self._reconstruct(closed, context)
+            if last:
+                emitted += self.flush(context)
         return emitted
 
     def receive_waveform(self, waveform: Any) -> None:
@@ -865,6 +870,10 @@ class ReconPlugin(ABC):
             As :meth:`receive`; the output of :meth:`finish`, if any, comes last
             and with ``None`` for ``data``.
         """
+        for index, gadget in enumerate(self.gadgets):
+            for held, data in gadget.release():
+                for received, readout, placed in self._through(index + 1, held, data):
+                    self._place(received, readout, placed)
         emitted = self._reconstruct(list(self._units), context)
         if not self._finished:
             self._finished = True
@@ -1017,23 +1026,55 @@ class ReconPlugin(ABC):
             has_acquisition_flag(acquisition, flag) for flag in self.reject_flags
         )
 
-    def _process(self, acquisition: Any) -> tuple[Any, Any]:
-        """Run the gadgets over one readout, returning it and the acquisition as they left it.
+    def _process(self, acquisition: Any) -> list[tuple[Any, Any, Any]]:
+        """Run the gadgets over one readout, returning the readouts they give on.
 
-        The readout is ``None`` when a gadget consumed it or it has no samples.
-        The gadgets are given a copy of the acquisition, so that the header
-        fields they assign reach the buffers and the received acquisition is
+        Each is ``(received, readout, placed)``: the acquisition as received,
+        the readout, and the acquisition as the gadgets left it. None when a
+        gadget consumed or held the readout, or it has no samples; more than
+        one when a gadget gave on readouts it held, which come first. The
+        gadgets are given a copy of the acquisition, so that the header fields
+        they assign reach the buffers and the received acquisition is
         unchanged; with no gadgets the acquisition is returned as it is.
         """
         data = np.asarray(acquisition.data)
         if data.size == 0:
-            return None, acquisition
+            return []
+        return self._through(0, acquisition, data, received=acquisition)
+
+    def _through(
+        self, start: int, acquisition: Any, data: Any, received: Any = None
+    ) -> list[tuple[Any, Any, Any]]:
+        """Run the gadgets from ``start`` over a readout, as :meth:`_process`.
+
+        ``received`` is the acquisition as received; a readout a gadget held
+        has none, and the acquisition the gadget held stands for it.
+        """
+        received = acquisition if received is None else received
         placed = _copy_acquisition(acquisition) if self.gadgets else acquisition
-        for gadget in self.gadgets:
-            data = gadget(placed, data)
+        for index in range(start, len(self.gadgets)):
+            data = self.gadgets[index](placed, data)
             if data is None:
-                return None, placed
-        return data, placed
+                return []
+            if isinstance(data, list):
+                return [
+                    given
+                    for held, readout in data
+                    for given in self._through(
+                        index + 1,
+                        held,
+                        readout,
+                        received=received if held is placed else None,
+                    )
+                ]
+        return [(received, data, placed)]
+
+    def _place(self, received: Any, readout: Any, placed: Any) -> str | None:
+        """Add one readout to the unit of its branch, returning the branch; ``None`` where it has none."""
+        branch = None if readout is None else self.branch_for(received)
+        if branch is not None:
+            self._unit(branch, received).add_acquisition(received, readout, placed)
+        return branch
 
     def _unit(self, branch: str, acquisition: Any) -> ReconUnit:
         key = unit_key(branch, acquisition, self.axes, self.merge)

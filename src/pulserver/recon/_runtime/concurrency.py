@@ -1,12 +1,15 @@
 """Number of concurrent reconstructions the host memory and its GPUs allow."""
 
 __all__ = [
+    "DEFAULT_PER_RECON_GB",
     "HostSlots",
     "Slot",
     "Slots",
     "compute_max_concurrent",
     "gpu_devices",
     "memory_allows",
+    "memory_holds",
+    "series_gib",
     "slot_devices",
 ]
 
@@ -23,8 +26,10 @@ import time
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
-_DEFAULT_PER_RECON_GB: float = 48.0
+#: GiB budgeted for one reconstruction, the least a series is admitted with.
+DEFAULT_PER_RECON_GB: float = 48.0
 _DEFAULT_HEADROOM_FRACTION: float = 0.8
 
 
@@ -44,8 +49,69 @@ def _available_ram_gb() -> float:
         return 0.0
 
 
+def _total_ram_gb() -> float:
+    """Physical memory in GiB from ``psutil``, else ``sysconf``; 0.0 when neither answers."""
+    try:
+        import psutil  # type: ignore[import-untyped]
+
+        return psutil.virtual_memory().total / (1024**3)
+    except ImportError:
+        pass
+    try:
+        return os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES") / (1024**3)
+    except (AttributeError, ValueError, OSError):
+        return 0.0
+
+
+def series_gib(header: Any, channels: int | None = None) -> float:
+    """Return the GiB of complex64 k-space a series buffers at once, from its header.
+
+    For each encoding space, ``channels`` x contrasts x averages x slices x
+    the encoded phase encodes and partitions x the reconstructed readout
+    (``reconSpace`` ``x``, the readout oversampling removed) x 8 bytes, summed
+    over the spaces: the units of every contrast, average and slice are open
+    together, those of repetitions, sets and phases one after the other.
+
+    Parameters
+    ----------
+    header : ismrmrd.xsd.ismrmrdHeader
+        The series' header.
+    channels : int, default=None
+        Channels each readout is buffered with; the header's
+        ``receiverChannels`` when not given, or when it states fewer.
+    """
+    system = getattr(header, "acquisitionSystemInformation", None)
+    received = int(getattr(system, "receiverChannels", 0) or 0) or 1
+    coils = received if channels is None else min(received, int(channels))
+
+    def size(space: Any, axis: str) -> int:
+        matrix = getattr(space, "matrixSize", None)
+        return max(1, int(getattr(matrix, axis, 1) or 1))
+
+    def count(limits: Any, counter: str) -> int:
+        limit = getattr(limits, counter, None)
+        return max(1, int(getattr(limit, "maximum", 0) or 0) + 1)
+
+    total = 0
+    for encoding in getattr(header, "encoding", None) or ():
+        encoded = getattr(encoding, "encodedSpace", None)
+        recon = getattr(encoding, "reconSpace", None) or encoded
+        limits = getattr(encoding, "encodingLimits", None)
+        total += (
+            coils
+            * size(recon, "x")
+            * size(encoded, "y")
+            * size(encoded, "z")
+            * math.prod(
+                count(limits, name) for name in ("contrast", "average", "slice")
+            )
+            * 8
+        )
+    return total / (1024**3)
+
+
 def compute_max_concurrent(
-    per_recon_gb: float = _DEFAULT_PER_RECON_GB,
+    per_recon_gb: float = DEFAULT_PER_RECON_GB,
     headroom_fraction: float = _DEFAULT_HEADROOM_FRACTION,
     override: int | None = None,
 ) -> int:
@@ -56,7 +122,7 @@ def compute_max_concurrent(
 
     Parameters
     ----------
-    per_recon_gb : float, default=_DEFAULT_PER_RECON_GB
+    per_recon_gb : float, default=DEFAULT_PER_RECON_GB
         Memory budgeted for one reconstruction, in GiB.
     headroom_fraction : float, default=_DEFAULT_HEADROOM_FRACTION
         Fraction of available memory given to reconstructions.
@@ -87,7 +153,7 @@ def compute_max_concurrent(
 
 
 def memory_allows(
-    per_recon_gb: float = _DEFAULT_PER_RECON_GB,
+    per_recon_gb: float = DEFAULT_PER_RECON_GB,
     headroom_fraction: float = _DEFAULT_HEADROOM_FRACTION,
 ) -> bool:
     """Return whether the memory available now holds one more reconstruction.
@@ -98,6 +164,17 @@ def memory_allows(
     """
     available = _available_ram_gb()
     return available <= 0.0 or available * headroom_fraction >= per_recon_gb
+
+
+def memory_holds(
+    per_recon_gb: float, headroom_fraction: float = _DEFAULT_HEADROOM_FRACTION
+) -> bool:
+    """Return whether the host's physical memory, with nothing else running, holds one reconstruction of ``per_recon_gb``.
+
+    ``True`` when physical memory cannot be read.
+    """
+    total = _total_ram_gb()
+    return total <= 0.0 or total * headroom_fraction >= per_recon_gb
 
 
 def gpu_devices() -> tuple[str, ...]:

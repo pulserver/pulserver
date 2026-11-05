@@ -65,11 +65,20 @@ def _images(console, name, values, recon=None):
         recon=recon,
     )
     assert status == 0, messages[-1:]
-    return [
-        pydicom.dcmread(io.BytesIO(base64.b64decode(m["dicom"]))).pixel_array
+    datasets = [
+        pydicom.dcmread(io.BytesIO(base64.b64decode(m["dicom"])))
         for m in messages
         if "dicom" in m
     ]
+    return [dataset.pixel_array for dataset in datasets if _magnitude(dataset)]
+
+
+def _magnitude(dataset):
+    """Whether a DICOM image is a magnitude image, by its ``ImageType`` or GE's image-type tag."""
+    ge = dataset.get((0x0043, 0x102F))
+    if ge is not None:
+        return int(ge.value) == 0
+    return list(dataset.ImageType)[2:3] in ([], ["M"])
 
 
 def _correlation(a, b):
