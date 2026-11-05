@@ -14,7 +14,12 @@ from ...mrd._images import center_crop
 from .._buffers import ReconBuffer, ReconData
 from .._calibration import CoilCompression, coil_maps
 from .._correct import gradient_unwarped, states_gradient_coefficients
-from ..gadgets import AsymmetricEcho, Prewhiten, RemoveReadoutOversampling
+from ..gadgets import (
+    AsymmetricEcho,
+    CompressChannels,
+    Prewhiten,
+    RemoveReadoutOversampling,
+)
 from ..plugin import ReconContext, ReconPlugin, ReconResult
 
 #: Fewest points along an axis that BART's wavelet, ``dau2`` as
@@ -29,9 +34,12 @@ WAVELET_MIN_POINTS = 4
 #: GRAPPA leaves it.
 CALIBRATION_LINES = 48
 
-#: Virtual channels the receive channels of a unit are compressed to before
-#: its maps and its solve (:class:`~pulserver.recon.CoilCompression`).
+#: Virtual channels the receive channels are compressed to before the maps
+#: and the solve (:class:`~pulserver.recon.CompressChannels`).
 VIRTUAL_COILS = 6
+
+#: ``series_index`` of the magnitude, real and imaginary images.
+MAGNITUDE_SERIES, REAL_SERIES, IMAGINARY_SERIES = 0, 1, 2
 
 
 class PicsRecon(ReconPlugin):
@@ -44,7 +52,9 @@ class PicsRecon(ReconPlugin):
     measurement for any that never closed.
 
     Each readout is whitened with the noise measurement of the stream
-    (:class:`~pulserver.recon.Prewhiten`), completed to a full echo
+    (:class:`~pulserver.recon.Prewhiten`), compressed to ``virtual_coils``
+    virtual channels by a basis from the calibration readouts that lead the
+    scan (:class:`~pulserver.recon.CompressChannels`), completed to a full echo
     (:class:`~pulserver.recon.AsymmetricEcho`), has its readout oversampling
     removed (:class:`~pulserver.recon.RemoveReadoutOversampling`) and is placed
     by its echo along the readout and by the offset of its lines from the
@@ -52,9 +62,11 @@ class PicsRecon(ReconPlugin):
     slice closes. Noise readouts are consumed by the whitening;
     phase-correction readouts are rejected.
 
-    A unit of more receive channels than ``virtual_coils`` is compressed to
-    that many virtual channels (:func:`compressed`) before its maps are
-    estimated and its image solved.
+    The buffers of a scan of many contrasts, which are open together, so
+    hold ``virtual_coils`` channels each. A scan whose calibration readouts
+    do not lead is compressed a unit at a time instead, as the unit closes
+    and before its maps are estimated and its image solved
+    (:func:`compressed`).
 
     The coil sensitivities are those of :func:`~pulserver.recon.coil_maps`
     with :func:`nlinv_estimate` as the estimate: from the unit's calibration
@@ -66,12 +78,17 @@ class PicsRecon(ReconPlugin):
     of its slice. The image minimises
     ``|P F S x - y|^2 + lambda |W x|_1`` over the maps (``bart pics -R W``),
     ``W`` the wavelet transform over the encoded axes of at least
-    ``WAVELET_MIN_POINTS`` points. An encoded axis is
-    partial Fourier where the lines missing at one end outnumber the widest gap
-    between sampled lines, and
-    :func:`bartorch.apps.partial_fourier` completes the image along it
-    (``bart homodyne -I -C``). bartorch is imported when the first unit is
-    reconstructed.
+    ``WAVELET_MIN_POINTS`` points. An encoded axis is partial Fourier where
+    the lines missing at one end outnumber the widest gap between sampled
+    lines, and :func:`partial_fourier` completes the image by homodyne over
+    every such axis together, which makes it real. bartorch is imported when
+    the first unit is reconstructed.
+
+    The magnitude image is series ``MAGNITUDE_SERIES``. A scan of more than
+    one contrast, such as a multi-echo gradient echo, also sends the real and
+    imaginary parts of each image as series ``REAL_SERIES`` and
+    ``IMAGINARY_SERIES``; they keep the phase of the image where no axis is
+    partial Fourier.
 
     The k-space, the maps and the vectors of the solve stay on the host. The
     encoding is built on ``context.device`` and brings them over a coil at a
@@ -105,7 +122,15 @@ class PicsRecon(ReconPlugin):
             axes=("average",),
             reject_flags=AcquisitionFlag.IS_PHASECORR_DATA,
         )
-        self.gadgets = (Prewhiten(), AsymmetricEcho(), RemoveReadoutOversampling())
+        compression = (
+            () if virtual_coils is None else (CompressChannels(virtual_coils),)
+        )
+        self.gadgets = (
+            Prewhiten(),
+            *compression,
+            AsymmetricEcho(),
+            RemoveReadoutOversampling(),
+        )
         self.wavelet = wavelet
         self.iterations = iterations
         self.virtual_coils = virtual_coils
@@ -128,7 +153,36 @@ class PicsRecon(ReconPlugin):
         if states_gradient_coefficients(context.header):
             image = gradient_unwarped(image, context, data)
             history.append("GRADUNWARP")
-        return ReconResult(image, attributes={"ImageProcessingHistory": history})
+        attributes = {"ImageProcessingHistory": history}
+        results = [ReconResult(np.abs(image), attributes=attributes)]
+        if np.iscomplexobj(image) and self._contrasts_are_images(context, buffer):
+            results += [
+                ReconResult(
+                    np.real(image),
+                    series_index=REAL_SERIES,
+                    image_type="real",
+                    attributes=attributes,
+                ),
+                ReconResult(
+                    np.imag(image),
+                    series_index=IMAGINARY_SERIES,
+                    image_type="imaginary",
+                    attributes=attributes,
+                ),
+            ]
+        return results if len(results) > 1 else results[0]
+
+    def _contrasts_are_images(self, context: ReconContext, buffer: ReconBuffer) -> bool:
+        """Return whether the encoding space of ``buffer`` states more than one contrast, each its own image."""
+        if "contrast" in self.merge:
+            return False
+        encodings = getattr(context.header, "encoding", None) or ()
+        index = buffer.space.index
+        if index >= len(encodings):
+            return False
+        limits = getattr(encodings[index], "encodingLimits", None)
+        contrast = getattr(limits, "contrast", None)
+        return int(getattr(contrast, "maximum", 0) or 0) > 0
 
     def image(
         self,
@@ -137,9 +191,8 @@ class PicsRecon(ReconPlugin):
         context: ReconContext,
         data: ReconData,
     ) -> np.ndarray:
-        """Return the magnitude image of ``(coils, [partitions,] phase encodes, readout)`` k-space, cropped to ``shape``."""
+        """Return the complex image of ``(coils, [partitions,] phase encodes, readout)`` k-space, cropped to ``shape``."""
         import torch
-        from bartorch import apps
 
         volume = kspace if kspace.ndim == 4 else kspace[:, None]
         volume = torch.from_numpy(np.ascontiguousarray(volume, dtype=np.complex64))
@@ -149,14 +202,13 @@ class PicsRecon(ReconPlugin):
         image = pics_image(
             volume, maps, sampled, self.wavelet, self.iterations, context.device
         )
-        image = apps.partial_fourier(image, sampled)
-        image = image.abs().numpy()
+        image = partial_fourier(image, sampled).numpy()
         if kspace.ndim == 3:
             image = image[0]
         return np.array(center_crop(image, shape[-image.ndim :]))
 
     def wave_image(self, context: ReconContext, data: ReconData) -> np.ndarray:
-        """Return the magnitude image ``(partitions, phase encodes, readout)`` of a wave-CAIPI volume.
+        """Return the complex image ``(partitions, phase encodes, readout)`` of a wave-CAIPI volume.
 
         The wave-encoded readouts are ``data.data`` and the wave-free
         readouts of the calibration region ``data.ref``, both of one
@@ -226,7 +278,7 @@ class PicsRecon(ReconPlugin):
             maxiter=self.iterations,
         )
         image = scaling * solve(measured * (1.0 / scaling), encoding)
-        return image.abs().numpy()
+        return image.numpy()
 
 
 PLUGIN = PicsRecon()
@@ -313,6 +365,84 @@ def pics_image(
     solve = optim.FISTA(priors.Wavelet(axes, wavelet), maxiter=iterations)
     data = (measured * (1.0 / scaling)).reshape(kspace.shape[0], *grid)
     return (scaling * solve(data, encoding)).reshape(kspace.shape[1:])
+
+
+def partial_fourier(image: Any, sampled: Any) -> Any:
+    """Return ``image`` completed by homodyne over every partial-Fourier axis of ``sampled`` together.
+
+    An axis is partial Fourier where the lines missing at one end of
+    ``sampled`` outnumber the widest gap between sampled lines, which
+    undersampling alone leaves. The k-space of ``image`` is kept inside the
+    range of lines acquired along each such axis, ``R``. A sample of ``R``
+    whose conjugate position is also in ``R`` is weighted 1, any other
+    sample of ``R`` 2, and the phase is that of the image of the samples
+    weighted 1. The image returned is the real part of the weighted image
+    with that phase removed. One axis at a time would leave the phase of the
+    others' missing lines in the image whose real part the next takes.
+
+    Parameters
+    ----------
+    image : torch.Tensor
+        Complex ``([z,] y, x)`` image of the sampled k-space; the Fourier
+        transform relating them is centred, zero frequency at ``n // 2``.
+    sampled : torch.Tensor
+        Boolean mask of the acquired samples, with the shape of ``image``.
+
+    Returns
+    -------
+    torch.Tensor
+        ``image`` where no axis is partial Fourier; otherwise the completed
+        real image, as complex64.
+    """
+    import bartorch
+    import torch
+
+    mask = sampled.cpu().numpy()
+    kept = np.ones(mask.shape, dtype=bool)
+    axes = []
+    for axis in range(mask.ndim):
+        lines = _acquired_range(mask, axis)
+        if lines is None:
+            continue
+        axes.append(axis)
+        shape = [1] * mask.ndim
+        shape[axis] = mask.shape[axis]
+        inside = np.zeros(mask.shape[axis], dtype=bool)
+        inside[lines[0] : lines[1] + 1] = True
+        kept = kept & inside.reshape(shape)
+    if not axes:
+        return image
+    every = tuple(range(mask.ndim))
+    # Index i of a centred axis of n points holds the conjugate of index
+    # 2 (n // 2) - i, the mirror image shifted by one point where n is even.
+    mirrored = np.roll(np.flip(kept), [1 - n % 2 for n in mask.shape], axis=every)
+    weight = np.where(kept, np.where(mirrored, 1.0, 2.0), 0.0).astype(np.float32)
+    symmetric = (kept & mirrored).astype(np.float32)
+    kspace = bartorch.fft(image.to(torch.complex64), every, unitary=True)
+    kspace = kspace.reshape(image.shape)
+
+    def weighted_image(weights: np.ndarray) -> Any:
+        weighted = kspace * torch.from_numpy(weights)
+        return bartorch.fft(weighted, every, inverse=True, unitary=True).reshape(
+            image.shape
+        )
+
+    low, weighted = weighted_image(symmetric), weighted_image(weight)
+    phase = torch.exp(-1j * torch.angle(low))
+    return (weighted * phase).real.to(torch.complex64)
+
+
+def _acquired_range(mask: np.ndarray, axis: int) -> tuple[int, int] | None:
+    """Return the first and last line acquired along a partial-Fourier ``axis``; ``None`` where it is not one."""
+    profile = mask.any(axis=tuple(a for a in range(mask.ndim) if a != axis))
+    lines = np.flatnonzero(profile)
+    if lines.size < 2:
+        return None
+    gap = int(np.diff(lines).max()) - 1
+    low, high = int(lines[0]), profile.size - 1 - int(lines[-1])
+    if max(low, high) <= gap:
+        return None
+    return int(lines[0]), int(lines[-1])
 
 
 def wavelet_axes(shape: tuple[int, ...], axes: tuple[int, ...]) -> tuple[int, ...]:

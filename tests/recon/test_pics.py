@@ -14,7 +14,13 @@ from conftest import (
     relative_difference,
 )
 
-from pulserver.recon.handlers.pics import PicsRecon
+from pulserver.recon.handlers.pics import (
+    IMAGINARY_SERIES,
+    MAGNITUDE_SERIES,
+    REAL_SERIES,
+    PicsRecon,
+    partial_fourier,
+)
 from pulserver.recon.handlers.pics_train import PicsTrainRecon
 
 pytest.importorskip("bartorch")
@@ -37,8 +43,8 @@ UNDERSAMPLING = 7e-2
 class Recording:
     """Keeps what each unit returns, in the list a stream's copy shares."""
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.results = []
 
     def recon(self, context, branch, data):
@@ -65,9 +71,22 @@ def reconstruct(acquisitions, header=None, *, device=None, plugin=None):
         device=device,
     )
     images = [
-        np.asarray(result.data) for result in plugin.results if result is not None
+        np.asarray(result.data)
+        for result in results(plugin)
+        if result.series_index == MAGNITUDE_SERIES
     ]
     return context, images
+
+
+def results(plugin):
+    """Every ``ReconResult`` the units of ``plugin`` returned, in order."""
+    returned = []
+    for result in plugin.results:
+        if isinstance(result, list):
+            returned += result
+        elif result is not None:
+            returned.append(result)
+    return returned
 
 
 def vials():
@@ -271,7 +290,9 @@ def test_noise_readouts_whiten_the_imaging_readouts_and_are_not_placed(device):
 def test_a_partial_fourier_image_is_closer_to_the_full_one_than_the_solve_of_its_lines_alone(
     device, monkeypatch
 ):
-    from bartorch import apps, tools
+    from bartorch import tools
+
+    from pulserver.recon.handlers import pics
 
     kspace = tools.phantom(64, kspace=True, coils=8).reshape(8, 64, 64).numpy()
 
@@ -283,7 +304,7 @@ def test_a_partial_fourier_image_is_closer_to_the_full_one_than_the_solve_of_its
         return image
 
     completed = image()
-    monkeypatch.setattr(apps, "partial_fourier", lambda image, sampled: image)
+    monkeypatch.setattr(pics, "partial_fourier", lambda image, sampled: image)
     solved = image()
 
     full = root_sum_of_squares(kspace)
@@ -388,8 +409,7 @@ def test_channels_beyond_the_virtual_coils_are_compressed_before_the_maps_and_th
     _, _, kspace = coil_phantom(coils, MATRIX)
     lines = acquired(range(0, MATRIX, 2))
     header = calibration_header(coils, MATRIX)
-    every_channel = Images()
-    every_channel.virtual_coils = None
+    every_channel = Images(virtual_coils=None)
 
     context, (compressed,) = reconstruct(stream(kspace, lines), header, device=device)
     _, (full,) = reconstruct(
@@ -430,3 +450,167 @@ def test_the_solve_on_host_k_space_is_bartorchs_pics_with_the_image_on_the_host(
     assert (
         relative_difference(image.numpy(), expected.reshape(image.shape).numpy()) < 1e-5
     )
+
+
+def contrasts_led_by_their_calibration(echoes, lines):
+    """The readouts of each echo's k-space, the central lines of every echo first and flagged calibration, then the rest, echo by echo within a line."""
+    outside = [line for line in lines if line not in CENTRE]
+    acquisitions = []
+    for flags, selected in ((CALIBRATION_AND_IMAGING,), CENTRE), ((), outside):
+        for line in selected:
+            for echo, kspace in enumerate(echoes):
+                last = LAST if line == outside[-1] else ()
+                (acquisition,) = readouts(kspace, *flags, lines=[line], last=last)
+                acquisition.idx.contrast = echo
+                acquisitions.append(acquisition)
+    return acquisitions
+
+
+class Channels(Images):
+    """Keeps the channels each unit's imaging buffer holds, in the list a stream's copy shares."""
+
+    def __init__(self):
+        super().__init__()
+        self.channels = []
+
+    def recon(self, context, branch, data):
+        self.channels.append(data.data.coils)
+        return super().recon(context, branch, data)
+
+
+def test_contrasts_open_together_are_buffered_with_the_virtual_channels_and_lose_nothing(
+    device,
+):
+    """Eight channels spanning three dimensions of coil space lose nothing in six virtual channels from the first echo's calibration."""
+    coils = 8
+    image, maps, first = coil_phantom(coils, MATRIX)
+    echoes = [first, centred_kspace(maps * image**2)]
+    lines = acquired(range(0, MATRIX, 2))
+    header = calibration_header(coils, MATRIX)
+    header.encoding[0].encodingLimits.contrast = SimpleNamespace(
+        minimum=0, maximum=1, center=0
+    )
+    streamed = Channels()
+
+    context, images = reconstruct(
+        contrasts_led_by_their_calibration(echoes, lines),
+        header,
+        device=device,
+        plugin=streamed,
+    )
+    _, full = reconstruct(
+        contrasts_led_by_their_calibration(echoes, lines),
+        header,
+        device=device,
+        plugin=Images(virtual_coils=None),
+    )
+
+    assert streamed.channels == [6, 6]
+    assert context.coil_compression.n_virtual == 6
+    for image, reference in zip(images, full, strict=True):
+        assert relative_difference(image, reference) < COMPRESSION
+
+
+def test_a_multi_echo_scan_sends_the_real_and_imaginary_parts_of_each_echo_as_series_of_their_own(
+    device,
+):
+    echoes = [vials(), coil_phantom(COILS, MATRIX)[2]]
+    plugin = Images()
+
+    reconstruct(
+        contrasts_led_by_their_calibration(echoes, range(MATRIX)),
+        contrasts_in_header(len(echoes)),
+        device=device,
+        plugin=plugin,
+    )
+
+    sent = results(plugin)
+    series = {
+        index: [result for result in sent if result.series_index == index]
+        for index in (MAGNITUDE_SERIES, REAL_SERIES, IMAGINARY_SERIES)
+    }
+    assert [len(series[index]) for index in series] == [2, 2, 2]
+    assert {result.image_type for result in series[REAL_SERIES]} == {"real"}
+    assert {result.image_type for result in series[IMAGINARY_SERIES]} == {"imaginary"}
+    for magnitude, real, imaginary in zip(*series.values(), strict=True):
+        modulus = np.abs(real.data + 1j * imaginary.data)
+        np.testing.assert_allclose(modulus, magnitude.data, rtol=1e-5, atol=1e-6)
+        assert np.abs(imaginary.data).max() > 0
+
+
+def test_a_single_echo_scan_sends_its_magnitude_alone(device):
+    plugin = Images()
+
+    reconstruct(stream(vials(), range(MATRIX)), device=device, plugin=plugin)
+
+    assert [result.image_type for result in results(plugin)] == ["magnitude"]
+
+
+def ellipsoid(n):
+    """The magnitude and the centred k-space of a ``(n, n, n)`` ellipsoid of smoothly varying phase."""
+    z, y, x = np.meshgrid(*(np.linspace(-1, 1, n),) * 3, indexing="ij")
+    magnitude = (z**2 / 0.6 + y**2 / 0.5 + x**2 / 0.7 < 0.8) * (1 + 0.3 * x)
+    image = magnitude * np.exp(1j * (0.8 * y + 0.5 * z + 0.3 * x * y))
+    kspace = np.fft.fftshift(np.fft.fftn(np.fft.ifftshift(image)))
+    return magnitude, kspace
+
+
+def truncated(kspace, axes):
+    """The image of ``kspace`` with the last quarter of its lines along ``axes`` missing, and the mask of what is left."""
+    import torch
+
+    sampled = np.ones(kspace.shape, dtype=bool)
+    for axis in axes:
+        missing = [slice(None)] * kspace.ndim
+        missing[axis] = slice(3 * kspace.shape[axis] // 4, None)
+        sampled[tuple(missing)] = False
+    image = np.fft.fftshift(np.fft.ifftn(np.fft.ifftshift(kspace * sampled)))
+    return torch.from_numpy(image.astype(np.complex64)), torch.from_numpy(sampled)
+
+
+def magnitude_error(image, magnitude):
+    inside = magnitude > 0
+    difference = np.abs(np.asarray(image)) - magnitude
+    return np.linalg.norm(difference[inside]) / np.linalg.norm(magnitude[inside])
+
+
+@pytest.mark.parametrize("n", [32, 33])
+def test_homodyne_over_two_partial_fourier_axes_together_beats_one_axis_after_the_other(
+    n,
+):
+    from bartorch import apps
+
+    magnitude, kspace = ellipsoid(n)
+    image, sampled = truncated(kspace, (0, 1))
+
+    together = magnitude_error(partial_fourier(image, sampled), magnitude)
+    in_turn = magnitude_error(apps.partial_fourier(image, sampled), magnitude)
+
+    assert together < 0.8 * in_turn
+    assert together < 0.8 * magnitude_error(image, magnitude)
+
+
+@pytest.mark.parametrize("axis", [0, 1])
+def test_homodyne_along_one_partial_fourier_axis_makes_a_real_image_near_the_full_magnitude(
+    axis,
+):
+    magnitude, kspace = ellipsoid(32)
+    image, sampled = truncated(kspace, (axis,))
+
+    completed = partial_fourier(image, sampled)
+
+    assert completed.imag.abs().max() == 0
+    assert magnitude_error(completed, magnitude) < 0.5 * magnitude_error(
+        image, magnitude
+    )
+
+
+def test_an_image_without_partial_fourier_axes_keeps_its_phase():
+    import torch
+
+    _, kspace = ellipsoid(16)
+    image, _ = truncated(kspace, ())
+    sampled = torch.ones(image.shape, dtype=torch.bool)
+    sampled[:, ::2] = False
+
+    assert partial_fourier(image, sampled) is image

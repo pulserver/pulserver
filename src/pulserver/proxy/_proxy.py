@@ -22,7 +22,15 @@ import ismrmrd.xsd as xsd
 
 from .._plugins import NAME, PluginPath, directories, find
 from ..recon._runtime import constants
-from ..recon._runtime.concurrency import HostSlots, Slot, memory_allows, slot_devices
+from ..recon._runtime.concurrency import (
+    DEFAULT_PER_RECON_GB,
+    HostSlots,
+    Slot,
+    memory_allows,
+    memory_holds,
+    series_gib,
+    slot_devices,
+)
 from ..recon._runtime.connection import Connection
 from ..recon._runtime.exam import (
     DEFAULT_EXAM_DIRECTORY,
@@ -31,6 +39,7 @@ from ..recon._runtime.exam import (
 )
 from ..recon._runtime.mrd2dicom import MrdDicomBuilder
 from ..recon._runtime.readers import deserialize_config, read_text
+from ..recon.handlers.pics import VIRTUAL_COILS
 from . import _held
 from ._designs import Design, DesignCache
 from ._enrich import enrich_acquisition, enrich_header, header_fov_offset_m
@@ -612,6 +621,10 @@ class _Workers:
     ) -> None:
         """Reconstruct the series ``items`` streams on a worker, in a slot or from the queue.
 
+        A series whose buffers, sized from its header, the host's physical
+        memory cannot hold even alone is not reconstructed: its stream is read
+        to its end, so the proxy keeps it, and the client is told why.
+
         ``motion`` is the pose file of a scan corrected for motion while it
         plays: the poses the reconstruction states are published into it,
         created anew for the series. Such a series runs alone among such
@@ -619,6 +632,16 @@ class _Workers:
         and are dropped where it is ``None``.
         """
         path = self._plugin_path(plugin)
+        buffers = _buffers_gb(header, plugin)
+        budget = max(DEFAULT_PER_RECON_GB, buffers)
+        if not memory_holds(buffers):
+            for _ in items:
+                pass
+            raise ValueError(
+                f"{plugin} would buffer {buffers:.1f} GiB of k-space, more than "
+                "this host's memory holds for one reconstruction: the series is "
+                "not reconstructed, and is kept where the proxy keeps series"
+            )
         if motion is not None:
             # Waits rather than queueing: a pose is worth nothing once the scan
             # it described has moved on, so a series that would publish one
@@ -645,7 +668,7 @@ class _Workers:
             finally:
                 self._alone.release(alone)
             return
-        slot = self._slots.take(wait=False) if self._admits() else None
+        slot = self._slots.take(wait=False) if self._admits(budget) else None
         if slot is not None:
             try:
                 self._run(
@@ -664,7 +687,7 @@ class _Workers:
         _log.info("queued %s", queued.path.name)
         try:
             others = _record(items, header, queued)
-            self._wait_for_memory()
+            self._wait_for_memory(budget)
             slot = self._slots.take(wait=True)
             try:
                 self._run(
@@ -681,15 +704,15 @@ class _Workers:
         finally:
             queued.unlink()
 
-    def _admits(self) -> bool:
-        """Return whether a series may start now: memory holds it, or this proxy runs none."""
+    def _admits(self, budget: float) -> bool:
+        """Return whether a series of ``budget`` GiB may start now: memory holds it, or this proxy runs none."""
         with self._finished:
-            return self._running == 0 or memory_allows()
+            return self._running == 0 or memory_allows(budget)
 
-    def _wait_for_memory(self) -> None:
-        """Wait until :meth:`_admits` a series, rechecking as series finish and every second."""
+    def _wait_for_memory(self, budget: float) -> None:
+        """Wait until :meth:`_admits` a series of ``budget`` GiB, rechecking as series finish and every second."""
         with self._finished:
-            while self._running and not memory_allows():
+            while self._running and not memory_allows(budget):
                 self._finished.wait(timeout=_MEMORY_POLL)
 
     def close(self) -> None:
@@ -967,6 +990,18 @@ def _first(connection: Connection) -> Any:
         return connection.next()[1]
     except StopIteration:
         return None
+
+
+#: Plugins that compress each readout to ``VIRTUAL_COILS`` channels as it arrives.
+_STREAM_COMPRESSED = ("pics",)
+
+
+def _buffers_gb(header: Any, plugin: str) -> float:
+    """Return the GiB of k-space ``plugin`` buffers for a series, as its header sizes them."""
+    channels = VIRTUAL_COILS if plugin in _STREAM_COMPRESSED else None
+    buffers = series_gib(header, channels)
+    _log.info("%s buffers %.1f GiB of k-space", plugin, buffers)
+    return buffers
 
 
 def _refuse(connection: Connection, error: Exception) -> None:

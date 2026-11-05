@@ -320,3 +320,124 @@ def capture_ref(header, kspace):
     play(plugin, header, readouts(kspace, last=("ACQ_LAST_IN_SLICE",)))
     (data,) = plugin.results
     return data.data
+
+
+def streaming_context(coils=8):
+    return recon.ReconContext(
+        header=calibration_header(coils, MATRIX), exam=recon.ExamCache("exam")
+    )
+
+
+def started(gadget, context):
+    gadget.startup(context)
+    return gadget
+
+
+def led_by_calibration(kspace, acs=ACS):
+    """The readouts of ``kspace``, its central ``acs`` lines first and flagged calibration and imaging; the slice closes with the last."""
+    lines = kspace.shape[1]
+    centre = range(lines // 2 - acs // 2, lines // 2 + acs // 2)
+    outside = [line for line in range(lines) if line not in centre]
+    return readouts(
+        kspace, "ACQ_IS_PARALLEL_CALIBRATION_AND_IMAGING", lines=centre
+    ) + readouts(kspace, lines=outside, last=("ACQ_LAST_IN_SLICE",))
+
+
+def test_calibration_readouts_are_held_then_given_on_projected_ahead_of_the_first_imaging_readout():
+    _, _, kspace = coil_phantom(8, MATRIX)
+    context = streaming_context()
+    gadget = started(recon.CompressChannels(4), context)
+    acquisitions = led_by_calibration(kspace)
+
+    held = [gadget(a, np.asarray(a.data)) for a in acquisitions[:ACS]]
+    given = gadget(acquisitions[ACS], np.asarray(acquisitions[ACS].data))
+
+    assert held == [None] * ACS
+    assert [acquisition for acquisition, _ in given] == acquisitions[: ACS + 1]
+    basis = context.coil_compression
+    virtual = basis.matrix[:4].conj()
+    for acquisition, readout in given:
+        np.testing.assert_allclose(
+            readout, virtual @ np.asarray(acquisition.data), rtol=1e-5, atol=1e-6
+        )
+    later = acquisitions[ACS + 1]
+    assert gadget(later, np.asarray(later.data)).shape == (4, MATRIX)
+
+
+def test_the_basis_comes_from_the_calibration_readouts_of_the_first_contrast():
+    """The first contrast's samples, projected, carry its three leading eigenvalues; noise of a later contrast takes no part."""
+    _, _, kspace = coil_phantom(8, MATRIX)
+    context = streaming_context()
+    gadget = started(recon.CompressChannels(3), context)
+    first = readouts(kspace, "ACQ_IS_PARALLEL_CALIBRATION", lines=range(8, 24))
+    noise = np.random.default_rng(0).standard_normal(kspace.shape)
+    later = readouts(
+        100 * noise.astype(np.complex64),
+        "ACQ_IS_PARALLEL_CALIBRATION",
+        lines=range(8, 24),
+    )
+    for acquisition in later:
+        acquisition.idx.contrast = 1
+    for acquisition in [*first, *later]:
+        gadget(acquisition, np.asarray(acquisition.data))
+    gadget.release()
+
+    samples = np.concatenate([np.asarray(a.data) for a in first], axis=1)
+    eigenvalues = np.sort(np.linalg.eigvalsh(samples @ samples.conj().T))[::-1][:3]
+    virtual = context.coil_compression.matrix[:3].conj() @ samples
+    np.testing.assert_allclose(
+        np.real(np.diag(virtual @ virtual.conj().T)), eigenvalues, rtol=1e-3
+    )
+
+
+def test_a_stream_led_by_an_imaging_readout_passes_its_channels_unchanged():
+    _, _, kspace = coil_phantom(8, MATRIX)
+    context = streaming_context()
+    gadget = started(recon.CompressChannels(4), context)
+
+    passed = [gadget(a, np.asarray(a.data)) for a in acs_readouts(kspace, acs=ACS)]
+
+    assert all(readout.shape == (8, MATRIX) for readout in passed)
+    assert context.coil_compression is None
+
+
+@pytest.mark.parametrize("flag", ["ACQ_IS_NAVIGATION_DATA", "ACQ_IS_RTFEEDBACK_DATA"])
+def test_navigator_readouts_pass_unchanged_and_are_never_held(flag):
+    _, _, kspace = coil_phantom(8, MATRIX)
+    gadget = started(recon.CompressChannels(4), streaming_context())
+    (navigator,) = readouts(kspace, flag, "ACQ_IS_PARALLEL_CALIBRATION", lines=[0])
+
+    assert gadget(navigator, np.asarray(navigator.data)) is not None
+
+
+def test_readouts_held_when_the_stream_ends_reach_their_unit_projected(device):
+    _, _, kspace = coil_phantom(8, MATRIX)
+    plugin = stream_plugin(gadgets=[recon.CompressChannels(4)])
+    calibration = readouts(
+        kspace,
+        "ACQ_IS_PARALLEL_CALIBRATION",
+        lines=range(8, 24),
+        last=("ACQ_LAST_IN_SLICE",),
+    )
+
+    context = play(plugin, calibration_header(8, MATRIX), calibration, device=device)
+
+    (unit,) = plugin.results
+    assert unit.ref.coils == 4
+    assert len(unit.acquisitions) == 16
+    assert context.coil_compression.n_virtual == 4
+
+
+def test_a_unit_of_streamed_readouts_holds_the_virtual_channels_in_arrival_order(
+    device,
+):
+    _, _, kspace = coil_phantom(8, MATRIX)
+    plugin = stream_plugin(gadgets=[recon.CompressChannels(4)])
+    acquisitions = led_by_calibration(kspace)
+
+    play(plugin, calibration_header(8, MATRIX), acquisitions, device=device)
+
+    (unit,) = plugin.results
+    assert unit.data.coils == 4
+    assert unit.acquisitions == acquisitions
+    assert unit.data.mask.all()

@@ -40,9 +40,9 @@ write such a plugin.
 - **Prewhitens on arrival, from the series' noise readouts or the exam's noise covariance.**
 
   Code: {class}`~pulserver.recon.Prewhiten`. Test: *noise readouts whiten the imaging readouts* (`test_prewhiten.py`).
-- **Compresses coils with one basis per stream.**
+- **Compresses coils with one basis per stream, as the readouts arrive or as a unit closes.**
 
-  Code: {class}`~pulserver.recon.CoilCompression`. Tests: *virtual channels are uncorrelated and carry the leading eigenvalues*; *compressed data and maps reconstruct the uncompressed image* (`test_coil_compression.py`).
+  Code: {class}`~pulserver.recon.CompressChannels`, {class}`~pulserver.recon.CoilCompression`. Tests: *virtual channels are uncorrelated and carry the leading eigenvalues*; *compressed data and maps reconstruct the uncompressed image*; *calibration readouts are held then given on projected ahead of the first imaging readout*; *the basis comes from the calibration readouts of the first contrast* (`test_coil_compression.py`); *contrasts open together are buffered with the virtual channels and lose nothing* (`test_pics.py`).
 - **Finds coil maps in the unit, the stream or the exam, and refuses maps that differ in any recorded field.**
 
   Code: {func}`~pulserver.recon.coil_maps`, {class}`~pulserver.recon.CoilSensitivities`. Tests: *a later unit without calibration readouts is given the maps of its slice*; *maps that differ in a field are refused naming it with both values*; *exam maps at another matrix are refused not resampled* (`test_calibration.py`).
@@ -51,7 +51,7 @@ write such a plugin.
   Code: {class}`~pulserver.recon.ExamCache`. Test: *a value one cache stores is read by the next on its directory* (`test_app.py`).
 - **Ships a `pics` plugin with prewhitening, coil compression, partial Fourier and asymmetric echo.**
 
-  Code: `src/pulserver/_zoo/recon/pics.py`. Tests: *every other phase encode and the centre reconstruct to the image of all lines*; *a partial fourier image is closer to the full one than the solve of its lines alone*; *channels beyond the virtual coils are compressed before the maps and the solve* (`test_pics.py`).
+  Code: `src/pulserver/_zoo/recon/pics.py`. Tests: *every other phase encode and the centre reconstruct to the image of all lines*; *a partial fourier image is closer to the full one than the solve of its lines alone*; *homodyne over two partial fourier axes together beats one axis after the other*; *a multi echo scan sends the real and imaginary parts of each echo as series of their own*; *channels beyond the virtual coils are compressed before the maps and the solve* (`test_pics.py`).
 - **Keeps a unit's k-space, maps and solver vectors on the host, the encoding computing on the series' GPU.**
 
   Code: `pics_image` in `src/pulserver/recon/handlers/pics.py`. Test: *the solve on host k space is bartorchs pics with the image on the host* (`test_pics.py`).

@@ -13,6 +13,7 @@ import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from types import SimpleNamespace
 
 import ismrmrd
 import ismrmrd.xsd
@@ -575,7 +576,7 @@ def test_a_series_arriving_while_memory_is_short_is_held_on_disk_until_a_series_
     start_proxy, bucket, tmp_path, monkeypatch
 ):
     _, series = bucket
-    monkeypatch.setattr(_proxy, "memory_allows", lambda: False)
+    monkeypatch.setattr(_proxy, "memory_allows", lambda budget: False)
     proxy = start_proxy(slots=2)
     gate = tmp_path / "go"
     trace = tmp_path / "trace"
@@ -1878,3 +1879,54 @@ def test_memory_allows_a_reconstruction_when_its_budget_fits_the_headroom_or_mem
     monkeypatch.setattr(concurrency, "_available_ram_gb", lambda: available_gb)
 
     assert concurrency.memory_allows(per_recon_gb=48.0, headroom_fraction=0.8) is allows
+
+
+def sized_header(channels=32, contrasts=5, matrix=(320, 320, 256), oversampled=2):
+    """A header of one encoding space of ``matrix`` ``(x, y, z)``, its readout encoded ``oversampled`` times over."""
+    x, y, z = matrix
+    space = lambda width: SimpleNamespace(  # noqa: E731
+        matrixSize=SimpleNamespace(x=width, y=y, z=z)
+    )
+    return SimpleNamespace(
+        acquisitionSystemInformation=SimpleNamespace(receiverChannels=channels),
+        encoding=[
+            SimpleNamespace(
+                encodedSpace=space(oversampled * x),
+                reconSpace=space(x),
+                encodingLimits=SimpleNamespace(
+                    contrast=SimpleNamespace(maximum=contrasts - 1)
+                ),
+            )
+        ],
+    )
+
+
+def test_a_series_is_sized_by_its_channels_contrasts_and_matrix_with_the_readout_oversampling_removed():
+    header = sized_header()
+
+    assert concurrency.series_gib(header) == 32 * 5 * 320 * 320 * 256 * 8 / 1024**3
+    assert concurrency.series_gib(header, 6) == 6 * 5 * 320 * 320 * 256 * 8 / 1024**3
+    assert concurrency.series_gib(header, 64) == concurrency.series_gib(header)
+
+
+def test_a_pics_series_buffers_the_virtual_channels_and_any_other_every_channel():
+    header = sized_header(contrasts=10)
+
+    assert _proxy._buffers_gb(header, "pics") == concurrency.series_gib(header, 6)
+    assert _proxy._buffers_gb(header, "epi") == concurrency.series_gib(header)
+
+
+def test_a_series_too_large_for_the_hosts_memory_is_kept_and_refused_without_reconstruction(
+    start_proxy, bucket, tmp_path, monkeypatch
+):
+    _, series = bucket
+    monkeypatch.setattr(_proxy, "memory_holds", lambda gib: False)
+    kept = tmp_path / "kept"
+    proxy = start_proxy(slots=1, save_to=kept)
+
+    received = stream(proxy.port, series["gre2d"])
+
+    assert not images(received)
+    texts = [item for item in received if isinstance(item, str)]
+    assert "more than this host's memory holds" in texts[-1]
+    assert len(sorted(kept.glob("*.h5"))) == 1

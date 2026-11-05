@@ -149,7 +149,7 @@ class EpiRecon(PicsRecon):
         context: ReconContext,
         data: ReconData,
     ) -> np.ndarray:
-        image = super().image(kspace, shape, context, data)
+        image = np.abs(super().image(kspace, shape, context, data))
         if int(data.counters.get("set", 0)) == 1:
             self.references[int(data.counters.get("slice", 0))] = image
             return image
