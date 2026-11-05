@@ -50,7 +50,7 @@ from ..protocol import (
     prescribed_rotation,
 )
 from ._blocks import import_averages, parse_import
-from ._limits import design_system, split_limits
+from ._limits import design_system, follows_poses, split_limits
 from ._push import push as push_design
 from ._store import DesignStore, design_identity
 
@@ -215,8 +215,11 @@ def generate(
     the plugin's options, the plugin source, the package versions and the
     limits is returned without designing again.
     Otherwise the sequence is designed once, under the scanner limits
-    capped by the design limits ``design_max_grad`` and ``design_max_slew``
-    and laid out with the design dead times, written in the logical frame,
+    capped by the design limits ``design_max_grad`` and ``design_max_slew``,
+    or by their ``_any_rotation`` counterparts where the site follows
+    motion-correction poses (``pmc_enable``) and the plugin's sequence sets
+    ``EnablePmc`` (the manifest's ``design_rotation`` says which), and laid
+    out with the design dead times, written in the logical frame,
     checked in the physical frame of the
     prescription rotation against the scanner limits with
     :func:`pulserver.ir.check`, converted to the IR cache at the prescribed
@@ -239,8 +242,8 @@ def generate(
     request = _request(block, listing)
     limits = _read(limits)
     _, options, _ = split_limits(limits)
-    design = design_system(limits)
     scanner = _plugin(variant)
+    design = design_system(limits, any_rotation=_any_rotation(limits, scanner))
     requested = {key: p.value for key, p in listing.items() if p.editable}
     requested.update(request)
     if not scanner.reads_exam:
@@ -308,7 +311,8 @@ def _tr_for_wave_loading(
 def _generate(plugin, limits, listing, scanner, variant, validation, store, push, exam):
     """Design, check, convert and store ``validation``'s values; see :func:`generate`."""
     system, options, checked = split_limits(limits)
-    design = design_system(limits)
+    any_rotation = _any_rotation(limits, scanner)
+    design = design_system(limits, any_rotation=any_rotation)
     source = _source(variant)
     identified = dict(validation.values)
     if scanner.options:
@@ -348,6 +352,7 @@ def _generate(plugin, limits, listing, scanner, variant, validation, store, push
             "source": source,
             "scan_time": validation.duration,
             "fov_offset_mm": [1e3 * value for value in offset],
+            "design_rotation": "any" if any_rotation else "prescribed",
         }
         design = store.commit(identity, staged, manifest)
     except BaseException:
@@ -567,7 +572,28 @@ def _validated(
     request: Mapping[ProtocolKey, Any],
     exam: str | None = None,
 ) -> Validation:
-    return _plugin(variant).validate(design_system(limits), request, exam)
+    scanner = _plugin(variant)
+    design = design_system(limits, any_rotation=_any_rotation(limits, scanner))
+    return scanner.validate(design, request, exam)
+
+
+def _any_rotation(limits: Mapping[str, Any], scanner: SequencePlugin) -> bool:
+    """Whether ``scanner`` is designed for every rotation: the site follows poses and its sequence asks for them.
+
+    A sequence function states that it sets ``EnablePmc`` by an
+    ``enable_pmc`` attribute, as :func:`pulserver._zoo._pmc.navigated` sets
+    it, on itself or on any function it wraps.
+    """
+    if not follows_poses(limits):
+        return False
+    app: Any = type(scanner).app
+    seen: set[int] = set()
+    while app is not None and id(app) not in seen:
+        seen.add(id(app))
+        if getattr(app, "enable_pmc", False):
+            return True
+        app = getattr(app, "__wrapped__", None) or getattr(app, "func", None)
+    return False
 
 
 def _exam_digest(exam: str) -> str:

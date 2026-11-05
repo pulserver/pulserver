@@ -25,6 +25,13 @@ _WAVE_BUDGET = {
 }
 _CHECK_PREFIXES = ("pns_", "forbidden_band_", "vop_", "acoustic_", "adc_gap")
 _DESIGN_LIMITS = {"design_max_grad": "max_grad", "design_max_slew": "max_slew"}
+_ANY_ROTATION = {
+    "design_max_grad_any_rotation": "max_grad",
+    "design_max_slew_any_rotation": "max_slew",
+}
+#: Site settings: ``pmc_enable``, whether a scan follows the poses its
+#: reconstruction publishes.
+_SITE = ("pmc_enable",)
 _DESIGN_TIMES = {
     "design_rf_dead_time": "rf_dead_time",
     "design_rf_ringdown_time": "rf_ringdown_time",
@@ -67,7 +74,8 @@ def split_limits(
     required together. Keys starting with ``pns_``, ``forbidden_band_``,
     ``vop_`` and ``acoustic_`` are the check limits of :func:`check_limits`,
     and those starting with ``design_`` the design limits of
-    :func:`design_system`. The other keys are ``pypulseqpp.Opts`` keyword
+    :func:`design_system`. ``pmc_enable`` is a site setting
+    (:func:`follows_poses`). The other keys are ``pypulseqpp.Opts`` keyword
     arguments, among which ``B0`` is required: the field in T the scan runs
     at, which ppm offsets are resolved at. ``max_b1``, the peak B1 the
     transmit chain allows, in µT unless ``b1_unit`` says otherwise, is
@@ -133,14 +141,19 @@ def _wave_budget(limits: Mapping[str, Any]) -> ir.WaveBudget | None:
     return ir.WaveBudget(**given)
 
 
-def design_system(limits: Mapping[str, Any]) -> pp.Opts:
+def design_system(limits: Mapping[str, Any], *, any_rotation: bool = False) -> pp.Opts:
     """Return the limits an app is designed under: the scanner limits less the design margin.
 
     The scanner limits of :func:`split_limits`, with the gradient amplitude and
     slew rate capped by ``design_max_grad`` and ``design_max_slew`` where the
     limits carry them, in the units of ``max_grad`` and ``max_slew``. These
-    are the per-logical-axis limits that a prescription rotation derates. A
-    design limit above the scanner's leaves the scanner's.
+    are the per-logical-axis limits of the prescribed rotation, all three
+    axes active. Under ``any_rotation`` the caps are
+    ``design_max_grad_any_rotation`` and ``design_max_slew_any_rotation``
+    instead, where given: the per-logical-axis limits that hold whichever way
+    the axes are turned, for a scan whose prospective motion correction
+    rotates it after the design. A design limit above the scanner's leaves
+    the scanner's.
     ``design_rf_dead_time``, ``design_rf_ringdown_time`` and
     ``design_adc_dead_time``, in s, are the least dead times and RF ringdown
     time a design is laid out with: the room the playout needs around an RF
@@ -162,6 +175,8 @@ def design_system(limits: Mapping[str, Any]) -> pp.Opts:
     """
     system = split_limits(limits)[0]
     ceilings = _design_ceilings(limits)
+    if any_rotation:
+        ceilings |= _design_ceilings(limits, _ANY_ROTATION)
     if ceilings:
         derated = pp.Opts(**{**_scanner_arguments(limits), **ceilings})
         system = pp.cap_system(
@@ -179,25 +194,46 @@ def design_system(limits: Mapping[str, Any]) -> pp.Opts:
     return pp.apply_system_derates(system)
 
 
+def follows_poses(limits: Mapping[str, Any]) -> bool:
+    """Whether a scan under these limits follows the poses its reconstruction publishes, ``pmc_enable``.
+
+    A sequence that sets ``EnablePmc`` is then turned during the scan, by
+    rotations its design and its check never saw: it is designed under the
+    any-rotation limits of :func:`design_system`, and
+    :func:`pulserver.ir.check` holds it to every rotation.
+    """
+    return bool(int(float(limits.get("pmc_enable", 0))))
+
+
 def _scanner_arguments(limits: Mapping[str, Any]) -> dict[str, Any]:
     prefixes = ("ir_", "design_", *_CHECK_PREFIXES)
-    return {k: v for k, v in limits.items() if not k.startswith(prefixes)}
+    return {
+        k: v for k, v in limits.items() if not k.startswith(prefixes) and k not in _SITE
+    }
 
 
-def _design_ceilings(limits: Mapping[str, Any]) -> dict[str, float]:
-    """Return the design limits as ``pypulseqpp.Opts`` arguments, ``max_grad`` and ``max_slew``."""
+def _design_ceilings(
+    limits: Mapping[str, Any], keys: Mapping[str, str] = _DESIGN_LIMITS
+) -> dict[str, float]:
+    """Return the design limits of ``keys`` as ``pypulseqpp.Opts`` arguments, ``max_grad`` and ``max_slew``."""
     unknown = [
         k
         for k in limits
         if k.startswith("design_")
         and k not in _DESIGN_LIMITS
+        and k not in _ANY_ROTATION
         and k not in _DESIGN_TIMES
     ]
     if unknown:
         raise ValueError(f"not design limits: {unknown}")
     _design_times(limits)
+    for key in _ANY_ROTATION:
+        if key in limits and not float(limits[key]) > 0.0:
+            raise ValueError(f"the design limit {key} must be positive: {limits[key]}")
+    if "pmc_enable" in limits and float(limits["pmc_enable"]) not in (0.0, 1.0):
+        raise ValueError(f"pmc_enable must be 0 or 1, not {limits['pmc_enable']!r}")
     ceilings = {}
-    for key, name in _DESIGN_LIMITS.items():
+    for key, name in keys.items():
         if key in limits:
             value = float(limits[key])
             if not value > 0.0:
@@ -245,6 +281,8 @@ def check_limits(limits: Mapping[str, Any]) -> ir.CheckLimits:
       scanner reports, which the VOP file's ``transmit`` metadata must name.
       ``vop_head_limit`` and ``vop_local_limit`` are the scanner's head and
       local SAR limits in W/kg in its current operating mode.
+    - ``pmc_enable``, a site setting, says whether a scan follows the poses
+      its reconstruction publishes (:func:`follows_poses`).
     - ``adc_gap_us`` is the least time in µs from the end of one ADC to the
       start of the next that the scanner's receiver can start a readout in.
     - ``ir_wave_max_samples`` and ``ir_wave_raster_us``, the waveform memory
@@ -273,7 +311,10 @@ def check_limits(limits: Mapping[str, Any]) -> ir.CheckLimits:
     ]
     if unknown:
         raise ValueError(f"not check limits: {unknown}")
-    arguments: dict[str, Any] = {"pns": _nerve_model(limits)}
+    arguments: dict[str, Any] = {
+        "pns": _nerve_model(limits),
+        "follows_poses": follows_poses(limits),
+    }
     if "pns_limit" in limits:
         arguments["pns_limit"] = float(limits["pns_limit"])
     numbered = sorted(

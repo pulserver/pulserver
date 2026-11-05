@@ -495,3 +495,46 @@ def test_a_reflected_rotation_stays_a_reflection():
 def test_a_rotation_that_is_not_orthonormal_is_refused():
     with pytest.raises(ValueError, match="not orthonormal"):
         prescribed_rotation(_rotation_entries(np.diag([1.0, 1.0, 1.01])))
+
+
+ANY = {**SCANNER, "design_max_grad": 30.0, "design_max_slew": 120.0}
+ANY_KEYS = {"design_max_grad_any_rotation": 17.0, "design_max_slew_any_rotation": 69.0}
+
+
+def test_the_any_rotation_limits_cap_a_design_made_for_every_rotation():
+    limits = {**ANY, **ANY_KEYS, "pmc_enable": 1}
+    exact, every = design_system(limits), design_system(limits, any_rotation=True)
+    mt, tms = (
+        pp.Opts(max_grad=1.0, grad_unit="mT/m"),
+        pp.Opts(max_slew=1.0, slew_unit="T/m/s"),
+    )
+    assert exact.max_grad == pytest.approx(pp.MAX_GRAD_DERATE * 30.0 * mt.max_grad)
+    assert every.max_grad == pytest.approx(pp.MAX_GRAD_DERATE * 17.0 * mt.max_grad)
+    assert every.max_slew == pytest.approx(pp.MAX_SLEW_DERATE * 69.0 * tms.max_slew)
+
+
+def test_without_any_rotation_limits_a_design_for_every_rotation_keeps_the_design_limits():
+    """An interpreter that sends no any-rotation limits designs as it always did."""
+    assert design_system(ANY, any_rotation=True).max_grad == design_system(ANY).max_grad
+
+
+def test_pmc_enable_is_a_site_setting_and_reaches_the_checks():
+    limits = {**ANY, **ANY_KEYS, "pmc_enable": 1}
+    system, _, checked = split_limits(limits)
+    assert system.max_grad == pp.Opts(**SCANNER).max_grad
+    assert checked.follows_poses
+    assert not split_limits(ANY)[2].follows_poses
+    assert not split_limits({**ANY, "pmc_enable": 0})[2].follows_poses
+
+
+@pytest.mark.parametrize(
+    ("limits", "message"),
+    [
+        ({"pmc_enable": 2}, "0 or 1"),
+        ({"design_max_grad_any_rotation": 0.0}, "positive"),
+        ({"design_max_slew_any_rotation": -1.0}, "positive"),
+    ],
+)
+def test_site_and_any_rotation_limits_that_cannot_be_read_are_refused(limits, message):
+    with pytest.raises(ValueError, match=message):
+        split_limits({**SCANNER, **limits})
