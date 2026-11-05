@@ -264,13 +264,15 @@ does the same; the `nufft` plugin solves so.
 
 The `pics` and `nufft` handlers fit the maps with
 `apps.nlinv_maps(kspace, phase_pole=0)`, `bart nlinv --phase-pole 0`, on a grid
-of the central 24 lines, or of the trajectory's samples within 12 grid units of
+of the central 48 lines, or of the trajectory's samples within 24 grid units of
 the centre, and zero-fill them to the image grid: after every Gauss-Newton step
 the phase poles the maps share are moved into the image. Without it, maps that
 share a phase pole go to zero there in every coil, and the image has a dark
 spot at it. BART refuses the detection on a grid with an axis no longer than a
-twentieth of its longest, rounded up; a slab of fewer than 3 partitions is
-fitted without the correction.
+twentieth of its longest, rounded up; a slab of 3 partitions or fewer, on a
+matrix of 48 or more, is fitted without the correction. A grid of 24 lines
+left a ghost at half the field of view of a scan undersampled by 2 along its
+partitions.
 
 A calibration unit, whose `data.data` is `None`, stores its maps for its slice,
 and the imaging units of that slice take them from the stream. A series that is

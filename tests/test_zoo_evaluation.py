@@ -1400,3 +1400,37 @@ def test_the_main_sequence_states_the_qsm_anatomy_for_the_reconstruction():
     assert designed[-1].get_definition("QsmAnatomy") == [
         plugin.QSM_ANATOMIES.index(plugin.QSM_ANATOMY)
     ]
+
+
+@pytest.mark.skipif(
+    importlib.util.find_spec("blochsim") is None, reason="blochsim is not installed"
+)
+def test_an_optimized_fse3d_train_is_designed_with_blochsim_on_the_cpu(monkeypatch):
+    """A host card blochsim carries no kernels for must never be asked to design a train."""
+    import contextlib
+
+    from blochsim import _execution
+
+    asked = []
+    real = _execution.execution
+
+    @contextlib.contextmanager
+    def recording(target="auto", **kwargs):
+        asked.append(target)
+        with real(target, **kwargs):
+            yield
+
+    monkeypatch.setattr(_execution, "execution", recording)
+    plugin = load_plugin(_plugins.SEQUENCES / "fse3d.py", {"refocusing": "optimized"})
+    plugin.app(
+        pp.Opts(),
+        fov_x=0.2,
+        fov_y=0.2,
+        slice_thickness=2e-3,
+        n_x=32,
+        n_y=16,
+        n_z=8,
+        etl=8,
+        tr=1.0,
+    )
+    assert asked and set(asked) == {"cpu"}
