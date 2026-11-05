@@ -39,6 +39,16 @@ request states ({ref}`plugin-options`).
 | {obj}`~pulserver.design.OptionParam` | The entry an option is listed as: the index of its value among its choices. |
 | {obj}`~pulserver.design.OptionError` | An option a plugin is loaded with that it does not declare or take, or a declaration the console cannot list. |
 
+## Recon parameters
+
+Values a sequence states for its reconstruction, which the proxy copies into
+the MRD header.
+
+| Object | Description |
+| --- | --- |
+| {obj}`~pulserver.design.recon_parameters` | State values as definitions listed in `ReconParameters`, each reaching the header as a user parameter string. |
+| {obj}`~pulserver.design.RECON_PARAMETERS` | Name of the definition listing them. |
+
 ## RF layout
 
 The RF an evaluation states: the RF definitions of a sequence, the instances of

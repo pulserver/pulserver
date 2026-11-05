@@ -384,7 +384,8 @@ every `--plugins` directory, so a file of the same name there replaces it:
 
 | Plugin | Paired reconstruction |
 | --- | --- |
-| `gre2d`, `se2d`, `bssfp2d`, `gre_multiecho2d`, `gre3d`, `se3d`, `bssfp3d`, `gre_multiecho3d` | `pics` |
+| `gre2d`, `se2d`, `bssfp2d`, `gre_multiecho2d`, `gre3d`, `se3d`, `bssfp3d` | `pics` |
+| `gre_multiecho3d` | `qsm` |
 | `fse3d`, `mprage3d` | `pmc` |
 | `gre_radial2d`, `gre_spiral2d`, `se_radial2d`, `se_spiral2d`, `gre_propeller2d`, `se_propeller2d`, `se_epi_propeller2d`, `zte3d` | `nufft` |
 | `gre_stack_of_stars3d`, `gre_stack_of_spirals3d`, `gre_stack_of_blades3d`, `se_stack_of_stars3d`, `se_stack_of_spirals3d`, `se_stack_of_blades3d` | `nufft` |
@@ -489,6 +490,7 @@ GE scanner:
 | `gre3d`, `gre_multiecho3d`, `mprage3d`, `fse3d` | `wave` | `user37` | Wave-CAIPI; the calibration region is acquired first without the wave, and `pics` and `pmc` reconstruct the wave-encoded volume | `user10` and `user11`: wave amplitude and cycles |
 | `gre3d`, `se3d`, `gre_multiecho3d` | `elliptical` | `user40` | Only the phase encodes inside the ky-kz ellipse; on by default | None |
 | `gre_multiecho2d`, `gre_multiecho3d` | `flyback` | `user41` | Monopolar echoes, on by default; off reads even echoes reversed | None |
+| `gre_multiecho3d` | `qsm_anatomy` | `user13` | `"phantom"` (0, the default), `"brain"` (1) or `"body"` (2): the maps the `qsm` reconstruction makes, stated to it as the `QsmAnatomy` recon parameter | None |
 | `gre_multiecho3d` | `sampling` | `user12` | `"lattice"`, the CAIPIRINHA lattice, the default; or `"poisson"`: a variable-density Poisson-disc draw at the undersampling `ry * rz`, for the compressed-sensing `pics` solve | None |
 | `zte3d` | `scheme` | `user43` | Spokes ordered `"spiral"`, at a constant step across many rings; `"meridian"`; or `"quiet"`, the default: the spiral's directions in steps about a ring gap long, every other shell played backwards | None |
 | `bssfp2d` | `retrospective` | `user44` | ECG gating: off, prospective, each heartbeat triggered and acquired once per cardiac phase; on, retrospective, each segment cycled over a heartbeat and binned into cardiac phases by the reconstruction | None |

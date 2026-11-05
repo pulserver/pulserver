@@ -539,6 +539,9 @@ the axes the design’s blocks are rotated onto, as
 <li><p><strong>diffusion</strong> (<em>tuple of ndarray or None</em>) – <code class="docutils literal notranslate"><span class="pre">(b,</span> <span class="pre">g)</span></code> read from the table file the first file of the chain to
 name one names (<a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.io.get_diffusion_table.html#pypulseqpp.io.get_diffusion_table" title="(in pypulseqpp latest)"><code class="xref py py-func docutils literal notranslate"><span class="pre">pypulseqpp.io.get_diffusion_table()</span></code></a>); None when
 no file names one or the table cannot be read.</p></li>
+<li><p><strong>recon_parameters</strong> (<em>dict of str to str</em>) – The definitions the chain’s files list in <code class="docutils literal notranslate"><span class="pre">ReconParameters</span></code>
+(<a class="reference internal" href="pulserver.design.recon_parameters.html#pulserver.design.recon_parameters" title="pulserver.design.recon_parameters"><code class="xref py py-func docutils literal notranslate"><span class="pre">pulserver.design.recon_parameters()</span></code></a>), by name, their values as
+written; a later file’s value replaces an earlier one’s.</p></li>
 </ul>
 </dd>
 </dl>
@@ -599,6 +602,9 @@ no file names one or the table cannot be read.</p></li>
 <td><p></p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="pulserver.proxy.SequenceTable.sequence_parameters.html#pulserver.proxy.SequenceTable.sequence_parameters" title="pulserver.proxy.SequenceTable.sequence_parameters"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sequence_parameters</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.proxy.SequenceTable.recon_parameters.html#pulserver.proxy.SequenceTable.recon_parameters" title="pulserver.proxy.SequenceTable.recon_parameters"><code class="xref py py-obj docutils literal notranslate"><span class="pre">recon_parameters</span></code></a></p></td>
 <td><p></p></td>
 </tr>
 </tbody>

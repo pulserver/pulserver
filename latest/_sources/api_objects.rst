@@ -23,6 +23,8 @@ from.
    option
    OptionParam
    OptionError
+   recon_parameters
+   RECON_PARAMETERS
    RfLayout
    RfControl
    TimeParam
