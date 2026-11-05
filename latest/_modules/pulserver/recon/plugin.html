@@ -1048,9 +1048,19 @@
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
-<span class="sd">        ndarray or None</span>
-<span class="sd">            The readout, or ``None`` to consume the acquisition.</span>
-<span class="sd">        """</span></div>
+<span class="sd">        ndarray, list or None</span>
+<span class="sd">            The readout; ``None`` to consume the acquisition, or to hold it;</span>
+<span class="sd">            or a list of ``(acquisition, readout)`` pairs, which gives on the</span>
+<span class="sd">            readouts the gadget held, each with the acquisition it was given,</span>
+<span class="sd">            followed or not by this one.</span>
+<span class="sd">        """</span>
+
+<div class="viewcode-block" id="Gadget.release">
+<a class="viewcode-back" href="../../../generated/pulserver.recon.Gadget.release.html#pulserver.recon.Gadget.release">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">release</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">"""Return the ``(acquisition, readout)`` pairs still held when the stream ends; the default holds none."""</span>
+        <span class="k">return</span> <span class="p">[]</span></div>
+</div>
 
 
 
@@ -1295,10 +1305,11 @@
 
 <span class="sd">        In order: the acquisition must pass ``require_flags`` and</span>
 <span class="sd">        ``reject_flags``; the ``gadgets`` run over a copy of it, any of which may</span>
-<span class="sd">        consume it; :meth:`branch_for` names its branch; it is added to its</span>
-<span class="sd">        unit, which places the readout the gadgets returned; the units that</span>
-<span class="sd">        close are removed from the plugin and reconstructed by :meth:`recon`,</span>
-<span class="sd">        in the order they opened. An acquisition carrying</span>
+<span class="sd">        consume it, hold it, or give on readouts it held before it;</span>
+<span class="sd">        :meth:`branch_for` names the branch of each readout given on; each is</span>
+<span class="sd">        added to its unit, which places it; the units that close are removed</span>
+<span class="sd">        from the plugin and reconstructed by :meth:`recon`, in the order they</span>
+<span class="sd">        opened. Readouts a gadget still holds are placed by :meth:`flush`. An acquisition carrying</span>
 <span class="sd">        ``LAST_IN_MEASUREMENT`` closes every open unit instead, as :meth:`flush`</span>
 <span class="sd">        does, whether or not it has samples: the stream's end marker has none.</span>
 
@@ -1310,17 +1321,14 @@
 <span class="sd">        """</span>
         <span class="n">emitted</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="n">ReconData</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_accepts</span><span class="p">(</span><span class="n">acquisition</span><span class="p">):</span>
-            <span class="n">readout</span><span class="p">,</span> <span class="n">placed</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_process</span><span class="p">(</span><span class="n">acquisition</span><span class="p">)</span>
-            <span class="n">branch</span> <span class="o">=</span> <span class="kc">None</span> <span class="k">if</span> <span class="n">readout</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">branch_for</span><span class="p">(</span><span class="n">acquisition</span><span class="p">)</span>
-            <span class="k">if</span> <span class="n">branch</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">_unit</span><span class="p">(</span><span class="n">branch</span><span class="p">,</span> <span class="n">acquisition</span><span class="p">)</span><span class="o">.</span><span class="n">add_acquisition</span><span class="p">(</span>
-                    <span class="n">acquisition</span><span class="p">,</span> <span class="n">readout</span><span class="p">,</span> <span class="n">placed</span>
-                <span class="p">)</span>
-            <span class="k">if</span> <span class="n">has_acquisition_flag</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="s2">"ACQ_LAST_IN_MEASUREMENT"</span><span class="p">):</span>
-                <span class="n">emitted</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">flush</span><span class="p">(</span><span class="n">context</span><span class="p">)</span>
-            <span class="k">elif</span> <span class="n">branch</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="n">closed</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_closure</span><span class="o">.</span><span class="n">closed</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_units</span><span class="p">,</span> <span class="n">acquisition</span><span class="p">,</span> <span class="n">branch</span><span class="p">)</span>
-                <span class="n">emitted</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_reconstruct</span><span class="p">(</span><span class="n">closed</span><span class="p">,</span> <span class="n">context</span><span class="p">)</span>
+            <span class="n">last</span> <span class="o">=</span> <span class="n">has_acquisition_flag</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="s2">"ACQ_LAST_IN_MEASUREMENT"</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">received</span><span class="p">,</span> <span class="n">readout</span><span class="p">,</span> <span class="n">placed</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_process</span><span class="p">(</span><span class="n">acquisition</span><span class="p">):</span>
+                <span class="n">branch</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_place</span><span class="p">(</span><span class="n">received</span><span class="p">,</span> <span class="n">readout</span><span class="p">,</span> <span class="n">placed</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">branch</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">last</span><span class="p">:</span>
+                    <span class="n">closed</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_closure</span><span class="o">.</span><span class="n">closed</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_units</span><span class="p">,</span> <span class="n">received</span><span class="p">,</span> <span class="n">branch</span><span class="p">)</span>
+                    <span class="n">emitted</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_reconstruct</span><span class="p">(</span><span class="n">closed</span><span class="p">,</span> <span class="n">context</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">last</span><span class="p">:</span>
+                <span class="n">emitted</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">flush</span><span class="p">(</span><span class="n">context</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">emitted</span></div>
 
 
@@ -1345,6 +1353,10 @@
 <span class="sd">            As :meth:`receive`; the output of :meth:`finish`, if any, comes last</span>
 <span class="sd">            and with ``None`` for ``data``.</span>
 <span class="sd">        """</span>
+        <span class="k">for</span> <span class="n">index</span><span class="p">,</span> <span class="n">gadget</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">gadgets</span><span class="p">):</span>
+            <span class="k">for</span> <span class="n">held</span><span class="p">,</span> <span class="n">data</span> <span class="ow">in</span> <span class="n">gadget</span><span class="o">.</span><span class="n">release</span><span class="p">():</span>
+                <span class="k">for</span> <span class="n">received</span><span class="p">,</span> <span class="n">readout</span><span class="p">,</span> <span class="n">placed</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_through</span><span class="p">(</span><span class="n">index</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">held</span><span class="p">,</span> <span class="n">data</span><span class="p">):</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_place</span><span class="p">(</span><span class="n">received</span><span class="p">,</span> <span class="n">readout</span><span class="p">,</span> <span class="n">placed</span><span class="p">)</span>
         <span class="n">emitted</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_reconstruct</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_units</span><span class="p">),</span> <span class="n">context</span><span class="p">)</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">_finished</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_finished</span> <span class="o">=</span> <span class="kc">True</span>
@@ -1507,23 +1519,55 @@
             <span class="n">has_acquisition_flag</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="n">flag</span><span class="p">)</span> <span class="k">for</span> <span class="n">flag</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">reject_flags</span>
         <span class="p">)</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_process</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">acquisition</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">"""Run the gadgets over one readout, returning it and the acquisition as they left it.</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_process</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">acquisition</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">"""Run the gadgets over one readout, returning the readouts they give on.</span>
 
-<span class="sd">        The readout is ``None`` when a gadget consumed it or it has no samples.</span>
-<span class="sd">        The gadgets are given a copy of the acquisition, so that the header</span>
-<span class="sd">        fields they assign reach the buffers and the received acquisition is</span>
+<span class="sd">        Each is ``(received, readout, placed)``: the acquisition as received,</span>
+<span class="sd">        the readout, and the acquisition as the gadgets left it. None when a</span>
+<span class="sd">        gadget consumed or held the readout, or it has no samples; more than</span>
+<span class="sd">        one when a gadget gave on readouts it held, which come first. The</span>
+<span class="sd">        gadgets are given a copy of the acquisition, so that the header fields</span>
+<span class="sd">        they assign reach the buffers and the received acquisition is</span>
 <span class="sd">        unchanged; with no gadgets the acquisition is returned as it is.</span>
 <span class="sd">        """</span>
         <span class="n">data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">acquisition</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">data</span><span class="o">.</span><span class="n">size</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
-            <span class="k">return</span> <span class="kc">None</span><span class="p">,</span> <span class="n">acquisition</span>
+            <span class="k">return</span> <span class="p">[]</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_through</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">acquisition</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">received</span><span class="o">=</span><span class="n">acquisition</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_through</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">start</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">acquisition</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">received</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">"""Run the gadgets from ``start`` over a readout, as :meth:`_process`.</span>
+
+<span class="sd">        ``received`` is the acquisition as received; a readout a gadget held</span>
+<span class="sd">        has none, and the acquisition the gadget held stands for it.</span>
+<span class="sd">        """</span>
+        <span class="n">received</span> <span class="o">=</span> <span class="n">acquisition</span> <span class="k">if</span> <span class="n">received</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">received</span>
         <span class="n">placed</span> <span class="o">=</span> <span class="n">_copy_acquisition</span><span class="p">(</span><span class="n">acquisition</span><span class="p">)</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">gadgets</span> <span class="k">else</span> <span class="n">acquisition</span>
-        <span class="k">for</span> <span class="n">gadget</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">gadgets</span><span class="p">:</span>
-            <span class="n">data</span> <span class="o">=</span> <span class="n">gadget</span><span class="p">(</span><span class="n">placed</span><span class="p">,</span> <span class="n">data</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">index</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">start</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">gadgets</span><span class="p">)):</span>
+            <span class="n">data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">gadgets</span><span class="p">[</span><span class="n">index</span><span class="p">](</span><span class="n">placed</span><span class="p">,</span> <span class="n">data</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">data</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="k">return</span> <span class="kc">None</span><span class="p">,</span> <span class="n">placed</span>
-        <span class="k">return</span> <span class="n">data</span><span class="p">,</span> <span class="n">placed</span>
+                <span class="k">return</span> <span class="p">[]</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
+                <span class="k">return</span> <span class="p">[</span>
+                    <span class="n">given</span>
+                    <span class="k">for</span> <span class="n">held</span><span class="p">,</span> <span class="n">readout</span> <span class="ow">in</span> <span class="n">data</span>
+                    <span class="k">for</span> <span class="n">given</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_through</span><span class="p">(</span>
+                        <span class="n">index</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span>
+                        <span class="n">held</span><span class="p">,</span>
+                        <span class="n">readout</span><span class="p">,</span>
+                        <span class="n">received</span><span class="o">=</span><span class="n">received</span> <span class="k">if</span> <span class="n">held</span> <span class="ow">is</span> <span class="n">placed</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+                    <span class="p">)</span>
+                <span class="p">]</span>
+        <span class="k">return</span> <span class="p">[(</span><span class="n">received</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">placed</span><span class="p">)]</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_place</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">received</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">readout</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">placed</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Add one readout to the unit of its branch, returning the branch; ``None`` where it has none."""</span>
+        <span class="n">branch</span> <span class="o">=</span> <span class="kc">None</span> <span class="k">if</span> <span class="n">readout</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">branch_for</span><span class="p">(</span><span class="n">received</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">branch</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_unit</span><span class="p">(</span><span class="n">branch</span><span class="p">,</span> <span class="n">received</span><span class="p">)</span><span class="o">.</span><span class="n">add_acquisition</span><span class="p">(</span><span class="n">received</span><span class="p">,</span> <span class="n">readout</span><span class="p">,</span> <span class="n">placed</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">branch</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_unit</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">branch</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">acquisition</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ReconUnit</span><span class="p">:</span>
         <span class="n">key</span> <span class="o">=</span> <span class="n">unit_key</span><span class="p">(</span><span class="n">branch</span><span class="p">,</span> <span class="n">acquisition</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">axes</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">merge</span><span class="p">)</span>

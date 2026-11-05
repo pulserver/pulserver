@@ -204,6 +204,7 @@ from.
    Gadget
    load_plugin
    AsymmetricEcho
+   CompressChannels
    Prewhiten
    RemoveReadoutOversampling
    ReconContext

@@ -552,10 +552,13 @@ sensitivity maps, noise prewhitening and coil compression are the subject of
 <tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.recon.AsymmetricEcho.html#pulserver.recon.AsymmetricEcho" title="pulserver.recon.AsymmetricEcho"><code class="xref py py-obj docutils literal notranslate"><span class="pre">AsymmetricEcho</span></code></a></p></td>
 <td><p>Zero-fill a partial echo to the full echo that is symmetric about its <code class="docutils literal notranslate"><span class="pre">center_sample</span></code>.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.recon.Prewhiten.html#pulserver.recon.Prewhiten" title="pulserver.recon.Prewhiten"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Prewhiten</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.recon.CompressChannels.html#pulserver.recon.CompressChannels" title="pulserver.recon.CompressChannels"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CompressChannels</span></code></a></p></td>
+<td><p>Project each readout’s channels onto virtual channels from the calibration readouts that lead the scan, as it arrives.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.recon.Prewhiten.html#pulserver.recon.Prewhiten" title="pulserver.recon.Prewhiten"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Prewhiten</span></code></a></p></td>
 <td><p>Whiten the channels of each readout with the stream’s noise measurement.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.recon.RemoveReadoutOversampling.html#pulserver.recon.RemoveReadoutOversampling" title="pulserver.recon.RemoveReadoutOversampling"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RemoveReadoutOversampling</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.recon.RemoveReadoutOversampling.html#pulserver.recon.RemoveReadoutOversampling" title="pulserver.recon.RemoveReadoutOversampling"><code class="xref py py-obj docutils literal notranslate"><span class="pre">RemoveReadoutOversampling</span></code></a></p></td>
 <td><p>Crop a full echo to the readout field of view of the reconstruction.</p></td>
 </tr>
 </tbody>
