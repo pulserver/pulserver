@@ -1358,3 +1358,16 @@ def test_poisson_disc_views_are_counted_as_the_draw_holds_them(zoo):
     drawn = poisson.evaluate(SYSTEM, _protocol(poisson, changes)).duration
 
     assert drawn != pytest.approx(on_lattice)
+
+
+def test_the_sampling_option_sits_on_an_own_entry_the_console_reaches(zoo):
+    """user45 maps to no console entry on a GE scanner: the option is listed at the plugin's first own entry, whatever the other options."""
+    from pulserver._zoo._user import OWN
+
+    for name in ("gre_multiecho3d", "gre_multiecho3d+POISSON", "gre_multiecho3d+WAVE"):
+        protocol = zoo[name].protocol
+
+        assert OWN < 45
+        assert type(protocol[UIParam.user_value(OWN)]).__name__ == "OptionParam"
+        assert protocol[UIParam.user_name(OWN)].text.startswith("View sampling")
+        assert UIParam.user_value(45) not in protocol

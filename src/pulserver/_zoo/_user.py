@@ -108,7 +108,6 @@ OPTIONS = {
             ("variable_density", "Variable density"),
             ("scheme", "Spoke order"),
             ("retrospective", "Retrospective gating"),
-            ("sampling", "View sampling"),
         ),
         start=36,
     )

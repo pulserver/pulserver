@@ -9,7 +9,13 @@ from pypulseqpp.sequences.sequence.gre_multiecho3D_sequence import (
 
 from pulserver._zoo._evaluation import cartesian_3d, evaluation
 from pulserver._zoo._slab import slab
-from pulserver._zoo._user import OPTIONS, shortest_at_zero, user_entries, wave_entries
+from pulserver._zoo._user import (
+    OPTIONS,
+    OWN,
+    shortest_at_zero,
+    user_entries,
+    wave_entries,
+)
 from pulserver.design import (
     ChoiceParam,
     FloatParam,
@@ -35,8 +41,12 @@ FLYBACK = option("flyback", True, **OPTIONS["flyback"])
 
 #: Views outside the calibration region: ``"lattice"``, the CAIPIRINHA
 #: lattice, or ``"poisson"``, a variable-density Poisson-disc draw at the
-#: undersampling ``ry * rz``, for the compressed-sensing ``pics`` solve.
-SAMPLING = option("sampling", "lattice", choices=SAMPLINGS, **OPTIONS["sampling"])
+#: undersampling ``ry * rz``, for the compressed-sensing ``pics`` solve. This
+#: plugin's own, at its first own user entry: the shared options fill user36
+#: to user44, and user45 reaches no console entry on a GE scanner.
+SAMPLING = option(
+    "sampling", "lattice", choices=SAMPLINGS, user=OWN, label="View sampling"
+)
 
 
 class GreMultiecho3D(SequencePlugin):
