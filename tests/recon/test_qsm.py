@@ -190,3 +190,17 @@ def test_the_phantom_maps_are_rss_t2star_and_a_medi_qsm_with_positive_paramagnet
     chi = np.transpose(series[qsm.SERIES["qsm"]].data, (2, 1, 0))
     assert np.median(chi[plus]) == pytest.approx(0.4, rel=0.2)
     assert np.median(chi[minus]) == pytest.approx(-0.2, rel=0.2)
+
+
+def test_synthstrip_weights_are_the_named_file_else_the_shipped_one(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setenv("FASTQSM_SYNTHSTRIP_WEIGHTS", "/named.pt")
+    assert qsm.synthstrip_weights() == "/named.pt"
+    monkeypatch.delenv("FASTQSM_SYNTHSTRIP_WEIGHTS")
+    monkeypatch.setattr(qsm.sys, "prefix", str(tmp_path))
+    assert qsm.synthstrip_weights() is None
+    shipped = tmp_path / qsm.SYNTHSTRIP_WEIGHTS
+    shipped.parent.mkdir(parents=True)
+    shipped.write_bytes(b"")
+    assert qsm.synthstrip_weights() == str(shipped)

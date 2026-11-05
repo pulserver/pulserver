@@ -6,6 +6,8 @@ __all__ = ["ANATOMIES", "PLUGIN", "SERIES", "QsmRecon"]
 
 import logging
 import os
+import sys
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -40,6 +42,10 @@ GAMMA_HZ_T = 42.57747892e6
 #: The paramagnetic Gd vials of a phantom map positive when it is right.
 PHASE_SIGN = 1
 
+#: Where an installer puts FreeSurfer's SynthStrip weights, under the Python
+#: environment's prefix.
+SYNTHSTRIP_WEIGHTS = "share/fastqsm/synthstrip.1.pt"
+
 #: Echo time of the SWI echo at 3 T, scaled by 3 T / B0.
 SWI_TE_3T = 20e-3
 
@@ -65,7 +71,7 @@ class QsmRecon(PicsRecon):
     The B0 direction in the image axes is that of the unit's reference
     acquisition, B0 is the header's resonance frequency over gamma, the echo
     times are the header's, and the phase sign is :data:`PHASE_SIGN`. The
-    SynthStrip weights are read from ``FASTQSM_SYNTHSTRIP_WEIGHTS``. Without
+    SynthStrip weights are those of :func:`synthstrip_weights`. Without
     fast-qsm the plugin makes the echoes alone and logs why.
     """
 
@@ -185,7 +191,7 @@ class QsmRecon(PicsRecon):
                 te,
                 voxel,
                 anatomy="head",
-                synthstrip_weights=os.environ.get("FASTQSM_SYNTHSTRIP_WEIGHTS"),
+                synthstrip_weights=synthstrip_weights(),
                 **common,
             )
             out.append(result("qsm", run.maps["chi_masked"], "QSM"))
@@ -195,6 +201,15 @@ class QsmRecon(PicsRecon):
             "qsm: %s maps in %s s on %s", anatomy, run.info.get("total_s"), device
         )
         return out
+
+
+def synthstrip_weights() -> str | None:
+    """Return the SynthStrip weights: ``FASTQSM_SYNTHSTRIP_WEIGHTS``, else :data:`SYNTHSTRIP_WEIGHTS` in the environment's prefix when it is there."""
+    named = os.environ.get("FASTQSM_SYNTHSTRIP_WEIGHTS")
+    if named:
+        return named
+    shipped = Path(sys.prefix) / SYNTHSTRIP_WEIGHTS
+    return str(shipped) if shipped.is_file() else None
 
 
 def _echo_times(header: Any) -> list[float]:
