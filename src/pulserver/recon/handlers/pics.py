@@ -23,8 +23,11 @@ from ..plugin import ReconContext, ReconPlugin, ReconResult
 WAVELET_MIN_POINTS = 4
 
 #: Lines of every encoded axis, around the k-space centre, the coil maps are
-#: fitted to, as :func:`bartorch.apps.nlinv_maps` takes them.
-CALIBRATION_LINES = 24
+#: fitted to, as :func:`bartorch.apps.nlinv_maps` takes them. Maps fitted to
+#: 24 lines left a ghost at half the field of view of a scan undersampled by
+#: 2 along its partitions, about 5 % of the object; at 48 it is as faint as
+#: GRAPPA leaves it.
+CALIBRATION_LINES = 48
 
 #: Virtual channels the receive channels of a unit are compressed to before
 #: its maps and its solve (:class:`~pulserver.recon.CoilCompression`).
@@ -242,8 +245,8 @@ def nlinv_estimate(
     image, where they would otherwise drive every coil's sensitivity towards
     zero and leave a dark spot in the image. BART refuses the detection on a
     grid with an axis no longer than a twentieth of its longest, rounded up;
-    k-space whose calibration grid has such an axis, a slab of fewer than 3
-    partitions, is fitted without it.
+    k-space whose calibration grid has such an axis, a slab of 3 partitions
+    or fewer on a matrix of 48 or more, is fitted without it.
     """
     from bartorch import apps
 
