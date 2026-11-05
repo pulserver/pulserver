@@ -1909,24 +1909,24 @@ def test_a_series_is_sized_by_its_channels_contrasts_and_matrix_with_the_readout
     assert concurrency.series_gib(header, 64) == concurrency.series_gib(header)
 
 
-def test_a_pics_series_is_budgeted_with_the_virtual_channels_and_never_below_the_default(
-    monkeypatch,
-):
-    monkeypatch.setattr(concurrency, "_total_ram_gb", lambda: 512.0)
-
+def test_a_pics_series_buffers_the_virtual_channels_and_any_other_every_channel():
     header = sized_header(contrasts=10)
 
-    assert concurrency.series_gib(header) > concurrency.DEFAULT_PER_RECON_GB
-    assert _proxy._budget_gb(header, "pics") == concurrency.DEFAULT_PER_RECON_GB
-    assert _proxy._budget_gb(header, "epi") == concurrency.series_gib(header)
+    assert _proxy._buffers_gb(header, "pics") == concurrency.series_gib(header, 6)
+    assert _proxy._buffers_gb(header, "epi") == concurrency.series_gib(header)
 
 
-def test_a_series_too_large_for_the_hosts_memory_is_warned_of_as_it_starts(
-    monkeypatch, caplog
+def test_a_series_too_large_for_the_hosts_memory_is_kept_and_refused_without_reconstruction(
+    start_proxy, bucket, tmp_path, monkeypatch
 ):
-    monkeypatch.setattr(concurrency, "_total_ram_gb", lambda: 64.0)
+    _, series = bucket
+    monkeypatch.setattr(_proxy, "memory_holds", lambda gib: False)
+    kept = tmp_path / "kept"
+    proxy = start_proxy(slots=1, save_to=kept)
 
-    with caplog.at_level("WARNING", logger=_proxy._log.name):
-        _proxy._budget_gb(sized_header(contrasts=10), "epi")
+    received = stream(proxy.port, series["gre2d"])
 
-    assert "more than this host's memory holds" in caplog.text
+    assert not images(received)
+    texts = [item for item in received if isinstance(item, str)]
+    assert "more than this host's memory holds" in texts[-1]
+    assert len(sorted(kept.glob("*.h5"))) == 1

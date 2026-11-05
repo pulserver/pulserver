@@ -191,8 +191,9 @@ the six virtual channels of `pics`, times contrasts, averages and slices, times
 the encoded phase encodes and partitions and the reconstructed readout, times
 8 bytes), and at least
 the default budget, 48 GiB. A series
-whose buffers the host's physical memory cannot hold even alone is logged as a
-warning when it starts. A series that
+whose buffers the host's physical memory cannot hold even alone is not
+reconstructed: its stream is read to its end, so `--save-data` keeps it for an
+offline reconstruction, and the client is told why. A series that
 arrives when every slot is occupied, or when another series runs and the
 available memory is short of its budget, is written to disk,
 enriched, as it arrives, and replayed to a worker once a slot is released and

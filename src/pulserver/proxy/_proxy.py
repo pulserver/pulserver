@@ -621,6 +621,10 @@ class _Workers:
     ) -> None:
         """Reconstruct the series ``items`` streams on a worker, in a slot or from the queue.
 
+        A series whose buffers, sized from its header, the host's physical
+        memory cannot hold even alone is not reconstructed: its stream is read
+        to its end, so the proxy keeps it, and the client is told why.
+
         ``motion`` is the pose file of a scan corrected for motion while it
         plays: the poses the reconstruction states are published into it,
         created anew for the series. Such a series runs alone among such
@@ -628,7 +632,16 @@ class _Workers:
         and are dropped where it is ``None``.
         """
         path = self._plugin_path(plugin)
-        budget = _budget_gb(header, plugin)
+        buffers = _buffers_gb(header, plugin)
+        budget = max(DEFAULT_PER_RECON_GB, buffers)
+        if not memory_holds(buffers):
+            for _ in items:
+                pass
+            raise ValueError(
+                f"{plugin} would buffer {buffers:.1f} GiB of k-space, more than "
+                "this host's memory holds for one reconstruction: the series is "
+                "not reconstructed, and is kept where the proxy keeps series"
+            )
         if motion is not None:
             # Waits rather than queueing: a pose is worth nothing once the scan
             # it described has moved on, so a series that would publish one
@@ -983,24 +996,12 @@ def _first(connection: Connection) -> Any:
 _STREAM_COMPRESSED = ("pics",)
 
 
-def _budget_gb(header: Any, plugin: str) -> float:
-    """Return the GiB a series is admitted with: its buffers as its header sizes them, at least the default budget.
-
-    A series whose buffers the host's memory cannot hold even alone is
-    logged as a warning, naming the size, as it starts.
-    """
+def _buffers_gb(header: Any, plugin: str) -> float:
+    """Return the GiB of k-space ``plugin`` buffers for a series, as its header sizes them."""
     channels = VIRTUAL_COILS if plugin in _STREAM_COMPRESSED else None
     buffers = series_gib(header, channels)
-    if not memory_holds(buffers):
-        _log.warning(
-            "%s buffers %.1f GiB of k-space, more than this host's memory holds "
-            "for one reconstruction: it is likely to fail",
-            plugin,
-            buffers,
-        )
-    else:
-        _log.info("%s buffers %.1f GiB of k-space", plugin, buffers)
-    return max(DEFAULT_PER_RECON_GB, buffers)
+    _log.info("%s buffers %.1f GiB of k-space", plugin, buffers)
+    return buffers
 
 
 def _refuse(connection: Connection, error: Exception) -> None:
