@@ -475,8 +475,10 @@ option entry holds no index of a choice is refused, and so is one stating an
 entry its options hide. The options join the design's identity and its
 manifest.
 
-The shipped plugins declare their options at `user36` to `user44`, each at the
-same user entry in every plugin:
+The shipped plugins declare their shared options at `user36` to `user44`, each
+at the same user entry in every plugin. An option one plugin alone has takes
+one of its own entries, from `user12`; `user45` reaches no console entry on a
+GE scanner:
 
 | Plugin | Option | User entry | Choices | Entries added |
 | --- | --- | --- | --- | --- |
@@ -487,6 +489,7 @@ same user entry in every plugin:
 | `gre3d`, `gre_multiecho3d`, `mprage3d`, `fse3d` | `wave` | `user37` | Wave-CAIPI; the calibration region is acquired first without the wave, and `pics` and `pmc` reconstruct the wave-encoded volume | `user10` and `user11`: wave amplitude and cycles |
 | `gre3d`, `se3d`, `gre_multiecho3d` | `elliptical` | `user40` | Only the phase encodes inside the ky-kz ellipse; on by default | None |
 | `gre_multiecho2d`, `gre_multiecho3d` | `flyback` | `user41` | Monopolar echoes, on by default; off reads even echoes reversed | None |
+| `gre_multiecho3d` | `sampling` | `user12` | `"lattice"`, the CAIPIRINHA lattice, the default; or `"poisson"`: a variable-density Poisson-disc draw at the undersampling `ry * rz`, for the compressed-sensing `pics` solve | None |
 | `zte3d` | `scheme` | `user43` | Spokes ordered `"spiral"`, at a constant step across many rings; `"meridian"`; or `"quiet"`, the default: the spiral's directions in steps about a ring gap long, every other shell played backwards | None |
 | `bssfp2d` | `retrospective` | `user44` | ECG gating: off, prospective, each heartbeat triggered and acquired once per cardiac phase; on, retrospective, each segment cycled over a heartbeat and binned into cardiac phases by the reconstruction | None |
 | `gre_spiral2d`, `se_spiral2d`, `gre_stack_of_spirals3d`, `se_stack_of_spirals3d`, `mprage_stack_of_spirals3d` | `variable_density` | `user42` | Variable-density spirals | `user12`: periphery undersampling |
