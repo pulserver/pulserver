@@ -20,7 +20,9 @@ SYSTEM = pp.Opts(B0=3.0)
 # A small fraction of the k-space spacing of every sequence here.
 K_TOLERANCE = 1e-3
 # The text format writes a gradient's amplitude to six significant figures,
-# and a turned gradient's amplitude is written as the rotation leaves it.
+# and a turned gradient's amplitude is written as the rotation leaves it: each
+# gradient carries a relative error of up to 5e-6 into k-space, and a sample
+# keeps the errors of every gradient played since its excitation.
 K_PRECISION = 1e-5
 STANDARD_SECTIONS = {
     "VERSION",
@@ -44,9 +46,28 @@ def _exported(path, target, rotation=None):
     return back, phases
 
 
-def _assert_same_trajectory(exported, played):
-    atol = K_TOLERANCE + K_PRECISION * np.abs(played).max()
-    np.testing.assert_allclose(exported, played, rtol=0, atol=atol)
+def _area_since_excitation(seq):
+    """Per axis, the gradient area played in magnitude from each ADC sample's excitation to the sample."""
+    _, _, t_excitation, _, t_adc = seq.calculate_kspace()
+    excited = np.searchsorted(t_excitation, t_adc, side="right") - 1
+    starts = np.concatenate([[0.0], t_excitation])
+    start = starts[excited + 1]
+    area = np.zeros((3, t_adc.size))
+    for axis, waveform in enumerate(seq.waveforms()):
+        if waveform.size == 0:
+            continue
+        t, g = waveform
+        played = np.concatenate(
+            [[0.0], np.cumsum(0.5 * (np.abs(g[1:]) + np.abs(g[:-1])) * np.diff(t))]
+        )
+        area[axis] = np.interp(t_adc, t, played) - np.interp(start, t, played)
+    return area
+
+
+def _assert_same_trajectory(back, played):
+    exported = back.calculate_kspace()[0]
+    atol = K_TOLERANCE + K_PRECISION * (np.abs(played) + _area_since_excitation(back))
+    assert np.all(np.abs(exported - played) <= atol), np.abs(exported - played).max()
 
 
 def _fixture(name, tmp_path):
@@ -69,7 +90,7 @@ def test_every_shipped_sequence_exports_the_trajectory_its_cache_plays(
     back, _ = _exported(design, tmp_path / "exported.seq", rotation)
 
     played = np.concatenate(trajectory(design, rotation=rotation), axis=1)
-    _assert_same_trajectory(back.calculate_kspace()[0], played)
+    _assert_same_trajectory(back, played)
 
 
 @pytest.mark.parametrize("rotation", ORIENTATIONS.values(), ids=ORIENTATIONS.keys())
@@ -81,7 +102,7 @@ def test_every_fixture_exports_the_trajectory_its_cache_plays(name, rotation, tm
     back, _ = _exported(path, tmp_path / "exported.seq", rotation)
 
     played = np.concatenate(trajectory(path, rotation=rotation), axis=1)
-    _assert_same_trajectory(back.calculate_kspace()[0], played)
+    _assert_same_trajectory(back, played)
 
 
 def test_every_shipped_sequence_exports_each_block_as_long_as_its_cache_plays_it(
@@ -196,7 +217,7 @@ def test_a_gradient_that_starts_and_ends_away_from_zero_inside_its_block_steps_t
     back, _ = _exported(path, tmp_path / "exported.seq")
 
     played = np.concatenate(trajectory(path), axis=1)
-    _assert_same_trajectory(back.calculate_kspace()[0], played)
+    _assert_same_trajectory(back, played)
 
 
 def test_the_receiver_phase_is_the_adc_offsets_advancing_from_its_start(tmp_path):
