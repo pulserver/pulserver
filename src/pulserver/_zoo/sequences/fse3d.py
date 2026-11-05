@@ -79,6 +79,29 @@ if OPTIMIZED and importlib.util.find_spec("blochsim") is None:
 ORDERING = option("ordering", "radial", choices=ORDERINGS, **OPTIONS["ordering"])
 
 
+def on_host(app):
+    """Return ``app`` designing its refocusing trains with blochsim on the CPU.
+
+    blochsim runs a problem above its work threshold on a CUDA device when
+    one is present. The design runs on the scanner host, whose card may be
+    one blochsim carries no kernels for ("no kernel image is available for
+    execution on the device"), and a train the size of a clinical protocol
+    crosses the threshold; on the CPU it is designed in seconds. A constant
+    train, which an evaluation designs, imports no blochsim.
+    """
+
+    @functools.wraps(app)
+    def designed(*args, **kwargs):
+        if kwargs.get("flip_modulation", "constant") == "constant":
+            return app(*args, **kwargs)
+        from blochsim._execution import execution
+
+        with execution("cpu"):
+            return app(*args, **kwargs)
+
+    return designed
+
+
 class Fse3D(SequencePlugin):
     app = (
         navigated(shortest_at_zero(slab(fse3d), "esp"))
@@ -86,7 +109,7 @@ class Fse3D(SequencePlugin):
         else shortest_at_zero(slab(fse3d), "esp")
     )
     if OPTIMIZED:
-        app = functools.partial(app, flip_modulation="optimized")
+        app = functools.partial(on_host(app), flip_modulation="optimized")
     app = functools.partial(app, ordering=ORDERING)
     protocol = {
         UIParam.IMAGING_MODE: StatedParam(ImagingMode.THREE_D),
