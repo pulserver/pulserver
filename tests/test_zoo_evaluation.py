@@ -226,6 +226,21 @@ SCANS = [pytest.param(name, {}, id=name) for name in SHIPPED] + [
             "bipolar",
             {"nslices": 8, "ny": 32, "num_echoes": 3},
         ),
+        (
+            "gre_multiecho3d+POISSON",
+            "poisson",
+            # Poisson-disc views at ry * rz, partial Fourier and no readout
+            # oversampling, as the 7 T session scanned it.
+            {
+                "num_echoes": 2,
+                "nslices": 64,
+                "ny": 96,
+                "Ry": 2,
+                "Rz": 4,
+                "user3_value": 0.75,
+                "user6_value": 1.0,
+            },
+        ),
         ("gre3d", "spsp", {"nslices": 16, "ny": 32, "excitation": "spsp"}),
         ("gre3d+CARTESIAN", "cartesian", {"nslices": 16, "ny": 32}),
         (
@@ -419,6 +434,7 @@ TOGGLED = {
     ),
     "gre_multiecho2d+BIPOLAR": ("gre_multiecho2d", {"flyback": False}),
     "gre_multiecho3d+BIPOLAR": ("gre_multiecho3d", {"flyback": False}),
+    "gre_multiecho3d+POISSON": ("gre_multiecho3d", {"sampling": "poisson"}),
     "gre3d+CARTESIAN": ("gre3d", {"elliptical": False}),
     "fse3d+SHUFFLING": ("fse3d", {"ordering": "shuffling"}),
     "mprage3d+SHUFFLING": ("mprage3d", {"ordering": "shuffling"}),
@@ -1330,3 +1346,15 @@ def test_a_multi_echo_gradient_echo_spaces_its_echoes_by_the_shared_echo_spacing
     assert len(spaced) == 3
     assert np.diff(spaced) == pytest.approx(10e-3, abs=1e-5)
     assert np.diff(shortest).max() < 10e-3
+
+
+def test_poisson_disc_views_are_counted_as_the_draw_holds_them(zoo):
+    """The scan time of a Poisson-disc scan is that of the draw, not of the lattice at the same undersampling."""
+    changes = {"num_echoes": 2, "nslices": 64, "ny": 96, "Ry": 2, "Rz": 4}
+    lattice = zoo["gre_multiecho3d"]
+    poisson = zoo["gre_multiecho3d+POISSON"]
+
+    on_lattice = lattice.evaluate(SYSTEM, _protocol(lattice, changes)).duration
+    drawn = poisson.evaluate(SYSTEM, _protocol(poisson, changes)).duration
+
+    assert drawn != pytest.approx(on_lattice)

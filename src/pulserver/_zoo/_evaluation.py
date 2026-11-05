@@ -253,7 +253,10 @@ def cartesian_2d(a: dict[str, Any]) -> tuple[dict[str, Any], int]:
 def cartesian_3d(a: dict[str, Any]) -> tuple[dict[str, Any], int]:
     """One view of a 3D Cartesian scan, and its views.
 
-    Under the wave the views include the wave-free calibration region.
+    Under the wave the views include the wave-free calibration region. The
+    views are counted with the app's ``sampling``, a lattice where it takes
+    none; the one view is a lattice's, a Poisson-disc draw at full
+    undersampling holding several.
     """
     calibrating, imaging = pp.count_cartesian_plane_sampling(
         (a["n_y"], a["n_z"]),
@@ -263,8 +266,11 @@ def cartesian_3d(a: dict[str, Any]) -> tuple[dict[str, Any], int]:
         partial_fourier=(a["partial_fourier_y"], a["partial_fourier_z"]),
         elliptical=a["elliptical_sampling"],
         elliptical_acs=a["elliptical_acs"],
+        sampling=a.get("sampling", "lattice"),
     )
     one = {"n_dummy": 0, "ry": a["n_y"], "rz": a["n_z"], "n_acs_y": 0, "n_acs_z": 0}
+    if "sampling" in a:
+        one["sampling"] = "lattice"
     references = calibrating if waved(a) else 0
     return one, references + calibrating + imaging
 
