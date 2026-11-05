@@ -45,7 +45,7 @@
   <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../_static/documentation_options.js?v=4f39bc78"></script>
+    <script src="../_static/documentation_options.js?v=cd58becf"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -56,7 +56,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.11';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.15';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -70,7 +70,7 @@
     <link rel="prev" title="Scanner sequences" href="scanner-sequences.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.4.11" />
+  <meta name="docsearch:version" content="v0.4.15" />
   
     
     <script src="../_static/searchtools.js"></script>
@@ -492,6 +492,7 @@
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#non-cartesian-data">Non-Cartesian data</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coil-sensitivities-noise-and-compression">Coil sensitivities, noise and compression</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#dicom-output">DICOM output</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#recon-parameters">Recon parameters</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#diffusion-tables">Diffusion tables</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#logging">Logging</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#offline-reconstruction">Offline reconstruction</a></li>
@@ -752,7 +753,9 @@ k-space <code class="docutils literal notranslate"><span class="pre">data.ref</s
 (<a class="reference internal" href="../developer-guide/internals/calibration.html"><span class="doc">Calibration, noise and coil compression</span></a> states the order and the
 conditions for reuse). <a class="reference internal" href="../generated/pulserver.recon.Prewhiten.html#pulserver.recon.Prewhiten" title="pulserver.recon.Prewhiten"><code class="xref py py-class docutils literal notranslate"><span class="pre">Prewhiten</span></code></a> is a gadget and
 <a class="reference internal" href="../generated/pulserver.recon.CoilCompression.html#pulserver.recon.CoilCompression" title="pulserver.recon.CoilCompression"><code class="xref py py-class docutils literal notranslate"><span class="pre">CoilCompression</span></code></a> a step called from <code class="docutils literal notranslate"><span class="pre">recon</span></code>; all three
-compute with bartorch.</p>
+compute with bartorch. The gadget <a class="reference internal" href="../generated/pulserver.recon.CompressChannels.html#pulserver.recon.CompressChannels" title="pulserver.recon.CompressChannels"><code class="xref py py-class docutils literal notranslate"><span class="pre">CompressChannels</span></code></a>
+compresses each readout as it arrives instead, from the calibration readouts
+that lead the scan, so the buffers never hold the full set of channels.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># recon/gre.py</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 
@@ -792,7 +795,12 @@ exam. Without either it passes readouts unchanged and logs a warning once;
 virtual channels, at most the channels of the first unit, with the basis of
 that unit’s calibration k-space (its imaging k-space where it has none), and
 projects every later unit onto it. Compress a unit before requesting its maps,
-so that they are estimated in the basis of the data they are used with.</p>
+so that they are estimated in the basis of the data they are used with.
+<code class="docutils literal notranslate"><span class="pre">CompressChannels(n)</span></code>, placed after <code class="docutils literal notranslate"><span class="pre">Prewhiten</span></code> and before <code class="docutils literal notranslate"><span class="pre">AsymmetricEcho</span></code>,
+holds the leading calibration readouts until the first imaging-only readout,
+estimates the basis from those of the first contrast, and gives them on
+projected; a scan whose first readout is not calibration passes it unchanged,
+and a <code class="docutils literal notranslate"><span class="pre">CoilCompression</span></code> step in <code class="docutils literal notranslate"><span class="pre">recon</span></code> then compresses each unit.</p>
 <p><code class="docutils literal notranslate"><span class="pre">apps.pics</span></code> computes where the maps are, here the host. An encoding built with
 <code class="docutils literal notranslate"><span class="pre">device=context.device</span></code>, such as <code class="xref py py-func docutils literal notranslate"><span class="pre">bartorch.linop.CartesianSense()</span></code>, computes
 on the GPU and takes the k-space, the maps and the solver’s vectors from the
@@ -802,13 +810,15 @@ trajectory is, so a trajectory on <code class="docutils literal notranslate"><sp
 does the same; the <code class="docutils literal notranslate"><span class="pre">nufft</span></code> plugin solves so.</p>
 <p>The <code class="docutils literal notranslate"><span class="pre">pics</span></code> and <code class="docutils literal notranslate"><span class="pre">nufft</span></code> handlers fit the maps with
 <code class="docutils literal notranslate"><span class="pre">apps.nlinv_maps(kspace,</span> <span class="pre">phase_pole=0)</span></code>, <code class="docutils literal notranslate"><span class="pre">bart</span> <span class="pre">nlinv</span> <span class="pre">--phase-pole</span> <span class="pre">0</span></code>, on a grid
-of the central 24 lines, or of the trajectory’s samples within 12 grid units of
+of the central 48 lines, or of the trajectory’s samples within 24 grid units of
 the centre, and zero-fill them to the image grid: after every Gauss-Newton step
 the phase poles the maps share are moved into the image. Without it, maps that
 share a phase pole go to zero there in every coil, and the image has a dark
 spot at it. BART refuses the detection on a grid with an axis no longer than a
-twentieth of its longest, rounded up; a slab of fewer than 3 partitions is
-fitted without the correction.</p>
+twentieth of its longest, rounded up; a slab of 3 partitions or fewer, on a
+matrix of 48 or more, is fitted without the correction. A grid of 24 lines
+left a ghost at half the field of view of a scan undersampled by 2 along its
+partitions.</p>
 <p>A calibration unit, whose <code class="docutils literal notranslate"><span class="pre">data.data</span></code> is <code class="docutils literal notranslate"><span class="pre">None</span></code>, stores its maps for its slice,
 and the imaging units of that slice take them from the stream. A series that is
 only a calibration leaves its maps to the exam by assigning
@@ -906,6 +916,19 @@ from a matplotlib figure, stored as a DICOM secondary capture.</p>
 </pre></div>
 </div>
 </section>
+<section id="recon-parameters">
+<h2>Recon parameters<a class="headerlink" href="#recon-parameters" title="Link to this heading">#</a></h2>
+<p>A sequence states values for its reconstruction with
+<a class="reference internal" href="../generated/pulserver.design.recon_parameters.html#pulserver.design.recon_parameters" title="pulserver.design.recon_parameters"><code class="xref py py-func docutils literal notranslate"><span class="pre">pulserver.design.recon_parameters()</span></code></a>, which writes each as a definition
+and lists its name in the <code class="docutils literal notranslate"><span class="pre">ReconParameters</span></code> definition. The proxy copies every
+listed definition into the MRD header as a user parameter string of the same
+name, which the reconstruction reads:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pulserver</span><span class="w"> </span><span class="kn">import</span> <span class="n">mrd</span>
+
+<span class="n">anatomy</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">mrd</span><span class="o">.</span><span class="n">user_parameter</span><span class="p">(</span><span class="n">context</span><span class="o">.</span><span class="n">header</span><span class="p">,</span> <span class="s2">"QsmAnatomy"</span><span class="p">,</span> <span class="mi">0</span><span class="p">)))</span>
+</pre></div>
+</div>
+</section>
 <section id="diffusion-tables">
 <h2>Diffusion tables<a class="headerlink" href="#diffusion-tables" title="Link to this heading">#</a></h2>
 <p>The proxy states the diffusion table a design names in the header’s
@@ -970,14 +993,15 @@ the encoded space and the receiver channels:</p>
 </section>
 <section id="shipped-reconstructions">
 <h2>Shipped reconstructions<a class="headerlink" href="#shipped-reconstructions" title="Link to this heading">#</a></h2>
-<p>Six shipped plugins are complete reconstructions, returning the values of their
+<p>Seven shipped plugins are complete reconstructions, returning the values of their
 transform or solve unscaled. They are searched after every reconstruction
 plugin directory, so a client can name one, such as <code class="docutils literal notranslate"><span class="pre">nufft</span></code>, without a file of
 its own, and a file of the same name in a <code class="docutils literal notranslate"><span class="pre">--plugins</span></code> directory replaces it.
-Each whitens its readouts with <a class="reference internal" href="../generated/pulserver.recon.Prewhiten.html#pulserver.recon.Prewhiten" title="pulserver.recon.Prewhiten"><code class="xref py py-class docutils literal notranslate"><span class="pre">Prewhiten</span></code></a>, compresses a
-unit of more than six receive channels to six virtual channels
-(<a class="reference internal" href="../generated/pulserver.recon.CoilCompression.html#pulserver.recon.CoilCompression" title="pulserver.recon.CoilCompression"><code class="xref py py-class docutils literal notranslate"><span class="pre">CoilCompression</span></code></a>), and sends a volume as one image per
-partition.</p>
+Each whitens its readouts with <a class="reference internal" href="../generated/pulserver.recon.Prewhiten.html#pulserver.recon.Prewhiten" title="pulserver.recon.Prewhiten"><code class="xref py py-class docutils literal notranslate"><span class="pre">Prewhiten</span></code></a>, compresses
+more than six receive channels to six virtual channels (<code class="docutils literal notranslate"><span class="pre">pics</span></code> as the readouts
+arrive, <a class="reference internal" href="../generated/pulserver.recon.CompressChannels.html#pulserver.recon.CompressChannels" title="pulserver.recon.CompressChannels"><code class="xref py py-class docutils literal notranslate"><span class="pre">CompressChannels</span></code></a>; the others a unit at a
+time, <a class="reference internal" href="../generated/pulserver.recon.CoilCompression.html#pulserver.recon.CoilCompression" title="pulserver.recon.CoilCompression"><code class="xref py py-class docutils literal notranslate"><span class="pre">CoilCompression</span></code></a>), and sends a volume as one
+image per partition.</p>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
 <tr class="row-odd"><th class="head"><p>Plugin</p></th>
@@ -986,10 +1010,10 @@ partition.</p>
 </thead>
 <tbody>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">pics</span></code></p></td>
-<td><p>One image per slice, contrast, cardiac phase, set and repetition, averages summed, from readouts placed by their encoding counters, whitened, completed to full echoes and cropped to the reconstruction field of view as they arrive (<code class="docutils literal notranslate"><span class="pre">Prewhiten</span></code>, <code class="docutils literal notranslate"><span class="pre">AsymmetricEcho</span></code>, <code class="docutils literal notranslate"><span class="pre">RemoveReadoutOversampling</span></code>). Each image is solved as <code class="docutils literal notranslate"><span class="pre">bart</span> <span class="pre">pics</span> <span class="pre">-R</span> <span class="pre">W</span></code> over the coil sensitivities of <a class="reference internal" href="../generated/pulserver.recon.coil_maps.html#pulserver.recon.coil_maps" title="pulserver.recon.coil_maps"><code class="xref py py-func docutils literal notranslate"><span class="pre">coil_maps()</span></code></a> (<code class="docutils literal notranslate"><span class="pre">bart</span> <span class="pre">nlinv</span> <span class="pre">--phase-pole</span> <span class="pre">0</span></code> of the unit’s calibration readouts, else the maps stored for its slice or the exam’s, else a fit to the unit’s own low-resolution centre), then completed by <code class="docutils literal notranslate"><span class="pre">bart</span> <span class="pre">homodyne</span></code> along a partial-Fourier axis. A unit of calibration readouts only makes no image and stores its maps</p></td>
+<td><p>One image per slice, contrast, cardiac phase, set and repetition, averages summed, from readouts placed by their encoding counters, whitened, compressed to six virtual channels from the calibration readouts that lead the scan, completed to full echoes and cropped to the reconstruction field of view as they arrive (<code class="docutils literal notranslate"><span class="pre">Prewhiten</span></code>, <code class="docutils literal notranslate"><span class="pre">CompressChannels</span></code>, <code class="docutils literal notranslate"><span class="pre">AsymmetricEcho</span></code>, <code class="docutils literal notranslate"><span class="pre">RemoveReadoutOversampling</span></code>). Each image is solved as <code class="docutils literal notranslate"><span class="pre">bart</span> <span class="pre">pics</span> <span class="pre">-R</span> <span class="pre">W</span></code> over the coil sensitivities of <a class="reference internal" href="../generated/pulserver.recon.coil_maps.html#pulserver.recon.coil_maps" title="pulserver.recon.coil_maps"><code class="xref py py-func docutils literal notranslate"><span class="pre">coil_maps()</span></code></a> (<code class="docutils literal notranslate"><span class="pre">bart</span> <span class="pre">nlinv</span> <span class="pre">--phase-pole</span> <span class="pre">0</span></code> of the unit’s calibration readouts, else the maps stored for its slice or the exam’s, else a fit to the unit’s own low-resolution centre), then completed by homodyne over every partial-Fourier axis together, which makes it real. A scan of more than one contrast also sends the real and imaginary parts of each image, series 1 and 2 beside the magnitude’s 0; without partial Fourier they keep the phase. A unit of calibration readouts only makes no image and stores its maps</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">pics_train</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">pics</span></code>’s images from readouts that number their place in an echo train or an inversion shot (<code class="docutils literal notranslate"><span class="pre">contrast</span></code>, <code class="docutils literal notranslate"><span class="pre">ECO</span></code>), merged so that the readouts of every place fill one image</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">pics</span></code>’s images from readouts that number their place in an echo train or an inversion shot (<code class="docutils literal notranslate"><span class="pre">contrast</span></code>, <code class="docutils literal notranslate"><span class="pre">ECO</span></code>), merged so that the readouts of every place fill one image; its channels are compressed a unit at a time, as a train mixes calibration and imaging lines</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">nufft</span></code></p></td>
 <td><p>The images of <code class="docutils literal notranslate"><span class="pre">pics</span></code> for a radial, spiral, PROPELLER or zero-echo-time trajectory or a stack of them, each solved as <code class="docutils literal notranslate"><span class="pre">bart</span> <span class="pre">pics</span> <span class="pre">-t</span> <span class="pre">-R</span> <span class="pre">W</span></code> over <code class="docutils literal notranslate"><span class="pre">bart</span> <span class="pre">nlinv</span> <span class="pre">--phase-pole</span> <span class="pre">0</span> <span class="pre">-t</span></code> sensitivities of the unit’s samples near the k-space centre. The readouts of every segment of a unit, the blades of a PROPELLER scan or the shells of a zero-echo-time one, enter one solve; a trajectory that encodes the partition direction without a partition axis is solved as one volume</p></td>
@@ -1000,7 +1024,10 @@ partition.</p>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">epi</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">pics</span></code>’s images from EPI readouts, each whitened, resampled off its ramps onto the matrix and corrected for its odd/even phase against the shot’s navigator as it arrives (<code class="docutils literal notranslate"><span class="pre">bart</span></code> ramp operator, <code class="docutils literal notranslate"><span class="pre">estimate_epi_phase</span></code>). The phase-encode-reversed reference set is an image of its own; with PyHySCO installed (GPL-3.0, not a dependency; the Docker image carries it), each later image of its slice, or volume of a 3D scan, is corrected for susceptibility distortion against it</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">pmc</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">qsm</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">pics</span></code>’s images of each echo of a multi-echo 3D gradient echo (magnitude, real and imaginary series), and once the last echo of a volume is in, from the complex echoes with fast-qsm (an optional dependency; without it the echoes alone), each its own series from 3 on: the root sum of squares over echoes and T2* of the whole object; then for the <code class="docutils literal notranslate"><span class="pre">QsmAnatomy</span></code> recon parameter 0 (phantom) QSM by PDF and MEDI+0 referenced to the water, 1 (brain) SWI and its minimum intensity projection, QSM by V-SHARP and iLSQR inside the SynthStrip brain mask and the DECOMPOSE paramagnetic and diamagnetic component susceptibilities, 2 (body) QSM by mask-free total field inversion. A partial-Fourier axis makes the echoes real, without the field’s phase: QSM scans sample all of k-space</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">pmc</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">pics_train</span></code>’s images, and a pose from each three-plane navigator (<code class="docutils literal notranslate"><span class="pre">NAV</span></code> or <code class="docutils literal notranslate"><span class="pre">RTFEEDBACK</span></code> readouts): planes gridded with Pipe-Menon density compensation on one thread, coils combined by root sum of squares, registered against the first navigator and filtered by an extended Kalman filter. The pose is published to the scan when its design sets <code class="docutils literal notranslate"><span class="pre">EnablePmc</span></code></p></td>
 </tr>
 </tbody>
@@ -1073,6 +1100,7 @@ partition.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#non-cartesian-data">Non-Cartesian data</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coil-sensitivities-noise-and-compression">Coil sensitivities, noise and compression</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#dicom-output">DICOM output</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#recon-parameters">Recon parameters</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#diffusion-tables">Diffusion tables</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#logging">Logging</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#offline-reconstruction">Offline reconstruction</a></li>

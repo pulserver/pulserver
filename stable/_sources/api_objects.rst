@@ -23,6 +23,8 @@ from.
    option
    OptionParam
    OptionError
+   recon_parameters
+   RECON_PARAMETERS
    RfLayout
    RfControl
    TimeParam
@@ -204,6 +206,7 @@ from.
    Gadget
    load_plugin
    AsymmetricEcho
+   CompressChannels
    Prewhiten
    RemoveReadoutOversampling
    ReconContext

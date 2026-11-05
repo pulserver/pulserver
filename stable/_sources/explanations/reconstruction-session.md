@@ -5,7 +5,7 @@
 
 - The proxy speaks Gadgetron's MRD streaming messages: one series per connection, images back on the same one.
 - The client's config names the recon plugin, so one design can be reconstructed by any plugin.
-- Each series runs in its own worker process, queued on disk when every slot is busy, or is forwarded to a reconstruction server.
+- Each series runs in its own worker process, queued on disk when every slot is busy or memory is short, or is forwarded to a reconstruction server.
 ```
 
 The scanner's reconstruction client opens a connection per series, sends a
@@ -36,9 +36,9 @@ on the other end refuses a series it cannot serve, enriches it from its design
 - **Reconstructs each series in a fresh worker process, with spares that have already imported the engine, and returns why one failed.**
 
   Code: {class}`~pulserver.proxy.ReconProxy`. Tests: *the spare worker is replaced after each series*; *the proxy process does not import the reconstruction engine*; *a crashing plugin closes its series and frees the slot*; *a plugin crashing while its series still arrives reports why* (`test_proxy.py`).
-- **Bounds concurrent series by slots, one per GPU by default, and holds the rest on disk.**
+- **Bounds concurrent series by slots, one per GPU by default, and by the memory available, and holds the rest on disk.**
 
-  Code: `--slots`, `--gpu-slots`, `--queue`. Tests: *a second series waits for a slot and still returns images*; *a series with every slot busy is held on disk until one frees*; *a series reads the gpu its slot holds* (`test_proxy.py`).
+  Code: `--slots`, `--gpu-slots`, `--queue`. Tests: *a second series waits for a slot and still returns images*; *a series with every slot busy is held on disk until one frees*; *a series arriving while memory is short is held on disk until a series finishes*; *a series reads the gpu its slot holds* (`test_proxy.py`).
 - **Stops a reconstruction past its timeout and tells the client.**
 
   Code: `--recon-timeout`. Tests: *a reconstruction past the recon timeout is stopped and reported*; *a reconstruction outlasting the worker timeout still returns its image* (`test_proxy.py`).
@@ -98,8 +98,9 @@ series.
 A worker reconstructs one series and exits, which frees whatever memory the
 reconstruction allocated; the import cost is paid by a spare started in
 advance. Slots are derived from memory and the GPUs found through
-`CUDA_VISIBLE_DEVICES` or `nvidia-smi`. A series without a slot is written to
-the queue, enriched, as it arrives, and the client stays connected until its
+`CUDA_VISIBLE_DEVICES` or `nvidia-smi`. A series without a slot, or arriving
+while another runs and the available memory is short of one reconstruction's
+budget, is written to the queue, enriched, as it arrives, and the client stays connected until its
 images come back. {doc}`../developer-guide/internals/reconstruction-proxy`
 states the details.
 

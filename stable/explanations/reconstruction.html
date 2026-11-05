@@ -45,7 +45,7 @@
   <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../_static/documentation_options.js?v=4f39bc78"></script>
+    <script src="../_static/documentation_options.js?v=cd58becf"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -56,7 +56,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.11';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.15';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -70,7 +70,7 @@
     <link rel="prev" title="Reconstruction session" href="reconstruction-session.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.4.11" />
+  <meta name="docsearch:version" content="v0.4.15" />
   
     
     <script src="../_static/searchtools.js"></script>
@@ -547,8 +547,8 @@ write such a plugin.</p>
 <li><p><strong>Prewhitens on arrival, from the series’ noise readouts or the exam’s noise covariance.</strong></p>
 <p>Code: <a class="reference internal" href="../generated/pulserver.recon.Prewhiten.html#pulserver.recon.Prewhiten" title="pulserver.recon.Prewhiten"><code class="xref py py-class docutils literal notranslate"><span class="pre">Prewhiten</span></code></a>. Test: <em>noise readouts whiten the imaging readouts</em> (<code class="docutils literal notranslate"><span class="pre">test_prewhiten.py</span></code>).</p>
 </li>
-<li><p><strong>Compresses coils with one basis per stream.</strong></p>
-<p>Code: <a class="reference internal" href="../generated/pulserver.recon.CoilCompression.html#pulserver.recon.CoilCompression" title="pulserver.recon.CoilCompression"><code class="xref py py-class docutils literal notranslate"><span class="pre">CoilCompression</span></code></a>. Tests: <em>virtual channels are uncorrelated and carry the leading eigenvalues</em>; <em>compressed data and maps reconstruct the uncompressed image</em> (<code class="docutils literal notranslate"><span class="pre">test_coil_compression.py</span></code>).</p>
+<li><p><strong>Compresses coils with one basis per stream, as the readouts arrive or as a unit closes.</strong></p>
+<p>Code: <a class="reference internal" href="../generated/pulserver.recon.CompressChannels.html#pulserver.recon.CompressChannels" title="pulserver.recon.CompressChannels"><code class="xref py py-class docutils literal notranslate"><span class="pre">CompressChannels</span></code></a>, <a class="reference internal" href="../generated/pulserver.recon.CoilCompression.html#pulserver.recon.CoilCompression" title="pulserver.recon.CoilCompression"><code class="xref py py-class docutils literal notranslate"><span class="pre">CoilCompression</span></code></a>. Tests: <em>virtual channels are uncorrelated and carry the leading eigenvalues</em>; <em>compressed data and maps reconstruct the uncompressed image</em>; <em>calibration readouts are held then given on projected ahead of the first imaging readout</em>; <em>the basis comes from the calibration readouts of the first contrast</em> (<code class="docutils literal notranslate"><span class="pre">test_coil_compression.py</span></code>); <em>contrasts open together are buffered with the virtual channels and lose nothing</em> (<code class="docutils literal notranslate"><span class="pre">test_pics.py</span></code>).</p>
 </li>
 <li><p><strong>Finds coil maps in the unit, the stream or the exam, and refuses maps that differ in any recorded field.</strong></p>
 <p>Code: <a class="reference internal" href="../generated/pulserver.recon.coil_maps.html#pulserver.recon.coil_maps" title="pulserver.recon.coil_maps"><code class="xref py py-func docutils literal notranslate"><span class="pre">coil_maps()</span></code></a>, <a class="reference internal" href="../generated/pulserver.recon.CoilSensitivities.html#pulserver.recon.CoilSensitivities" title="pulserver.recon.CoilSensitivities"><code class="xref py py-class docutils literal notranslate"><span class="pre">CoilSensitivities</span></code></a>. Tests: <em>a later unit without calibration readouts is given the maps of its slice</em>; <em>maps that differ in a field are refused naming it with both values</em>; <em>exam maps at another matrix are refused not resampled</em> (<code class="docutils literal notranslate"><span class="pre">test_calibration.py</span></code>).</p>
@@ -557,7 +557,7 @@ write such a plugin.</p>
 <p>Code: <a class="reference internal" href="../generated/pulserver.recon.ExamCache.html#pulserver.recon.ExamCache" title="pulserver.recon.ExamCache"><code class="xref py py-class docutils literal notranslate"><span class="pre">ExamCache</span></code></a>. Test: <em>a value one cache stores is read by the next on its directory</em> (<code class="docutils literal notranslate"><span class="pre">test_app.py</span></code>).</p>
 </li>
 <li><p><strong>Ships a <code class="docutils literal notranslate"><span class="pre">pics</span></code> plugin with prewhitening, coil compression, partial Fourier and asymmetric echo.</strong></p>
-<p>Code: <code class="docutils literal notranslate"><span class="pre">src/pulserver/_zoo/recon/pics.py</span></code>. Tests: <em>every other phase encode and the centre reconstruct to the image of all lines</em>; <em>a partial fourier image is closer to the full one than the solve of its lines alone</em>; <em>channels beyond the virtual coils are compressed before the maps and the solve</em> (<code class="docutils literal notranslate"><span class="pre">test_pics.py</span></code>).</p>
+<p>Code: <code class="docutils literal notranslate"><span class="pre">src/pulserver/_zoo/recon/pics.py</span></code>. Tests: <em>every other phase encode and the centre reconstruct to the image of all lines</em>; <em>a partial fourier image is closer to the full one than the solve of its lines alone</em>; <em>homodyne over two partial fourier axes together beats one axis after the other</em>; <em>a multi echo scan sends the real and imaginary parts of each echo as series of their own</em>; <em>channels beyond the virtual coils are compressed before the maps and the solve</em> (<code class="docutils literal notranslate"><span class="pre">test_pics.py</span></code>).</p>
 </li>
 <li><p><strong>Keeps a unit’s k-space, maps and solver vectors on the host, the encoding computing on the series’ GPU.</strong></p>
 <p>Code: <code class="docutils literal notranslate"><span class="pre">pics_image</span></code> in <code class="docutils literal notranslate"><span class="pre">src/pulserver/recon/handlers/pics.py</span></code>. Test: <em>the solve on host k space is bartorchs pics with the image on the host</em> (<code class="docutils literal notranslate"><span class="pre">test_pics.py</span></code>).</p>
@@ -580,13 +580,13 @@ write such a plugin.</p>
 <figure class="only-light align-default" id="id1">
 <img alt="../_images/context.svg" src="../_images/context.svg" />
 <figcaption>
-<p><span class="caption-text">Calibration stored by one series of an exam and reused by the next only on an exact match.</span><a class="headerlink" href="#id1" title="Link to this image">#</a></p>
+<p><span class="caption-text">Calibration stored by one series of an exam and reused by the next with the same coils, whitening and frame of reference, resliced onto its grid.</span><a class="headerlink" href="#id1" title="Link to this image">#</a></p>
 </figcaption>
 </figure>
 <figure class="only-dark align-default" id="id2">
 <img alt="../_images/context-dark.svg" src="../_images/context-dark.svg" />
 <figcaption>
-<p><span class="caption-text">Calibration stored by one series of an exam and reused by the next only on an exact match.</span><a class="headerlink" href="#id2" title="Link to this image">#</a></p>
+<p><span class="caption-text">Calibration stored by one series of an exam and reused by the next with the same coils, whitening and frame of reference, resliced onto its grid.</span><a class="headerlink" href="#id2" title="Link to this image">#</a></p>
 </figcaption>
 </figure>
 <section id="units">
@@ -611,10 +611,15 @@ are those of the reconstruction.</p>
 <h3>Calibration context<a class="headerlink" href="#calibration-context" title="Link to this heading">#</a></h3>
 <p>Maps estimated from whitened, compressed data describe only data with the same
 channels, whitening, compression and voxel grid. So a stored set records all
-of them, and <a class="reference internal" href="../generated/pulserver.recon.coil_maps.html#pulserver.recon.coil_maps" title="pulserver.recon.coil_maps"><code class="xref py py-func docutils literal notranslate"><span class="pre">coil_maps()</span></code></a> hands it to a unit only where
-every field is equal; otherwise it raises
-<a class="reference internal" href="../generated/pulserver.recon.MissingCalibration.html#pulserver.recon.MissingCalibration" title="pulserver.recon.MissingCalibration"><code class="xref py py-class docutils literal notranslate"><span class="pre">MissingCalibration</span></code></a>, naming each source and the field
-that differed. Nothing is resampled. The model and the comparison are in
+of them. <a class="reference internal" href="../generated/pulserver.recon.coil_maps.html#pulserver.recon.coil_maps" title="pulserver.recon.coil_maps"><code class="xref py py-func docutils literal notranslate"><span class="pre">coil_maps()</span></code></a> hands maps a series stored for
+itself to a unit only where every field is equal. Maps of the exam, measured
+by a calibration series, serve a unit with the same coils, whitening, frame of
+reference and table position: on another position, orientation or grid they
+are resliced onto the unit’s grid, and maps of uncompressed channels are
+projected onto the unit’s compression basis. A unit’s own calibration readouts
+always win over both. Where no source serves, it raises
+<a class="reference internal" href="../generated/pulserver.recon.MissingCalibration.html#pulserver.recon.MissingCalibration" title="pulserver.recon.MissingCalibration"><code class="xref py py-class docutils literal notranslate"><span class="pre">MissingCalibration</span></code></a>, naming each source and why it
+was not used, a unit reaching outside the calibration volume among them. The model and the comparison are in
 <a class="reference internal" href="../developer-guide/internals/calibration.html"><span class="doc">Calibration, noise and coil compression</span></a>; units and image headers in
 <a class="reference internal" href="../developer-guide/internals/reconstruction-proxy.html"><span class="doc">Reconstruction proxy</span></a>.</p>
 </section>

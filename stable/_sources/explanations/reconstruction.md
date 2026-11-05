@@ -40,9 +40,9 @@ write such a plugin.
 - **Prewhitens on arrival, from the series' noise readouts or the exam's noise covariance.**
 
   Code: {class}`~pulserver.recon.Prewhiten`. Test: *noise readouts whiten the imaging readouts* (`test_prewhiten.py`).
-- **Compresses coils with one basis per stream.**
+- **Compresses coils with one basis per stream, as the readouts arrive or as a unit closes.**
 
-  Code: {class}`~pulserver.recon.CoilCompression`. Tests: *virtual channels are uncorrelated and carry the leading eigenvalues*; *compressed data and maps reconstruct the uncompressed image* (`test_coil_compression.py`).
+  Code: {class}`~pulserver.recon.CompressChannels`, {class}`~pulserver.recon.CoilCompression`. Tests: *virtual channels are uncorrelated and carry the leading eigenvalues*; *compressed data and maps reconstruct the uncompressed image*; *calibration readouts are held then given on projected ahead of the first imaging readout*; *the basis comes from the calibration readouts of the first contrast* (`test_coil_compression.py`); *contrasts open together are buffered with the virtual channels and lose nothing* (`test_pics.py`).
 - **Finds coil maps in the unit, the stream or the exam, and refuses maps that differ in any recorded field.**
 
   Code: {func}`~pulserver.recon.coil_maps`, {class}`~pulserver.recon.CoilSensitivities`. Tests: *a later unit without calibration readouts is given the maps of its slice*; *maps that differ in a field are refused naming it with both values*; *exam maps at another matrix are refused not resampled* (`test_calibration.py`).
@@ -51,7 +51,7 @@ write such a plugin.
   Code: {class}`~pulserver.recon.ExamCache`. Test: *a value one cache stores is read by the next on its directory* (`test_app.py`).
 - **Ships a `pics` plugin with prewhitening, coil compression, partial Fourier and asymmetric echo.**
 
-  Code: `src/pulserver/_zoo/recon/pics.py`. Tests: *every other phase encode and the centre reconstruct to the image of all lines*; *a partial fourier image is closer to the full one than the solve of its lines alone*; *channels beyond the virtual coils are compressed before the maps and the solve* (`test_pics.py`).
+  Code: `src/pulserver/_zoo/recon/pics.py`. Tests: *every other phase encode and the centre reconstruct to the image of all lines*; *a partial fourier image is closer to the full one than the solve of its lines alone*; *homodyne over two partial fourier axes together beats one axis after the other*; *a multi echo scan sends the real and imaginary parts of each echo as series of their own*; *channels beyond the virtual coils are compressed before the maps and the solve* (`test_pics.py`).
 - **Keeps a unit's k-space, maps and solver vectors on the host, the encoding computing on the series' GPU.**
 
   Code: `pics_image` in `src/pulserver/recon/handlers/pics.py`. Test: *the solve on host k space is bartorchs pics with the image on the host* (`test_pics.py`).
@@ -71,13 +71,13 @@ write such a plugin.
 ```{figure} ../_static/context.svg
 :figclass: only-light
 
-Calibration stored by one series of an exam and reused by the next only on an exact match.
+Calibration stored by one series of an exam and reused by the next with the same coils, whitening and frame of reference, resliced onto its grid.
 ```
 
 ```{figure} ../_static/context-dark.svg
 :figclass: only-dark
 
-Calibration stored by one series of an exam and reused by the next only on an exact match.
+Calibration stored by one series of an exam and reused by the next with the same coils, whitening and frame of reference, resliced onto its grid.
 ```
 
 ### Units
@@ -102,10 +102,15 @@ are those of the reconstruction.
 
 Maps estimated from whitened, compressed data describe only data with the same
 channels, whitening, compression and voxel grid. So a stored set records all
-of them, and {func}`~pulserver.recon.coil_maps` hands it to a unit only where
-every field is equal; otherwise it raises
-{class}`~pulserver.recon.MissingCalibration`, naming each source and the field
-that differed. Nothing is resampled. The model and the comparison are in
+of them. {func}`~pulserver.recon.coil_maps` hands maps a series stored for
+itself to a unit only where every field is equal. Maps of the exam, measured
+by a calibration series, serve a unit with the same coils, whitening, frame of
+reference and table position: on another position, orientation or grid they
+are resliced onto the unit's grid, and maps of uncompressed channels are
+projected onto the unit's compression basis. A unit's own calibration readouts
+always win over both. Where no source serves, it raises
+{class}`~pulserver.recon.MissingCalibration`, naming each source and why it
+was not used, a unit reaching outside the calibration volume among them. The model and the comparison are in
 {doc}`../developer-guide/internals/calibration`; units and image headers in
 {doc}`../developer-guide/internals/reconstruction-proxy`.
 

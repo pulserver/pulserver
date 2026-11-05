@@ -45,7 +45,7 @@
   <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../_static/documentation_options.js?v=4f39bc78"></script>
+    <script src="../_static/documentation_options.js?v=cd58becf"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -56,7 +56,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.11';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.15';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -70,7 +70,7 @@
     <link rel="prev" title="User guide" href="index.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.4.11" />
+  <meta name="docsearch:version" content="v0.4.15" />
   
     
     <script src="../_static/searchtools.js"></script>
@@ -618,7 +618,11 @@ nex: 2
 <p>The offset is in mm along the logical readout, phase and slice axes, zero along
 an axis left out, and the rotation is given by the <code class="docutils literal notranslate"><span class="pre">fov_rotation_ij</span></code> lines of
 <a class="reference internal" href="../explanations/protocol.html"><span class="doc">Protocol resolution</span></a>. <code class="docutils literal notranslate"><span class="pre">nex</span></code>, a whole number from 1, plays the main
-sequence, the last file of the chain, that many times. The chain is copied,
+sequence, the last file of the chain, that many times, numbering the averages
+in the <code class="docutils literal notranslate"><span class="pre">AVG</span></code> counter: blocks under the label <code class="docutils literal notranslate"><span class="pre">ONCE</span></code> 1 play before the first
+average only, under <code class="docutils literal notranslate"><span class="pre">ONCE</span></code> 2 after the last only
+(<a class="reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.Sequence.expand_repeats.html#pypulseqpp.Sequence.expand_repeats" title="(in pypulseqpp latest)"><code class="xref py py-meth docutils literal notranslate"><span class="pre">pypulseqpp.Sequence.expand_repeats()</span></code></a>). A file that already writes <code class="docutils literal notranslate"><span class="pre">AVG</span></code>
+is refused with <code class="docutils literal notranslate"><span class="pre">nex</span></code> above 1, as is one with no block played every time. The chain is copied,
 then checked and converted as <code class="docutils literal notranslate"><span class="pre">generate</span></code> checks and converts a design.</p>
 </section>
 <section id="scanner-limits">
@@ -669,6 +673,12 @@ scanner for the prescription’s rotation:</p>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">design_max_slew</span></code></p></td>
 <td><p>Slew rate each logical axis is designed under, in the <code class="docutils literal notranslate"><span class="pre">slew_unit</span></code> of <code class="docutils literal notranslate"><span class="pre">max_slew</span></code></p></td>
 </tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">design_max_grad_any_rotation</span></code>, <code class="docutils literal notranslate"><span class="pre">design_max_slew_any_rotation</span></code></p></td>
+<td><p>The same for a design that must hold under any rotation: one whose scan follows motion-correction poses</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">pmc_enable</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">1</span></code> when the scan follows the poses its reconstruction publishes, <code class="docutils literal notranslate"><span class="pre">0</span></code> otherwise</p></td>
+</tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">design_rf_dead_time</span></code></p></td>
 <td><p>Least delay of an RF pulse in its block, in s</p></td>
 </tr>
@@ -681,6 +691,15 @@ scanner for the prescription’s rotation:</p>
 </tbody>
 </table>
 </div>
+<p>A sequence that sets <code class="docutils literal notranslate"><span class="pre">EnablePmc</span></code>, as the navigator option of <code class="docutils literal notranslate"><span class="pre">fse3d</span></code> and
+<code class="docutils literal notranslate"><span class="pre">mprage3d</span></code> does, is turned during the scan by the poses its reconstruction
+publishes when <code class="docutils literal notranslate"><span class="pre">pmc_enable</span></code> is <code class="docutils literal notranslate"><span class="pre">1</span></code>: rotations neither its design nor the
+check saw. Such a design is made under the <code class="docutils literal notranslate"><span class="pre">_any_rotation</span></code> limits, and the
+check also holds its gradient amplitude and slew rate summed over the three
+axes to <code class="docutils literal notranslate"><span class="pre">max_grad</span></code> and <code class="docutils literal notranslate"><span class="pre">max_slew</span></code>, since a rotation can put the whole vector
+on one physical axis. A sequence without <code class="docutils literal notranslate"><span class="pre">EnablePmc</span></code>, or a scan with
+<code class="docutils literal notranslate"><span class="pre">pmc_enable</span></code> <code class="docutils literal notranslate"><span class="pre">0</span></code>, is designed under <code class="docutils literal notranslate"><span class="pre">design_max_grad</span></code> and <code class="docutils literal notranslate"><span class="pre">design_max_slew</span></code>.
+The manifest’s <code class="docutils literal notranslate"><span class="pre">design_rotation</span></code> records which, <code class="docutils literal notranslate"><span class="pre">any</span></code> or <code class="docutils literal notranslate"><span class="pre">prescribed</span></code>.</p>
 <p>A design limit above the scanner’s leaves the scanner’s, and one left out is the
 scanner’s; a design dead time below the scanner’s leaves the scanner’s. The
 design dead times are the room a playout needs around an RF pulse or a readout
@@ -763,7 +782,7 @@ gradient heating from it.</p>
 <td><p>One forbidden band: its physical axis (<code class="docutils literal notranslate"><span class="pre">x</span></code>, <code class="docutils literal notranslate"><span class="pre">y</span></code>, <code class="docutils literal notranslate"><span class="pre">z</span></code> or <code class="docutils literal notranslate"><span class="pre">all</span></code>), its lowest and highest frequency in Hz and, optionally, the readout gradient amplitude in mT/m above which it is locked, as an echo-spacing lockout table states it, separated by spaces. Without an amplitude, the band is held to 8 mT/m (<code class="docutils literal notranslate"><span class="pre">RESONANCE_FLOOR</span></code>)</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">vop_file</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">.mat</span></code> or <code class="docutils literal notranslate"><span class="pre">.npz</span></code> file of VOPs and the head SAR matrix of each body model, at a path the design calls can read; its <code class="docutils literal notranslate"><span class="pre">safety_factor</span></code> multiplies local SAR</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">.mat</span></code> or <code class="docutils literal notranslate"><span class="pre">.npz</span></code> file of VOPs and the head SAR matrix of each body model, at a path the design calls can read; its <code class="docutils literal notranslate"><span class="pre">safety_factor</span></code> multiplies local SAR and its <code class="docutils literal notranslate"><span class="pre">global_safety_factor</span></code>, 1 when absent, global SAR</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">vop_head_limit</span></code>, <code class="docutils literal notranslate"><span class="pre">vop_local_limit</span></code></p></td>
 <td><p>The scanner’s head and local SAR limits in W/kg in its current operating mode</p></td>

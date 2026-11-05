@@ -44,7 +44,7 @@
   <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../../../_static/documentation_options.js?v=4f39bc78"></script>
+    <script src="../../../_static/documentation_options.js?v=cd58becf"></script>
     <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -55,7 +55,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.11';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.15';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -67,7 +67,7 @@
     <link rel="search" title="Search" href="../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.4.11" />
+  <meta name="docsearch:version" content="v0.4.15" />
   
     
     <script src="../../../_static/searchtools.js"></script>
@@ -520,6 +520,12 @@
 <span class="sd">    spl_average_limit</span>
 <span class="sd">        Largest A-weighted average sound pressure level allowed, in dB(A);</span>
 <span class="sd">        that of IEC 60601-2-33 by default.</span>
+<span class="sd">    follows_poses</span>
+<span class="sd">        Whether the scan follows the poses its reconstruction publishes. A</span>
+<span class="sd">        chain that sets ``EnablePmc`` is then turned during the scan by</span>
+<span class="sd">        rotations the check never sees, so its gradient amplitude and slew</span>
+<span class="sd">        rate summed over the three axes are held to the per-axis limits: any</span>
+<span class="sd">        rotation can put the whole vector on one axis.</span>
 
 <span class="sd">    Raises</span>
 <span class="sd">    ------</span>
@@ -543,6 +549,7 @@
     <span class="n">acoustic_interval</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span>
     <span class="n">spl_peak_limit</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">140.0</span>
     <span class="n">spl_average_limit</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">99.0</span>
+    <span class="n">follows_poses</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">__post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">pns_limit</span> <span class="o">&lt;=</span> <span class="mf">0.0</span><span class="p">:</span>
@@ -633,6 +640,10 @@
 <span class="sd">    gradient's length against ``limits.wave_memory``; and with</span>
 <span class="sd">    ``check_pns``, ``check_mech_resonance`` and ``check_spl`` where ``limits``</span>
 <span class="sd">    carries a nerve model, forbidden bands or an acoustic transfer function;</span>
+<span class="sd">    under ``limits.follows_poses``, a chain a file of which sets</span>
+<span class="sd">    ``EnablePmc`` also has its gradient amplitude and slew rate summed over</span>
+<span class="sd">    the axes held to the per-axis limits, which is what every rotation the</span>
+<span class="sd">    poses may bring keeps within them;</span>
 <span class="sd">    the gradient spectrum is read over windows of ``RESONANCE_WINDOW``, a</span>
 <span class="sd">    band stating no amplitude is held to ``RESONANCE_FLOOR``, and a stated</span>
 <span class="sd">    amplitude limits the axis's gradient while the band holds a line.</span>
@@ -674,9 +685,12 @@
     <span class="n">response</span> <span class="o">=</span> <span class="kc">None</span> <span class="k">if</span> <span class="n">spl_levels</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">limits</span><span class="o">.</span><span class="n">acoustic_response</span><span class="p">()</span>
     <span class="n">chain_read</span> <span class="o">=</span> <span class="n">designed</span> <span class="k">if</span> <span class="n">designed</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">_read</span><span class="p">(</span><span class="n">seq_path</span><span class="p">)</span>
     <span class="n">turn</span> <span class="o">=</span> <span class="kc">None</span> <span class="k">if</span> <span class="n">rotation</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">_prescription</span><span class="p">(</span><span class="n">rotation</span><span class="p">)</span>
+    <span class="n">any_rotation</span> <span class="o">=</span> <span class="n">limits</span><span class="o">.</span><span class="n">follows_poses</span> <span class="ow">and</span> <span class="nb">any</span><span class="p">(</span>
+        <span class="n">enables_pmc</span><span class="p">(</span><span class="n">sequence</span><span class="p">)</span> <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">sequence</span> <span class="ow">in</span> <span class="n">chain_read</span>
+    <span class="p">)</span>
     <span class="n">problems</span> <span class="o">=</span> <span class="p">[]</span>
     <span class="k">for</span> <span class="n">index</span><span class="p">,</span> <span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">sequence</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">chain_read</span><span class="p">):</span>
-        <span class="n">found</span> <span class="o">=</span> <span class="n">_problems</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">system</span><span class="p">,</span> <span class="n">turn</span><span class="p">,</span> <span class="n">limits</span><span class="p">,</span> <span class="n">response</span><span class="p">)</span>
+        <span class="n">found</span> <span class="o">=</span> <span class="n">_problems</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">system</span><span class="p">,</span> <span class="n">turn</span><span class="p">,</span> <span class="n">limits</span><span class="p">,</span> <span class="n">response</span><span class="p">,</span> <span class="n">any_rotation</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">spl_levels</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">found</span> <span class="o">+=</span> <span class="n">_spl_problems</span><span class="p">(</span><span class="n">spl_levels</span><span class="p">[</span><span class="n">index</span><span class="p">],</span> <span class="n">limits</span><span class="p">)</span>
         <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">chain_read</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
@@ -707,6 +721,7 @@
     <span class="n">rotation</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">limits</span><span class="p">:</span> <span class="n">CheckLimits</span><span class="p">,</span>
     <span class="n">response</span><span class="p">:</span> <span class="n">safety</span><span class="o">.</span><span class="n">AcousticResponse</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">any_rotation</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
     <span class="n">opts</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">copy</span><span class="p">(</span><span class="n">system</span><span class="p">)</span>
     <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">_RASTERS</span><span class="p">:</span>
@@ -729,6 +744,11 @@
         <span class="p">(</span><span class="n">_limit</span><span class="p">,</span> <span class="n">safety</span><span class="o">.</span><span class="n">check_max_grad</span><span class="p">,</span> <span class="s2">"gradient amplitude"</span><span class="p">,</span> <span class="s2">"mT/m"</span><span class="p">,</span> <span class="mf">1e3</span><span class="p">),</span>
         <span class="p">(</span><span class="n">_limit</span><span class="p">,</span> <span class="n">safety</span><span class="o">.</span><span class="n">check_max_slew</span><span class="p">,</span> <span class="s2">"slew rate"</span><span class="p">,</span> <span class="s2">"T/m/s"</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">),</span>
     <span class="p">]</span>
+    <span class="k">if</span> <span class="n">any_rotation</span><span class="p">:</span>
+        <span class="n">checks</span> <span class="o">+=</span> <span class="p">[</span>
+            <span class="p">(</span><span class="n">_vector</span><span class="p">,</span> <span class="n">safety</span><span class="o">.</span><span class="n">check_max_grad</span><span class="p">,</span> <span class="s2">"gradient amplitude"</span><span class="p">,</span> <span class="s2">"mT/m"</span><span class="p">,</span> <span class="mf">1e3</span><span class="p">),</span>
+            <span class="p">(</span><span class="n">_vector</span><span class="p">,</span> <span class="n">safety</span><span class="o">.</span><span class="n">check_max_slew</span><span class="p">,</span> <span class="s2">"slew rate"</span><span class="p">,</span> <span class="s2">"T/m/s"</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">),</span>
+        <span class="p">]</span>
     <span class="k">if</span> <span class="n">limits</span><span class="o">.</span><span class="n">pns</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">checks</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">_pns</span><span class="p">,</span> <span class="n">limits</span><span class="p">))</span>
     <span class="k">if</span> <span class="n">limits</span><span class="o">.</span><span class="n">bands</span><span class="p">:</span>
@@ -868,6 +888,35 @@
         <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">peak</span><span class="o">.</span><span class="n">axis</span><span class="si">}</span><span class="s2"> in block </span><span class="si">{</span><span class="n">peak</span><span class="o">.</span><span class="n">block</span><span class="si">}</span><span class="s2"> exceeds "</span>
         <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">found</span><span class="o">.</span><span class="n">limit</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="n">system</span><span class="o">.</span><span class="n">gamma</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">scale</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">unit</span><span class="si">}</span><span class="s2">"</span>
     <span class="p">]</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_vector</span><span class="p">(</span>
+    <span class="n">sequence</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Sequence</span><span class="p">,</span>
+    <span class="n">system</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">,</span>
+    <span class="n">check</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">unit</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">scale</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Return the problem of a peak summed over the axes above the per-axis limit, which some rotation puts on one axis."""</span>
+    <span class="n">_</span><span class="p">,</span> <span class="n">found</span> <span class="o">=</span> <span class="n">check</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">system</span><span class="p">)</span>
+    <span class="n">peak</span> <span class="o">=</span> <span class="n">found</span><span class="o">.</span><span class="n">vector</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">found</span><span class="o">.</span><span class="n">limit</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">peak</span><span class="o">.</span><span class="n">value</span> <span class="o">&lt;=</span> <span class="n">found</span><span class="o">.</span><span class="n">limit</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">[]</span>
+    <span class="k">return</span> <span class="p">[</span>
+        <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> of </span><span class="si">{</span><span class="n">peak</span><span class="o">.</span><span class="n">value</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="n">system</span><span class="o">.</span><span class="n">gamma</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">scale</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">unit</span><span class="si">}</span><span class="s2"> summed over "</span>
+        <span class="sa">f</span><span class="s2">"the axes in block </span><span class="si">{</span><span class="n">peak</span><span class="o">.</span><span class="n">block</span><span class="si">}</span><span class="s2"> exceeds "</span>
+        <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">found</span><span class="o">.</span><span class="n">limit</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="n">system</span><span class="o">.</span><span class="n">gamma</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">scale</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">unit</span><span class="si">}</span><span class="s2">, which a scan "</span>
+        <span class="s2">"following motion-correction poses may turn onto one axis"</span>
+    <span class="p">]</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">enables_pmc</span><span class="p">(</span><span class="n">sequence</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Sequence</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Whether a sequence sets ``EnablePmc``, asking the scan to follow the poses its reconstruction publishes."""</span>
+    <span class="n">value</span> <span class="o">=</span> <span class="n">sequence</span><span class="o">.</span><span class="n">definitions</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"EnablePmc"</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">False</span>
+    <span class="k">return</span> <span class="nb">bool</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">))</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_pns</span><span class="p">(</span><span class="n">sequence</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Sequence</span><span class="p">,</span> <span class="n">system</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">,</span> <span class="n">limits</span><span class="p">:</span> <span class="n">CheckLimits</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>

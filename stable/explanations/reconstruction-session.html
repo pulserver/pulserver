@@ -45,7 +45,7 @@
   <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../_static/documentation_options.js?v=4f39bc78"></script>
+    <script src="../_static/documentation_options.js?v=cd58becf"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -56,7 +56,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.11';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.15';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -70,7 +70,7 @@
     <link rel="prev" title="MRD enrichment" href="raw-data.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.4.11" />
+  <meta name="docsearch:version" content="v0.4.15" />
   
     
     <script src="../_static/searchtools.js"></script>
@@ -513,7 +513,7 @@
 <ul class="simple">
 <li><p>The proxy speaks Gadgetron’s MRD streaming messages: one series per connection, images back on the same one.</p></li>
 <li><p>The client’s config names the recon plugin, so one design can be reconstructed by any plugin.</p></li>
-<li><p>Each series runs in its own worker process, queued on disk when every slot is busy, or is forwarded to a reconstruction server.</p></li>
+<li><p>Each series runs in its own worker process, queued on disk when every slot is busy or memory is short, or is forwarded to a reconstruction server.</p></li>
 </ul>
 </div>
 <p>The scanner’s reconstruction client opens a connection per series, sends a
@@ -543,8 +543,8 @@ on the other end refuses a series it cannot serve, enriches it from its design
 <li><p><strong>Reconstructs each series in a fresh worker process, with spares that have already imported the engine, and returns why one failed.</strong></p>
 <p>Code: <a class="reference internal" href="../generated/pulserver.proxy.ReconProxy.html#pulserver.proxy.ReconProxy" title="pulserver.proxy.ReconProxy"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReconProxy</span></code></a>. Tests: <em>the spare worker is replaced after each series</em>; <em>the proxy process does not import the reconstruction engine</em>; <em>a crashing plugin closes its series and frees the slot</em>; <em>a plugin crashing while its series still arrives reports why</em> (<code class="docutils literal notranslate"><span class="pre">test_proxy.py</span></code>).</p>
 </li>
-<li><p><strong>Bounds concurrent series by slots, one per GPU by default, and holds the rest on disk.</strong></p>
-<p>Code: <code class="docutils literal notranslate"><span class="pre">--slots</span></code>, <code class="docutils literal notranslate"><span class="pre">--gpu-slots</span></code>, <code class="docutils literal notranslate"><span class="pre">--queue</span></code>. Tests: <em>a second series waits for a slot and still returns images</em>; <em>a series with every slot busy is held on disk until one frees</em>; <em>a series reads the gpu its slot holds</em> (<code class="docutils literal notranslate"><span class="pre">test_proxy.py</span></code>).</p>
+<li><p><strong>Bounds concurrent series by slots, one per GPU by default, and by the memory available, and holds the rest on disk.</strong></p>
+<p>Code: <code class="docutils literal notranslate"><span class="pre">--slots</span></code>, <code class="docutils literal notranslate"><span class="pre">--gpu-slots</span></code>, <code class="docutils literal notranslate"><span class="pre">--queue</span></code>. Tests: <em>a second series waits for a slot and still returns images</em>; <em>a series with every slot busy is held on disk until one frees</em>; <em>a series arriving while memory is short is held on disk until a series finishes</em>; <em>a series reads the gpu its slot holds</em> (<code class="docutils literal notranslate"><span class="pre">test_proxy.py</span></code>).</p>
 </li>
 <li><p><strong>Stops a reconstruction past its timeout and tells the client.</strong></p>
 <p>Code: <code class="docutils literal notranslate"><span class="pre">--recon-timeout</span></code>. Tests: <em>a reconstruction past the recon timeout is stopped and reported</em>; <em>a reconstruction outlasting the worker timeout still returns its image</em> (<code class="docutils literal notranslate"><span class="pre">test_proxy.py</span></code>).</p>
@@ -607,8 +607,9 @@ series.</p>
 <p>A worker reconstructs one series and exits, which frees whatever memory the
 reconstruction allocated; the import cost is paid by a spare started in
 advance. Slots are derived from memory and the GPUs found through
-<code class="docutils literal notranslate"><span class="pre">CUDA_VISIBLE_DEVICES</span></code> or <code class="docutils literal notranslate"><span class="pre">nvidia-smi</span></code>. A series without a slot is written to
-the queue, enriched, as it arrives, and the client stays connected until its
+<code class="docutils literal notranslate"><span class="pre">CUDA_VISIBLE_DEVICES</span></code> or <code class="docutils literal notranslate"><span class="pre">nvidia-smi</span></code>. A series without a slot, or arriving
+while another runs and the available memory is short of one reconstruction’s
+budget, is written to the queue, enriched, as it arrives, and the client stays connected until its
 images come back. <a class="reference internal" href="../developer-guide/internals/reconstruction-proxy.html"><span class="doc">Reconstruction proxy</span></a>
 states the details.</p>
 </section>

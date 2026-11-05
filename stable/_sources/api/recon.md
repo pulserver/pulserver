@@ -32,6 +32,7 @@ sensitivity maps, noise prewhitening and coil compression are the subject of
 | Object | Description |
 | --- | --- |
 | {obj}`~pulserver.recon.AsymmetricEcho` | Zero-fill a partial echo to the full echo that is symmetric about its `center_sample`. |
+| {obj}`~pulserver.recon.CompressChannels` | Project each readout's channels onto virtual channels from the calibration readouts that lead the scan, as it arrives. |
 | {obj}`~pulserver.recon.Prewhiten` | Whiten the channels of each readout with the stream's noise measurement. |
 | {obj}`~pulserver.recon.RemoveReadoutOversampling` | Crop a full echo to the readout field of view of the reconstruction. |
 

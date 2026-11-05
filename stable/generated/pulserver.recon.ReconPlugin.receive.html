@@ -45,7 +45,7 @@
   <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../_static/documentation_options.js?v=4f39bc78"></script>
+    <script src="../_static/documentation_options.js?v=cd58becf"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -56,7 +56,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.11';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.15';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -68,7 +68,7 @@
     <link rel="search" title="Search" href="../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.4.11" />
+  <meta name="docsearch:version" content="v0.4.15" />
   
     
     <script src="../_static/searchtools.js"></script>
@@ -504,10 +504,11 @@
 <dd><p>Take in one acquisition and reconstruct the units it completes.</p>
 <p>In order: the acquisition must pass <code class="docutils literal notranslate"><span class="pre">require_flags</span></code> and
 <code class="docutils literal notranslate"><span class="pre">reject_flags</span></code>; the <code class="docutils literal notranslate"><span class="pre">gadgets</span></code> run over a copy of it, any of which may
-consume it; <a class="reference internal" href="pulserver.recon.ReconPlugin.branch_for.html#pulserver.recon.ReconPlugin.branch_for" title="pulserver.recon.ReconPlugin.branch_for"><code class="xref py py-meth docutils literal notranslate"><span class="pre">branch_for()</span></code></a> names its branch; it is added to its
-unit, which places the readout the gadgets returned; the units that
-close are removed from the plugin and reconstructed by <a class="reference internal" href="pulserver.recon.ReconPlugin.recon.html#pulserver.recon.ReconPlugin.recon" title="pulserver.recon.ReconPlugin.recon"><code class="xref py py-meth docutils literal notranslate"><span class="pre">recon()</span></code></a>,
-in the order they opened. An acquisition carrying
+consume it, hold it, or give on readouts it held before it;
+<a class="reference internal" href="pulserver.recon.ReconPlugin.branch_for.html#pulserver.recon.ReconPlugin.branch_for" title="pulserver.recon.ReconPlugin.branch_for"><code class="xref py py-meth docutils literal notranslate"><span class="pre">branch_for()</span></code></a> names the branch of each readout given on; each is
+added to its unit, which places it; the units that close are removed
+from the plugin and reconstructed by <a class="reference internal" href="pulserver.recon.ReconPlugin.recon.html#pulserver.recon.ReconPlugin.recon" title="pulserver.recon.ReconPlugin.recon"><code class="xref py py-meth docutils literal notranslate"><span class="pre">recon()</span></code></a>, in the order they
+opened. Readouts a gadget still holds are placed by <a class="reference internal" href="pulserver.recon.ReconPlugin.flush.html#pulserver.recon.ReconPlugin.flush" title="pulserver.recon.ReconPlugin.flush"><code class="xref py py-meth docutils literal notranslate"><span class="pre">flush()</span></code></a>. An acquisition carrying
 <code class="docutils literal notranslate"><span class="pre">LAST_IN_MEASUREMENT</span></code> closes every open unit instead, as <a class="reference internal" href="pulserver.recon.ReconPlugin.flush.html#pulserver.recon.ReconPlugin.flush" title="pulserver.recon.ReconPlugin.flush"><code class="xref py py-meth docutils literal notranslate"><span class="pre">flush()</span></code></a>
 does, whether or not it has samples: the stream’s end marker has none.</p>
 <dl class="field-list simple">

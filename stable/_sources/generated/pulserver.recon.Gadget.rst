@@ -14,6 +14,7 @@
    :toctree:
    :nosignatures:
 
+   ~Gadget.release
    ~Gadget.startup
 
 

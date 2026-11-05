@@ -44,7 +44,7 @@
   <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../../../_static/documentation_options.js?v=4f39bc78"></script>
+    <script src="../../../_static/documentation_options.js?v=cd58becf"></script>
     <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -55,7 +55,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.11';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.15';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -67,7 +67,7 @@
     <link rel="search" title="Search" href="../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.4.11" />
+  <meta name="docsearch:version" content="v0.4.15" />
   
     
     <script src="../../../_static/searchtools.js"></script>
@@ -475,7 +475,7 @@
     <span class="n">prescribed_rotation</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._blocks</span><span class="w"> </span><span class="kn">import</span> <span class="n">import_averages</span><span class="p">,</span> <span class="n">parse_import</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">._limits</span><span class="w"> </span><span class="kn">import</span> <span class="n">design_system</span><span class="p">,</span> <span class="n">split_limits</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">._limits</span><span class="w"> </span><span class="kn">import</span> <span class="n">design_system</span><span class="p">,</span> <span class="n">follows_poses</span><span class="p">,</span> <span class="n">split_limits</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._push</span><span class="w"> </span><span class="kn">import</span> <span class="n">push</span> <span class="k">as</span> <span class="n">push_design</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._store</span><span class="w"> </span><span class="kn">import</span> <span class="n">DesignStore</span><span class="p">,</span> <span class="n">design_identity</span>
 
@@ -640,8 +640,11 @@
 <span class="sd">    the plugin's options, the plugin source, the package versions and the</span>
 <span class="sd">    limits is returned without designing again.</span>
 <span class="sd">    Otherwise the sequence is designed once, under the scanner limits</span>
-<span class="sd">    capped by the design limits ``design_max_grad`` and ``design_max_slew``</span>
-<span class="sd">    and laid out with the design dead times, written in the logical frame,</span>
+<span class="sd">    capped by the design limits ``design_max_grad`` and ``design_max_slew``,</span>
+<span class="sd">    or by their ``_any_rotation`` counterparts where the site follows</span>
+<span class="sd">    motion-correction poses (``pmc_enable``) and the plugin's sequence sets</span>
+<span class="sd">    ``EnablePmc`` (the manifest's ``design_rotation`` says which), and laid</span>
+<span class="sd">    out with the design dead times, written in the logical frame,</span>
 <span class="sd">    checked in the physical frame of the</span>
 <span class="sd">    prescription rotation against the scanner limits with</span>
 <span class="sd">    :func:`pulserver.ir.check`, converted to the IR cache at the prescribed</span>
@@ -664,8 +667,8 @@
     <span class="n">request</span> <span class="o">=</span> <span class="n">_request</span><span class="p">(</span><span class="n">block</span><span class="p">,</span> <span class="n">listing</span><span class="p">)</span>
     <span class="n">limits</span> <span class="o">=</span> <span class="n">_read</span><span class="p">(</span><span class="n">limits</span><span class="p">)</span>
     <span class="n">_</span><span class="p">,</span> <span class="n">options</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">split_limits</span><span class="p">(</span><span class="n">limits</span><span class="p">)</span>
-    <span class="n">design</span> <span class="o">=</span> <span class="n">design_system</span><span class="p">(</span><span class="n">limits</span><span class="p">)</span>
     <span class="n">scanner</span> <span class="o">=</span> <span class="n">_plugin</span><span class="p">(</span><span class="n">variant</span><span class="p">)</span>
+    <span class="n">design</span> <span class="o">=</span> <span class="n">design_system</span><span class="p">(</span><span class="n">limits</span><span class="p">,</span> <span class="n">any_rotation</span><span class="o">=</span><span class="n">_any_rotation</span><span class="p">(</span><span class="n">limits</span><span class="p">,</span> <span class="n">scanner</span><span class="p">))</span>
     <span class="n">requested</span> <span class="o">=</span> <span class="p">{</span><span class="n">key</span><span class="p">:</span> <span class="n">p</span><span class="o">.</span><span class="n">value</span> <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">listing</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">p</span><span class="o">.</span><span class="n">editable</span><span class="p">}</span>
     <span class="n">requested</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">request</span><span class="p">)</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="n">scanner</span><span class="o">.</span><span class="n">reads_exam</span><span class="p">:</span>
@@ -733,7 +736,8 @@
 <span class="k">def</span><span class="w"> </span><span class="nf">_generate</span><span class="p">(</span><span class="n">plugin</span><span class="p">,</span> <span class="n">limits</span><span class="p">,</span> <span class="n">listing</span><span class="p">,</span> <span class="n">scanner</span><span class="p">,</span> <span class="n">variant</span><span class="p">,</span> <span class="n">validation</span><span class="p">,</span> <span class="n">store</span><span class="p">,</span> <span class="n">push</span><span class="p">,</span> <span class="n">exam</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Design, check, convert and store ``validation``'s values; see :func:`generate`."""</span>
     <span class="n">system</span><span class="p">,</span> <span class="n">options</span><span class="p">,</span> <span class="n">checked</span> <span class="o">=</span> <span class="n">split_limits</span><span class="p">(</span><span class="n">limits</span><span class="p">)</span>
-    <span class="n">design</span> <span class="o">=</span> <span class="n">design_system</span><span class="p">(</span><span class="n">limits</span><span class="p">)</span>
+    <span class="n">any_rotation</span> <span class="o">=</span> <span class="n">_any_rotation</span><span class="p">(</span><span class="n">limits</span><span class="p">,</span> <span class="n">scanner</span><span class="p">)</span>
+    <span class="n">design</span> <span class="o">=</span> <span class="n">design_system</span><span class="p">(</span><span class="n">limits</span><span class="p">,</span> <span class="n">any_rotation</span><span class="o">=</span><span class="n">any_rotation</span><span class="p">)</span>
     <span class="n">source</span> <span class="o">=</span> <span class="n">_source</span><span class="p">(</span><span class="n">variant</span><span class="p">)</span>
     <span class="n">identified</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">validation</span><span class="o">.</span><span class="n">values</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">scanner</span><span class="o">.</span><span class="n">options</span><span class="p">:</span>
@@ -773,6 +777,7 @@
             <span class="s2">"source"</span><span class="p">:</span> <span class="n">source</span><span class="p">,</span>
             <span class="s2">"scan_time"</span><span class="p">:</span> <span class="n">validation</span><span class="o">.</span><span class="n">duration</span><span class="p">,</span>
             <span class="s2">"fov_offset_mm"</span><span class="p">:</span> <span class="p">[</span><span class="mf">1e3</span> <span class="o">*</span> <span class="n">value</span> <span class="k">for</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">offset</span><span class="p">],</span>
+            <span class="s2">"design_rotation"</span><span class="p">:</span> <span class="s2">"any"</span> <span class="k">if</span> <span class="n">any_rotation</span> <span class="k">else</span> <span class="s2">"prescribed"</span><span class="p">,</span>
         <span class="p">}</span>
         <span class="n">design</span> <span class="o">=</span> <span class="n">store</span><span class="o">.</span><span class="n">commit</span><span class="p">(</span><span class="n">identity</span><span class="p">,</span> <span class="n">staged</span><span class="p">,</span> <span class="n">manifest</span><span class="p">)</span>
     <span class="k">except</span> <span class="ne">BaseException</span><span class="p">:</span>
@@ -995,7 +1000,28 @@
     <span class="n">request</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
     <span class="n">exam</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Validation</span><span class="p">:</span>
-    <span class="k">return</span> <span class="n">_plugin</span><span class="p">(</span><span class="n">variant</span><span class="p">)</span><span class="o">.</span><span class="n">validate</span><span class="p">(</span><span class="n">design_system</span><span class="p">(</span><span class="n">limits</span><span class="p">),</span> <span class="n">request</span><span class="p">,</span> <span class="n">exam</span><span class="p">)</span>
+    <span class="n">scanner</span> <span class="o">=</span> <span class="n">_plugin</span><span class="p">(</span><span class="n">variant</span><span class="p">)</span>
+    <span class="n">design</span> <span class="o">=</span> <span class="n">design_system</span><span class="p">(</span><span class="n">limits</span><span class="p">,</span> <span class="n">any_rotation</span><span class="o">=</span><span class="n">_any_rotation</span><span class="p">(</span><span class="n">limits</span><span class="p">,</span> <span class="n">scanner</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">scanner</span><span class="o">.</span><span class="n">validate</span><span class="p">(</span><span class="n">design</span><span class="p">,</span> <span class="n">request</span><span class="p">,</span> <span class="n">exam</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_any_rotation</span><span class="p">(</span><span class="n">limits</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="n">scanner</span><span class="p">:</span> <span class="n">SequencePlugin</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Whether ``scanner`` is designed for every rotation: the site follows poses and its sequence asks for them.</span>
+
+<span class="sd">    A sequence function states that it sets ``EnablePmc`` by an</span>
+<span class="sd">    ``enable_pmc`` attribute, as :func:`pulserver._zoo._pmc.navigated` sets</span>
+<span class="sd">    it, on itself or on any function it wraps.</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">follows_poses</span><span class="p">(</span><span class="n">limits</span><span class="p">):</span>
+        <span class="k">return</span> <span class="kc">False</span>
+    <span class="n">app</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="nb">type</span><span class="p">(</span><span class="n">scanner</span><span class="p">)</span><span class="o">.</span><span class="n">app</span>
+    <span class="n">seen</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+    <span class="k">while</span> <span class="n">app</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">id</span><span class="p">(</span><span class="n">app</span><span class="p">)</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">seen</span><span class="p">:</span>
+        <span class="n">seen</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="nb">id</span><span class="p">(</span><span class="n">app</span><span class="p">))</span>
+        <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">app</span><span class="p">,</span> <span class="s2">"enable_pmc"</span><span class="p">,</span> <span class="kc">False</span><span class="p">):</span>
+            <span class="k">return</span> <span class="kc">True</span>
+        <span class="n">app</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">app</span><span class="p">,</span> <span class="s2">"__wrapped__"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">or</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">app</span><span class="p">,</span> <span class="s2">"func"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="k">return</span> <span class="kc">False</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_exam_digest</span><span class="p">(</span><span class="n">exam</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>

@@ -44,7 +44,7 @@
   <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../../../_static/documentation_options.js?v=4f39bc78"></script>
+    <script src="../../../_static/documentation_options.js?v=cd58becf"></script>
     <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -55,7 +55,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.11';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.15';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -67,7 +67,7 @@
     <link rel="search" title="Search" href="../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.4.11" />
+  <meta name="docsearch:version" content="v0.4.15" />
   
     
     <script src="../../../_static/searchtools.js"></script>
@@ -1028,7 +1028,15 @@
 <span class="sd">          acquires, and its frequency and phase offsets;</span>
 <span class="sd">        - ``adc_delay_us``, ``adc_dwell_ns``, ``adc_samples``: the ADC delay</span>
 <span class="sd">          from the block's start, dwell time and sample count; 0 without ADC;</span>
-<span class="sd">        - ``trid``: the TRID group in force, 0 when ungrouped.</span>
+<span class="sd">        - ``trid``: the TRID group in force, 0 when ungrouped;</span>
+<span class="sd">        - ``trigger_channel``, ``trigger_delay_us``, ``trigger_duration_us``:</span>
+<span class="sd">          the Pulseq channel code of the output trigger the block fires (1</span>
+<span class="sd">          ``osc0``, 2 ``osc1``, 3 ``ext1``), its delay from the block's start</span>
+<span class="sd">          and its duration, in µs; -1, 0 and 0 where it fires none;</span>
+<span class="sd">        - ``rf_shim``, ``rf_shim_span``: the complex weight per transmit</span>
+<span class="sd">          channel of every RF shim played, concatenated in play order, and</span>
+<span class="sd">          ``(blocks, 2)``, the start and stop of each block's weights in it;</span>
+<span class="sd">          an empty span for a block without one.</span>
 
 <span class="sd">        With ``waveforms``, also:</span>
 

@@ -45,7 +45,7 @@
   <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../_static/documentation_options.js?v=4f39bc78"></script>
+    <script src="../_static/documentation_options.js?v=cd58becf"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -56,7 +56,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.11';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.15';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -68,7 +68,7 @@
     <link rel="search" title="Search" href="../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.4.11" />
+  <meta name="docsearch:version" content="v0.4.15" />
   
     
     <script src="../_static/searchtools.js"></script>
@@ -564,7 +564,15 @@ prescription’s rotation is the only one the scanner applies;</p></li>
 acquires, and its frequency and phase offsets;</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">adc_delay_us</span></code>, <code class="docutils literal notranslate"><span class="pre">adc_dwell_ns</span></code>, <code class="docutils literal notranslate"><span class="pre">adc_samples</span></code>: the ADC delay
 from the block’s start, dwell time and sample count; 0 without ADC;</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">trid</span></code>: the TRID group in force, 0 when ungrouped.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">trid</span></code>: the TRID group in force, 0 when ungrouped;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">trigger_channel</span></code>, <code class="docutils literal notranslate"><span class="pre">trigger_delay_us</span></code>, <code class="docutils literal notranslate"><span class="pre">trigger_duration_us</span></code>:
+the Pulseq channel code of the output trigger the block fires (1
+<code class="docutils literal notranslate"><span class="pre">osc0</span></code>, 2 <code class="docutils literal notranslate"><span class="pre">osc1</span></code>, 3 <code class="docutils literal notranslate"><span class="pre">ext1</span></code>), its delay from the block’s start
+and its duration, in µs; -1, 0 and 0 where it fires none;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">rf_shim</span></code>, <code class="docutils literal notranslate"><span class="pre">rf_shim_span</span></code>: the complex weight per transmit
+channel of every RF shim played, concatenated in play order, and
+<code class="docutils literal notranslate"><span class="pre">(blocks,</span> <span class="pre">2)</span></code>, the start and stop of each block’s weights in it;
+an empty span for a block without one.</p></li>
 </ul>
 <p>With <code class="docutils literal notranslate"><span class="pre">waveforms</span></code>, also:</p>
 <ul class="simple">

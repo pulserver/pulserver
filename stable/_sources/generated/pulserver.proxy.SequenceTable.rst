@@ -39,3 +39,4 @@
    ~SequenceTable.slice_offset_m
    ~SequenceTable.spaces
    ~SequenceTable.sequence_parameters
+   ~SequenceTable.recon_parameters

@@ -45,7 +45,7 @@
   <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../_static/documentation_options.js?v=4f39bc78"></script>
+    <script src="../_static/documentation_options.js?v=cd58becf"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -58,7 +58,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.11';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.15';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -72,7 +72,7 @@
     <link rel="prev" title="Safety checks" href="safety-checks.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.4.11" />
+  <meta name="docsearch:version" content="v0.4.15" />
   
     
     <script src="../_static/searchtools.js"></script>
@@ -715,7 +715,7 @@ Two offsets give two caches, and two designs.</p>
 </tr>
 <tr class="row-odd"><td><p>Multishot gradient variants</p></td>
 <td><p>One base block with shot variants, chosen per instance by the optional <code class="docutils literal notranslate"><span class="pre">gradient_shot_index</span></code></p></td>
-<td><p>No shot index: a gradient that differs between instances is played as a wave from waveform memory, or the run is a variant of its virtual segment</p></td>
+<td><p>Supported without a shot index: each block instance names the shape its arbitrary gradient plays (<code class="docutils literal notranslate"><span class="pre">gx_shape_id</span></code>, <code class="docutils literal notranslate"><span class="pre">gy_shape_id</span></code>, <code class="docutils literal notranslate"><span class="pre">gz_shape_id</span></code>; the first through <code class="docutils literal notranslate"><span class="pre">pulseg_get_grad_initial_shape_id</span></code>), and the shapes are held in waveform memory, all resident or streamed through slots, so one base block plays a different shape per instance</p></td>
 </tr>
 </tbody>
 </table>

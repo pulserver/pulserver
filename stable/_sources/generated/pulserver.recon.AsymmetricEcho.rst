@@ -14,6 +14,7 @@
    :toctree:
    :nosignatures:
 
+   ~AsymmetricEcho.release
    ~AsymmetricEcho.startup
 
 

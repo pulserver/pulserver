@@ -45,7 +45,7 @@
   <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../_static/documentation_options.js?v=4f39bc78"></script>
+    <script src="../_static/documentation_options.js?v=cd58becf"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -56,7 +56,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.11';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.15';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -70,7 +70,7 @@
     <link rel="prev" title="Documentation" href="documentation.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.4.11" />
+  <meta name="docsearch:version" content="v0.4.15" />
   
     
     <script src="../_static/searchtools.js"></script>
@@ -762,19 +762,22 @@ verb that classifies the operation: “Return…”, “Read…”, “Format…
 <tr class="row-odd"><td><p>VOP safety factor (<code class="docutils literal notranslate"><span class="pre">safety_factor</span></code> of a VOP file)</p></td>
 <td><p>unitless, at least 1, on local SAR</p></td>
 </tr>
-<tr class="row-even"><td><p>Transmit configuration (<code class="docutils literal notranslate"><span class="pre">vop_coil</span></code>, <code class="docutils literal notranslate"><span class="pre">transmit</span></code> of a VOP file)</p></td>
+<tr class="row-even"><td><p>VOP global safety factor (<code class="docutils literal notranslate"><span class="pre">global_safety_factor</span></code> of a VOP file)</p></td>
+<td><p>unitless, at least 1, on global SAR; 1 when the file has none</p></td>
+</tr>
+<tr class="row-odd"><td><p>Transmit configuration (<code class="docutils literal notranslate"><span class="pre">vop_coil</span></code>, <code class="docutils literal notranslate"><span class="pre">transmit</span></code> of a VOP file)</p></td>
 <td><p>an opaque string the scanner reports</p></td>
 </tr>
-<tr class="row-odd"><td><p>Dwell time in an enriched acquisition (<code class="docutils literal notranslate"><span class="pre">sample_time_us</span></code>)</p></td>
+<tr class="row-even"><td><p>Dwell time in an enriched acquisition (<code class="docutils literal notranslate"><span class="pre">sample_time_us</span></code>)</p></td>
 <td><p>µs</p></td>
 </tr>
-<tr class="row-even"><td><p>k-space trajectory</p></td>
+<tr class="row-odd"><td><p>k-space trajectory</p></td>
 <td><p>1/m, as pypulseqpp reports it</p></td>
 </tr>
-<tr class="row-odd"><td><p>Grid trajectory (<code class="docutils literal notranslate"><span class="pre">ReconBuffer.grid_trajectory</span></code>)</p></td>
+<tr class="row-even"><td><p>Grid trajectory (<code class="docutils literal notranslate"><span class="pre">ReconBuffer.grid_trajectory</span></code>)</p></td>
 <td><p>k times the reconstructed field of view; an N-point matrix spans [-N/2, N/2)</p></td>
 </tr>
-<tr class="row-even"><td><p>Design identifier</p></td>
+<tr class="row-odd"><td><p>Design identifier</p></td>
 <td><p>18 hexadecimal digits: three 24-bit integers, each exact in a float32</p></td>
 </tr>
 </tbody>

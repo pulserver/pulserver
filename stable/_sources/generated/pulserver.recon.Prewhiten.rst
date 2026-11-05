@@ -15,6 +15,7 @@
    :nosignatures:
 
    ~Prewhiten.publish
+   ~Prewhiten.release
    ~Prewhiten.startup
 
 

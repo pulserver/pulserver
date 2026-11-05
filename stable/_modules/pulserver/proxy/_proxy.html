@@ -44,7 +44,7 @@
   <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../../../_static/documentation_options.js?v=4f39bc78"></script>
+    <script src="../../../_static/documentation_options.js?v=cd58becf"></script>
     <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -55,7 +55,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.11';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.15';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -67,7 +67,7 @@
     <link rel="search" title="Search" href="../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.4.11" />
+  <meta name="docsearch:version" content="v0.4.15" />
   
     
     <script src="../../../_static/searchtools.js"></script>
@@ -447,7 +447,15 @@
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">.._plugins</span><span class="w"> </span><span class="kn">import</span> <span class="n">NAME</span><span class="p">,</span> <span class="n">PluginPath</span><span class="p">,</span> <span class="n">directories</span><span class="p">,</span> <span class="n">find</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..recon._runtime</span><span class="w"> </span><span class="kn">import</span> <span class="n">constants</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">..recon._runtime.concurrency</span><span class="w"> </span><span class="kn">import</span> <span class="n">HostSlots</span><span class="p">,</span> <span class="n">Slot</span><span class="p">,</span> <span class="n">memory_allows</span><span class="p">,</span> <span class="n">slot_devices</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..recon._runtime.concurrency</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">DEFAULT_PER_RECON_GB</span><span class="p">,</span>
+    <span class="n">HostSlots</span><span class="p">,</span>
+    <span class="n">Slot</span><span class="p">,</span>
+    <span class="n">memory_allows</span><span class="p">,</span>
+    <span class="n">memory_holds</span><span class="p">,</span>
+    <span class="n">series_gib</span><span class="p">,</span>
+    <span class="n">slot_devices</span><span class="p">,</span>
+<span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..recon._runtime.connection</span><span class="w"> </span><span class="kn">import</span> <span class="n">Connection</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..recon._runtime.exam</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">DEFAULT_EXAM_DIRECTORY</span><span class="p">,</span>
@@ -456,6 +464,7 @@
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..recon._runtime.mrd2dicom</span><span class="w"> </span><span class="kn">import</span> <span class="n">MrdDicomBuilder</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..recon._runtime.readers</span><span class="w"> </span><span class="kn">import</span> <span class="n">deserialize_config</span><span class="p">,</span> <span class="n">read_text</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..recon.handlers.pics</span><span class="w"> </span><span class="kn">import</span> <span class="n">VIRTUAL_COILS</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.</span><span class="w"> </span><span class="kn">import</span> <span class="n">_held</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._designs</span><span class="w"> </span><span class="kn">import</span> <span class="n">Design</span><span class="p">,</span> <span class="n">DesignCache</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._enrich</span><span class="w"> </span><span class="kn">import</span> <span class="n">enrich_acquisition</span><span class="p">,</span> <span class="n">enrich_header</span><span class="p">,</span> <span class="n">header_fov_offset_m</span>
@@ -1049,6 +1058,10 @@
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""Reconstruct the series ``items`` streams on a worker, in a slot or from the queue.</span>
 
+<span class="sd">        A series whose buffers, sized from its header, the host's physical</span>
+<span class="sd">        memory cannot hold even alone is not reconstructed: its stream is read</span>
+<span class="sd">        to its end, so the proxy keeps it, and the client is told why.</span>
+
 <span class="sd">        ``motion`` is the pose file of a scan corrected for motion while it</span>
 <span class="sd">        plays: the poses the reconstruction states are published into it,</span>
 <span class="sd">        created anew for the series. Such a series runs alone among such</span>
@@ -1056,6 +1069,16 @@
 <span class="sd">        and are dropped where it is ``None``.</span>
 <span class="sd">        """</span>
         <span class="n">path</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_plugin_path</span><span class="p">(</span><span class="n">plugin</span><span class="p">)</span>
+        <span class="n">buffers</span> <span class="o">=</span> <span class="n">_buffers_gb</span><span class="p">(</span><span class="n">header</span><span class="p">,</span> <span class="n">plugin</span><span class="p">)</span>
+        <span class="n">budget</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">DEFAULT_PER_RECON_GB</span><span class="p">,</span> <span class="n">buffers</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">memory_holds</span><span class="p">(</span><span class="n">buffers</span><span class="p">):</span>
+            <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">items</span><span class="p">:</span>
+                <span class="k">pass</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">plugin</span><span class="si">}</span><span class="s2"> would buffer </span><span class="si">{</span><span class="n">buffers</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> GiB of k-space, more than "</span>
+                <span class="s2">"this host's memory holds for one reconstruction: the series is "</span>
+                <span class="s2">"not reconstructed, and is kept where the proxy keeps series"</span>
+            <span class="p">)</span>
         <span class="k">if</span> <span class="n">motion</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="c1"># Waits rather than queueing: a pose is worth nothing once the scan</span>
             <span class="c1"># it described has moved on, so a series that would publish one</span>
@@ -1082,7 +1105,7 @@
             <span class="k">finally</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_alone</span><span class="o">.</span><span class="n">release</span><span class="p">(</span><span class="n">alone</span><span class="p">)</span>
             <span class="k">return</span>
-        <span class="n">slot</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_slots</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">wait</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_admits</span><span class="p">()</span> <span class="k">else</span> <span class="kc">None</span>
+        <span class="n">slot</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_slots</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">wait</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_admits</span><span class="p">(</span><span class="n">budget</span><span class="p">)</span> <span class="k">else</span> <span class="kc">None</span>
         <span class="k">if</span> <span class="n">slot</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">try</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_run</span><span class="p">(</span>
@@ -1101,7 +1124,7 @@
         <span class="n">_log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">"queued </span><span class="si">%s</span><span class="s2">"</span><span class="p">,</span> <span class="n">queued</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
         <span class="k">try</span><span class="p">:</span>
             <span class="n">others</span> <span class="o">=</span> <span class="n">_record</span><span class="p">(</span><span class="n">items</span><span class="p">,</span> <span class="n">header</span><span class="p">,</span> <span class="n">queued</span><span class="p">)</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_wait_for_memory</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_wait_for_memory</span><span class="p">(</span><span class="n">budget</span><span class="p">)</span>
             <span class="n">slot</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_slots</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">wait</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
             <span class="k">try</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_run</span><span class="p">(</span>
@@ -1118,15 +1141,15 @@
         <span class="k">finally</span><span class="p">:</span>
             <span class="n">queued</span><span class="o">.</span><span class="n">unlink</span><span class="p">()</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_admits</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Return whether a series may start now: memory holds it, or this proxy runs none."""</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_admits</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">budget</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Return whether a series of ``budget`` GiB may start now: memory holds it, or this proxy runs none."""</span>
         <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_finished</span><span class="p">:</span>
-            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_running</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">memory_allows</span><span class="p">()</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_running</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">memory_allows</span><span class="p">(</span><span class="n">budget</span><span class="p">)</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_wait_for_memory</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Wait until :meth:`_admits` a series, rechecking as series finish and every second."""</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_wait_for_memory</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">budget</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Wait until :meth:`_admits` a series of ``budget`` GiB, rechecking as series finish and every second."""</span>
         <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_finished</span><span class="p">:</span>
-            <span class="k">while</span> <span class="bp">self</span><span class="o">.</span><span class="n">_running</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">memory_allows</span><span class="p">():</span>
+            <span class="k">while</span> <span class="bp">self</span><span class="o">.</span><span class="n">_running</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">memory_allows</span><span class="p">(</span><span class="n">budget</span><span class="p">):</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">_finished</span><span class="o">.</span><span class="n">wait</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="n">_MEMORY_POLL</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">close</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
@@ -1404,6 +1427,18 @@
         <span class="k">return</span> <span class="n">connection</span><span class="o">.</span><span class="n">next</span><span class="p">()[</span><span class="mi">1</span><span class="p">]</span>
     <span class="k">except</span> <span class="ne">StopIteration</span><span class="p">:</span>
         <span class="k">return</span> <span class="kc">None</span>
+
+
+<span class="c1">#: Plugins that compress each readout to ``VIRTUAL_COILS`` channels as it arrives.</span>
+<span class="n">_STREAM_COMPRESSED</span> <span class="o">=</span> <span class="p">(</span><span class="s2">"pics"</span><span class="p">,)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_buffers_gb</span><span class="p">(</span><span class="n">header</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">plugin</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the GiB of k-space ``plugin`` buffers for a series, as its header sizes them."""</span>
+    <span class="n">channels</span> <span class="o">=</span> <span class="n">VIRTUAL_COILS</span> <span class="k">if</span> <span class="n">plugin</span> <span class="ow">in</span> <span class="n">_STREAM_COMPRESSED</span> <span class="k">else</span> <span class="kc">None</span>
+    <span class="n">buffers</span> <span class="o">=</span> <span class="n">series_gib</span><span class="p">(</span><span class="n">header</span><span class="p">,</span> <span class="n">channels</span><span class="p">)</span>
+    <span class="n">_log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">"</span><span class="si">%s</span><span class="s2"> buffers </span><span class="si">%.1f</span><span class="s2"> GiB of k-space"</span><span class="p">,</span> <span class="n">plugin</span><span class="p">,</span> <span class="n">buffers</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">buffers</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_refuse</span><span class="p">(</span><span class="n">connection</span><span class="p">:</span> <span class="n">Connection</span><span class="p">,</span> <span class="n">error</span><span class="p">:</span> <span class="ne">Exception</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>

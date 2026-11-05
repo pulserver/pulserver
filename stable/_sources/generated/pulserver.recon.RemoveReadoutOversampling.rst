@@ -14,6 +14,7 @@
    :toctree:
    :nosignatures:
 
+   ~RemoveReadoutOversampling.release
    ~RemoveReadoutOversampling.startup
 
 

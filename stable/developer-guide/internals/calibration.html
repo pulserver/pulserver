@@ -45,7 +45,7 @@
   <link rel="preload" as="script" href="../../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../../_static/documentation_options.js?v=4f39bc78"></script>
+    <script src="../../_static/documentation_options.js?v=cd58becf"></script>
     <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -58,7 +58,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.11';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.15';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -72,7 +72,7 @@
     <link rel="prev" title="Internals" href="index.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.4.11" />
+  <meta name="docsearch:version" content="v0.4.15" />
   
     
     <script src="../../_static/searchtools.js"></script>
@@ -576,12 +576,24 @@ readouts of every unit are whitened alike.</p>
 <section id="coil-compression">
 <h2>Coil compression<a class="headerlink" href="#coil-compression" title="Link to this heading">#</a></h2>
 <p>The basis <span class="math notranslate nohighlight">\(A\)</span> is that of the channel covariance
-<span class="math notranslate nohighlight">\(\sum_k \mathbf{y}_k\mathbf{y}_k^H\)</span> over the placed samples of the calibration
-k-space of the first unit the stream compresses, or of its imaging k-space
-where that unit holds no calibration k-space. One basis is estimated per
-stream, and every unit is projected onto it, so the virtual channels of
-successive units are the same. The basis and the projection are computed on
-the host.</p>
+<span class="math notranslate nohighlight">\(\sum_k \mathbf{y}_k\mathbf{y}_k^H\)</span> over calibration samples. One basis is
+estimated per stream, and every readout or unit is projected onto it, so the
+virtual channels of successive units are the same. The basis and the
+projection are computed on the host. It is estimated in one of two places:</p>
+<ul class="simple">
+<li><p>as the readouts arrive, by the gadget
+<a class="reference internal" href="../../generated/pulserver.recon.CompressChannels.html#pulserver.recon.CompressChannels" title="pulserver.recon.CompressChannels"><code class="xref py py-class docutils literal notranslate"><span class="pre">CompressChannels</span></code></a>, from the calibration readouts
+(<code class="docutils literal notranslate"><span class="pre">REF</span></code> or <code class="docutils literal notranslate"><span class="pre">IMA</span></code>) of the first contrast that lead the scan. They are held
+until the first readout that is not calibration, then placed, projected,
+ahead of it; every later readout is projected as it arrives. The buffers then
+hold <span class="math notranslate nohighlight">\(n\)</span> channels, which is what lets the units of every echo of a
+multi-echo volume be open together;</p></li>
+<li><p>as a unit closes, by <a class="reference internal" href="../../generated/pulserver.recon.CoilCompression.html#pulserver.recon.CoilCompression" title="pulserver.recon.CoilCompression"><code class="xref py py-class docutils literal notranslate"><span class="pre">CoilCompression</span></code></a>, from the
+placed samples of the calibration k-space of the first unit the stream
+compresses, or of its imaging k-space where that unit holds none. This is
+the place for a scan whose calibration lines are spread among its imaging
+lines, such as an echo train.</p></li>
+</ul>
 <p>If the signal of the channels lies in a subspace of dimension at most <span class="math notranslate nohighlight">\(n\)</span>,
 compression discards none of it, and SENSE with compressed data and compressed
 maps reconstructs the image of the full set of channels to round-off.
@@ -721,7 +733,7 @@ the message of <a class="reference internal" href="../../generated/pulserver.rec
 <td><p><code class="docutils literal notranslate"><span class="pre">context.noise</span></code>; the exam key <a class="reference internal" href="../../generated/pulserver.recon.NOISE_COVARIANCE.html#pulserver.recon.NOISE_COVARIANCE" title="pulserver.recon.NOISE_COVARIANCE"><code class="xref py py-obj docutils literal notranslate"><span class="pre">NOISE_COVARIANCE</span></code></a></p></td>
 </tr>
 <tr class="row-odd"><td><p>Compression basis <span class="math notranslate nohighlight">\(A\)</span></p></td>
-<td><p><a class="reference internal" href="../../generated/pulserver.recon.CoilCompression.html#pulserver.recon.CoilCompression" title="pulserver.recon.CoilCompression"><code class="xref py py-class docutils literal notranslate"><span class="pre">CoilCompression</span></code></a>, called from <code class="docutils literal notranslate"><span class="pre">recon</span></code></p></td>
+<td><p><a class="reference internal" href="../../generated/pulserver.recon.CompressChannels.html#pulserver.recon.CompressChannels" title="pulserver.recon.CompressChannels"><code class="xref py py-class docutils literal notranslate"><span class="pre">CompressChannels</span></code></a>, a gadget; <a class="reference internal" href="../../generated/pulserver.recon.CoilCompression.html#pulserver.recon.CoilCompression" title="pulserver.recon.CoilCompression"><code class="xref py py-class docutils literal notranslate"><span class="pre">CoilCompression</span></code></a>, called from <code class="docutils literal notranslate"><span class="pre">recon</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">context.coil_compression</span></code></p></td>
 </tr>
 <tr class="row-even"><td><p>Maps <span class="math notranslate nohighlight">\(\mathbf{S}\)</span></p></td>

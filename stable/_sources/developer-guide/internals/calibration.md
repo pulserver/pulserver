@@ -67,12 +67,23 @@ readouts of every unit are whitened alike.
 ## Coil compression
 
 The basis $A$ is that of the channel covariance
-$\sum_k \mathbf{y}_k\mathbf{y}_k^H$ over the placed samples of the calibration
-k-space of the first unit the stream compresses, or of its imaging k-space
-where that unit holds no calibration k-space. One basis is estimated per
-stream, and every unit is projected onto it, so the virtual channels of
-successive units are the same. The basis and the projection are computed on
-the host.
+$\sum_k \mathbf{y}_k\mathbf{y}_k^H$ over calibration samples. One basis is
+estimated per stream, and every readout or unit is projected onto it, so the
+virtual channels of successive units are the same. The basis and the
+projection are computed on the host. It is estimated in one of two places:
+
+- as the readouts arrive, by the gadget
+  {class}`~pulserver.recon.CompressChannels`, from the calibration readouts
+  (`REF` or `IMA`) of the first contrast that lead the scan. They are held
+  until the first readout that is not calibration, then placed, projected,
+  ahead of it; every later readout is projected as it arrives. The buffers then
+  hold $n$ channels, which is what lets the units of every echo of a
+  multi-echo volume be open together;
+- as a unit closes, by {class}`~pulserver.recon.CoilCompression`, from the
+  placed samples of the calibration k-space of the first unit the stream
+  compresses, or of its imaging k-space where that unit holds none. This is
+  the place for a scan whose calibration lines are spread among its imaging
+  lines, such as an echo train.
 
 If the signal of the channels lies in a subspace of dimension at most $n$,
 compression discards none of it, and SENSE with compressed data and compressed
@@ -171,7 +182,7 @@ no coil sensitivities for slice 0; sources consulted:
 | Quantity | Interface | State |
 | --- | --- | --- |
 | Whitening $W$ | {class}`~pulserver.recon.Prewhiten`, a gadget | `context.noise`; the exam key {obj}`~pulserver.recon.NOISE_COVARIANCE` |
-| Compression basis $A$ | {class}`~pulserver.recon.CoilCompression`, called from `recon` | `context.coil_compression` |
+| Compression basis $A$ | {class}`~pulserver.recon.CompressChannels`, a gadget; {class}`~pulserver.recon.CoilCompression`, called from `recon` | `context.coil_compression` |
 | Maps $\mathbf{S}$ | {func}`~pulserver.recon.coil_maps`, called from `recon`; {class}`~pulserver.recon.CoilSensitivities` | `context.coil_maps` by slice; the exam key {obj}`~pulserver.recon.COIL_SENSITIVITIES`, read and written as `context.coil_sensitivities` |
 
 The state in `context` belongs to one stream. What a series leaves to the next

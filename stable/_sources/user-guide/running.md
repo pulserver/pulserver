@@ -86,7 +86,11 @@ nex: 2
 The offset is in mm along the logical readout, phase and slice axes, zero along
 an axis left out, and the rotation is given by the `fov_rotation_ij` lines of
 {doc}`../explanations/protocol`. `nex`, a whole number from 1, plays the main
-sequence, the last file of the chain, that many times. The chain is copied,
+sequence, the last file of the chain, that many times, numbering the averages
+in the `AVG` counter: blocks under the label `ONCE` 1 play before the first
+average only, under `ONCE` 2 after the last only
+({meth}`pypulseqpp.Sequence.expand_repeats`). A file that already writes `AVG`
+is refused with `nex` above 1, as is one with no block played every time. The chain is copied,
 then checked and converted as `generate` checks and converts a design.
 
 (scanner-limits)=
@@ -134,9 +138,21 @@ scanner for the prescription's rotation:
 | --- | --- |
 | `design_max_grad` | Gradient amplitude each logical axis is designed under, in the `grad_unit` of `max_grad` |
 | `design_max_slew` | Slew rate each logical axis is designed under, in the `slew_unit` of `max_slew` |
+| `design_max_grad_any_rotation`, `design_max_slew_any_rotation` | The same for a design that must hold under any rotation: one whose scan follows motion-correction poses |
+| `pmc_enable` | `1` when the scan follows the poses its reconstruction publishes, `0` otherwise |
 | `design_rf_dead_time` | Least delay of an RF pulse in its block, in s |
 | `design_rf_ringdown_time` | Least time from the end of an RF pulse to the end of its block, in s |
 | `design_adc_dead_time` | Least delay of a readout in its block, and least time after it, in s |
+
+A sequence that sets `EnablePmc`, as the navigator option of `fse3d` and
+`mprage3d` does, is turned during the scan by the poses its reconstruction
+publishes when `pmc_enable` is `1`: rotations neither its design nor the
+check saw. Such a design is made under the `_any_rotation` limits, and the
+check also holds its gradient amplitude and slew rate summed over the three
+axes to `max_grad` and `max_slew`, since a rotation can put the whole vector
+on one physical axis. A sequence without `EnablePmc`, or a scan with
+`pmc_enable` `0`, is designed under `design_max_grad` and `design_max_slew`.
+The manifest's `design_rotation` records which, `any` or `prescribed`.
 
 A design limit above the scanner's leaves the scanner's, and one left out is the
 scanner's; a design dead time below the scanner's leaves the scanner's. The
@@ -185,7 +201,7 @@ gradient heating from it.
 | `pns_<axis>_<field>` | SAFE nerve model, for the axes `x`, `y` and `z` and the fields `a1` to `a3`, `tau1` to `tau3` in ms, `stim_limit` in T/m/s and `g_scale` |
 | `pns_limit` | Largest PNS response allowed, as a fraction of the model's threshold; 1 when left out |
 | `forbidden_band_<n>` | One forbidden band: its physical axis (`x`, `y`, `z` or `all`), its lowest and highest frequency in Hz and, optionally, the readout gradient amplitude in mT/m above which it is locked, as an echo-spacing lockout table states it, separated by spaces. Without an amplitude, the band is held to 8 mT/m (`RESONANCE_FLOOR`) |
-| `vop_file` | `.mat` or `.npz` file of VOPs and the head SAR matrix of each body model, at a path the design calls can read; its `safety_factor` multiplies local SAR |
+| `vop_file` | `.mat` or `.npz` file of VOPs and the head SAR matrix of each body model, at a path the design calls can read; its `safety_factor` multiplies local SAR and its `global_safety_factor`, 1 when absent, global SAR |
 | `vop_head_limit`, `vop_local_limit` | The scanner's head and local SAR limits in W/kg in its current operating mode |
 | `vop_drive_per_hz` | Channel drive per Hz of RF amplitude, one value or one per channel separated by spaces; a scale common to every channel cancels. Equal drives when left out |
 | `vop_default_shim` | Magnitude and phase in rad of each channel's weight for a pulse played without an RF shim, separated by spaces; equal weights whose squares sum to 1 when left out |
