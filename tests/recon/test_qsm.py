@@ -44,6 +44,18 @@ class Maps(QsmRecon):
         return []
 
 
+def magnitudes(results):
+    """Return the magnitude images (series 0) among ``results``, each a result or a list of them."""
+    flat = []
+    for result in results:
+        flat.extend(result if isinstance(result, list) else [result])
+    return [
+        np.asarray(result.data)
+        for result in flat
+        if result is not None and not result.series_index
+    ]
+
+
 def multi_echo(te_ms):
     echoes = [vials(), coil_phantom(COILS, MATRIX)[2]][: len(te_ms)]
     acquisitions = []
@@ -64,12 +76,8 @@ def test_each_echo_is_the_pics_image_and_the_maps_follow_the_last_echo_once(devi
     pics = Images()
     reconstruct(acquisitions, header, device=device, plugin=pics)
 
-    images = [
-        np.asarray(result.data) for result in plugin.results if result is not None
-    ]
-    expected = [
-        np.asarray(result.data) for result in pics.results if result is not None
-    ]
+    images = magnitudes(plugin.results)
+    expected = magnitudes(pics.results)
     assert len(images) == len(expected) == 2
     for image, reference in zip(images, expected, strict=True):
         np.testing.assert_allclose(

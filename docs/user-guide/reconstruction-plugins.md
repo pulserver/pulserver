@@ -210,7 +210,9 @@ k-space `data.ref`, or taken from the maps the stream or the exam holds
 ({doc}`../developer-guide/internals/calibration` states the order and the
 conditions for reuse). {class}`~pulserver.recon.Prewhiten` is a gadget and
 {class}`~pulserver.recon.CoilCompression` a step called from `recon`; all three
-compute with bartorch.
+compute with bartorch. The gadget {class}`~pulserver.recon.CompressChannels`
+compresses each readout as it arrives instead, from the calibration readouts
+that lead the scan, so the buffers never hold the full set of channels.
 
 ```python
 # recon/gre.py
@@ -253,6 +255,11 @@ virtual channels, at most the channels of the first unit, with the basis of
 that unit's calibration k-space (its imaging k-space where it has none), and
 projects every later unit onto it. Compress a unit before requesting its maps,
 so that they are estimated in the basis of the data they are used with.
+`CompressChannels(n)`, placed after `Prewhiten` and before `AsymmetricEcho`,
+holds the leading calibration readouts until the first imaging-only readout,
+estimates the basis from those of the first contrast, and gives them on
+projected; a scan whose first readout is not calibration passes it unchanged,
+and a `CoilCompression` step in `recon` then compresses each unit.
 
 `apps.pics` computes where the maps are, here the host. An encoding built with
 `device=context.device`, such as {func}`bartorch.linop.CartesianSense`, computes
@@ -468,19 +475,20 @@ Seven shipped plugins are complete reconstructions, returning the values of thei
 transform or solve unscaled. They are searched after every reconstruction
 plugin directory, so a client can name one, such as `nufft`, without a file of
 its own, and a file of the same name in a `--plugins` directory replaces it.
-Each whitens its readouts with {class}`~pulserver.recon.Prewhiten`, compresses a
-unit of more than six receive channels to six virtual channels
-({class}`~pulserver.recon.CoilCompression`), and sends a volume as one image per
-partition.
+Each whitens its readouts with {class}`~pulserver.recon.Prewhiten`, compresses
+more than six receive channels to six virtual channels (`pics` as the readouts
+arrive, {class}`~pulserver.recon.CompressChannels`; the others a unit at a
+time, {class}`~pulserver.recon.CoilCompression`), and sends a volume as one
+image per partition.
 
 | Plugin | Reconstructs |
 | --- | --- |
-| `pics` | One image per slice, contrast, cardiac phase, set and repetition, averages summed, from readouts placed by their encoding counters, whitened, completed to full echoes and cropped to the reconstruction field of view as they arrive (`Prewhiten`, `AsymmetricEcho`, `RemoveReadoutOversampling`). Each image is solved as `bart pics -R W` over the coil sensitivities of {func}`~pulserver.recon.coil_maps` (`bart nlinv --phase-pole 0` of the unit's calibration readouts, else the maps stored for its slice or the exam's, else a fit to the unit's own low-resolution centre), then completed by `bart homodyne` along a partial-Fourier axis. A unit of calibration readouts only makes no image and stores its maps |
-| `pics_train` | `pics`'s images from readouts that number their place in an echo train or an inversion shot (`contrast`, `ECO`), merged so that the readouts of every place fill one image |
+| `pics` | One image per slice, contrast, cardiac phase, set and repetition, averages summed, from readouts placed by their encoding counters, whitened, compressed to six virtual channels from the calibration readouts that lead the scan, completed to full echoes and cropped to the reconstruction field of view as they arrive (`Prewhiten`, `CompressChannels`, `AsymmetricEcho`, `RemoveReadoutOversampling`). Each image is solved as `bart pics -R W` over the coil sensitivities of {func}`~pulserver.recon.coil_maps` (`bart nlinv --phase-pole 0` of the unit's calibration readouts, else the maps stored for its slice or the exam's, else a fit to the unit's own low-resolution centre), then completed by homodyne over every partial-Fourier axis together, which makes it real. A scan of more than one contrast also sends the real and imaginary parts of each image, series 1 and 2 beside the magnitude's 0; without partial Fourier they keep the phase. A unit of calibration readouts only makes no image and stores its maps |
+| `pics_train` | `pics`'s images from readouts that number their place in an echo train or an inversion shot (`contrast`, `ECO`), merged so that the readouts of every place fill one image; its channels are compressed a unit at a time, as a train mixes calibration and imaging lines |
 | `nufft` | The images of `pics` for a radial, spiral, PROPELLER or zero-echo-time trajectory or a stack of them, each solved as `bart pics -t -R W` over `bart nlinv --phase-pole 0 -t` sensitivities of the unit's samples near the k-space centre. The readouts of every segment of a unit, the blades of a PROPELLER scan or the shells of a zero-echo-time one, enter one solve; a trajectory that encodes the partition direction without a partition axis is solved as one volume |
 | `nufft_train` | `nufft`'s images from readouts that number their place in a train of excitations (`contrast`, `ECO`), merged so that the readouts of every place fill one image |
 | `epi` | `pics`'s images from EPI readouts, each whitened, resampled off its ramps onto the matrix and corrected for its odd/even phase against the shot's navigator as it arrives (`bart` ramp operator, `estimate_epi_phase`). The phase-encode-reversed reference set is an image of its own; with PyHySCO installed (GPL-3.0, not a dependency; the Docker image carries it), each later image of its slice, or volume of a 3D scan, is corrected for susceptibility distortion against it |
-| `qsm` | `pics`'s image of each echo of a multi-echo 3D gradient echo, and once the last echo of a volume is in, from the complex echoes with fast-qsm (an optional dependency; without it the echoes alone), each its own series: the root sum of squares over echoes and T2* of the whole object; then for the `QsmAnatomy` recon parameter 0 (phantom) QSM by PDF and MEDI+0 referenced to the water, 1 (brain) SWI and its minimum intensity projection, QSM by V-SHARP and iLSQR inside the SynthStrip brain mask and the DECOMPOSE paramagnetic and diamagnetic component susceptibilities, 2 (body) QSM by mask-free total field inversion. The echoes take homodyne's phase along a partial-Fourier axis, which QSM cannot use: QSM scans sample all of k-space |
+| `qsm` | `pics`'s images of each echo of a multi-echo 3D gradient echo (magnitude, real and imaginary series), and once the last echo of a volume is in, from the complex echoes with fast-qsm (an optional dependency; without it the echoes alone), each its own series from 3 on: the root sum of squares over echoes and T2* of the whole object; then for the `QsmAnatomy` recon parameter 0 (phantom) QSM by PDF and MEDI+0 referenced to the water, 1 (brain) SWI and its minimum intensity projection, QSM by V-SHARP and iLSQR inside the SynthStrip brain mask and the DECOMPOSE paramagnetic and diamagnetic component susceptibilities, 2 (body) QSM by mask-free total field inversion. A partial-Fourier axis makes the echoes real, without the field's phase: QSM scans sample all of k-space |
 | `pmc` | `pics_train`'s images, and a pose from each three-plane navigator (`NAV` or `RTFEEDBACK` readouts): planes gridded with Pipe-Menon density compensation on one thread, coils combined by root sum of squares, registered against the first navigator and filtered by an extended Kalman filter. The pose is published to the scan when its design sets `EnablePmc` |
 
 A plugin file that re-exports one under another name,

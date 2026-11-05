@@ -1,8 +1,13 @@
-"""Gadgets applied to each readout on arrival: prewhitening, asymmetric-echo filling and readout oversampling removal."""
+"""Gadgets applied to each readout on arrival: prewhitening, coil compression, asymmetric-echo filling and readout oversampling removal."""
 
 from __future__ import annotations
 
-__all__ = ["AsymmetricEcho", "Prewhiten", "RemoveReadoutOversampling"]
+__all__ = [
+    "AsymmetricEcho",
+    "CompressChannels",
+    "Prewhiten",
+    "RemoveReadoutOversampling",
+]
 
 import logging
 from typing import Any
@@ -12,7 +17,14 @@ import numpy as np
 from ..mrd._acquisitions import AcquisitionFlag
 from ..mrd._metadata import acquisition_label, has_acquisition_flag
 from ._buffers import discards, echo_centre
-from ._calibration import MissingCalibration, Whitening, coil_labels, digest
+from ._calibration import (
+    MissingCalibration,
+    Whitening,
+    basis_of,
+    coil_labels,
+    digest,
+    projected_readout,
+)
 from ._units import carries
 from .plugin import NOISE_COVARIANCE, Gadget
 
@@ -23,6 +35,13 @@ NAVIGATOR = AcquisitionFlag.IS_NAVIGATION_DATA | AcquisitionFlag.IS_RTFEEDBACK_D
 #: Readouts that are not sampled on the imaging grid: the gadgets pass them on
 #: as they are.
 _OFF_GRID = NAVIGATOR | AcquisitionFlag.IS_NOISE_MEASUREMENT
+
+#: The flags either of which marks a calibration readout: pypulseqpp's ``REF``
+#: and ``IMA`` labels.
+CALIBRATION = (
+    AcquisitionFlag.IS_PARALLEL_CALIBRATION
+    | AcquisitionFlag.IS_PARALLEL_CALIBRATION_AND_IMAGING
+)
 
 
 class Prewhiten(Gadget):
@@ -120,6 +139,89 @@ class Prewhiten(Gadget):
                 raise MissingCalibration(message)
             logging.getLogger(__name__).warning(message)
         self._resolved = True
+
+
+class CompressChannels(Gadget):
+    """Project the receive channels of each readout onto ``n_virtual`` virtual channels as it arrives.
+
+    The calibration readouts (``REF`` or ``IMA``) that lead a scan are held
+    until the first readout that is not one: the basis is the eigenvectors of
+    the channel covariance of every sample of the held readouts of the first
+    contrast, of all of them where none is of the first contrast
+    (:func:`bartorch.tools.cc`), of which the ``n_virtual`` with the largest
+    eigenvalues are kept. It is stored in ``context.coil_compression``, so the
+    maps :func:`~pulserver.recon.coil_maps` estimates record it. The held
+    readouts are then given on, projected, ahead of that readout, and every
+    later readout is projected as it arrives, so a buffer holds
+    ``n_virtual`` channels. Readouts held when the stream ends are given on
+    by :meth:`release`.
+
+    A stream whose first readout is not a calibration readout, or whose
+    readouts have no more than ``n_virtual`` channels, passes unchanged, as
+    do navigator and noise readouts. Place the gadget after
+    :class:`Prewhiten`, so the basis is that of whitened channels, and before
+    any gadget that changes the header of a readout: a held readout is given
+    on with its acquisition as this gadget received it.
+
+    Corresponds to Gadgetron's ``PCACoilGadget`` and
+    ``CoilReductionGadget``.
+
+    Parameters
+    ----------
+    n_virtual : int
+        Virtual channels kept.
+    """
+
+    def __init__(self, n_virtual: int) -> None:
+        if n_virtual < 1:
+            raise ValueError(f"n_virtual is {n_virtual}; it has to be at least 1")
+        self.n_virtual = int(n_virtual)
+
+    def startup(self, context):
+        super().startup(context)
+        self._held: list[tuple[Any, np.ndarray]] = []
+        self._passing = False
+
+    def __call__(self, acquisition: Any, data: np.ndarray) -> Any:
+        if self._passing or carries(acquisition, _OFF_GRID):
+            return data
+        basis = self.context.coil_compression
+        if basis is not None:
+            return projected_readout(data, basis)
+        if data.shape[0] <= self.n_virtual:
+            self._passing = True
+            return data
+        if carries(acquisition, CALIBRATION):
+            self._held.append((acquisition, np.array(data)))
+            return None
+        if not self._held:
+            self._passing = True
+            return data
+        return [*self.release(), (acquisition, projected_readout(data, self._basis()))]
+
+    def release(self) -> list[tuple[Any, np.ndarray]]:
+        """Return the readouts held, projected onto the basis they give, in the order they arrived."""
+        if not self._held:
+            return []
+        basis = self.context.coil_compression or self._basis()
+        held, self._held = self._held, []
+        return [
+            (acquisition, projected_readout(data, basis)) for acquisition, data in held
+        ]
+
+    def _basis(self) -> Any:
+        """Return the stream's basis, estimated from the held readouts when it has none."""
+        if self.context.coil_compression is None:
+            first = [
+                data
+                for acquisition, data in self._held
+                if int(acquisition_label(acquisition, "contrast", 0) or 0) == 0
+            ]
+            readouts = first or [data for _, data in self._held]
+            self.context.coil_compression = basis_of(
+                np.concatenate(readouts, axis=1), self.n_virtual
+            )
+        return self.context.coil_compression
 
 
 class AsymmetricEcho(Gadget):

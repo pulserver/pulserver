@@ -4,6 +4,7 @@ from __future__ import annotations
 
 __all__ = ["PLUGIN", "PicsTrainRecon"]
 
+from ..gadgets import AsymmetricEcho, Prewhiten, RemoveReadoutOversampling
 from .pics import PicsRecon
 
 
@@ -17,7 +18,9 @@ class PicsTrainRecon(PicsRecon):
     value of it fills, and closes when ``LAST_IN_SLICE`` has arrived for each.
 
     Two readouts of a unit that share their phase encode and partition replace
-    one another, with a warning. A scan whose contrasts are images, such as a
+    one another, with a warning. The readouts of a train mix calibration and
+    imaging lines, so the receive channels are compressed as each unit
+    closes rather than as the readouts arrive. A scan whose contrasts are images, such as a
     multi-echo gradient echo, is reconstructed by
     :class:`~pulserver.recon.handlers.pics.PicsRecon`.
 
@@ -32,6 +35,7 @@ class PicsTrainRecon(PicsRecon):
     def __init__(self, wavelet: float = 0.005, iterations: int = 30) -> None:
         super().__init__(wavelet, iterations)
         self.merge = ("contrast",)
+        self.gadgets = (Prewhiten(), AsymmetricEcho(), RemoveReadoutOversampling())
 
 
 PLUGIN = PicsTrainRecon()

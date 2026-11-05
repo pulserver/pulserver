@@ -70,10 +70,23 @@ def _images(console, name, values, recon=None):
         for m in messages
         if "dicom" in m
     ]
-    # The images of the scan itself: its first series. A reconstruction that
-    # derives maps from them (qsm) sends each map as a later series.
+    # The magnitude images of the scan itself: its first series. A
+    # reconstruction that derives maps from them (qsm) sends each map as a
+    # later series.
     first = min((int(d.SeriesNumber) for d in datasets), default=0)
-    return [d.pixel_array for d in datasets if int(d.SeriesNumber) == first]
+    return [
+        dataset.pixel_array
+        for dataset in datasets
+        if _magnitude(dataset) and int(dataset.SeriesNumber) == first
+    ]
+
+
+def _magnitude(dataset):
+    """Whether a DICOM image is a magnitude image, by its ``ImageType`` or GE's image-type tag."""
+    ge = dataset.get((0x0043, 0x102F))
+    if ge is not None:
+        return int(ge.value) == 0
+    return list(dataset.ImageType)[2:3] in ([], ["M"])
 
 
 def _correlation(a, b):

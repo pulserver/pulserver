@@ -14,24 +14,24 @@ import numpy as np
 
 from ...mrd._metadata import user_parameter
 from .._buffers import ReconData
-from .._correct import gradient_unwarped, states_gradient_coefficients
 from ..plugin import ReconContext, ReconResult
-from .pics import PicsRecon, compressed
+from .pics import IMAGINARY_SERIES, REAL_SERIES, PicsRecon
 
 _log = logging.getLogger(__name__)
 
 #: The anatomies of the ``QsmAnatomy`` recon parameter, by its value.
 ANATOMIES = ("phantom", "brain", "body")
 
-#: The series of each derived map, after the echoes' own (series 0).
+#: The series of each derived map, after the echoes' magnitude, real and
+#: imaginary series of ``pics``.
 SERIES = {
-    "rss": 1,
-    "t2star": 2,
-    "qsm": 3,
-    "swi": 4,
-    "swi_mip": 5,
-    "pcs": 6,
-    "dcs": 7,
+    "rss": 3,
+    "t2star": 4,
+    "qsm": 5,
+    "swi": 6,
+    "swi_mip": 7,
+    "pcs": 8,
+    "dcs": 9,
 }
 
 #: Gyromagnetic ratio of 1H over 2 pi, Hz/T.
@@ -55,8 +55,9 @@ class QsmRecon(PicsRecon):
 
     The anatomy is the ``QsmAnatomy`` recon parameter of the header (0
     phantom, 1 brain, 2 body), as ``gre_multiecho3d`` states it. The complex
-    image of each echo is kept until the last echo of its slice and loop
-    position closes; then, each its own series (:data:`SERIES`):
+    image of each echo, the real and imaginary series ``pics`` sends, is kept
+    until the last echo of its slice and loop position closes; then, each its
+    own series (:data:`SERIES`):
 
     - every anatomy: the root sum of squares of the echo magnitudes and T2*
       (ms) of the whole object, from the field fit of fast-qsm;
@@ -70,7 +71,9 @@ class QsmRecon(PicsRecon):
 
     The B0 direction in the image axes is that of the unit's reference
     acquisition, B0 is the header's resonance frequency over gamma, the echo
-    times are the header's, and the phase sign is :data:`PHASE_SIGN`. The
+    times are the header's, and the phase sign is :data:`PHASE_SIGN`. A
+    partial-Fourier axis leaves ``pics`` a real image without the field's
+    phase, so the scan must sample k-space fully. The
     SynthStrip weights are those of :func:`synthstrip_weights`. Without
     fast-qsm the plugin makes the echoes alone and logs why.
     """
@@ -87,30 +90,26 @@ class QsmRecon(PicsRecon):
     def recon(
         self, context: ReconContext, branch: str, data: ReconData
     ) -> list[ReconResult] | ReconResult | None:
-        del branch
-        data = compressed(context, data, self.virtual_coils)
-        if data.data is None:
-            return super().recon(context, "imaging", data)
-        image = self.unit_image(context, data, magnitude=False)
-        history = ["PULSERVER", "PYTHON", "PICS"]
-        magnitude = np.abs(image)
-        if states_gradient_coefficients(context.header):
-            magnitude = gradient_unwarped(magnitude, context, data)
-            history.append("GRADUNWARP")
-        results = [
-            ReconResult(magnitude, attributes={"ImageProcessingHistory": history})
-        ]
+        result = super().recon(context, branch, data)
         te = _echo_times(context.header)
+        if not isinstance(result, list) or len(te) < 2:
+            return result
+        parts = {r.series_index: r.data for r in result}
+        if REAL_SERIES not in parts or IMAGINARY_SERIES not in parts:
+            return result
+        image = np.asarray(parts[REAL_SERIES]) + 1j * np.asarray(
+            parts[IMAGINARY_SERIES]
+        )
         idx = data.data.reference.idx
         echo = int(idx.contrast)
         position = (int(idx.slice), int(idx.phase), int(idx.set), int(idx.repetition))
         held = self._echoes.setdefault(position, {})
-        held[echo] = image
-        if len(te) > 1 and len(held) == len(te):
+        held[echo] = image.astype(np.complex64)
+        if len(held) == len(te):
             del self._echoes[position]
             echoes = np.stack([held[e] for e in sorted(held)])
-            results.extend(self.maps(context, data, echoes, te))
-        return results
+            result.extend(self.maps(context, data, echoes, te))
+        return result
 
     def maps(
         self,

@@ -588,13 +588,18 @@ def _projected(maps: np.ndarray, basis: Basis) -> np.ndarray:
 
 
 def _basis(buffer: ReconBuffer, n_virtual: int) -> Basis:
+    return basis_of(buffer.kspace[:, buffer.mask], n_virtual)
+
+
+def basis_of(samples: np.ndarray, n_virtual: int) -> Basis:
+    """Return the basis of the ``n_virtual`` strongest virtual channels of ``(coils, n)`` samples (:func:`bartorch.tools.cc`)."""
     import torch
     from bartorch import tools
 
-    coils = buffer.coils
+    coils = samples.shape[0]
     if n_virtual > coils:
         raise ValueError(f"cannot keep {n_virtual} virtual channels of {coils}")
-    samples = np.ascontiguousarray(buffer.kspace[:, buffer.mask], dtype=np.complex64)
+    samples = np.ascontiguousarray(samples, dtype=np.complex64)
     matrix = tools.cc(
         torch.from_numpy(samples).reshape(coils, -1, 1, 1),
         p=n_virtual,
@@ -604,6 +609,14 @@ def _basis(buffer: ReconBuffer, n_virtual: int) -> Basis:
     )
     matrix = matrix.cpu().numpy()[:, :, 0, 0, 0]
     return Basis(matrix, n_virtual, digest(matrix[:, :n_virtual], n_virtual))
+
+
+def projected_readout(data: np.ndarray, basis: Basis) -> np.ndarray:
+    """Return a ``(coils, samples)`` readout on the virtual channels of ``basis``, as :func:`bartorch.tools.ccapply` projects k-space."""
+    virtual = basis.matrix[: basis.n_virtual].conj()
+    return (virtual.astype(data.dtype, copy=False) @ data).astype(
+        data.dtype, copy=False
+    )
 
 
 def _compressed(buffer: ReconBuffer | None, basis: Basis) -> ReconBuffer | None:

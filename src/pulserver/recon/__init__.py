@@ -10,7 +10,12 @@ from ._correct import gradient_unwarped
 from ._exam_image import ExamImage
 from ._figure import figure_rgb
 from ._loader import load_plugin
-from .gadgets import AsymmetricEcho, Prewhiten, RemoveReadoutOversampling
+from .gadgets import (
+    AsymmetricEcho,
+    CompressChannels,
+    Prewhiten,
+    RemoveReadoutOversampling,
+)
 from .plugin import (
     B0_MAP,
     B1_MAP,
@@ -35,6 +40,7 @@ __all__ = [
     "AsymmetricEcho",
     "CoilCompression",
     "CoilSensitivities",
+    "CompressChannels",
     "ExamCache",
     "ExamImage",
     "Gadget",
