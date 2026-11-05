@@ -25,9 +25,11 @@ from ._plugin import (
     load_exam,
     load_plugin,
 )
+from ._recon_parameters import RECON_PARAMETERS, recon_parameters
 from ._rf import RfControl, RfLayout
 
 __all__ = [
+    "RECON_PARAMETERS",
     "AveragesParam",
     "BoolParam",
     "ChoiceParam",
@@ -49,4 +51,5 @@ __all__ = [
     "load_exam",
     "load_plugin",
     "option",
+    "recon_parameters",
 ]

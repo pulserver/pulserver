@@ -28,6 +28,7 @@ from pypulseqpp.io import get_diffusion_table
 
 from .._accelerators import require
 from .._labels import MRD_COUNTERS, MRD_FLAGS
+from ..design._recon_parameters import RECON_PARAMETERS
 from ..mrd._acquisitions import AcquisitionFlag
 from ..mrd._metadata import DIFFUSION_TABLE, user_parameter
 from ..mrd._sequence import ReadoutTable, SequenceDefinitions, read_chain
@@ -168,6 +169,10 @@ class SequenceTable:
         ``(b, g)`` read from the table file the first file of the chain to
         name one names (:func:`pypulseqpp.io.get_diffusion_table`); None when
         no file names one or the table cannot be read.
+    recon_parameters : dict of str to str
+        The definitions the chain's files list in ``ReconParameters``
+        (:func:`pulserver.design.recon_parameters`), by name, their values as
+        written; a later file's value replaces an earlier one's.
     """
 
     counters: dict[str, np.ndarray]
@@ -184,6 +189,7 @@ class SequenceTable:
     _first_rows: np.ndarray = dataclasses.field(repr=False)
     fov_offset_m: tuple[float, float, float] = (0.0, 0.0, 0.0)
     diffusion: tuple[np.ndarray, np.ndarray] | None = None
+    recon_parameters: dict[str, str] = dataclasses.field(default_factory=dict)
 
     def __len__(self) -> int:
         return int(self.num_samples.size)
@@ -268,9 +274,11 @@ class SequenceTable:
         ti: list[float] = []
         flip: list[float] = []
         diffusion = None
+        recon: dict[str, str] = {}
         for subsequence, (_, seq) in enumerate(read_chain(path)):
             if diffusion is None:
                 diffusion = _diffusion(seq)
+            recon.update(_recon_parameters(seq))
             definitions = SequenceDefinitions.from_sequence(seq)
             readouts = ReadoutTable.from_sequence(seq)
             part, part_spaces = _map_readouts(
@@ -333,6 +341,7 @@ class SequenceTable:
             _first_rows=np.cumsum([0] + [len(file) for file in files[:-1]]),
             fov_offset_m=tuple(float(value) for value in fov_offset_m),
             diffusion=diffusion,
+            recon_parameters=recon,
         )
 
 
@@ -384,6 +393,24 @@ def is_enriched(header: Any) -> bool:
     return user_parameter(header, ENRICHED) is not None
 
 
+def _recon_parameters(seq: Any) -> dict[str, str]:
+    """Return the definitions a sequence lists in ``ReconParameters``, as strings."""
+
+    def text(value: Any) -> str:
+        if isinstance(value, (list, tuple, np.ndarray)):
+            return " ".join(
+                f"{item:g}" if isinstance(item, float) else str(item) for item in value
+            )
+        return f"{value:g}" if isinstance(value, float) else str(value)
+
+    names = str(seq.get_definition(RECON_PARAMETERS) or "").split()
+    return {
+        name: text(seq.get_definition(name))
+        for name in names
+        if seq.get_definition(name) not in (None, "")
+    }
+
+
 def _set_user_string(header: Any, name: str, value: str) -> None:
     if header.userParameters is None:
         header.userParameters = xsd.userParametersType()
@@ -407,9 +434,12 @@ def enrich_header(header: Any, table: SequenceTable) -> None:
     an existing encoding are kept; missing encodings are appended. Sequence
     parameters the table holds replace the header's, and its diffusion table
     becomes the ``diffusion_table`` user parameter string, one ``x y z b`` row
-    per volume (:func:`pulserver.mrd.diffusion_table`).
+    per volume (:func:`pulserver.mrd.diffusion_table`). Each recon parameter
+    of the table becomes a user parameter string of its name.
     """
     _set_user_string(header, ENRICHED, "1")
+    for name, value in table.recon_parameters.items():
+        _set_user_string(header, name, value)
     parameters = header.sequenceParameters
     if table.sequence_parameters and parameters is None:
         parameters = xsd.sequenceParametersType()

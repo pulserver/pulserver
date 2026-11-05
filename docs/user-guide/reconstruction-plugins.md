@@ -377,6 +377,20 @@ return recon.ReconResult(
 )
 ```
 
+## Recon parameters
+
+A sequence states values for its reconstruction with
+{func}`pulserver.design.recon_parameters`, which writes each as a definition
+and lists its name in the `ReconParameters` definition. The proxy copies every
+listed definition into the MRD header as a user parameter string of the same
+name, which the reconstruction reads:
+
+```python
+from pulserver import mrd
+
+anatomy = int(float(mrd.user_parameter(context.header, "QsmAnatomy", 0)))
+```
+
 ## Diffusion tables
 
 The proxy states the diffusion table a design names in the header's
@@ -448,7 +462,7 @@ the encoded space and the receiver channels:
 
 ## Shipped reconstructions
 
-Six shipped plugins are complete reconstructions, returning the values of their
+Seven shipped plugins are complete reconstructions, returning the values of their
 transform or solve unscaled. They are searched after every reconstruction
 plugin directory, so a client can name one, such as `nufft`, without a file of
 its own, and a file of the same name in a `--plugins` directory replaces it.
@@ -464,6 +478,7 @@ partition.
 | `nufft` | The images of `pics` for a radial, spiral, PROPELLER or zero-echo-time trajectory or a stack of them, each solved as `bart pics -t -R W` over `bart nlinv --phase-pole 0 -t` sensitivities of the unit's samples near the k-space centre. The readouts of every segment of a unit, the blades of a PROPELLER scan or the shells of a zero-echo-time one, enter one solve; a trajectory that encodes the partition direction without a partition axis is solved as one volume |
 | `nufft_train` | `nufft`'s images from readouts that number their place in a train of excitations (`contrast`, `ECO`), merged so that the readouts of every place fill one image |
 | `epi` | `pics`'s images from EPI readouts, each whitened, resampled off its ramps onto the matrix and corrected for its odd/even phase against the shot's navigator as it arrives (`bart` ramp operator, `estimate_epi_phase`). The phase-encode-reversed reference set is an image of its own; with PyHySCO installed (GPL-3.0, not a dependency; the Docker image carries it), each later image of its slice, or volume of a 3D scan, is corrected for susceptibility distortion against it |
+| `qsm` | `pics`'s image of each echo of a multi-echo 3D gradient echo, and once the last echo of a volume is in, from the complex echoes with fast-qsm (an optional dependency; without it the echoes alone), each its own series: the root sum of squares over echoes and T2* of the whole object; then for the `QsmAnatomy` recon parameter 0 (phantom) QSM by PDF and MEDI+0 referenced to the water, 1 (brain) SWI and its minimum intensity projection, QSM by V-SHARP and iLSQR inside the SynthStrip brain mask and the DECOMPOSE paramagnetic and diamagnetic component susceptibilities, 2 (body) QSM by mask-free total field inversion. The echoes take homodyne's phase along a partial-Fourier axis, which QSM cannot use: QSM scans sample all of k-space |
 | `pmc` | `pics_train`'s images, and a pose from each three-plane navigator (`NAV` or `RTFEEDBACK` readouts): planes gridded with Pipe-Menon density compensation on one thread, coils combined by root sum of squares, registered against the first navigator and filtered by an extended Kalman filter. The pose is published to the scan when its design sets `EnablePmc` |
 
 A plugin file that re-exports one under another name,

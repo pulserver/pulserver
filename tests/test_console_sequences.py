@@ -65,11 +65,15 @@ def _images(console, name, values, recon=None):
         recon=recon,
     )
     assert status == 0, messages[-1:]
-    return [
-        pydicom.dcmread(io.BytesIO(base64.b64decode(m["dicom"]))).pixel_array
+    datasets = [
+        pydicom.dcmread(io.BytesIO(base64.b64decode(m["dicom"])))
         for m in messages
         if "dicom" in m
     ]
+    # The images of the scan itself: its first series. A reconstruction that
+    # derives maps from them (qsm) sends each map as a later series.
+    first = min((int(d.SeriesNumber) for d in datasets), default=0)
+    return [d.pixel_array for d in datasets if int(d.SeriesNumber) == first]
 
 
 def _correlation(a, b):

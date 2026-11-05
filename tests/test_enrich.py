@@ -674,3 +674,32 @@ def test_a_design_whose_table_cannot_be_read_enriches_without_one(tmp_path, capl
     assert unreadable.diffusion is None
     assert diffusion_table(enriched) is None
     assert "diffusion table" in caplog.text
+
+
+def test_recon_parameters_a_sequence_states_reach_the_header_as_user_strings(
+    tmp_path,
+):
+    from pulserver.design import recon_parameters
+    from pulserver.mrd import user_parameter
+
+    seq = pp.Sequence(pp.Opts())
+    seq.set_definition("Matrix", [32, 3, 1])
+    for lin in range(3):
+        add_readout(seq, pp.make_label("LIN", "SET", lin))
+    recon_parameters(seq, QsmAnatomy=1, Lambda=2.5)
+    table = written(seq, tmp_path)
+    assert table.recon_parameters == {"QsmAnatomy": "1", "Lambda": "2.5"}
+    enriched = header()
+    enrich_header(enriched, table)
+    assert user_parameter(enriched, "QsmAnatomy") == "1"
+    assert user_parameter(enriched, "Lambda") == "2.5"
+
+
+def test_a_sequence_without_recon_parameters_adds_none_to_the_header(tmp_path):
+    from pulserver.mrd import user_parameter
+
+    table = fixture("gre_2d_3sl.seq")
+    assert table.recon_parameters == {}
+    enriched = header()
+    enrich_header(enriched, table)
+    assert user_parameter(enriched, "ReconParameters") is None

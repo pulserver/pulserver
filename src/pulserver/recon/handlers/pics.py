@@ -114,18 +114,27 @@ class PicsRecon(ReconPlugin):
         data = compressed(context, data, self.virtual_coils)
         if data.data is None and data.ref is not None:
             coil_maps(context, data, estimate=nlinv_estimate)
-        buffer = data.data
-        if buffer is None:
+        if data.data is None:
             return None
-        if buffer.space.cartesian:
-            image = self.image(averaged(buffer), buffer.image_shape, context, data)
-        else:
-            image = self.wave_image(context, data)
+        image = self.unit_image(context, data)
         history = ["PULSERVER", "PYTHON", "PICS"]
         if states_gradient_coefficients(context.header):
             image = gradient_unwarped(image, context, data)
             history.append("GRADUNWARP")
         return ReconResult(image, attributes={"ImageProcessingHistory": history})
+
+    def unit_image(
+        self, context: ReconContext, data: ReconData, *, magnitude: bool = True
+    ) -> np.ndarray:
+        """Return the image of a unit's imaging readouts: :meth:`complex_image` of a Cartesian space, :meth:`wave_image` of a wave-CAIPI one, its magnitude unless ``magnitude`` is False."""
+        buffer = data.data
+        if buffer.space.cartesian:
+            image = self.complex_image(
+                averaged(buffer), buffer.image_shape, context, data
+            )
+        else:
+            image = self.wave_image(context, data, magnitude=False)
+        return np.abs(image) if magnitude else image
 
     def image(
         self,
@@ -135,6 +144,20 @@ class PicsRecon(ReconPlugin):
         data: ReconData,
     ) -> np.ndarray:
         """Return the magnitude image of ``(coils, [partitions,] phase encodes, readout)`` k-space, cropped to ``shape``."""
+        return np.abs(self.complex_image(kspace, shape, context, data))
+
+    def complex_image(
+        self,
+        kspace: np.ndarray,
+        shape: tuple[int, ...],
+        context: ReconContext,
+        data: ReconData,
+    ) -> np.ndarray:
+        """Return the complex image of ``(coils, [partitions,] phase encodes, readout)`` k-space, cropped to ``shape``.
+
+        A partial-Fourier axis is completed by homodyne, whose phase is not
+        that of the object.
+        """
         import torch
         from bartorch import apps
 
@@ -147,13 +170,15 @@ class PicsRecon(ReconPlugin):
             volume, maps, sampled, self.wavelet, self.iterations, context.device
         )
         image = apps.partial_fourier(image, sampled)
-        image = image.abs().numpy()
+        image = image.numpy()
         if kspace.ndim == 3:
             image = image[0]
         return np.array(center_crop(image, shape[-image.ndim :]))
 
-    def wave_image(self, context: ReconContext, data: ReconData) -> np.ndarray:
-        """Return the magnitude image ``(partitions, phase encodes, readout)`` of a wave-CAIPI volume.
+    def wave_image(
+        self, context: ReconContext, data: ReconData, *, magnitude: bool = True
+    ) -> np.ndarray:
+        """Return the image ``(partitions, phase encodes, readout)`` of a wave-CAIPI volume, its magnitude unless ``magnitude`` is False.
 
         The wave-encoded readouts are ``data.data`` and the wave-free
         readouts of the calibration region ``data.ref``, both of one
@@ -223,7 +248,7 @@ class PicsRecon(ReconPlugin):
             maxiter=self.iterations,
         )
         image = scaling * solve(measured * (1.0 / scaling), encoding)
-        return image.abs().numpy()
+        return (image.abs() if magnitude else image).numpy()
 
 
 PLUGIN = PicsRecon()
