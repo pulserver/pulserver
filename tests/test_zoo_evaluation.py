@@ -1330,3 +1330,37 @@ def test_a_multi_echo_gradient_echo_spaces_its_echoes_by_the_shared_echo_spacing
     assert len(spaced) == 3
     assert np.diff(spaced) == pytest.approx(10e-3, abs=1e-5)
     assert np.diff(shortest).max() < 10e-3
+
+
+@pytest.mark.skipif(
+    importlib.util.find_spec("blochsim") is None, reason="blochsim is not installed"
+)
+def test_an_optimized_fse3d_train_is_designed_with_blochsim_on_the_cpu(monkeypatch):
+    """A host card blochsim carries no kernels for must never be asked to design a train."""
+    import contextlib
+
+    from blochsim import _execution
+
+    asked = []
+    real = _execution.execution
+
+    @contextlib.contextmanager
+    def recording(target="auto", **kwargs):
+        asked.append(target)
+        with real(target, **kwargs):
+            yield
+
+    monkeypatch.setattr(_execution, "execution", recording)
+    plugin = load_plugin(_plugins.SEQUENCES / "fse3d.py", {"refocusing": "optimized"})
+    plugin.app(
+        pp.Opts(),
+        fov_x=0.2,
+        fov_y=0.2,
+        slice_thickness=2e-3,
+        n_x=32,
+        n_y=16,
+        n_z=8,
+        etl=8,
+        tr=1.0,
+    )
+    assert asked and set(asked) == {"cpu"}
