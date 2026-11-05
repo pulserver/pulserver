@@ -93,6 +93,12 @@ class CheckLimits:
     spl_average_limit
         Largest A-weighted average sound pressure level allowed, in dB(A);
         that of IEC 60601-2-33 by default.
+    follows_poses
+        Whether the scan follows the poses its reconstruction publishes. A
+        chain that sets ``EnablePmc`` is then turned during the scan by
+        rotations the check never sees, so its gradient amplitude and slew
+        rate summed over the three axes are held to the per-axis limits: any
+        rotation can put the whole vector on one axis.
 
     Raises
     ------
@@ -116,6 +122,7 @@ class CheckLimits:
     acoustic_interval: float = 0.0
     spl_peak_limit: float = 140.0
     spl_average_limit: float = 99.0
+    follows_poses: bool = False
 
     def __post_init__(self) -> None:
         if self.pns_limit <= 0.0:
@@ -194,6 +201,10 @@ def check(
     gradient's length against ``limits.wave_memory``; and with
     ``check_pns``, ``check_mech_resonance`` and ``check_spl`` where ``limits``
     carries a nerve model, forbidden bands or an acoustic transfer function;
+    under ``limits.follows_poses``, a chain a file of which sets
+    ``EnablePmc`` also has its gradient amplitude and slew rate summed over
+    the axes held to the per-axis limits, which is what every rotation the
+    poses may bring keeps within them;
     the gradient spectrum is read over windows of ``RESONANCE_WINDOW``, a
     band stating no amplitude is held to ``RESONANCE_FLOOR``, and a stated
     amplitude limits the axis's gradient while the band holds a line.
@@ -235,9 +246,12 @@ def check(
     response = None if spl_levels is not None else limits.acoustic_response()
     chain_read = designed if designed is not None else _read(seq_path)
     turn = None if rotation is None else _prescription(rotation)
+    any_rotation = limits.follows_poses and any(
+        enables_pmc(sequence) for _, sequence in chain_read
+    )
     problems = []
     for index, (path, sequence) in enumerate(chain_read):
-        found = _problems(sequence, system, turn, limits, response)
+        found = _problems(sequence, system, turn, limits, response, any_rotation)
         if spl_levels is not None:
             found += _spl_problems(spl_levels[index], limits)
         if len(chain_read) > 1:
@@ -267,6 +281,7 @@ def _problems(
     rotation: np.ndarray | None,
     limits: CheckLimits,
     response: safety.AcousticResponse | None,
+    any_rotation: bool = False,
 ) -> list[str]:
     opts = copy.copy(system)
     for name in _RASTERS:
@@ -289,6 +304,11 @@ def _problems(
         (_limit, safety.check_max_grad, "gradient amplitude", "mT/m", 1e3),
         (_limit, safety.check_max_slew, "slew rate", "T/m/s", 1.0),
     ]
+    if any_rotation:
+        checks += [
+            (_vector, safety.check_max_grad, "gradient amplitude", "mT/m", 1e3),
+            (_vector, safety.check_max_slew, "slew rate", "T/m/s", 1.0),
+        ]
     if limits.pns is not None:
         checks.append((_pns, limits))
     if limits.bands:
@@ -428,6 +448,35 @@ def _limit(
         f"{peak.axis} in block {peak.block} exceeds "
         f"{found.limit / system.gamma * scale:.1f} {unit}"
     ]
+
+
+def _vector(
+    sequence: pp.Sequence,
+    system: pp.Opts,
+    check: Any,
+    name: str,
+    unit: str,
+    scale: float,
+) -> list[str]:
+    """Return the problem of a peak summed over the axes above the per-axis limit, which some rotation puts on one axis."""
+    _, found = check(sequence, system)
+    peak = found.vector
+    if not found.limit > 0 or peak.value <= found.limit:
+        return []
+    return [
+        f"{name} of {peak.value / system.gamma * scale:.1f} {unit} summed over "
+        f"the axes in block {peak.block} exceeds "
+        f"{found.limit / system.gamma * scale:.1f} {unit}, which a scan "
+        "following motion-correction poses may turn onto one axis"
+    ]
+
+
+def enables_pmc(sequence: pp.Sequence) -> bool:
+    """Whether a sequence sets ``EnablePmc``, asking the scan to follow the poses its reconstruction publishes."""
+    value = sequence.definitions.get("EnablePmc")
+    if value is None:
+        return False
+    return bool(np.any(np.asarray(value, dtype=float) != 0))
 
 
 def _pns(sequence: pp.Sequence, system: pp.Opts, limits: CheckLimits) -> list[str]:

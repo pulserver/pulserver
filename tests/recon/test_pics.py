@@ -224,7 +224,8 @@ def test_maps_of_a_plane_from_calibration_readouts_and_from_the_units_own_centre
         ((COILS, 1, MATRIX, MATRIX), False, None, 0),
         ((COILS, 2, MATRIX, MATRIX), False, None, None),
         ((COILS, 3, MATRIX, MATRIX), False, None, 0),
-        ((COILS, 3, 256, 256), False, None, 0),
+        ((COILS, 3, 256, 256), False, None, None),
+        ((COILS, 4, 256, 256), False, None, 0),
         ((COILS, 8, MATRIX), True, None, 0),
         ((COILS, 8, MATRIX), True, (MATRIX,) * 3, 0),
         ((COILS, 8, MATRIX), True, (2, MATRIX, MATRIX), None),
@@ -235,6 +236,7 @@ def test_maps_of_a_plane_from_calibration_readouts_and_from_the_units_own_centre
         "2 partitions",
         "3 partitions",
         "3 of 256",
+        "4 of 256",
         "trajectory",
         "3D trajectory",
         "3D trajectory of 2 partitions",
@@ -243,8 +245,9 @@ def test_maps_of_a_plane_from_calibration_readouts_and_from_the_units_own_centre
 def test_phase_pole_correction_is_asked_unless_the_calibration_grid_is_too_thin(
     shape, trajectory, image, phase_pole, monkeypatch
 ):
-    """The calibration grid is 24 points a side, where BART's detection
-    circle is 2 points: 3 along every axis are enough, whatever the matrix."""
+    """The calibration grid is 48 points a side, capped at the matrix, and
+    BART's detection circle is a twentieth of its longest side: 3 points
+    along every axis are enough on a 32-point matrix, 4 on 256."""
     import torch
     from bartorch import apps
 
@@ -259,8 +262,8 @@ def test_phase_pole_correction_is_asked_unless_the_calibration_grid_is_too_thin(
 
     assert asked == [
         {
-            "size": 24,
-            "radius": 12.0,
+            "size": 48,
+            "radius": 24.0,
             "shape": image,
             "phase_pole": phase_pole,
         }

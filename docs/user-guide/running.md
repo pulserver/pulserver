@@ -138,9 +138,21 @@ scanner for the prescription's rotation:
 | --- | --- |
 | `design_max_grad` | Gradient amplitude each logical axis is designed under, in the `grad_unit` of `max_grad` |
 | `design_max_slew` | Slew rate each logical axis is designed under, in the `slew_unit` of `max_slew` |
+| `design_max_grad_any_rotation`, `design_max_slew_any_rotation` | The same for a design that must hold under any rotation: one whose scan follows motion-correction poses |
+| `pmc_enable` | `1` when the scan follows the poses its reconstruction publishes, `0` otherwise |
 | `design_rf_dead_time` | Least delay of an RF pulse in its block, in s |
 | `design_rf_ringdown_time` | Least time from the end of an RF pulse to the end of its block, in s |
 | `design_adc_dead_time` | Least delay of a readout in its block, and least time after it, in s |
+
+A sequence that sets `EnablePmc`, as the navigator option of `fse3d` and
+`mprage3d` does, is turned during the scan by the poses its reconstruction
+publishes when `pmc_enable` is `1`: rotations neither its design nor the
+check saw. Such a design is made under the `_any_rotation` limits, and the
+check also holds its gradient amplitude and slew rate summed over the three
+axes to `max_grad` and `max_slew`, since a rotation can put the whole vector
+on one physical axis. A sequence without `EnablePmc`, or a scan with
+`pmc_enable` `0`, is designed under `design_max_grad` and `design_max_slew`.
+The manifest's `design_rotation` records which, `any` or `prescribed`.
 
 A design limit above the scanner's leaves the scanner's, and one left out is the
 scanner's; a design dead time below the scanner's leaves the scanner's. The

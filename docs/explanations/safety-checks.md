@@ -30,6 +30,9 @@ patient safety.
 - **Designs under per-logical-axis limits and checks against the coil's per-physical-axis limits.**
 
   Code: `design_max_grad`, `design_max_slew` in the call's limits. Test: *an oblique design is held under the design limits and checked against the scanner's* (`test_design_service.py`).
+- **Designs a scan that follows motion-correction poses for every rotation, and checks it so.**
+
+  Code: `design_max_grad_any_rotation`, `design_max_slew_any_rotation` and `pmc_enable` in the call's limits; `CheckLimits.follows_poses`. Tests: *a navigated scan at a site following poses is designed for every rotation*; *the vector is held to the axis limit only where poses may turn the scan*; *a sequence setting EnablePmc unannounced is refused where poses could turn it* (`test_any_rotation.py`).
 - **Checks that the file's rasters and the scanner's are integer multiples of each other.**
 
   Code: `check_raster_times` in `src/cpp/ir/dedup.cpp`, run by {func}`~pulserver.ir.convert`. Test: *a file raster converts only as an integer multiple of the scanner's* (`test_ir.py`).
@@ -104,7 +107,11 @@ physical axis at 45°. So the sequence is designed under `design_max_grad` and
 design margin of `pypulseqpp.apply_system_derates`, and checked on the physical
 axes against `max_grad` and `max_slew` as sent. The rotation arrives
 in the protocol's `fov_rotation_ij` entries; your sequence function never sees
-it.
+it. A scan that follows motion-correction poses is turned again during the
+scan, by rotations no check sees: a sequence that sets `EnablePmc` there is
+designed under the `_any_rotation` limits, and its gradient amplitude and slew
+rate summed over the three axes are held to the per-axis limits, the most any
+rotation can put on one axis.
 
 ### Limit sources
 
