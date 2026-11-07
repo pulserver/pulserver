@@ -77,6 +77,8 @@ def designed_chain(written: list[tuple[Path, Any]]) -> list[tuple[Path, Any]]:
 class SequenceDefinitions:
     """Definitions describing what a sequence acquires, in Pulseq units.
 
+    ``EffectiveEchoTime``, when present, supplies the contrast-equivalent TE
+    annotation in preference to physical ``TE``.
     ``TR`` and ``TE`` a sequence does not define are measured by
     ``Sequence.test_report_dict``: TE from the excitation before the closest
     approach to the k-space centre, TR between the excitations around it. An
@@ -91,7 +93,8 @@ class SequenceDefinitions:
         ``FOV`` and ``NavFOV`` as ``(x, y, z)``, in metres; ``None`` when
         undefined.
     tr, te, ti : tuple of float
-        ``TR``, ``TE`` and ``TI`` values, in seconds; empty when undefined.
+        ``TR``, ``TE`` (or ``EffectiveEchoTime``) and ``TI`` values, in seconds;
+        empty when undefined.
     flip_angle : tuple of float
         ``FlipAngle`` values, in degrees; empty when undefined.
     centre_line, centre_partition : int or None
@@ -128,7 +131,9 @@ class SequenceDefinitions:
         ``pypulseqpp.io.read`` builds one.
         """
         tr = tuple(_numbers(seq.get_definition("TR")))
-        te = tuple(_numbers(seq.get_definition("TE")))
+        te = tuple(_numbers(seq.get_definition("EffectiveEchoTime"))) or tuple(
+            _numbers(seq.get_definition("TE"))
+        )
         flip_angle = tuple(_numbers(seq.get_definition("FlipAngle")))
         if not (tr and te):
             measured_tr, measured_te = _measured(seq)

@@ -483,9 +483,10 @@ GE scanner:
 
 | Plugin | Option | User entry | Choices | Entries added |
 | --- | --- | --- | --- | --- |
-| `fse3d` | `refocusing` | `user38` | `"constant"`; `"optimized"`, a train designed with blochsim and shared by every shot; or `"dual_region"`, trains designed for the centre and the periphery of k-space, each shot's train a cubic step between them, `TR` and `ETL` being the centre's | Flip angle: the refocusing angle at the TE echo; `"dual_region"` also adds `user12` and `user13`, TR and ETL at the periphery |
-| `fse3d` | `ordering` | `user39` | `"radial"`, or `"shuffling"`: Poisson-disc views in random order | None |
+| `fse3d` | `refocusing` | `user38` | `"constant"`; `"optimized"`, a train designed with blochsim and shared by every shot; `"dual_region"`, direct-angle trains for the centre and periphery; `"busse"`, prescribed-PSS inverse EPG with forward-EPG control fitting; or `"busse_dual_region"`, independent Busse endpoint fits with a cubic control transition | Flip angle: the refocusing angle at TE for direct-angle designs, first/final maximum for Busse. Both dual-region options add `user12` and `user13`, TR and ETL at the periphery |
+| `fse3d` | `ordering` | `user39` | `"radial"`: PCLO for identical trains, Buonincontri assignment for varying trains; `"pclo"`, `"busse_radial"` (radius then polar angle, centre echo 0), and `"shuffling"` require identical trains | None |
 | `mprage3d` | `ordering` | `user39` | `"radial"`, each partition's lines centre-out, or `"shuffling"`: Poisson-disc lines in random order, for a time-resolved reconstruction | None |
+| `fse3d` | Busse controls | `user14`–`user19` | Minimum angle, centre angle, startup count, acquired centre echo (`-1`: midpoint), RF-dead-time overlap, crusher cycles | Busse modes only; `flip` gives the maximum angle |
 | `fse3d`, `mprage3d` | `navigator` | `user36` | Three-plane navigators; the design sets `EnablePmc`, and `pmc` publishes each pose to the scan | None |
 | `gre3d`, `gre_multiecho3d`, `mprage3d`, `fse3d` | `wave` | `user37` | Wave-CAIPI; the calibration region is acquired first without the wave, and `pics` and `pmc` reconstruct the wave-encoded volume | `user10` and `user11`: wave amplitude and cycles |
 | `gre3d`, `se3d`, `gre_multiecho3d` | `elliptical` | `user40` | Only the phase encodes inside the ky-kz ellipse; on by default | None |
@@ -495,6 +496,29 @@ GE scanner:
 | `zte3d` | `scheme` | `user43` | Spokes ordered `"spiral"`, at a constant step across many rings; `"meridian"`; or `"quiet"`, the default: the spiral's directions in steps about a ring gap long, every other shell played backwards | None |
 | `bssfp2d` | `retrospective` | `user44` | ECG gating: off, prospective, each heartbeat triggered and acquired once per cardiac phase; on, retrospective, each segment cycled over a heartbeat and binned into cardiac phases by the reconstruction | None |
 | `gre_spiral2d`, `se_spiral2d`, `gre_stack_of_spirals3d`, `se_stack_of_spirals3d`, `mprage_stack_of_spirals3d` | `variable_density` | `user42` | Variable-density spirals | `user12`: periphery undersampling |
+
+Busse modes play startup pulses without acquisition and use the same RF widths
+and echo spacing in every shot. All shots retain the longest train layout,
+with zero RF amplitude after each shot's own ETL. TR, acquired ETL and angle
+controls may vary;
+intermediate controls follow the cubic transition between two independent
+endpoint fits. In Busse modes, the TE control prescribes **contrast-equivalent
+TE**, using relaxed and relaxation-free CPMG EPG with reference T1/T2 of
+1000/100 ms. The nearest feasible centre echo is selected while retaining
+its prescribed centre angle. The default uses the midpoint; an explicit
+`user17` echo index takes precedence. The optimizer preserves the selected
+reference effective TE within 0.1 ms. The achieved value is recorded in
+`EffectiveEchoTime` and reported to the UI and MRD header; `TE` remains the
+physical excitation-to-centre-echo time. This reference contrast annotation
+does not model all tissues, B1 variation or inter-shot steady state. The selected echo must precede the last acquired echo in every
+train. `busse_radial` requires centre echo 0 and identical trains. `pclo`
+uses Rydén's pivot-centre, linear-outer ring permutation for an arbitrary
+centre echo in identical trains. `radial` selects PCLO for identical trains
+or Buonincontri joint shot/echo assignment for a centre/periphery parameter
+transition. The menu retains the same choice indices across refocusing modes.
+Sampling acceleration and the CAIPI shift are independent of this ordering
+choice. The PSF objective is an idealized design
+model, not a measurement of the scanner reconstruction.
 
 ### Diffusion tables
 
@@ -565,7 +589,7 @@ repetition from the modules their function is built from.
   gives for that TR and flip angle.
 - **Resolved values.** Those the main sequence states for the prescription,
   where the plugin has the entry: the echo time and repetition time in its `TE`
-  and `TR` definitions, the receiver bandwidth as the inverse of the dwell time
+  and `TR` definitions (`EffectiveEchoTime` takes precedence where supplied), the receiver bandwidth as the inverse of the dwell time
   of its first ADC event, and the slice thickness in its `SliceThickness`
   definition. A multi-echo sequence lists every echo time, and the `TE` entry
   holds the first.

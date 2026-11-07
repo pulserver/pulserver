@@ -1434,3 +1434,125 @@ def test_an_optimized_fse3d_train_is_designed_with_blochsim_on_the_cpu(monkeypat
         tr=1.0,
     )
     assert asked and set(asked) == {"cpu"}
+
+
+@WITH_BLOCHSIM
+@pytest.mark.parametrize("mode", ["busse", "busse_dual_region"])
+def test_busse_evaluation_counts_startup_and_matches_generated_scan_time(mode):
+    plugin = load_plugin(_plugins.SEQUENCES / "fse3d.py", {"refocusing": mode})
+    request = {
+        "nx": 64,
+        "ny": 32,
+        "nslices": 8,
+        "etl": 20,
+        "TR": 1800000,
+        "user0_value": 0,
+    }
+    if mode == "busse_dual_region":
+        request |= {"user12_value": 900.0, "user13_value": 28}
+    protocol = _protocol(plugin, request)
+    evaluation = plugin.evaluate(SYSTEM, protocol)
+    chain = _chain(plugin.generate(SYSTEM, protocol))
+    main = chain[-1]
+    rounding = SYSTEM.block_duration_raster * sum(map(_excitations, chain))
+    assert evaluation.duration == pytest.approx(
+        sum(s.duration()[0] for s in chain), abs=rounding + 1e-9
+    )
+    assert int(main.definitions["StartupEchoes"][0]) == 6
+    assert main.definitions["RefocusingFlipAngles"][0] == pytest.approx(120.0)
+    assert main.check_timing()[0]
+    for index, argument in (
+        (14, "busse_minimum_angle_deg"),
+        (15, "busse_centre_angle_deg"),
+        (16, "busse_startup_echoes"),
+        (17, "busse_centre_echo"),
+        (18, "rf_overlap"),
+        (19, "crusher_cycles"),
+    ):
+        assert plugin.protocol[UIParam.user_value(index)].argument == argument
+    assert plugin.protocol[UIParam.FLIP].argument == "busse_maximum_angle_deg"
+
+
+@WITH_BLOCHSIM
+def test_busse_effective_te_selects_an_echo_and_explicit_echo_takes_precedence():
+    plugin = load_plugin(_plugins.SEQUENCES / "fse3d.py", {"refocusing": "busse"})
+    common = {
+        "nx": 64,
+        "ny": 32,
+        "nslices": 8,
+        "etl": 20,
+        "TR": 1800000,
+        "user0_value": 0,
+    }
+    default = plugin.evaluate(SYSTEM, _protocol(plugin, common))
+    requested_te = default.protocol.arguments["busse_effective_te"] * 1e6 + 5000.0
+    later = plugin.evaluate(SYSTEM, _protocol(plugin, common | {"TE": requested_te}))
+    assert (
+        later.protocol.arguments["busse_effective_te"]
+        > default.protocol.arguments["busse_effective_te"]
+    )
+    explicit = plugin.evaluate(
+        SYSTEM, _protocol(plugin, common | {"TE": requested_te, "user17_value": 5})
+    )
+    assert (
+        explicit.protocol.arguments["busse_effective_te"]
+        < later.protocol.arguments["busse_effective_te"]
+    )
+
+
+@WITH_BLOCHSIM
+@pytest.mark.parametrize("mode", ["busse", "busse_dual_region"])
+def test_busse_listing_and_evaluation_import_no_torch(tmp_path, mode):
+    (tmp_path / "torch.py").write_text("raise SystemExit('torch imported')\n")
+    probe = f"LIMITS = {LIMITS!r}\n{LIST_AND_EVALUATE}"
+    found = subprocess.run(
+        [sys.executable, "-S", "-c", probe, mode],
+        capture_output=True,
+        text=True,
+        env={**os.environ, "PYTHONPATH": os.pathsep.join([str(tmp_path), *sys.path])},
+        check=False,
+    )
+    assert found.returncode == 0, found.stderr
+    assert found.stdout.strip() == "busse"
+
+
+@WITH_BLOCHSIM
+@pytest.mark.parametrize(
+    "mode", ["constant", "dual_region", "busse", "busse_dual_region"]
+)
+def test_fse_ordering_choices_keep_their_indices_across_refocusing_modes(mode):
+    from pulserver.design import OptionParam
+
+    plugin = load_plugin(_plugins.SEQUENCES / "fse3d.py", {"refocusing": mode})
+    ordering = next(
+        entry
+        for entry in plugin.protocol.values()
+        if isinstance(entry, OptionParam) and entry.name == "ordering"
+    )
+    assert ordering.choices == ("radial", "shuffling", "busse_radial", "pclo")
+
+
+@WITH_BLOCHSIM
+def test_busse_ui_te_and_mrd_annotation_use_contrast_equivalent_te():
+    from pulserver.mrd import SequenceDefinitions
+
+    plugin = load_plugin(_plugins.SEQUENCES / "fse3d.py", {"refocusing": "busse"})
+    assert plugin.protocol[UIParam.TE].argument == "busse_effective_te"
+    request = {
+        "nx": 64,
+        "ny": 32,
+        "nslices": 8,
+        "etl": 40,
+        "TR": 1800000,
+        "TE": 54000,
+        "user0_value": 0,
+    }
+    evaluation = plugin.evaluate(SYSTEM, _protocol(plugin, request))
+    main = _chain(plugin.generate(SYSTEM, evaluation.protocol))[-1]
+    effective = float(main.definitions["EffectiveEchoTime"][0])
+    physical = float(main.definitions["TE"][0])
+    assert physical > effective
+    assert effective == pytest.approx(
+        evaluation.protocol.arguments["busse_effective_te"], abs=1.01e-4
+    )
+    assert SequenceDefinitions.from_sequence(main).te == (effective,)

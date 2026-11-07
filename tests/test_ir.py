@@ -1100,3 +1100,39 @@ def test_a_half_raster_gradient_plays_its_raster_centre_samples(tmp_path):
     centres = times[0::2]
     np.testing.assert_allclose(at[1:-1], centres, atol=1e-9)
     np.testing.assert_allclose(values[1:-1], samples[0::2], rtol=1e-5)
+
+
+@pytest.mark.parametrize("varying", [False, True])
+def test_padded_busse_trains_keep_one_active_segment_and_one_closing_delay(
+    tmp_path, varying
+):
+    system = pp.Opts(
+        max_grad=40,
+        grad_unit="mT/m",
+        max_slew=150,
+        slew_unit="T/m/s",
+        rf_dead_time=100e-6,
+        rf_ringdown_time=20e-6,
+    )
+    protocol = {
+        "n_x": 32,
+        "n_y": 32,
+        "n_z": 16,
+        "etl": 20,
+        "te": None,
+        "tr": 1.8,
+        "n_dummy": 0,
+        "flip_modulation": "busse",
+        "rf_overlap": True,
+    }
+    if varying:
+        protocol.update(
+            etl_periphery=28,
+            tr_periphery=0.9,
+            busse_minimum_angle_periphery_deg=30,
+            busse_centre_angle_periphery_deg=65,
+        )
+    sequence = sequences.fse3D_sequence(system, **protocol)
+    path = tmp_path / "padded_fse.seq"
+    sequence.write(path)
+    assert summary(path, system)["num_segments"] == 2
