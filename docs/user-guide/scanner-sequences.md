@@ -531,8 +531,8 @@ peak position are calculated outputs. A final angle equal to the maximum
 allows the RF maximum to extend to the final pulse. This is an independent PD design,
 not a numerical reconstruction of Siemens PDvar*.
 
-The optional control fit adjusts first angle and signal-tail onset, retaining
-maximum/final angles, reference effective TE, centre signal and signed
+The optional control fit adjusts signal-tail onset, retaining the prescribed
+first/maximum/final angles, reference effective TE, centre signal and signed
 contrast constraints. The transition uses two endpoint fits and batched
 inverse EPG. ESP and RF widths are shared; every shot keeps the longest-train
 layout with zero RF amplitude after its own acquired ETL. Shared trains use
