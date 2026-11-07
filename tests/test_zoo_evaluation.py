@@ -55,6 +55,7 @@ CHANGED = {
     "epi2d": {"flip": 60.0, "nx": 64, "ny": 32},
     "epi3d": {"flip": 60.0, "nx": 64, "ny": 32, "nslices": 8},
     "fse3d": {"nx": 64, "ny": 32, "nslices": 16, "etl": 16},
+    "fse_pd3d": {"nx": 64, "ny": 32, "nslices": 16, "etl": 16},
     "gre2d": {"flip": 20.0, "nx": 64, "ny": 48},
     "gre3d": {"flip": 20.0, "nx": 64, "ny": 32, "nslices": 16},
     "gre_multiecho2d": {"flip": 20.0, "num_echoes": 2, "nx": 64, "ny": 48},
@@ -398,6 +399,7 @@ TRAINS: dict[str, list[str]] = {
     "epi2d": ["saturation", "excitation"],
     "epi3d": ["excitation"] * 32,
     "fse3d": ["excitation"] + ["refocusing"] * 45,
+    "fse_pd3d": ["excitation"] + ["refocusing"] * 51,
     "mprage3d": ["inversion"] + ["excitation"] * 256,
     "mprage_stack_of_spirals3d": ["inversion"] + ["excitation"] * 16,
     "mprage_stack_of_stars3d": ["inversion"] + ["excitation"] * 403,
@@ -543,14 +545,15 @@ def _reply(command, name, **asked):
     return reply
 
 
-def test_the_shipped_sequences_with_a_flip_entry_are_the_ones_that_are_not_spin_echoes(
+def test_flip_entries_bind_excitation_or_explicit_refocusing_controls(
     zoo,
 ):
     assert FLIPPED
     assert SPIN_ECHO
-    assert {name for name in SHIPPED if UIParam.FLIP in zoo[name].protocol} == set(
-        FLIPPED
-    )
+    assert {name for name in SHIPPED if UIParam.FLIP in zoo[name].protocol} == {
+        *FLIPPED,
+        "fse_pd3d",
+    }
 
 
 @pytest.mark.parametrize("name", SHIPPED)
@@ -561,11 +564,12 @@ def test_a_zoo_sequence_has_a_flip_entry_exactly_where_its_function_takes_a_flip
     app = plugin.app
     function = app.func if isinstance(app, functools.partial) else app
 
-    takes_flip = "flip_angle_deg" in inspect.signature(function).parameters
+    argument = "pd_maximum_angle_deg" if name == "fse_pd3d" else "flip_angle_deg"
+    takes_flip = argument in inspect.signature(function).parameters
 
     assert (UIParam.FLIP in plugin.protocol) == takes_flip
     if takes_flip:
-        assert plugin.protocol[UIParam.FLIP].argument == "flip_angle_deg"
+        assert plugin.protocol[UIParam.FLIP].argument == argument
 
 
 @pytest.mark.parametrize(("name", "changes"), SCANS)
@@ -609,7 +613,7 @@ def test_an_evaluation_states_as_its_layout_a_regular_tr_of_the_design(
     start = main.duration()[0] - main.definitions["TR"][0] if balanced else 0
     # An optimized refocusing train is designed around its flip angle rather
     # than scaled by it.
-    scaled = UIParam.FLIP in plugin.protocol and not name.startswith("fse3d")
+    scaled = UIParam.FLIP in plugin.protocol and not name.startswith("fse")
     banded = UIParam.EXSAT_MASK in plugin.protocol
     expected = rf_layout(main, scaled, start=start, banded=banded)
     amplitude = expected.instances.amplitude.copy()
@@ -1434,3 +1438,206 @@ def test_an_optimized_fse3d_train_is_designed_with_blochsim_on_the_cpu(monkeypat
         tr=1.0,
     )
     assert asked and set(asked) == {"cpu"}
+
+
+@WITH_BLOCHSIM
+@pytest.mark.parametrize("mode", ["busse", "busse_dual_region"])
+def test_busse_evaluation_counts_startup_and_matches_generated_scan_time(mode):
+    plugin = load_plugin(_plugins.SEQUENCES / "fse3d.py", {"refocusing": mode})
+    request = {
+        "nx": 64,
+        "ny": 32,
+        "nslices": 8,
+        "etl": 20,
+        "TR": 1800000,
+        "user0_value": 0,
+    }
+    if mode == "busse_dual_region":
+        request |= {"user12_value": 900.0, "user13_value": 28}
+    protocol = _protocol(plugin, request)
+    evaluation = plugin.evaluate(SYSTEM, protocol)
+    chain = _chain(plugin.generate(SYSTEM, protocol))
+    main = chain[-1]
+    rounding = SYSTEM.block_duration_raster * sum(map(_excitations, chain))
+    assert evaluation.duration == pytest.approx(
+        sum(s.duration()[0] for s in chain), abs=rounding + 1e-9
+    )
+    assert int(main.definitions["StartupEchoes"][0]) == 6
+    assert main.definitions["RefocusingFlipAngles"][0] == pytest.approx(120.0)
+    assert main.check_timing()[0]
+    for index, argument in (
+        (14, "busse_minimum_angle_deg"),
+        (15, "busse_centre_angle_deg"),
+        (16, "busse_startup_echoes"),
+        (17, "busse_centre_echo"),
+        (18, "rf_overlap"),
+        (19, "crusher_cycles"),
+    ):
+        assert plugin.protocol[UIParam.user_value(index)].argument == argument
+    assert plugin.protocol[UIParam.FLIP].argument == "busse_maximum_angle_deg"
+
+
+@WITH_BLOCHSIM
+def test_busse_effective_te_selects_an_echo_and_explicit_echo_takes_precedence():
+    plugin = load_plugin(_plugins.SEQUENCES / "fse3d.py", {"refocusing": "busse"})
+    common = {
+        "nx": 64,
+        "ny": 32,
+        "nslices": 8,
+        "etl": 20,
+        "TR": 1800000,
+        "user0_value": 0,
+    }
+    default = plugin.evaluate(SYSTEM, _protocol(plugin, common))
+    requested_te = default.protocol.arguments["busse_effective_te"] * 1e6 + 5000.0
+    later = plugin.evaluate(SYSTEM, _protocol(plugin, common | {"TE": requested_te}))
+    assert (
+        later.protocol.arguments["busse_effective_te"]
+        > default.protocol.arguments["busse_effective_te"]
+    )
+    explicit = plugin.evaluate(
+        SYSTEM, _protocol(plugin, common | {"TE": requested_te, "user17_value": 5})
+    )
+    assert (
+        explicit.protocol.arguments["busse_effective_te"]
+        < later.protocol.arguments["busse_effective_te"]
+    )
+
+
+@WITH_BLOCHSIM
+@pytest.mark.parametrize("mode", ["busse", "busse_dual_region"])
+def test_busse_listing_and_evaluation_import_no_torch(tmp_path, mode):
+    (tmp_path / "torch.py").write_text("raise SystemExit('torch imported')\n")
+    probe = f"LIMITS = {LIMITS!r}\n{LIST_AND_EVALUATE}"
+    found = subprocess.run(
+        [sys.executable, "-S", "-c", probe, mode],
+        capture_output=True,
+        text=True,
+        env={**os.environ, "PYTHONPATH": os.pathsep.join([str(tmp_path), *sys.path])},
+        check=False,
+    )
+    assert found.returncode == 0, found.stderr
+    assert found.stdout.strip() == "busse"
+
+
+@WITH_BLOCHSIM
+@pytest.mark.parametrize(
+    "mode", ["constant", "dual_region", "busse", "busse_dual_region"]
+)
+def test_fse_ordering_choices_keep_their_indices_across_refocusing_modes(mode):
+    from pulserver.design import OptionParam
+
+    plugin = load_plugin(_plugins.SEQUENCES / "fse3d.py", {"refocusing": mode})
+    ordering = next(
+        entry
+        for entry in plugin.protocol.values()
+        if isinstance(entry, OptionParam) and entry.name == "ordering"
+    )
+    assert ordering.choices == ("radial", "shuffling", "busse_radial", "pclo")
+
+
+@WITH_BLOCHSIM
+def test_busse_ui_te_and_mrd_annotation_use_contrast_equivalent_te():
+    from pulserver.mrd import SequenceDefinitions
+
+    plugin = load_plugin(_plugins.SEQUENCES / "fse3d.py", {"refocusing": "busse"})
+    assert plugin.protocol[UIParam.TE].argument == "busse_effective_te"
+    request = {
+        "nx": 64,
+        "ny": 32,
+        "nslices": 8,
+        "etl": 40,
+        "TR": 1800000,
+        "TE": 54000,
+        "user0_value": 0,
+    }
+    evaluation = plugin.evaluate(SYSTEM, _protocol(plugin, request))
+    main = _chain(plugin.generate(SYSTEM, evaluation.protocol))[-1]
+    effective = float(main.definitions["EffectiveEchoTime"][0])
+    physical = float(main.definitions["TE"][0])
+    assert physical > effective
+    assert effective == pytest.approx(
+        evaluation.protocol.arguments["busse_effective_te"], abs=1.01e-4
+    )
+    assert SequenceDefinitions.from_sequence(main).te == (effective,)
+
+
+def test_pd_ui_te_and_mrd_annotation_use_contrast_equivalent_te():
+    from pulserver.mrd import SequenceDefinitions
+
+    plugin = load_plugin(_plugins.SEQUENCES / "fse_pd3d.py")
+    assert plugin.protocol[UIParam.TE].argument == "pd_effective_te"
+    assert plugin.protocol[UIParam.FLIP].argument == "pd_maximum_angle_deg"
+    request = {
+        "nx": 64,
+        "ny": 32,
+        "nslices": 8,
+        "etl": 20,
+        "TR": 1800000,
+        "TE": 28000,
+        "user0_value": 0,
+    }
+    evaluation = plugin.evaluate(SYSTEM, _protocol(plugin, request))
+    main = _chain(plugin.generate(SYSTEM, evaluation.protocol))[-1]
+    effective = float(main.definitions["EffectiveEchoTime"][0])
+    assert float(main.definitions["TE"][0]) > effective
+    assert effective == pytest.approx(
+        evaluation.protocol.arguments["pd_effective_te"], abs=1e-9
+    )
+    assert SequenceDefinitions.from_sequence(main).te == (effective,)
+
+
+@pytest.mark.parametrize("options", [{}, {"dual_region": True}, {"fit_controls": True}])
+def test_pd_listing_and_evaluation_import_no_torch(tmp_path, options):
+    (tmp_path / "torch.py").write_text("raise SystemExit('torch imported')\n")
+    probe = f"""LIMITS = {LIMITS!r}
+from pulserver import _plugins
+from pulserver.design import load_plugin
+from pulserver.host._limits import design_system
+plugin = load_plugin(_plugins.SEQUENCES / "fse_pd3d.py", {options!r})
+plugin.listing()
+assert plugin.validate(design_system(dict(LIMITS)), {{}}).valid
+print("pd")
+"""
+    found = subprocess.run(
+        [sys.executable, "-S", "-c", probe],
+        capture_output=True,
+        text=True,
+        env={**os.environ, "PYTHONPATH": os.pathsep.join([str(tmp_path), *sys.path])},
+        check=False,
+    )
+    assert found.returncode == 0, found.stderr
+    assert found.stdout.strip() == "pd"
+
+
+def test_pd_dual_region_duration_and_conservative_rf_cover_played_trains():
+    plugin = load_plugin(_plugins.SEQUENCES / "fse_pd3d.py", {"dual_region": True})
+    request = {
+        "nx": 64,
+        "ny": 32,
+        "nslices": 8,
+        "etl": 28,
+        "TR": 800000,
+        "user0_value": 0,
+        "user12_value": 400,
+        "user13_value": 20,
+        "user23_value": 140,
+    }
+    evaluation = plugin.evaluate(SYSTEM, _protocol(plugin, request))
+    main = _chain(plugin.generate(SYSTEM, evaluation.protocol))[-1]
+    assert main.check_timing()[0]
+    assert evaluation.duration == pytest.approx(
+        main.duration()[0], abs=SYSTEM.block_duration_raster * _excitations(main) + 1e-9
+    )
+    instances = main.rf_instances()
+    pulses = np.flatnonzero(main.libraries().blocks[:, 0])
+    starts = [
+        int(block)
+        for block, definition in zip(pulses, instances.definition, strict=True)
+        if instances.definitions[definition].use == "excitation"
+    ]
+    ends = np.cumsum(main.libraries().block_durations)
+    for first, last in zip(starts, [*starts[1:], ends.size], strict=True):
+        duration = ends[last - 1] - (ends[first - 1] if first else 0.0)
+        power = main.calc_rf_power(block_range=(first + 1, last))[3] / duration
+        assert _layout_power(evaluation.rf_layout) >= power

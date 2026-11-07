@@ -6,7 +6,6 @@ import importlib.util
 import numpy as np
 import pypulseqpp as pp
 from pypulseqpp.sequences.sequence.fse3D_sequence import (
-    ORDERINGS,
     fse3d,
     shot_parameters,
 )
@@ -28,6 +27,7 @@ from pulserver._zoo._user import (
     wave_entries,
 )
 from pulserver.design import (
+    BoolParam,
     ChoiceParam,
     Description,
     Evaluation,
@@ -55,11 +55,15 @@ NAVIGATOR = option("navigator", False, **OPTIONS["navigator"])
 REFOCUSING = option(
     "refocusing",
     "constant",
-    choices=("constant", "optimized", "dual_region"),
+    choices=("constant", "optimized", "dual_region", "busse", "busse_dual_region"),
     **OPTIONS["refocusing"],
 )
 OPTIMIZED = REFOCUSING != "constant"
-DUAL_REGION = REFOCUSING == "dual_region"
+DUAL_REGION = REFOCUSING in ("dual_region", "busse_dual_region")
+BUSSE = REFOCUSING in ("busse", "busse_dual_region")
+
+#: Busse modes use prescribed-PSS inverse EPG; the dual-region option fits
+#: both endpoints and interpolates their angle controls cubically.
 
 #: Wave-CAIPI: sinusoidal gradients on the phase- and partition-encoding axes
 #: during each readout, the calibration region acquired first without them;
@@ -75,7 +79,9 @@ if OPTIMIZED and importlib.util.find_spec("blochsim") is None:
         name="blochsim",
     )
 
-#: Order of the views across shots, ``"radial"`` or ``"shuffling"``.
+#: Shared trains use Busse radial/PCLO; changing endpoint parameters uses
+#: Buonincontri joint shot/echo assignment. ``radial`` selects from the protocol.
+ORDERINGS = ("radial", "shuffling", "busse_radial", "pclo")
 ORDERING = option("ordering", "radial", choices=ORDERINGS, **OPTIONS["ordering"])
 
 
@@ -92,7 +98,10 @@ def on_host(app):
 
     @functools.wraps(app)
     def designed(*args, **kwargs):
-        if kwargs.get("flip_modulation", "constant") == "constant":
+        modulation = kwargs.get("flip_modulation", "constant")
+        if modulation == "constant" or (
+            modulation == "busse" and not kwargs.get("busse_optimize", False)
+        ):
             return app(*args, **kwargs)
         from blochsim._execution import execution
 
@@ -108,16 +117,30 @@ class Fse3D(SequencePlugin):
         if NAVIGATOR
         else shortest_at_zero(slab(fse3d), "esp")
     )
-    if OPTIMIZED:
+    if BUSSE:
+        app = functools.partial(
+            on_host(app),
+            te=None,
+            flip_modulation="busse",
+            busse_optimize=True,
+        )
+    elif OPTIMIZED:
         app = functools.partial(on_host(app), flip_modulation="optimized")
     app = functools.partial(app, ordering=ORDERING)
+    if ORDERING == "busse_radial":
+        app = functools.partial(app, te=None)
+        if BUSSE:
+            app = functools.partial(app, busse_centre_echo=0)
     protocol = {
         UIParam.IMAGING_MODE: StatedParam(ImagingMode.THREE_D),
         UIParam.EXCITATION: ChoiceParam(
             "excitation", Excitation, default=Excitation.SLAB
         ),
         UIParam.TE: TimeParam(
-            "te", range_min=2000, range_max=500000, presets={TEPreset.MINIMUM: None}
+            "busse_effective_te" if BUSSE else "te",
+            range_min=2000,
+            range_max=500000,
+            presets={TEPreset.MINIMUM: None},
         ),
         UIParam.TR: TimeParam(
             "tr",
@@ -151,10 +174,10 @@ class Fse3D(SequencePlugin):
     }
     if OPTIMIZED:
         protocol[UIParam.FLIP] = FloatParam(
-            "refocusing_angle_deg",
+            "busse_maximum_angle_deg" if BUSSE else "refocusing_angle_deg",
             unit="deg",
             range_min=60.0,
-            range_max=180.0,
+            range_max=179.0 if BUSSE else 180.0,
             default=120.0,
         )
     if DUAL_REGION:
@@ -174,10 +197,43 @@ class Fse3D(SequencePlugin):
             ),
         }
 
+    if BUSSE:
+        protocol |= {
+            UIParam.user_name(OWN + 2): Description("Busse minimum flip"),
+            UIParam.user_value(OWN + 2): FloatParam(
+                "busse_minimum_angle_deg", unit="deg", range_min=1.0, range_max=90.0
+            ),
+            UIParam.user_name(OWN + 3): Description("Busse centre flip"),
+            UIParam.user_value(OWN + 3): FloatParam(
+                "busse_centre_angle_deg", unit="deg", range_min=2.0, range_max=178.0
+            ),
+            UIParam.user_name(OWN + 4): Description("Busse startup echoes"),
+            UIParam.user_value(OWN + 4): IntParam(
+                "busse_startup_echoes", range_min=0, range_max=32
+            ),
+            UIParam.user_name(OWN + 5): Description(
+                "Busse centre acquired echo, -1 midpoint"
+            ),
+            UIParam.user_value(OWN + 5): IntParam(
+                "busse_centre_echo", range_min=-1, range_max=255, automatic=-1
+            ),
+            UIParam.user_name(OWN + 6): Description("Overlap RF dead time"),
+            UIParam.user_value(OWN + 6): BoolParam("rf_overlap", default=False),
+            UIParam.user_name(OWN + 7): Description("Read-axis crusher cycles"),
+            UIParam.user_value(OWN + 7): FloatParam(
+                "crusher_cycles", range_min=0.0, range_max=8.0, default=0.5
+            ),
+        }
+
     if WAVE:
         protocol |= wave_entries()
 
     protocol |= user_entries(app, protocol)
+    if BUSSE:
+        # Busse's maximum angle is bound to FLIP; the direct-angle parameter
+        # is absent from its prescription.
+        protocol.pop(UIParam.user_name(8), None)
+        protocol.pop(UIParam.user_value(8), None)
 
     def evaluate(self, system, protocol):
         # A TR is one echo train. The design of the centre view plays one
@@ -191,7 +247,8 @@ class Fse3D(SequencePlugin):
             "rz": a["n_z"],
             "n_acs_y": 0,
             "n_acs_z": 0,
-            "flip_modulation": "constant",
+            "flip_modulation": "busse" if BUSSE else "constant",
+            "busse_optimize": False,
             "ordering": "radial",
         }
         train = self.app(system, **(protocol.arguments | one))

@@ -9,6 +9,7 @@ ZOO_PAIRS: dict[str, str] = {
     "epi2d": "epi",
     "epi3d": "epi",
     "fse3d": "pmc",
+    "fse_pd3d": "pmc",
     "gre2d": "pics",
     "gre3d": "pics",
     "gre_multiecho2d": "pics",
