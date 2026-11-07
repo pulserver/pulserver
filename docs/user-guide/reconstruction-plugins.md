@@ -99,7 +99,9 @@ Reconstruction results carry `PulserverReconstructionManifest` and the JSON
 `PulserverReconstructionDependencies` in MRD image attributes. The same JSON is
 saved under `manifests/` beside the site library, or `PULSERVER_PROVENANCE_DIR`
 when set. It identifies the plugin source, resolved package versions, runtime,
-measurement and recorded wheel hashes. Optional backends that a plugin can skip
+measurement, installed site-package versions and recorded wheel hashes. Site
+packages are recorded even when a plugin has no hard requirements, covering
+optional backends. Optional backends that a plugin can skip
 should not be hard requirements.
 
 ## Reconstruction units

@@ -155,13 +155,28 @@ def requirements(path):
 def manifest(path):
     path = Path(path)
     versions = requirements(path)
-    if not versions and not declarations(path)["REQUIRES_IMPORTS"]:
+    root = directory()
+    site_versions = (
+        {
+            canonicalize_name(dist.metadata["Name"]): dist.version
+            for dist in metadata.distributions(path=[str(root)])
+            if dist.metadata["Name"]
+        }
+        if root is not None and root.is_dir()
+        else {}
+    )
+    if (
+        not versions
+        and not site_versions
+        and not declarations(path)["REQUIRES_IMPORTS"]
+    ):
         return {}
     record = {
         "plugin": path.name,
         "plugin_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
         "runtime": runtime(),
         "requirements": versions,
+        "site_packages": site_versions,
     }
     for name in ("pulserver", "pypulseqpp", "torch", "numpy"):
         with contextlib.suppress(metadata.PackageNotFoundError):
@@ -260,6 +275,8 @@ def main(argv=None):
     check.add_argument("--import", dest="imports", action="append", default=[])
     args = parser.parse_args(argv)
     try:
+        if args.root is not None:
+            os.environ["PULSERVER_SITE_PACKAGES"] = str(args.root.resolve())
         activate(args.root)
         root = directory()
         if args.command == "path":

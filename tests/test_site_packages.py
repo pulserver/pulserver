@@ -272,3 +272,22 @@ def test_runtime_emits_reconstruction_provenance_in_mrd_images(tmp_path, monkeyp
     saved = json.loads(attributes["PulserverReconstructionDependencies"])
     assert saved["requirements"]["private-backend"]["version"] == "1.2"
     assert attributes["PulserverReconstructionManifest"]
+
+
+def test_optional_site_backends_are_recorded_without_becoming_hard_requirements(
+    tmp_path,
+):
+    distribution(tmp_path)
+    packages.activate(tmp_path)
+    plugin = tmp_path / "optional.py"
+    plugin.write_text("PLUGIN = None\n")
+    record = packages.manifest(plugin)
+    assert record["requirements"] == {}
+    assert record["site_packages"]["private-backend"] == "1.2"
+
+
+def test_an_explicit_cli_root_overrides_the_environment(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("PULSERVER_SITE_PACKAGES", str(tmp_path / "default"))
+    chosen = tmp_path / "chosen"
+    packages.main(["--root", str(chosen), "path"])
+    assert capsys.readouterr().out.strip() == str(chosen)

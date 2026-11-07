@@ -556,9 +556,10 @@ def _source(variant: _Variant) -> str:
     """Return a digest of the code that designs with the plugin of a variant.
 
     Covers the plugin file, the source file of the app it binds, and the
-    installed versions of pypulseqpp and pulserver. A :func:`functools.partial`
-    app is covered through the function it wraps. Modules the app imports from
-    elsewhere are covered only through those versions.
+    installed versions of pypulseqpp and pulserver, declared requirements and
+    site-library installation metadata. A :func:`functools.partial` app is
+    covered through the function it wraps. Other imports need a dependency
+    declaration to identify their installed distribution.
     """
     digest = hashlib.sha256(Path(variant.path).read_bytes())
     app = _plugin(variant).app
