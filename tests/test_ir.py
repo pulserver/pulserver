@@ -1103,8 +1103,9 @@ def test_a_half_raster_gradient_plays_its_raster_centre_samples(tmp_path):
 
 
 @pytest.mark.parametrize("varying", [False, True])
-def test_padded_busse_trains_keep_one_active_segment_and_one_closing_delay(
-    tmp_path, varying
+@pytest.mark.parametrize("family", ["busse", "pd"])
+def test_padded_prescribed_trains_keep_one_active_segment_and_one_closing_delay(
+    tmp_path, varying, family
 ):
     system = pp.Opts(
         max_grad=40,
@@ -1122,7 +1123,7 @@ def test_padded_busse_trains_keep_one_active_segment_and_one_closing_delay(
         "te": None,
         "tr": 1.8,
         "n_dummy": 0,
-        "flip_modulation": "busse",
+        "flip_modulation": family,
         "rf_overlap": True,
     }
     if varying:
@@ -1132,6 +1133,8 @@ def test_padded_busse_trains_keep_one_active_segment_and_one_closing_delay(
             busse_minimum_angle_periphery_deg=30,
             busse_centre_angle_periphery_deg=65,
         )
+        if family == "pd":
+            protocol["pd_final_angle_periphery_deg"] = 140
     sequence = sequences.fse3D_sequence(system, **protocol)
     path = tmp_path / "padded_fse.seq"
     sequence.write(path)

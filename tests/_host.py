@@ -60,6 +60,7 @@ SMALLER = {
     "epi2d": {"bandwidth": 50e3},
     "epi3d": {"nslices": 8},
     "fse3d": {"nslices": 8},
+    "fse_pd3d": {"nslices": 8},
     "gre3d": {"nslices": 8},
     "gre_multiecho3d": {"nslices": 8, "num_echoes": 2},
     "se3d": {"nslices": 8},
@@ -106,8 +107,8 @@ def needs_blochsim(options):
     """Whether a shipped plugin loaded with ``options`` designs its refocusing trains with blochsim, and blochsim is missing."""
     return (
         options.get("refocusing", "constant") != "constant"
-        and importlib.util.find_spec("blochsim") is None
-    )
+        or options.get("fit_controls", False)
+    ) and importlib.util.find_spec("blochsim") is None
 
 
 def generate(
