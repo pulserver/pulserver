@@ -11,11 +11,13 @@ import importlib.metadata as metadata
 import json
 import os
 import platform
+import shutil
 import site
 import subprocess
 import sys
 import sysconfig
 import tempfile
+import zipfile
 from pathlib import Path
 
 from packaging.requirements import Requirement
@@ -240,6 +242,27 @@ def install(root, wheels):
         check=True,
         stdout=sys.stderr,
     )
+    installed = {}
+    for wheel in wheels:
+        with zipfile.ZipFile(wheel) as archive:
+            info = next(
+                name
+                for name in archive.namelist()
+                if name.endswith(".dist-info/METADATA")
+            )
+        installed[canonicalize_name(parse_wheel_filename(wheel.name)[0])] = Path(
+            info
+        ).parent.name
+    # pip --target replaces package directories but retains metadata under
+    # other versioned names. Keep the metadata belonging to the installed wheel.
+    for info in (*root.glob("*.dist-info"), *root.glob("*.egg-info")):
+        dist = metadata.Distribution.at(info)
+        name = canonicalize_name(dist.metadata.get("Name", ""))
+        if name in installed and info.name != installed[name]:
+            if info.is_symlink() or info.is_file():
+                info.unlink()
+            else:
+                shutil.rmtree(info)
     entries = previous.get("wheels", {})
     for wheel in wheels:
         name = canonicalize_name(parse_wheel_filename(wheel.name)[0])

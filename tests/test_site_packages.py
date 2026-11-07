@@ -291,3 +291,31 @@ def test_an_explicit_cli_root_overrides_the_environment(tmp_path, monkeypatch, c
     chosen = tmp_path / "chosen"
     packages.main(["--root", str(chosen), "path"])
     assert capsys.readouterr().out.strip() == str(chosen)
+
+
+@pytest.mark.parametrize("versions", [("1.0", "2.0"), ("1.0", "1.0.0")])
+def test_upgrading_a_private_wheel_removes_superseded_version_metadata(
+    tmp_path, versions
+):
+    root = tmp_path / "site"
+    for version in versions:
+        wheel = tmp_path / f"private_upgrade-{version}-py3-none-any.whl"
+        info = f"private_upgrade-{version}.dist-info"
+        with zipfile.ZipFile(wheel, "w") as archive:
+            archive.writestr("private_upgrade/__init__.py", f"VERSION = {version!r}\n")
+            archive.writestr(
+                f"{info}/METADATA",
+                f"Metadata-Version: 2.1\nName: private-upgrade\nVersion: {version}\n",
+            )
+            archive.writestr(
+                f"{info}/WHEEL",
+                "Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+            )
+            archive.writestr(f"{info}/RECORD", "")
+        packages.install(root, [wheel])
+    packages.activate(root)
+    assert metadata.version("private-upgrade") == versions[-1]
+    assert not (root / "private_upgrade-1.0.dist-info").exists()
+    assert (
+        root / "private_upgrade/__init__.py"
+    ).read_text() == f"VERSION = {versions[-1]!r}\n"
