@@ -45,7 +45,7 @@
   <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../_static/documentation_options.js?v=cd58becf"></script>
+    <script src="../_static/documentation_options.js?v=da2c3ea9"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -58,7 +58,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.15';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.16';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -72,7 +72,7 @@
     <link rel="prev" title="Services" href="running.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.4.15" />
+  <meta name="docsearch:version" content="v0.4.16" />
   
     
     <script src="../_static/searchtools.js"></script>
@@ -908,7 +908,7 @@ every <code class="docutils literal notranslate"><span class="pre">--plugins</sp
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">gre_multiecho3d</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">qsm</span></code></p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">fse3d</span></code>, <code class="docutils literal notranslate"><span class="pre">mprage3d</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">fse3d</span></code>, <code class="docutils literal notranslate"><span class="pre">fse_pd3d</span></code>, <code class="docutils literal notranslate"><span class="pre">mprage3d</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">pmc</span></code></p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">gre_radial2d</span></code>, <code class="docutils literal notranslate"><span class="pre">gre_spiral2d</span></code>, <code class="docutils literal notranslate"><span class="pre">se_radial2d</span></code>, <code class="docutils literal notranslate"><span class="pre">se_spiral2d</span></code>, <code class="docutils literal notranslate"><span class="pre">gre_propeller2d</span></code>, <code class="docutils literal notranslate"><span class="pre">se_propeller2d</span></code>, <code class="docutils literal notranslate"><span class="pre">se_epi_propeller2d</span></code>, <code class="docutils literal notranslate"><span class="pre">zte3d</span></code></p></td>
@@ -1065,28 +1065,52 @@ GE scanner:</p>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">fse3d</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">refocusing</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">user38</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">&quot;constant&quot;</span></code>; <code class="docutils literal notranslate"><span class="pre">&quot;optimized&quot;</span></code>, a train designed with blochsim and shared by every shot; or <code class="docutils literal notranslate"><span class="pre">&quot;dual_region&quot;</span></code>, trains designed for the centre and the periphery of k-space, each shot’s train a cubic step between them, <code class="docutils literal notranslate"><span class="pre">TR</span></code> and <code class="docutils literal notranslate"><span class="pre">ETL</span></code> being the centre’s</p></td>
-<td><p>Flip angle: the refocusing angle at the TE echo; <code class="docutils literal notranslate"><span class="pre">&quot;dual_region&quot;</span></code> also adds <code class="docutils literal notranslate"><span class="pre">user12</span></code> and <code class="docutils literal notranslate"><span class="pre">user13</span></code>, TR and ETL at the periphery</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">&quot;constant&quot;</span></code>; <code class="docutils literal notranslate"><span class="pre">&quot;optimized&quot;</span></code>, a train designed with blochsim and shared by every shot; <code class="docutils literal notranslate"><span class="pre">&quot;dual_region&quot;</span></code>, direct-angle trains for the centre and periphery; <code class="docutils literal notranslate"><span class="pre">&quot;busse&quot;</span></code>, prescribed-PSS inverse EPG with forward-EPG control fitting; or <code class="docutils literal notranslate"><span class="pre">&quot;busse_dual_region&quot;</span></code>, independent Busse endpoint fits with a cubic control transition</p></td>
+<td><p>Flip angle: the refocusing angle at TE for direct-angle designs, first/final maximum for Busse. Both dual-region options add <code class="docutils literal notranslate"><span class="pre">user12</span></code> and <code class="docutils literal notranslate"><span class="pre">user13</span></code>, TR and ETL at the periphery</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">fse3d</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">fse_pd3d</span></code></p></td>
+<td><p>PD controls</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">user14</span></code>–<code class="docutils literal notranslate"><span class="pre">user19</span></code>, <code class="docutils literal notranslate"><span class="pre">user22</span></code></p></td>
+<td><p>First/final angles, startup count, explicit centre echo, RF-dead-time overlap, crusher cycles, signal-tail onset fraction</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">flip</span></code> gives peak angle; TE is reference contrast-equivalent TE</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">fse_pd3d</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">dual_region</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">user20</span></code></p></td>
+<td><p>Off: shared train; on: centre/periphery controls with cubic transition</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">user12</span></code>/<code class="docutils literal notranslate"><span class="pre">user13</span></code>: peripheral TR/ETL; <code class="docutils literal notranslate"><span class="pre">user23</span></code>: final angle, 0 inherits</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">fse_pd3d</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">fit_controls</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">user21</span></code></p></td>
+<td><p>Off: prescribed inverse-EPG train; on: CPU multi-tissue/B1 control fitting</p></td>
+<td><p>Requires the design extra</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">fse3d</span></code>, <code class="docutils literal notranslate"><span class="pre">fse_pd3d</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">ordering</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">user39</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">&quot;radial&quot;</span></code>, or <code class="docutils literal notranslate"><span class="pre">&quot;shuffling&quot;</span></code>: Poisson-disc views in random order</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">&quot;radial&quot;</span></code>: PCLO for identical trains, Buonincontri assignment for varying trains; <code class="docutils literal notranslate"><span class="pre">&quot;pclo&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;busse_radial&quot;</span></code> (radius then polar angle, centre echo 0), and <code class="docutils literal notranslate"><span class="pre">&quot;shuffling&quot;</span></code> require identical trains</p></td>
 <td><p>None</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">mprage3d</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">mprage3d</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">ordering</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">user39</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">&quot;radial&quot;</span></code>, each partition’s lines centre-out, or <code class="docutils literal notranslate"><span class="pre">&quot;shuffling&quot;</span></code>: Poisson-disc lines in random order, for a time-resolved reconstruction</p></td>
 <td><p>None</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">fse3d</span></code>, <code class="docutils literal notranslate"><span class="pre">mprage3d</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">fse3d</span></code></p></td>
+<td><p>Busse controls</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">user14</span></code>–<code class="docutils literal notranslate"><span class="pre">user19</span></code></p></td>
+<td><p>Minimum angle, centre angle, startup count, acquired centre echo (<code class="docutils literal notranslate"><span class="pre">-1</span></code>: midpoint), RF-dead-time overlap, crusher cycles</p></td>
+<td><p>Busse modes only; <code class="docutils literal notranslate"><span class="pre">flip</span></code> gives the maximum angle</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">fse3d</span></code>, <code class="docutils literal notranslate"><span class="pre">fse_pd3d</span></code>, <code class="docutils literal notranslate"><span class="pre">mprage3d</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">navigator</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">user36</span></code></p></td>
 <td><p>Three-plane navigators; the design sets <code class="docutils literal notranslate"><span class="pre">EnablePmc</span></code>, and <code class="docutils literal notranslate"><span class="pre">pmc</span></code> publishes each pose to the scan</p></td>
 <td><p>None</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">gre3d</span></code>, <code class="docutils literal notranslate"><span class="pre">gre_multiecho3d</span></code>, <code class="docutils literal notranslate"><span class="pre">mprage3d</span></code>, <code class="docutils literal notranslate"><span class="pre">fse3d</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">gre3d</span></code>, <code class="docutils literal notranslate"><span class="pre">gre_multiecho3d</span></code>, <code class="docutils literal notranslate"><span class="pre">mprage3d</span></code>, <code class="docutils literal notranslate"><span class="pre">fse3d</span></code>, <code class="docutils literal notranslate"><span class="pre">fse_pd3d</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">wave</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">user37</span></code></p></td>
 <td><p>Wave-CAIPI; the calibration region is acquired first without the wave, and <code class="docutils literal notranslate"><span class="pre">pics</span></code> and <code class="docutils literal notranslate"><span class="pre">pmc</span></code> reconstruct the wave-encoded volume</p></td>
@@ -1137,6 +1161,44 @@ GE scanner:</p>
 </tbody>
 </table>
 </div>
+<p>Busse modes play startup pulses without acquisition and use the same RF widths
+and echo spacing in every shot. All shots retain the longest train layout,
+with zero RF amplitude after each shot’s own ETL. TR, acquired ETL and angle
+controls may vary;
+intermediate controls follow the cubic transition between two independent
+endpoint fits. In Busse modes, the TE control prescribes <strong>contrast-equivalent
+TE</strong>, using relaxed and relaxation-free CPMG EPG with reference T1/T2 of
+1000/100 ms. The nearest feasible centre echo is selected while retaining
+its prescribed centre angle. The default uses the midpoint; an explicit
+<code class="docutils literal notranslate"><span class="pre">user17</span></code> echo index takes precedence. The optimizer preserves the selected
+reference effective TE within 0.1 ms. The achieved value is recorded in
+<code class="docutils literal notranslate"><span class="pre">EffectiveEchoTime</span></code> and reported to the UI and MRD header; <code class="docutils literal notranslate"><span class="pre">TE</span></code> remains the
+physical excitation-to-centre-echo time. This reference contrast annotation
+does not model all tissues, B1 variation or inter-shot steady state. The selected echo must precede the last acquired echo in every
+train. <code class="docutils literal notranslate"><span class="pre">busse_radial</span></code> requires centre echo 0 and identical trains. <code class="docutils literal notranslate"><span class="pre">pclo</span></code>
+uses Rydén’s pivot-centre, linear-outer ring permutation for an arbitrary
+centre echo in identical trains. <code class="docutils literal notranslate"><span class="pre">radial</span></code> selects PCLO for identical trains
+or Buonincontri joint shot/echo assignment for a centre/periphery parameter
+transition. The menu retains the same choice indices across refocusing modes.
+Sampling acceleration and the CAIPI shift are independent of this ordering
+choice. The PSF objective is an idealized design
+model, not a measurement of the scanner reconstruction.</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">fse_pd3d</span></code> preset designs a PD signal evolution with an initial decrease,
+near-constant middle and gently declining quadratic tail, following Mugler’s
+prescribed-signal design principle. Relaxation-aware inverse EPG enforces
+independent first, maximum and final angles. Minimum/centre angles and RF
+peak position are calculated outputs. A final angle equal to the maximum
+allows the RF maximum to extend to the final pulse. This is an independent PD design,
+not a numerical reconstruction of Siemens PDvar*.</p>
+<p>The optional control fit adjusts signal-tail onset, retaining the prescribed
+first/maximum/final angles, reference effective TE, centre signal and signed
+contrast constraints. The transition uses two endpoint fits and batched
+inverse EPG. ESP and RF widths are shared; every shot keeps the longest-train
+layout with zero RF amplitude after its own acquired ETL. Shared trains use
+PCLO/basic Busse radial; changing endpoint parameters uses Buonincontri joint
+assignment. Default inverse design, listing and evaluation import no Torch.
+First and final angles must not exceed the maximum. The reference signal
+prescription follows <a class="reference external" href="https://cds.ismrm.org/ismrm-1999/PDF6/1631.pdf">Mugler et al., ISMRM 1999, abstract 1631</a>; numerical envelope controls are independently chosen.</p>
 </section>
 <section id="diffusion-tables">
 <h3>Diffusion tables<a class="headerlink" href="#diffusion-tables" title="Link to this heading">#</a></h3>
@@ -1207,7 +1269,7 @@ of <code class="docutils literal notranslate"><span class="pre">user0</span></co
 gives for that TR and flip angle.</p></li>
 <li><p><strong>Resolved values.</strong> Those the main sequence states for the prescription,
 where the plugin has the entry: the echo time and repetition time in its <code class="docutils literal notranslate"><span class="pre">TE</span></code>
-and <code class="docutils literal notranslate"><span class="pre">TR</span></code> definitions, the receiver bandwidth as the inverse of the dwell time
+and <code class="docutils literal notranslate"><span class="pre">TR</span></code> definitions (<code class="docutils literal notranslate"><span class="pre">EffectiveEchoTime</span></code> takes precedence where supplied), the receiver bandwidth as the inverse of the dwell time
 of its first ADC event, and the slice thickness in its <code class="docutils literal notranslate"><span class="pre">SliceThickness</span></code>
 definition. A multi-echo sequence lists every echo time, and the <code class="docutils literal notranslate"><span class="pre">TE</span></code> entry
 holds the first.</p></li>

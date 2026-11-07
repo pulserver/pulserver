@@ -44,7 +44,7 @@
   <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../../../_static/documentation_options.js?v=cd58becf"></script>
+    <script src="../../../_static/documentation_options.js?v=da2c3ea9"></script>
     <script src="../../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -55,7 +55,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.15';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.16';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -67,7 +67,7 @@
     <link rel="search" title="Search" href="../../../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.4.15" />
+  <meta name="docsearch:version" content="v0.4.16" />
   
     
     <script src="../../../_static/searchtools.js"></script>
@@ -436,6 +436,7 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">functools</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">hashlib</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">inspect</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">math</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">re</span>
@@ -775,6 +776,7 @@
             <span class="s2">"plugin"</span><span class="p">:</span> <span class="n">plugin</span><span class="p">,</span>
             <span class="s2">"options"</span><span class="p">:</span> <span class="nb">dict</span><span class="p">(</span><span class="n">scanner</span><span class="o">.</span><span class="n">options</span><span class="p">),</span>
             <span class="s2">"source"</span><span class="p">:</span> <span class="n">source</span><span class="p">,</span>
+            <span class="s2">"dependencies"</span><span class="p">:</span> <span class="n">_dependencies</span><span class="p">(</span><span class="n">variant</span><span class="p">),</span>
             <span class="s2">"scan_time"</span><span class="p">:</span> <span class="n">validation</span><span class="o">.</span><span class="n">duration</span><span class="p">,</span>
             <span class="s2">"fov_offset_mm"</span><span class="p">:</span> <span class="p">[</span><span class="mf">1e3</span> <span class="o">*</span> <span class="n">value</span> <span class="k">for</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">offset</span><span class="p">],</span>
             <span class="s2">"design_rotation"</span><span class="p">:</span> <span class="s2">"any"</span> <span class="k">if</span> <span class="n">any_rotation</span> <span class="k">else</span> <span class="s2">"prescribed"</span><span class="p">,</span>
@@ -972,13 +974,20 @@
     <span class="k">return</span> <span class="n">_plugin</span><span class="p">(</span><span class="n">variant</span><span class="p">)</span><span class="o">.</span><span class="n">listing</span><span class="p">()</span>
 
 
+<span class="k">def</span><span class="w"> </span><span class="nf">_dependencies</span><span class="p">(</span><span class="n">variant</span><span class="p">):</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">.._site_packages</span><span class="w"> </span><span class="kn">import</span> <span class="n">manifest</span>
+
+    <span class="k">return</span> <span class="n">manifest</span><span class="p">(</span><span class="n">variant</span><span class="o">.</span><span class="n">path</span><span class="p">)</span>
+
+
 <span class="k">def</span><span class="w"> </span><span class="nf">_source</span><span class="p">(</span><span class="n">variant</span><span class="p">:</span> <span class="n">_Variant</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Return a digest of the code that designs with the plugin of a variant.</span>
 
 <span class="sd">    Covers the plugin file, the source file of the app it binds, and the</span>
-<span class="sd">    installed versions of pypulseqpp and pulserver. A :func:`functools.partial`</span>
-<span class="sd">    app is covered through the function it wraps. Modules the app imports from</span>
-<span class="sd">    elsewhere are covered only through those versions.</span>
+<span class="sd">    installed versions of pypulseqpp and pulserver, declared requirements and</span>
+<span class="sd">    site-library installation metadata. A :func:`functools.partial` app is</span>
+<span class="sd">    covered through the function it wraps. Other imports need a dependency</span>
+<span class="sd">    declaration to identify their installed distribution.</span>
 <span class="sd">    """</span>
     <span class="n">digest</span> <span class="o">=</span> <span class="n">hashlib</span><span class="o">.</span><span class="n">sha256</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="n">variant</span><span class="o">.</span><span class="n">path</span><span class="p">)</span><span class="o">.</span><span class="n">read_bytes</span><span class="p">())</span>
     <span class="n">app</span> <span class="o">=</span> <span class="n">_plugin</span><span class="p">(</span><span class="n">variant</span><span class="p">)</span><span class="o">.</span><span class="n">app</span>
@@ -990,6 +999,9 @@
         <span class="n">module</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="k">if</span> <span class="n">module</span><span class="p">:</span>
         <span class="n">digest</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="n">module</span><span class="p">)</span><span class="o">.</span><span class="n">read_bytes</span><span class="p">())</span>
+    <span class="n">dependencies</span> <span class="o">=</span> <span class="n">_dependencies</span><span class="p">(</span><span class="n">variant</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">dependencies</span><span class="p">:</span>
+        <span class="n">digest</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">dependencies</span><span class="p">,</span> <span class="n">sort_keys</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">encode</span><span class="p">())</span>
     <span class="n">digest</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="sa">f</span><span class="s2">"pypulseqpp </span><span class="si">{</span><span class="n">pp</span><span class="o">.</span><span class="n">__version__</span><span class="si">}</span><span class="s2"> pulserver </span><span class="si">{</span><span class="n">__version__</span><span class="si">}</span><span class="s2">"</span><span class="o">.</span><span class="n">encode</span><span class="p">())</span>
     <span class="k">return</span> <span class="n">digest</span><span class="o">.</span><span class="n">hexdigest</span><span class="p">()</span>
 

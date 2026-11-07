@@ -45,7 +45,7 @@
   <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../_static/documentation_options.js?v=cd58becf"></script>
+    <script src="../_static/documentation_options.js?v=da2c3ea9"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -56,7 +56,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.15';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.16';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -70,7 +70,7 @@
     <link rel="prev" title="Scanner sequences" href="scanner-sequences.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.4.15" />
+  <meta name="docsearch:version" content="v0.4.16" />
   
     
     <script src="../_static/searchtools.js"></script>
@@ -486,6 +486,7 @@
             </div>
             <nav aria-label="Page">
                 <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#site-dependencies">Site dependencies</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reconstruction-units">Reconstruction units</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#plugin-hooks">Plugin hooks</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#readout-placement">Readout placement</a></li>
@@ -545,6 +546,62 @@ stream enriched from the sequence’s design
 (<a class="reference internal" href="../explanations/reconstruction-session.html"><span class="doc">Reconstruction session</span></a>). The client names the plugin of
 a series in its config (<a class="reference internal" href="reconstruction-client.html"><span class="doc">Reconstruction client</span></a>), independently of the
 scanner-sequence plugin the series was played from.</p>
+<section id="site-dependencies">
+<h2>Site dependencies<a class="headerlink" href="#site-dependencies" title="Link to this heading">#</a></h2>
+<p>A site library holds packages outside the environment managed by an installer.
+<code class="docutils literal notranslate"><span class="pre">PULSERVER_SITE_PACKAGES</span></code> names this directory. A scanner installer may configure
+it through a Python startup hook; <code class="docutils literal notranslate"><span class="pre">pulserver</span> <span class="pre">site</span> <span class="pre">path</span></code> prints the active path.
+The library precedes the managed packages and is available to sequence plugins,
+reconstruction workers, offline replay and Python subprocesses using that
+interpreter. Restart design/reconstruction services after changing packages;
+already imported modules retain their code.</p>
+<p>Install local wheels with the interpreter that will run them:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pulserver<span class="w"> </span>site<span class="w"> </span>--root<span class="w"> </span>/path/to/site/lib<span class="w"> </span>install<span class="w"> </span>./my_qsm-1.2-py3-none-any.whl
+</pre></div>
+</div>
+<p>This uses pip with <code class="docutils literal notranslate"><span class="pre">--target</span></code>, <code class="docutils literal notranslate"><span class="pre">--no-index</span></code>, <code class="docutils literal notranslate"><span class="pre">--no-deps</span></code> and <code class="docutils literal notranslate"><span class="pre">--upgrade</span></code>.
+Private wheels need no package index. Download or build dependencies as wheels
+and install them explicitly; the command does not replace the managed
+environment. A package can also be copied into the library, or installed with
+<code class="docutils literal notranslate"><span class="pre">python</span> <span class="pre">-m</span> <span class="pre">pip</span> <span class="pre">install</span> <span class="pre">--target</span> <span class="pre">/path/to/site/lib</span> <span class="pre">--no-deps</span> <span class="pre">package.whl</span></code>.
+Wheel hashes and the installation’s Python ABI are recorded by <code class="docutils literal notranslate"><span class="pre">site</span> <span class="pre">install</span></code>;
+a direct pip install or source copy does not create that record.</p>
+<p>A plugin declares requirements as a module-level literal tuple or list:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">REQUIRES</span> <span class="o">=</span> <span class="p">(</span><span class="s2">"my-qsm&gt;=1.2"</span><span class="p">,)</span>
+<span class="n">REQUIRES_IMPORTS</span> <span class="o">=</span> <span class="p">(</span><span class="s2">"my_qsm._core"</span><span class="p">,</span> <span class="s2">"my_qsm._cuda"</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Both plugin loaders check <code class="docutils literal notranslate"><span class="pre">REQUIRES</span></code> before executing the plugin. Installed
+versions, transitive requirements, extras and environment markers are checked;
+direct URL requirements belong to the installation command, not this declaration.
+A source-only package needs distribution metadata for a version requirement.
+<code class="docutils literal notranslate"><span class="pre">REQUIRES_IMPORTS</span></code> is an explicit preflight list, not a request to import GPU
+libraries in the design server. Run this on each computer that runs the plugin,
+before scanning:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pulserver<span class="w"> </span>site<span class="w"> </span>check<span class="w"> </span>--plugin<span class="w"> </span>/path/to/recon50.py
+</pre></div>
+</div>
+<p>The check resolves requirements and imports each <code class="docutils literal notranslate"><span class="pre">REQUIRES_IMPORTS</span></code> module.
+<code class="docutils literal notranslate"><span class="pre">--import</span> <span class="pre">MODULE</span></code> adds an import probe. This can detect missing native libraries
+and extension import failures; it does not exercise CUDA kernels. Run the
+package’s GPU self-test on the reconstruction computer as well.</p>
+<p>C++/CUDA wheels must match the running Python ABI, architecture, system-library
+requirements and GPU runtime/device support. pip checks wheel platform tags;
+those tags do not establish PyTorch/CUDA binary compatibility. The site installer
+records the Torch build for native wheels and refuses a recorded library after
+its Python ABI, architecture or Torch build changes. Use an empty library and
+compatible wheels for an upgraded environment. Bundled shared libraries must be
+loadable by the wheel’s own paths (for example an ELF <code class="docutils literal notranslate"><span class="pre">$ORIGIN</span></code> RPATH).</p>
+<p>Declared dependencies enter the sequence design identity and manifest.
+Reconstruction results carry <code class="docutils literal notranslate"><span class="pre">PulserverReconstructionManifest</span></code> and the JSON
+<code class="docutils literal notranslate"><span class="pre">PulserverReconstructionDependencies</span></code> in MRD image attributes. The same JSON is
+saved under <code class="docutils literal notranslate"><span class="pre">manifests/</span></code> beside the site library, or <code class="docutils literal notranslate"><span class="pre">PULSERVER_PROVENANCE_DIR</span></code>
+when set. It identifies the plugin source, resolved package versions, runtime,
+measurement, installed site-package versions and recorded wheel hashes. Site
+packages are recorded even when a plugin has no hard requirements, covering
+optional backends. Optional backends that a plugin can skip
+should not be hard requirements.</p>
+</section>
 <section id="reconstruction-units">
 <h2>Reconstruction units<a class="headerlink" href="#reconstruction-units" title="Link to this heading">#</a></h2>
 <p>A reconstruction unit is the set of readouts reconstructed together
@@ -1094,6 +1151,7 @@ image per partition.</p>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#site-dependencies">Site dependencies</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reconstruction-units">Reconstruction units</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#plugin-hooks">Plugin hooks</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#readout-placement">Readout placement</a></li>

@@ -45,7 +45,7 @@
   <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../_static/documentation_options.js?v=cd58becf"></script>
+    <script src="../_static/documentation_options.js?v=da2c3ea9"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -56,7 +56,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.15';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.16';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -68,7 +68,7 @@
     <link rel="search" title="Search" href="../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.4.15" />
+  <meta name="docsearch:version" content="v0.4.16" />
   
     
     <script src="../_static/searchtools.js"></script>
@@ -503,7 +503,9 @@
 <span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pulserver.mrd.</span></span><span class="sig-name descname"><span class="pre">SequenceDefinitions</span></span><a class="reference internal" href="../_modules/pulserver/mrd/_sequence.html#SequenceDefinitions"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.mrd.SequenceDefinitions" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/builtins/functions.html#object" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
 <p>Definitions describing what a sequence acquires, in Pulseq units.</p>
-<p><code class="docutils literal notranslate"><span class="pre">TR</span></code> and <code class="docutils literal notranslate"><span class="pre">TE</span></code> a sequence does not define are measured by
+<p><code class="docutils literal notranslate"><span class="pre">EffectiveEchoTime</span></code>, when present, supplies the contrast-equivalent TE
+annotation in preference to physical <code class="docutils literal notranslate"><span class="pre">TE</span></code>.
+<code class="docutils literal notranslate"><span class="pre">TR</span></code> and <code class="docutils literal notranslate"><span class="pre">TE</span></code> a sequence does not define are measured by
 <code class="docutils literal notranslate"><span class="pre">Sequence.test_report_dict</span></code>: TE from the excitation before the closest
 approach to the k-space centre, TR between the excitations around it. An
 undefined <code class="docutils literal notranslate"><span class="pre">FlipAngle</span></code> is every distinct value of
@@ -514,7 +516,8 @@ undefined <code class="docutils literal notranslate"><span class="pre">FlipAngle
 <li><p><strong>matrix, navigator_matrix</strong> (<em>tuple of int or None</em>) – <code class="docutils literal notranslate"><span class="pre">Matrix</span></code> and <code class="docutils literal notranslate"><span class="pre">NavMatrix</span></code> as <code class="docutils literal notranslate"><span class="pre">(x,</span> <span class="pre">y,</span> <span class="pre">z)</span></code>; <code class="docutils literal notranslate"><span class="pre">None</span></code> when undefined.</p></li>
 <li><p><strong>fov, navigator_fov</strong> (<em>tuple of float or None</em>) – <code class="docutils literal notranslate"><span class="pre">FOV</span></code> and <code class="docutils literal notranslate"><span class="pre">NavFOV</span></code> as <code class="docutils literal notranslate"><span class="pre">(x,</span> <span class="pre">y,</span> <span class="pre">z)</span></code>, in metres; <code class="docutils literal notranslate"><span class="pre">None</span></code> when
 undefined.</p></li>
-<li><p><strong>tr, te, ti</strong> (<em>tuple of float</em>) – <code class="docutils literal notranslate"><span class="pre">TR</span></code>, <code class="docutils literal notranslate"><span class="pre">TE</span></code> and <code class="docutils literal notranslate"><span class="pre">TI</span></code> values, in seconds; empty when undefined.</p></li>
+<li><p><strong>tr, te, ti</strong> (<em>tuple of float</em>) – <code class="docutils literal notranslate"><span class="pre">TR</span></code>, <code class="docutils literal notranslate"><span class="pre">TE</span></code> (or <code class="docutils literal notranslate"><span class="pre">EffectiveEchoTime</span></code>) and <code class="docutils literal notranslate"><span class="pre">TI</span></code> values, in seconds;
+empty when undefined.</p></li>
 <li><p><strong>flip_angle</strong> (<em>tuple of float</em>) – <code class="docutils literal notranslate"><span class="pre">FlipAngle</span></code> values, in degrees; empty when undefined.</p></li>
 <li><p><strong>centre_line, centre_partition</strong> (<em>int or None</em>) – <code class="docutils literal notranslate"><span class="pre">kSpaceCenterLine</span></code> and <code class="docutils literal notranslate"><span class="pre">kSpaceCenterPartition</span></code>: the <code class="docutils literal notranslate"><span class="pre">LIN</span></code> and
 <code class="docutils literal notranslate"><span class="pre">PAR</span></code> counter at which k-space is sampled at its centre; <code class="docutils literal notranslate"><span class="pre">None</span></code>
