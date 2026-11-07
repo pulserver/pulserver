@@ -7,7 +7,6 @@ import inspect
 import numpy as np
 import pypulseqpp as pp
 from pypulseqpp.sequences.sequence.fse3D_sequence import (
-    ORDERINGS,
     fse3d,
     shot_parameters,
 )
@@ -81,7 +80,9 @@ if OPTIMIZED and importlib.util.find_spec("blochsim") is None:
         name="blochsim",
     )
 
-#: Order of the views across shots, ``"radial"`` or ``"shuffling"``.
+#: Shared trains use Busse radial/PCLO; changing endpoint parameters uses
+#: Buonincontri joint shot/echo assignment. ``radial`` selects from the protocol.
+ORDERINGS = ("radial", "shuffling", "busse_radial", "pclo")
 ORDERING = option("ordering", "radial", choices=ORDERINGS, **OPTIONS["ordering"])
 
 

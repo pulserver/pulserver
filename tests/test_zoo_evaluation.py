@@ -1508,3 +1508,19 @@ def test_busse_listing_and_evaluation_import_no_torch(tmp_path, mode):
     )
     assert found.returncode == 0, found.stderr
     assert found.stdout.strip() == "busse"
+
+
+@WITH_BLOCHSIM
+@pytest.mark.parametrize(
+    "mode", ["constant", "dual_region", "busse", "busse_dual_region"]
+)
+def test_fse_ordering_choices_keep_their_indices_across_refocusing_modes(mode):
+    from pulserver.design import OptionParam
+
+    plugin = load_plugin(_plugins.SEQUENCES / "fse3d.py", {"refocusing": mode})
+    ordering = next(
+        entry
+        for entry in plugin.protocol.values()
+        if isinstance(entry, OptionParam) and entry.name == "ordering"
+    )
+    assert ordering.choices == ("radial", "shuffling", "busse_radial", "pclo")

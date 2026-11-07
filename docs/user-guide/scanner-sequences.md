@@ -484,7 +484,7 @@ GE scanner:
 | Plugin | Option | User entry | Choices | Entries added |
 | --- | --- | --- | --- | --- |
 | `fse3d` | `refocusing` | `user38` | `"constant"`; `"optimized"`, a train designed with blochsim and shared by every shot; `"dual_region"`, direct-angle trains for the centre and periphery; `"busse"`, prescribed-PSS inverse EPG with forward-EPG control fitting; or `"busse_dual_region"`, independent Busse endpoint fits with a cubic control transition | Flip angle: the refocusing angle at TE for direct-angle designs, first/final maximum for Busse. Both dual-region options add `user12` and `user13`, TR and ETL at the periphery |
-| `fse3d` | `ordering` | `user39` | `"radial"` / `"adaptive_radial"`: PCLO rings and adaptive shot assignment; `"busse_radial"`: radius then polar angle with centre echo 0 and identical trains; or `"shuffling"`: complementary Poisson-disc views | None |
+| `fse3d` | `ordering` | `user39` | `"radial"`: PCLO for identical trains, Buonincontri assignment for varying trains; `"pclo"`, `"busse_radial"` (radius then polar angle, centre echo 0), and `"shuffling"` require identical trains | None |
 | `mprage3d` | `ordering` | `user39` | `"radial"`, each partition's lines centre-out, or `"shuffling"`: Poisson-disc lines in random order, for a time-resolved reconstruction | None |
 | `fse3d` | Busse controls | `user14`–`user19` | Minimum angle, centre angle, startup count, acquired centre echo (`-1`: midpoint), RF-dead-time overlap, crusher cycles | Busse modes only; `flip` gives the maximum angle |
 | `fse3d`, `mprage3d` | `navigator` | `user36` | Three-plane navigators; the design sets `EnablePmc`, and `pmc` publishes each pose to the scan | None |
@@ -505,9 +505,13 @@ intermediate controls follow the cubic transition between two independent
 endpoint fits. The ordinary TE control selects the nearest acquired echo;
 the default uses the midpoint, and an explicit `user17` echo index takes
 precedence. The selected echo must precede the last acquired echo in every
-train. `busse_radial` requires centre echo 0; varying trains require
-`radial` or `adaptive_radial`. Sampling acceleration and the CAIPI shift are
-independent of this ordering choice. The PSF objective is an idealized design
+train. `busse_radial` requires centre echo 0 and identical trains. `pclo`
+uses Rydén's pivot-centre, linear-outer ring permutation for an arbitrary
+centre echo in identical trains. `radial` selects PCLO for identical trains
+or Buonincontri joint shot/echo assignment for a centre/periphery parameter
+transition. The menu retains the same choice indices across refocusing modes.
+Sampling acceleration and the CAIPI shift are independent of this ordering
+choice. The PSF objective is an idealized design
 model, not a measurement of the scanner reconstruction.
 
 ### Diffusion tables
