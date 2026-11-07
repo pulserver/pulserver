@@ -2,7 +2,6 @@
 
 import functools
 import importlib.util
-import inspect
 
 import numpy as np
 import pypulseqpp as pp
@@ -112,43 +111,6 @@ def on_host(app):
     return designed
 
 
-def busse_echo_time(app):
-    """Translate physical TE to an acquired echo; an explicit echo index wins.
-
-    The default TE uses the Busse midpoint. Both timing discovery and UI
-    evaluation construct a prescribed train without importing the optimizer.
-    """
-    signature = inspect.signature(app)
-    stated = signature.replace(
-        parameters=[
-            p.replace(default=None) if p.name == "te" else p
-            for p in signature.parameters.values()
-        ]
-    )
-
-    @functools.wraps(app)
-    def designed(*args, **kwargs):
-        if kwargs.get("flip_modulation") == "busse":
-            requested = kwargs.get("te")
-            kwargs["te"] = None
-            if requested is not None and kwargs.get("busse_centre_echo") is None:
-                probe = app(*args, **{**kwargs, "busse_optimize": False, "n_dummy": 0})
-                acquired = int(probe.definitions["EchoTrainLength"][0])
-                startup = int(probe.definitions["StartupEchoes"][0])
-                spacing = float(probe.definitions["EchoSpacing"][0])
-                first = (
-                    float(probe.definitions["TE"][0])
-                    - (startup + (acquired - 1) // 2) * spacing
-                )
-                kwargs["busse_centre_echo"] = (
-                    round((requested - first) / spacing) - startup
-                )
-        return app(*args, **kwargs)
-
-    designed.__signature__ = stated
-    return designed
-
-
 class Fse3D(SequencePlugin):
     app = (
         navigated(shortest_at_zero(slab(fse3d), "esp"))
@@ -157,7 +119,8 @@ class Fse3D(SequencePlugin):
     )
     if BUSSE:
         app = functools.partial(
-            on_host(busse_echo_time(app)),
+            on_host(app),
+            te=None,
             flip_modulation="busse",
             busse_optimize=True,
         )
@@ -174,7 +137,10 @@ class Fse3D(SequencePlugin):
             "excitation", Excitation, default=Excitation.SLAB
         ),
         UIParam.TE: TimeParam(
-            "te", range_min=2000, range_max=500000, presets={TEPreset.MINIMUM: None}
+            "busse_effective_te" if BUSSE else "te",
+            range_min=2000,
+            range_max=500000,
+            presets={TEPreset.MINIMUM: None},
         ),
         UIParam.TR: TimeParam(
             "tr",

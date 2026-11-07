@@ -309,3 +309,12 @@ def test_a_sequence_without_rf_measures_no_echo_or_repetition_time():
     add_readout(seq)
     definitions = SequenceDefinitions.from_sequence(seq)
     assert (definitions.tr, definitions.te, definitions.flip_angle) == ((), (), ())
+
+
+def test_effective_echo_annotation_takes_precedence_over_physical_te():
+    seq = pp.Sequence()
+    seq.set_definition("TR", 1.8)
+    seq.set_definition("TE", 0.158)
+    seq.set_definition("EffectiveEchoTime", 0.054)
+    assert SequenceDefinitions.from_sequence(seq).te == (0.054,)
+    assert float(seq.definitions["TE"][0]) == 0.158

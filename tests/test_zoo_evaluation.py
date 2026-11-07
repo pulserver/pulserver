@@ -1474,7 +1474,7 @@ def test_busse_evaluation_counts_startup_and_matches_generated_scan_time(mode):
 
 
 @WITH_BLOCHSIM
-def test_busse_physical_te_selects_an_echo_and_explicit_echo_takes_precedence():
+def test_busse_effective_te_selects_an_echo_and_explicit_echo_takes_precedence():
     plugin = load_plugin(_plugins.SEQUENCES / "fse3d.py", {"refocusing": "busse"})
     common = {
         "nx": 64,
@@ -1485,13 +1485,19 @@ def test_busse_physical_te_selects_an_echo_and_explicit_echo_takes_precedence():
         "user0_value": 0,
     }
     default = plugin.evaluate(SYSTEM, _protocol(plugin, common))
-    requested_te = default.protocol.arguments["te"] * 1e6 + 5000.0
+    requested_te = default.protocol.arguments["busse_effective_te"] * 1e6 + 5000.0
     later = plugin.evaluate(SYSTEM, _protocol(plugin, common | {"TE": requested_te}))
-    assert later.protocol.arguments["te"] > default.protocol.arguments["te"]
+    assert (
+        later.protocol.arguments["busse_effective_te"]
+        > default.protocol.arguments["busse_effective_te"]
+    )
     explicit = plugin.evaluate(
         SYSTEM, _protocol(plugin, common | {"TE": requested_te, "user17_value": 5})
     )
-    assert explicit.protocol.arguments["te"] < later.protocol.arguments["te"]
+    assert (
+        explicit.protocol.arguments["busse_effective_te"]
+        < later.protocol.arguments["busse_effective_te"]
+    )
 
 
 @WITH_BLOCHSIM
@@ -1524,3 +1530,29 @@ def test_fse_ordering_choices_keep_their_indices_across_refocusing_modes(mode):
         if isinstance(entry, OptionParam) and entry.name == "ordering"
     )
     assert ordering.choices == ("radial", "shuffling", "busse_radial", "pclo")
+
+
+@WITH_BLOCHSIM
+def test_busse_ui_te_and_mrd_annotation_use_contrast_equivalent_te():
+    from pulserver.mrd import SequenceDefinitions
+
+    plugin = load_plugin(_plugins.SEQUENCES / "fse3d.py", {"refocusing": "busse"})
+    assert plugin.protocol[UIParam.TE].argument == "busse_effective_te"
+    request = {
+        "nx": 64,
+        "ny": 32,
+        "nslices": 8,
+        "etl": 40,
+        "TR": 1800000,
+        "TE": 54000,
+        "user0_value": 0,
+    }
+    evaluation = plugin.evaluate(SYSTEM, _protocol(plugin, request))
+    main = _chain(plugin.generate(SYSTEM, evaluation.protocol))[-1]
+    effective = float(main.definitions["EffectiveEchoTime"][0])
+    physical = float(main.definitions["TE"][0])
+    assert physical > effective
+    assert effective == pytest.approx(
+        evaluation.protocol.arguments["busse_effective_te"], abs=1.01e-4
+    )
+    assert SequenceDefinitions.from_sequence(main).te == (effective,)

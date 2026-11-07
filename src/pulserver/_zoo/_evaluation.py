@@ -34,7 +34,9 @@ def _readout_bandwidth(main: pp.Sequence) -> float:
 #: sequence records it. A multi-echo sequence lists every echo time; the entry
 #: holds the first.
 _ACHIEVED: dict[ProtocolKey, Callable[[pp.Sequence], float]] = {
-    UIParam.TE: lambda main: main.definitions["TE"][0],
+    UIParam.TE: lambda main: main.definitions.get(
+        "EffectiveEchoTime", main.definitions["TE"]
+    )[0],
     UIParam.TR: lambda main: main.definitions["TR"][0],
     UIParam.BANDWIDTH: _readout_bandwidth,
 }
@@ -60,7 +62,8 @@ def achieved(plugin: SequencePlugin, main: pp.Sequence) -> dict[ProtocolKey, flo
     """Return the values the design achieved of the entries the plugin declares.
 
     The echo time and the repetition time are the ``TE`` and ``TR``
-    definitions of ``main``, the receiver bandwidth the inverse of the dwell
+    definitions of ``main`` (``EffectiveEchoTime`` takes precedence for
+    contrast-equivalent FSE annotation), the receiver bandwidth the inverse of the dwell
     time of its first ADC event outside a navigator. A 2D sequence's slice
     thickness is its ``SliceThickness`` definition, and the requested one where
     it states none; a 3D sequence's is its slab, the ``z`` of its ``FOV``

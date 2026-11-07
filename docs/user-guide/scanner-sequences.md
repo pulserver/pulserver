@@ -502,9 +502,15 @@ and echo spacing in every shot. All shots retain the longest train layout,
 with zero RF amplitude after each shot's own ETL. TR, acquired ETL and angle
 controls may vary;
 intermediate controls follow the cubic transition between two independent
-endpoint fits. The ordinary TE control selects the nearest acquired echo;
-the default uses the midpoint, and an explicit `user17` echo index takes
-precedence. The selected echo must precede the last acquired echo in every
+endpoint fits. In Busse modes, the TE control prescribes **contrast-equivalent
+TE**, using relaxed and relaxation-free CPMG EPG with reference T1/T2 of
+1000/100 ms. The nearest feasible centre echo is selected while retaining
+its prescribed centre angle. The default uses the midpoint; an explicit
+`user17` echo index takes precedence. The optimizer preserves the selected
+reference effective TE within 0.1 ms. The achieved value is recorded in
+`EffectiveEchoTime` and reported to the UI and MRD header; `TE` remains the
+physical excitation-to-centre-echo time. This reference contrast annotation
+does not model all tissues, B1 variation or inter-shot steady state. The selected echo must precede the last acquired echo in every
 train. `busse_radial` requires centre echo 0 and identical trains. `pclo`
 uses Rydén's pivot-centre, linear-outer ring permutation for an arbitrary
 centre echo in identical trains. `radial` selects PCLO for identical trains
@@ -583,7 +589,7 @@ repetition from the modules their function is built from.
   gives for that TR and flip angle.
 - **Resolved values.** Those the main sequence states for the prescription,
   where the plugin has the entry: the echo time and repetition time in its `TE`
-  and `TR` definitions, the receiver bandwidth as the inverse of the dwell time
+  and `TR` definitions (`EffectiveEchoTime` takes precedence where supplied), the receiver bandwidth as the inverse of the dwell time
   of its first ADC event, and the slice thickness in its `SliceThickness`
   definition. A multi-echo sequence lists every echo time, and the `TE` entry
   holds the first.
