@@ -507,6 +507,8 @@
 <span class="k">class</span><span class="w"> </span><span class="nc">SequenceDefinitions</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Definitions describing what a sequence acquires, in Pulseq units.</span>
 
+<span class="sd">    ``EffectiveEchoTime``, when present, supplies the contrast-equivalent TE</span>
+<span class="sd">    annotation in preference to physical ``TE``.</span>
 <span class="sd">    ``TR`` and ``TE`` a sequence does not define are measured by</span>
 <span class="sd">    ``Sequence.test_report_dict``: TE from the excitation before the closest</span>
 <span class="sd">    approach to the k-space centre, TR between the excitations around it. An</span>
@@ -521,7 +523,8 @@
 <span class="sd">        ``FOV`` and ``NavFOV`` as ``(x, y, z)``, in metres; ``None`` when</span>
 <span class="sd">        undefined.</span>
 <span class="sd">    tr, te, ti : tuple of float</span>
-<span class="sd">        ``TR``, ``TE`` and ``TI`` values, in seconds; empty when undefined.</span>
+<span class="sd">        ``TR``, ``TE`` (or ``EffectiveEchoTime``) and ``TI`` values, in seconds;</span>
+<span class="sd">        empty when undefined.</span>
 <span class="sd">    flip_angle : tuple of float</span>
 <span class="sd">        ``FlipAngle`` values, in degrees; empty when undefined.</span>
 <span class="sd">    centre_line, centre_partition : int or None</span>
@@ -560,7 +563,9 @@
 <span class="sd">        ``pypulseqpp.io.read`` builds one.</span>
 <span class="sd">        """</span>
         <span class="n">tr</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">_numbers</span><span class="p">(</span><span class="n">seq</span><span class="o">.</span><span class="n">get_definition</span><span class="p">(</span><span class="s2">"TR"</span><span class="p">)))</span>
-        <span class="n">te</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">_numbers</span><span class="p">(</span><span class="n">seq</span><span class="o">.</span><span class="n">get_definition</span><span class="p">(</span><span class="s2">"TE"</span><span class="p">)))</span>
+        <span class="n">te</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">_numbers</span><span class="p">(</span><span class="n">seq</span><span class="o">.</span><span class="n">get_definition</span><span class="p">(</span><span class="s2">"EffectiveEchoTime"</span><span class="p">)))</span> <span class="ow">or</span> <span class="nb">tuple</span><span class="p">(</span>
+            <span class="n">_numbers</span><span class="p">(</span><span class="n">seq</span><span class="o">.</span><span class="n">get_definition</span><span class="p">(</span><span class="s2">"TE"</span><span class="p">))</span>
+        <span class="p">)</span>
         <span class="n">flip_angle</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">_numbers</span><span class="p">(</span><span class="n">seq</span><span class="o">.</span><span class="n">get_definition</span><span class="p">(</span><span class="s2">"FlipAngle"</span><span class="p">)))</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="n">tr</span> <span class="ow">and</span> <span class="n">te</span><span class="p">):</span>
             <span class="n">measured_tr</span><span class="p">,</span> <span class="n">measured_te</span> <span class="o">=</span> <span class="n">_measured</span><span class="p">(</span><span class="n">seq</span><span class="p">)</span>
