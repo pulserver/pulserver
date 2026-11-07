@@ -691,6 +691,9 @@ def load_plugin(path: Path, options: Mapping[str, Any] | None = None) -> Sequenc
         one a value it does not take.
     """
     path = Path(path)
+    from .._site_packages import requirements
+
+    requirements(path)
     name = f"pulserver_plugin_{path.stem}"
     spec = importlib.util.spec_from_file_location(name, path)
     module = importlib.util.module_from_spec(spec)

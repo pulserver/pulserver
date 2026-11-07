@@ -38,6 +38,70 @@ stream enriched from the sequence's design
 a series in its config ({doc}`reconstruction-client`), independently of the
 scanner-sequence plugin the series was played from.
 
+## Site dependencies
+
+A site library holds packages outside the environment managed by an installer.
+`PULSERVER_SITE_PACKAGES` names this directory. A scanner installer may configure
+it through a Python startup hook; `pulserver site path` prints the active path.
+The library precedes the managed packages and is available to sequence plugins,
+reconstruction workers, offline replay and Python subprocesses using that
+interpreter. Restart design/reconstruction services after changing packages;
+already imported modules retain their code.
+
+Install local wheels with the interpreter that will run them:
+
+```bash
+pulserver site --root /path/to/site/lib install ./my_qsm-1.2-py3-none-any.whl
+```
+
+This uses pip with `--target`, `--no-index`, `--no-deps` and `--upgrade`.
+Private wheels need no package index. Download or build dependencies as wheels
+and install them explicitly; the command does not replace the managed
+environment. A package can also be copied into the library, or installed with
+`python -m pip install --target /path/to/site/lib --no-deps package.whl`.
+Wheel hashes and the installation's Python ABI are recorded by `site install`;
+a direct pip install or source copy does not create that record.
+
+A plugin declares requirements as a module-level literal tuple or list:
+
+```python
+REQUIRES = ("my-qsm>=1.2",)
+REQUIRES_IMPORTS = ("my_qsm._core", "my_qsm._cuda")
+```
+
+Both plugin loaders check `REQUIRES` before executing the plugin. Installed
+versions, transitive requirements, extras and environment markers are checked;
+direct URL requirements belong to the installation command, not this declaration.
+A source-only package needs distribution metadata for a version requirement.
+`REQUIRES_IMPORTS` is an explicit preflight list, not a request to import GPU
+libraries in the design server. Run this on each computer that runs the plugin,
+before scanning:
+
+```bash
+pulserver site check --plugin /path/to/recon50.py
+```
+
+The check resolves requirements and imports each `REQUIRES_IMPORTS` module.
+`--import MODULE` adds an import probe. This can detect missing native libraries
+and extension import failures; it does not exercise CUDA kernels. Run the
+package's GPU self-test on the reconstruction computer as well.
+
+C++/CUDA wheels must match the running Python ABI, architecture, system-library
+requirements and GPU runtime/device support. pip checks wheel platform tags;
+those tags do not establish PyTorch/CUDA binary compatibility. The site installer
+records the Torch build for native wheels and refuses a recorded library after
+its Python ABI, architecture or Torch build changes. Use an empty library and
+compatible wheels for an upgraded environment. Bundled shared libraries must be
+loadable by the wheel's own paths (for example an ELF `$ORIGIN` RPATH).
+
+Declared dependencies enter the sequence design identity and manifest.
+Reconstruction results carry `PulserverReconstructionManifest` and the JSON
+`PulserverReconstructionDependencies` in MRD image attributes. The same JSON is
+saved under `manifests/` beside the site library, or `PULSERVER_PROVENANCE_DIR`
+when set. It identifies the plugin source, resolved package versions, runtime,
+measurement and recorded wheel hashes. Optional backends that a plugin can skip
+should not be hard requirements.
+
 ## Reconstruction units
 
 A reconstruction unit is the set of readouts reconstructed together

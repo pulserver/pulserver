@@ -8,6 +8,7 @@ import importlib.util
 import sys
 from pathlib import Path
 
+from .._site_packages import manifest
 from .plugin import ReconPlugin
 
 
@@ -24,6 +25,7 @@ def load_plugin(path: Path | str) -> ReconPlugin:
         :class:`ReconPlugin`.
     """
     path = Path(path)
+    dependencies = manifest(path)
     name = f"pulserver_recon_{path.stem}"
     spec = importlib.util.spec_from_file_location(name, path)
     module = importlib.util.module_from_spec(spec)
@@ -32,4 +34,5 @@ def load_plugin(path: Path | str) -> ReconPlugin:
     plugin = getattr(module, "PLUGIN", None)
     if not isinstance(plugin, ReconPlugin):
         raise ValueError(f"{path} defines no module-level PLUGIN reconstruction")
+    plugin._dependency_manifest = dependencies
     return plugin

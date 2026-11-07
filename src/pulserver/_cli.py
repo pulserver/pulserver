@@ -11,6 +11,7 @@ _USAGE = (
     "       pulserver validate SEQ [--vendor NAME] [--played FILE] ...\n"
     "       pulserver proxy --store DIR --port N (--plugins DIR | --forward HOST:PORT) ...\n"
     "       pulserver recon --plugins DIR --port N ...\n"
+    "       pulserver site [--root DIR] {path,install,check} ...\n"
     "       pulserver replay SERIES --plugin FILE (--store DIR | --design SEQ) ...\n"
 )
 
@@ -21,6 +22,10 @@ def main(argv: list[str] | None = None) -> int:
     from ._memory import without_huge_page_advice
 
     without_huge_page_advice()
+    if argv and argv[0] == "site":
+        from ._site_packages import main as site_command
+
+        return site_command(argv[1:])
     if argv and argv[0] == "design":
         from .host._command import main as design
 

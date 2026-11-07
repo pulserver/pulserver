@@ -42,6 +42,9 @@ def run_application(
     ``ArrayMinimum`` and ``ArrayMaximum``. One DICOM builder serves the whole
     stream, so a series has one rescale mapping across its images.
     """
+    from ..._site_packages import reconstruction_record
+
+    provenance = reconstruction_record(plugin, context)
     app = plugin.spawn()
     image_index = 1
     dicom_builder: MrdDicomBuilder | None = None
@@ -58,6 +61,13 @@ def run_application(
                     item, bucket, context, image_index, type(app).__name__
                 )
                 for image in images:
+                    if provenance is not None:
+                        attributes = ismrmrd.Meta.deserialize(image.attribute_string)
+                        attributes["PulserverReconstructionManifest"] = provenance[0]
+                        attributes["PulserverReconstructionDependencies"] = provenance[
+                            1
+                        ]
+                        image.attribute_string = attributes.serialize()
                     if item.dicom:
                         if dicom_builder is None:
                             dicom_builder = MrdDicomBuilder(context.header)

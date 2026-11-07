@@ -11,6 +11,7 @@ import datetime
 import functools
 import hashlib
 import inspect
+import json
 import logging
 import math
 import re
@@ -350,6 +351,7 @@ def _generate(plugin, limits, listing, scanner, variant, validation, store, push
             "plugin": plugin,
             "options": dict(scanner.options),
             "source": source,
+            "dependencies": _dependencies(variant),
             "scan_time": validation.duration,
             "fov_offset_mm": [1e3 * value for value in offset],
             "design_rotation": "any" if any_rotation else "prescribed",
@@ -544,6 +546,12 @@ def _listing(variant: _Variant) -> dict[ProtocolKey, Parameter]:
     return _plugin(variant).listing()
 
 
+def _dependencies(variant):
+    from .._site_packages import manifest
+
+    return manifest(variant.path)
+
+
 def _source(variant: _Variant) -> str:
     """Return a digest of the code that designs with the plugin of a variant.
 
@@ -562,6 +570,9 @@ def _source(variant: _Variant) -> str:
         module = None
     if module:
         digest.update(Path(module).read_bytes())
+    dependencies = _dependencies(variant)
+    if dependencies:
+        digest.update(json.dumps(dependencies, sort_keys=True).encode())
     digest.update(f"pypulseqpp {pp.__version__} pulserver {__version__}".encode())
     return digest.hexdigest()
 
