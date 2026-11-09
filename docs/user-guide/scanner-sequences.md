@@ -640,8 +640,9 @@ repetition from the modules their function is built from.
 - **Invalid protocols.** A prescription the design refuses is invalid, with
   the message of its error.
 - **Representative sequence.** The repetition, on which the design service
-  checks nerve stimulation and slew rate before the scan is designed. `epi3d`,
-  `fse3d` and `fse_pd3d` state none.
+  checks nerve stimulation and slew rate before the scan is designed. That of
+  `fse3d` and `fse_pd3d` is the packed echo train their evaluation designs,
+  as long as the longest train; `epi3d` states none.
 - **RF layout.** The first TR of the repetition, its shot repeated once per
   slice of the largest packet, with the TR as its period; for the balanced
   steady state, the TR after the half-angle pulse. The TR of a fast spin echo

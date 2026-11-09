@@ -261,3 +261,35 @@ def test_a_shipped_fse_at_the_hardware_slew_rate_is_designed_within_the_nerve_li
     assert manifest["slew_passes"] >= 1
     assert manifest["design_max_slew_t_per_m_per_s"] < 0.9 * SEVEN_T["max_slew"]
     assert pp.safety.check_pns(sequence, model)[1].peak.value <= SEVEN_T["pns_limit"]
+
+
+@pytest.mark.parametrize("plugin", ["fse3d", "fse_pd3d"])
+def test_a_shipped_fse_is_lowered_at_validation_from_its_echo_train(tmp_path, plugin):
+    """The evaluation's echo train is checked, and generate starts where it left off.
+
+    The train acquires fewer peripheral views than the scan, so the scan's
+    partition encodes may lower the slew rate once more at generation.
+    """
+    from pulserver import _plugins
+
+    block = (
+        f"{PROTOCOL_BEGIN}\nTR: 3431000\netl: 80\nbandwidth: 500000.0\n"
+        "fov: 210.0\nphase_fov: 159.6\nnx: 276\nny: 32\nnslices: 16\n"
+        f"slice_thickness: 0.8\nRy: 2\nRz: 2\n{PROTOCOL_END}\n"
+    )
+    common = {"plugins": (_plugins.SEQUENCES,), "plugin": plugin, "limits": SEVEN_T}
+    status, text = service.call("validate", block=block, **common)
+    assert status == 0, text
+    lowered = list(service._LOWERED._slews.values())
+    assert lowered and max(lowered) < 0.9 * SEVEN_T["max_slew"] * 42.576e6
+    store = DesignStore(tmp_path / "designs", "scan")
+    status, text = service.call("generate", block=block, store=store, **common)
+    assert status == 0, text
+    directory = store.directory(text.split()[1])
+    manifest = json.loads((directory / "manifest.json").read_text())
+    sequence = pp.Sequence()
+    sequence.read(str(directory / "sequence.seq"))
+    model = pp.safety.ChronaxieModel(SEVEN_T["pns_chronaxie"], SEVEN_T["pns_rheobase"])
+    assert manifest["slew_passes"] <= 1
+    assert manifest["design_max_slew_t_per_m_per_s"] * 42.576e6 <= max(lowered)
+    assert pp.safety.check_pns(sequence, model)[1].peak.value <= SEVEN_T["pns_limit"]

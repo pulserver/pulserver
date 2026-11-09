@@ -269,6 +269,7 @@ class FsePd3D(SequencePlugin):
         return Evaluation(
             protocol.replace(achieved(self, train)),
             leading * times[0] + sum(times),
+            sequence=train,
             rf_layout=(
                 echo_train_layout(
                     train,
