@@ -216,6 +216,7 @@
 <li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/protocol-wire.html">Protocol text blocks</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/reconstruction-proxy.html">Reconstruction proxy</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/sar-ratios.html">SAR ratios against a reference pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/sequence-definitions.html">Sequence definitions</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
@@ -430,9 +431,11 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">contextlib</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">copy</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">io</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">threading</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Sequence</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">concurrent.futures</span><span class="w"> </span><span class="kn">import</span> <span class="n">ThreadPoolExecutor</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">functools</span><span class="w"> </span><span class="kn">import</span> <span class="n">partial</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
 
@@ -627,6 +630,7 @@
     <span class="n">limits</span><span class="p">:</span> <span class="n">CheckLimits</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">designed</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="n">Path</span><span class="p">,</span> <span class="n">pp</span><span class="o">.</span><span class="n">Sequence</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">spl_levels</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">SplLevels</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">readings</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">"""Return the problems of a chain under a scanner's limits, in the physical frame.</span>
 
@@ -668,6 +672,14 @@
 <span class="sd">    spl_levels : Sequence[SplLevels], default=None</span>
 <span class="sd">        One per file of the chain, as :func:`spl_levels` returns them for</span>
 <span class="sd">        ``rotation``, held to the limits in place of computing them.</span>
+<span class="sd">    readings : dict, default=None</span>
+<span class="sd">        Filled, where given, with the largest reading over the chain of the</span>
+<span class="sd">        gradient checks, each as a fraction of its limit: ``"grad"`` and</span>
+<span class="sd">        ``"slew"``, the gradient amplitude and slew rate on a physical axis;</span>
+<span class="sd">        ``"vector_grad"`` and ``"vector_slew"``, the same summed over the</span>
+<span class="sd">        axes, under ``limits.follows_poses`` for a chain that sets</span>
+<span class="sd">        ``EnablePmc``; and ``"pns"``, the nerve response over</span>
+<span class="sd">        ``limits.pns_limit``, where a nerve model is given.</span>
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
@@ -689,8 +701,11 @@
         <span class="n">enables_pmc</span><span class="p">(</span><span class="n">sequence</span><span class="p">)</span> <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">sequence</span> <span class="ow">in</span> <span class="n">chain_read</span>
     <span class="p">)</span>
     <span class="n">problems</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">largest</span> <span class="o">=</span> <span class="n">_Largest</span><span class="p">(</span><span class="n">readings</span><span class="p">)</span>
     <span class="k">for</span> <span class="n">index</span><span class="p">,</span> <span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">sequence</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">chain_read</span><span class="p">):</span>
-        <span class="n">found</span> <span class="o">=</span> <span class="n">_problems</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">system</span><span class="p">,</span> <span class="n">turn</span><span class="p">,</span> <span class="n">limits</span><span class="p">,</span> <span class="n">response</span><span class="p">,</span> <span class="n">any_rotation</span><span class="p">)</span>
+        <span class="n">found</span> <span class="o">=</span> <span class="n">_problems</span><span class="p">(</span>
+            <span class="n">sequence</span><span class="p">,</span> <span class="n">system</span><span class="p">,</span> <span class="n">turn</span><span class="p">,</span> <span class="n">limits</span><span class="p">,</span> <span class="n">response</span><span class="p">,</span> <span class="n">any_rotation</span><span class="p">,</span> <span class="n">largest</span>
+        <span class="p">)</span>
         <span class="k">if</span> <span class="n">spl_levels</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">found</span> <span class="o">+=</span> <span class="n">_spl_problems</span><span class="p">(</span><span class="n">spl_levels</span><span class="p">[</span><span class="n">index</span><span class="p">],</span> <span class="n">limits</span><span class="p">)</span>
         <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">chain_read</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
@@ -722,7 +737,9 @@
     <span class="n">limits</span><span class="p">:</span> <span class="n">CheckLimits</span><span class="p">,</span>
     <span class="n">response</span><span class="p">:</span> <span class="n">safety</span><span class="o">.</span><span class="n">AcousticResponse</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">any_rotation</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="n">largest</span><span class="p">:</span> <span class="n">_Largest</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+    <span class="n">largest</span> <span class="o">=</span> <span class="n">_Largest</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span> <span class="k">if</span> <span class="n">largest</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">largest</span>
     <span class="n">opts</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">copy</span><span class="p">(</span><span class="n">system</span><span class="p">)</span>
     <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">_RASTERS</span><span class="p">:</span>
         <span class="nb">setattr</span><span class="p">(</span><span class="n">opts</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">name</span><span class="p">))</span>
@@ -741,16 +758,44 @@
     <span class="k">if</span> <span class="n">limits</span><span class="o">.</span><span class="n">wave_memory</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
         <span class="n">problems</span> <span class="o">+=</span> <span class="n">_long_gradients</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">limits</span><span class="o">.</span><span class="n">wave_memory</span><span class="p">)</span>
     <span class="n">checks</span> <span class="o">=</span> <span class="p">[</span>
-        <span class="p">(</span><span class="n">_limit</span><span class="p">,</span> <span class="n">safety</span><span class="o">.</span><span class="n">check_max_grad</span><span class="p">,</span> <span class="s2">"gradient amplitude"</span><span class="p">,</span> <span class="s2">"mT/m"</span><span class="p">,</span> <span class="mf">1e3</span><span class="p">),</span>
-        <span class="p">(</span><span class="n">_limit</span><span class="p">,</span> <span class="n">safety</span><span class="o">.</span><span class="n">check_max_slew</span><span class="p">,</span> <span class="s2">"slew rate"</span><span class="p">,</span> <span class="s2">"T/m/s"</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">),</span>
+        <span class="p">(</span>
+            <span class="n">_limit</span><span class="p">,</span>
+            <span class="n">safety</span><span class="o">.</span><span class="n">check_max_grad</span><span class="p">,</span>
+            <span class="s2">"gradient amplitude"</span><span class="p">,</span>
+            <span class="s2">"mT/m"</span><span class="p">,</span>
+            <span class="mf">1e3</span><span class="p">,</span>
+            <span class="n">largest</span><span class="o">.</span><span class="n">into</span><span class="p">(</span><span class="s2">"grad"</span><span class="p">),</span>
+        <span class="p">),</span>
+        <span class="p">(</span>
+            <span class="n">_limit</span><span class="p">,</span>
+            <span class="n">safety</span><span class="o">.</span><span class="n">check_max_slew</span><span class="p">,</span>
+            <span class="s2">"slew rate"</span><span class="p">,</span>
+            <span class="s2">"T/m/s"</span><span class="p">,</span>
+            <span class="mf">1.0</span><span class="p">,</span>
+            <span class="n">largest</span><span class="o">.</span><span class="n">into</span><span class="p">(</span><span class="s2">"slew"</span><span class="p">),</span>
+        <span class="p">),</span>
     <span class="p">]</span>
     <span class="k">if</span> <span class="n">any_rotation</span><span class="p">:</span>
         <span class="n">checks</span> <span class="o">+=</span> <span class="p">[</span>
-            <span class="p">(</span><span class="n">_vector</span><span class="p">,</span> <span class="n">safety</span><span class="o">.</span><span class="n">check_max_grad</span><span class="p">,</span> <span class="s2">"gradient amplitude"</span><span class="p">,</span> <span class="s2">"mT/m"</span><span class="p">,</span> <span class="mf">1e3</span><span class="p">),</span>
-            <span class="p">(</span><span class="n">_vector</span><span class="p">,</span> <span class="n">safety</span><span class="o">.</span><span class="n">check_max_slew</span><span class="p">,</span> <span class="s2">"slew rate"</span><span class="p">,</span> <span class="s2">"T/m/s"</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">),</span>
+            <span class="p">(</span>
+                <span class="n">_vector</span><span class="p">,</span>
+                <span class="n">safety</span><span class="o">.</span><span class="n">check_max_grad</span><span class="p">,</span>
+                <span class="s2">"gradient amplitude"</span><span class="p">,</span>
+                <span class="s2">"mT/m"</span><span class="p">,</span>
+                <span class="mf">1e3</span><span class="p">,</span>
+                <span class="n">largest</span><span class="o">.</span><span class="n">into</span><span class="p">(</span><span class="s2">"vector_grad"</span><span class="p">),</span>
+            <span class="p">),</span>
+            <span class="p">(</span>
+                <span class="n">_vector</span><span class="p">,</span>
+                <span class="n">safety</span><span class="o">.</span><span class="n">check_max_slew</span><span class="p">,</span>
+                <span class="s2">"slew rate"</span><span class="p">,</span>
+                <span class="s2">"T/m/s"</span><span class="p">,</span>
+                <span class="mf">1.0</span><span class="p">,</span>
+                <span class="n">largest</span><span class="o">.</span><span class="n">into</span><span class="p">(</span><span class="s2">"vector_slew"</span><span class="p">),</span>
+            <span class="p">),</span>
         <span class="p">]</span>
     <span class="k">if</span> <span class="n">limits</span><span class="o">.</span><span class="n">pns</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">checks</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">_pns</span><span class="p">,</span> <span class="n">limits</span><span class="p">))</span>
+        <span class="n">checks</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">_pns</span><span class="p">,</span> <span class="n">limits</span><span class="p">,</span> <span class="n">largest</span><span class="o">.</span><span class="n">into</span><span class="p">(</span><span class="s2">"pns"</span><span class="p">)))</span>
     <span class="k">if</span> <span class="n">limits</span><span class="o">.</span><span class="n">bands</span><span class="p">:</span>
         <span class="n">checks</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">_resonance</span><span class="p">,</span> <span class="n">limits</span><span class="p">))</span>
     <span class="k">if</span> <span class="n">response</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
@@ -871,6 +916,24 @@
     <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">shapes</span><span class="p">[</span><span class="n">times</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">decompressed</span><span class="p">()))</span>
 
 
+<span class="k">class</span><span class="w"> </span><span class="nc">_Largest</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""The largest reading of each check over a chain, kept in a caller's dict from the checks' threads."""</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">readings</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_readings</span> <span class="o">=</span> <span class="n">readings</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">Lock</span><span class="p">()</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">into</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Return the call that records a reading under ``key``, or ``None`` when nothing is kept."""</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_readings</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="k">return</span> <span class="n">partial</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_record</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_readings</span><span class="p">,</span> <span class="n">key</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_record</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">readings</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">],</span> <span class="n">key</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">value</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">with</span> <span class="bp">self</span><span class="o">.</span><span class="n">_lock</span><span class="p">:</span>
+            <span class="n">readings</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">readings</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">))</span>
+
+
 <span class="k">def</span><span class="w"> </span><span class="nf">_limit</span><span class="p">(</span>
     <span class="n">sequence</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Sequence</span><span class="p">,</span>
     <span class="n">system</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">,</span>
@@ -878,8 +941,11 @@
     <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
     <span class="n">unit</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
     <span class="n">scale</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="n">record</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
     <span class="n">is_ok</span><span class="p">,</span> <span class="n">found</span> <span class="o">=</span> <span class="n">check</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">system</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">record</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">found</span><span class="o">.</span><span class="n">limit</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="n">record</span><span class="p">(</span><span class="n">found</span><span class="o">.</span><span class="n">per_axis</span><span class="o">.</span><span class="n">value</span> <span class="o">/</span> <span class="n">found</span><span class="o">.</span><span class="n">limit</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">is_ok</span><span class="p">:</span>
         <span class="k">return</span> <span class="p">[]</span>
     <span class="n">peak</span> <span class="o">=</span> <span class="n">found</span><span class="o">.</span><span class="n">per_axis</span>
@@ -897,10 +963,13 @@
     <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
     <span class="n">unit</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
     <span class="n">scale</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="n">record</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">"""Return the problem of a peak summed over the axes above the per-axis limit, which some rotation puts on one axis."""</span>
     <span class="n">_</span><span class="p">,</span> <span class="n">found</span> <span class="o">=</span> <span class="n">check</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">system</span><span class="p">)</span>
     <span class="n">peak</span> <span class="o">=</span> <span class="n">found</span><span class="o">.</span><span class="n">vector</span>
+    <span class="k">if</span> <span class="n">record</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">found</span><span class="o">.</span><span class="n">limit</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="n">record</span><span class="p">(</span><span class="n">peak</span><span class="o">.</span><span class="n">value</span> <span class="o">/</span> <span class="n">found</span><span class="o">.</span><span class="n">limit</span><span class="p">)</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="n">found</span><span class="o">.</span><span class="n">limit</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">peak</span><span class="o">.</span><span class="n">value</span> <span class="o">&lt;=</span> <span class="n">found</span><span class="o">.</span><span class="n">limit</span><span class="p">:</span>
         <span class="k">return</span> <span class="p">[]</span>
     <span class="k">return</span> <span class="p">[</span>
@@ -919,9 +988,13 @@
     <span class="k">return</span> <span class="nb">bool</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">))</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_pns</span><span class="p">(</span><span class="n">sequence</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Sequence</span><span class="p">,</span> <span class="n">system</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">,</span> <span class="n">limits</span><span class="p">:</span> <span class="n">CheckLimits</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_pns</span><span class="p">(</span>
+    <span class="n">sequence</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Sequence</span><span class="p">,</span> <span class="n">system</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">,</span> <span class="n">limits</span><span class="p">:</span> <span class="n">CheckLimits</span><span class="p">,</span> <span class="n">record</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
     <span class="n">_</span><span class="p">,</span> <span class="n">found</span> <span class="o">=</span> <span class="n">safety</span><span class="o">.</span><span class="n">check_pns</span><span class="p">(</span><span class="n">sequence</span><span class="p">,</span> <span class="n">limits</span><span class="o">.</span><span class="n">pns</span><span class="p">,</span> <span class="n">system</span><span class="o">=</span><span class="n">system</span><span class="p">)</span>
     <span class="n">peak</span> <span class="o">=</span> <span class="n">found</span><span class="o">.</span><span class="n">peak</span>
+    <span class="k">if</span> <span class="n">record</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">record</span><span class="p">(</span><span class="n">peak</span><span class="o">.</span><span class="n">value</span> <span class="o">/</span> <span class="n">limits</span><span class="o">.</span><span class="n">pns_limit</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">peak</span><span class="o">.</span><span class="n">value</span> <span class="o">&lt;</span> <span class="n">limits</span><span class="o">.</span><span class="n">pns_limit</span><span class="p">:</span>
         <span class="k">return</span> <span class="p">[]</span>
     <span class="n">axis</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">found</span><span class="o">.</span><span class="n">axes</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">reading</span><span class="p">:</span> <span class="n">reading</span><span class="o">.</span><span class="n">value</span><span class="p">)</span><span class="o">.</span><span class="n">axis</span>

@@ -19,4 +19,5 @@
    ~Evaluation.duration
    ~Evaluation.info
    ~Evaluation.rf_layout
+   ~Evaluation.sequence
    ~Evaluation.protocol

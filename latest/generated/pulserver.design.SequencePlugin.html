@@ -215,6 +215,7 @@
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/protocol-wire.html">Protocol text blocks</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/reconstruction-proxy.html">Reconstruction proxy</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/sar-ratios.html">SAR ratios against a reference pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/sequence-definitions.html">Sequence definitions</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
@@ -537,6 +538,12 @@ not pass it to the app. The options the plugin module declares with
 <a class="reference internal" href="pulserver.design.option.html#pulserver.design.option" title="pulserver.design.option"><code class="xref py py-func docutils literal notranslate"><span class="pre">option()</span></code></a> are added, each an
 <a class="reference internal" href="pulserver.design.OptionParam.html#pulserver.design.OptionParam" title="pulserver.design.OptionParam"><code class="xref py py-class docutils literal notranslate"><span class="pre">OptionParam</span></code></a> at its user entry, named in the user entry’s
 name.</p></li>
+<li><p><strong>strict_limits</strong> (<em>bool</em>) – Whether a design that exceeds a limit is refused as designed. By
+default, <code class="docutils literal notranslate"><span class="pre">False</span></code>, the design service lowers the slew rate a design
+exceeding the nerve-stimulation or slew-rate limit is made under and
+designs it again; a strict plugin’s design is never adjusted, and each
+file it writes sets the <code class="docutils literal notranslate"><span class="pre">StrictLimits</span></code> definition. A design whose
+sequence sets <code class="docutils literal notranslate"><span class="pre">StrictLimits</span></code> itself is held strictly too.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Raises<span class="colon">:</span></dt>
@@ -592,7 +599,10 @@ subclasses <a class="reference internal" href="pulserver.design.ScannerSequence.
 <tr class="row-odd"><td><p><a class="reference internal" href="pulserver.design.SequencePlugin.reads_exam.html#pulserver.design.SequencePlugin.reads_exam" title="pulserver.design.SequencePlugin.reads_exam"><code class="xref py py-obj docutils literal notranslate"><span class="pre">reads_exam</span></code></a></p></td>
 <td><p>Whether <code class="xref py py-meth docutils literal notranslate"><span class="pre">evaluate()</span></code> or <code class="xref py py-meth docutils literal notranslate"><span class="pre">generate()</span></code> takes <code class="docutils literal notranslate"><span class="pre">exam</span></code>.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.design.SequencePlugin.app.html#pulserver.design.SequencePlugin.app" title="pulserver.design.SequencePlugin.app"><code class="xref py py-obj docutils literal notranslate"><span class="pre">app</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.design.SequencePlugin.strict_limits.html#pulserver.design.SequencePlugin.strict_limits" title="pulserver.design.SequencePlugin.strict_limits"><code class="xref py py-obj docutils literal notranslate"><span class="pre">strict_limits</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.design.SequencePlugin.app.html#pulserver.design.SequencePlugin.app" title="pulserver.design.SequencePlugin.app"><code class="xref py py-obj docutils literal notranslate"><span class="pre">app</span></code></a></p></td>
 <td><p></p></td>
 </tr>
 </tbody>

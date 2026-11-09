@@ -30,6 +30,9 @@ patient safety.
 - **Designs under per-logical-axis limits and checks against the coil's per-physical-axis limits.**
 
   Code: `design_max_grad`, `design_max_slew` in the call's limits. Test: *an oblique design is held under the design limits and checked against the scanner's* (`test_design_service.py`).
+- **Designs a scan past the nerve or slew-rate limit again at a lower slew rate, and the console's protocol with it; refuses a strict design as designed.**
+
+  Code: `pulserver.host._slew`, the representative `sequence` of {class}`~pulserver.design.Evaluation`, {attr}`~pulserver.design.SequencePlugin.strict_limits`, the `DesignMaxSlew` and `StrictLimits` definitions. Tests: *a design past the nerve limit is designed again at a lower slew rate*; *a strict plugin is refused as designed and says so in its files*; *a sequence setting StrictLimits unannounced is refused as designed*; *validate reports the slew rate generate designs at*; *a shipped FSE at the hardware slew rate is designed within the nerve limit*; *a lower slew rate is not tried for an amplitude past its limit* (`test_slew_derate.py`).
 - **Designs a scan that follows motion-correction poses for every rotation, and checks it so.**
 
   Code: `design_max_grad_any_rotation`, `design_max_slew_any_rotation` and `pmc_enable` in the call's limits; `CheckLimits.follows_poses`. Tests: *a navigated scan at a site following poses is designed for every rotation*; *the vector is held to the axis limit only where poses may turn the scan*; *a sequence setting EnablePmc unannounced is refused where poses could turn it* (`test_any_rotation.py`).
@@ -51,7 +54,7 @@ patient safety.
 - **Refuses an arbitrary gradient longer than one axis's waveform memory, `ir_wave_max_samples` at `ir_wave_raster_us`.**
 
   Code: `CheckLimits(wave_memory=...)`. Test: *an arbitrary gradient longer than the waveform memory is refused* (`test_ir_checks.py`).
-- **Checks PNS under the scanner's nerve model (chronaxie or SAFE), up to a fraction of its threshold.**
+- **Checks PNS under the scanner's nerve model (chronaxie or SAFE), its response summed over the axes, up to a fraction of its threshold.**
 
   Code: `CheckLimits(pns=..., pns_limit=...)`, `pypulseqpp.safety.check_pns`. Test: *PNS is refused from the fraction of threshold the limits allow* (`test_ir_checks.py`).
 - **Refuses gradient trains in the forbidden bands of mechanical resonance, on the physical axis they play on, read over a 20 ms window: a train shorter than that drives a band less.** A band whose table states no amplitude is held to 8 mT/m. A stated amplitude is read as an echo-spacing lockout reads it: the band is refused when it holds a line above 6 mT/m while the axis's gradient exceeds the amplitude. A window that exceeds a band is read again over 80 ms; a steady line that then lies outside the band, at 80 % of its amplitude or more, is leakage through the 20 ms window and is not refused.
@@ -77,6 +80,12 @@ patient safety.
 
 ## Division of responsibility
 
+- **The design limits**, by the interpreter, from the scanner's gradient
+  specification and the prescription's rotation.
+- **The waveforms played**, those of the file. A slew rate is lowered by
+  designing again, so the file is what plays and states the slew rate in its
+  `DesignMaxSlew` definition; an interpreter refuses what it cannot play and
+  changes no waveform.
 - **SAR, RF coil heating and gradient heating**, in the vendor's routines,
   from the RF pulses and gradients the interpreter passes on, as for a product
   sequence.
@@ -103,15 +112,36 @@ converted into the IR cache with its sound pressure levels and SAR ratios.
 
 Two logical axes at 0.8 of the amplitude limit put $0.8\sqrt{2}$ of it on one
 physical axis at 45°. So the sequence is designed under `design_max_grad` and
-`design_max_slew`, which the scanner derates for the prescription, less the
-design margin of `pypulseqpp.apply_system_derates`, and checked on the physical
-axes against `max_grad` and `max_slew` as sent. The rotation arrives
-in the protocol's `fov_rotation_ij` entries; your sequence function never sees
-it. A scan that follows motion-correction poses is turned again during the
-scan, by rotations no check sees: a sequence that sets `EnablePmc` there is
-designed under the `_any_rotation` limits, and its gradient amplitude and slew
-rate summed over the three axes are held to the per-axis limits, the most any
-rotation can put on one axis.
+`design_max_slew`, the share of each coil's limits the prescription's rotation
+leaves a logical axis with all three active, less the design margin of
+`pypulseqpp.apply_system_derates`. Every scan is then checked as it plays:
+rotated, on each physical axis, against `max_grad` and `max_slew`, the coil's
+own per-axis limits. Each physical gradient has its own amplifier, so these
+are the limits of the scan's own rotation; the gradient summed over the axes is
+not limited by them. The rotation arrives in the protocol's `fov_rotation_ij`
+entries; your sequence function never sees it.
+
+A scan that follows motion-correction poses is turned again during the scan,
+by rotations no check sees: where the site follows poses (`pmc_enable`) and
+the sequence sets `EnablePmc`, it is designed under the `_any_rotation`
+limits, and its gradient amplitude and slew rate summed over the three axes, a
+root sum of squares, are held to the per-axis limits, the most any rotation
+can put on one axis.
+
+### Slew rate and nerve stimulation
+
+A gradient ramp stimulates peripheral nerves by its field's rate of change,
+which sums over the axes. The nerve model responds to a ramp of amplitude step
+$\Delta G$ at slew rate $S$ with $\Delta G / (b\,(c + \Delta G/S))$, for
+rheobase $b$ and chronaxie $c$: a short ramp at a high slew rate stimulates
+less than its slew rate alone suggests, so the slew rate a scan may play
+depends on the amplitudes it ramps. The design limits are the coil's; a design
+whose response then exceeds `pns_limit` is designed again at a lower slew
+rate, chosen from the response it measured, as a vendor sequence lowers its
+ramps for its own waveforms. The console's protocol is evaluated the same
+way, on the plugin's representative sequence. A plugin that wants a design
+refused rather than adjusted is strict, and says so in its files with the
+`StrictLimits` definition ({doc}`../developer-guide/internals/sequence-definitions`).
 
 ### Limit sources
 
@@ -137,3 +167,5 @@ calibrated for; {doc}`../developer-guide/internals/sar-ratios` derives them.
 - {doc}`architecture`: what is stored once a design passes.
 - {doc}`../api/ir`: {func}`~pulserver.ir.check`, {class}`~pulserver.ir.CheckLimits`
   and {func}`~pulserver.ir.sar_ratios`.
+- {doc}`../developer-guide/internals/sequence-definitions`: the definitions a
+  design writes and the checks read.

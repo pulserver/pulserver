@@ -31,4 +31,5 @@
    ~ScannerSequence.options
    ~ScannerSequence.protocol
    ~ScannerSequence.reads_exam
+   ~ScannerSequence.strict_limits
    ~ScannerSequence.app

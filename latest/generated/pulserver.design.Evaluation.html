@@ -215,6 +215,7 @@
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/protocol-wire.html">Protocol text blocks</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/reconstruction-proxy.html">Reconstruction proxy</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/sar-ratios.html">SAR ratios against a reference pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/sequence-definitions.html">Sequence definitions</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
@@ -517,6 +518,13 @@ RF of a protocol before it is designed. <code class="docutils literal notranslat
 states no estimate and is not invalid. Every control of the layout must
 be an entry of <a class="reference internal" href="pulserver.design.SequencePlugin.protocol.html#pulserver.design.SequencePlugin.protocol" title="pulserver.design.SequencePlugin.protocol"><code class="xref py py-attr docutils literal notranslate"><span class="pre">SequencePlugin.protocol</span></code></a> whose value in
 <code class="docutils literal notranslate"><span class="pre">protocol</span></code> is positive, or the protocol is invalid.</p></li>
+<li><p><strong>sequence</strong> (<em>pypulseqpp._sequence.Sequence | None</em>) – A representative design of the protocol, such as the one repetition
+or echo train the evaluation designed, in the logical frame. The
+design service checks nerve stimulation and slew rate on it before
+the scan is designed, and lowers the slew rate the protocol is
+designed under where they exceed their limits, so that the console
+shows what will play. <code class="docutils literal notranslate"><span class="pre">None</span></code>, the default, states none: the slew
+rate is then lowered only when the generated design fails the check.</p></li>
 </ul>
 </dd>
 </dl>
@@ -534,7 +542,10 @@ be an entry of <a class="reference internal" href="pulserver.design.SequencePlug
 <tr class="row-odd"><td><p><a class="reference internal" href="pulserver.design.Evaluation.rf_layout.html#pulserver.design.Evaluation.rf_layout" title="pulserver.design.Evaluation.rf_layout"><code class="xref py py-obj docutils literal notranslate"><span class="pre">rf_layout</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.design.Evaluation.protocol.html#pulserver.design.Evaluation.protocol" title="pulserver.design.Evaluation.protocol"><code class="xref py py-obj docutils literal notranslate"><span class="pre">protocol</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.design.Evaluation.sequence.html#pulserver.design.Evaluation.sequence" title="pulserver.design.Evaluation.sequence"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sequence</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.design.Evaluation.protocol.html#pulserver.design.Evaluation.protocol" title="pulserver.design.Evaluation.protocol"><code class="xref py py-obj docutils literal notranslate"><span class="pre">protocol</span></code></a></p></td>
 <td><p></p></td>
 </tr>
 </tbody>

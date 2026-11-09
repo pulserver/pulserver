@@ -136,10 +136,12 @@ its limits. Here is an example rheobase-chronaxie model:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 77-85
+.. GENERATED FROM PYTHON SOURCE LINES 77-87
 
-The design is refused. On a scanner this message is what the operator reads
-instead of a scan starting, and nothing is played.
+The design is refused. On a scanner the design service then designs it again
+at a lower slew rate, as this lesson does by hand below; for a plugin that
+asks to be held strictly, this message is what the operator reads instead
+of a scan starting, and nothing is played.
 :doc:`/explanations/safety-checks` lists every check and what each one
 needs from the scanner.
 
@@ -147,7 +149,7 @@ The figure shows why. Over the first 12 ms of a TR, the gradients stay
 within 40 mT/m and the slew rate within 150 T/m/s, but the slice rephaser
 ramps fast enough to drive the nerve response just above its threshold.
 
-.. GENERATED FROM PYTHON SOURCE LINES 85-126
+.. GENERATED FROM PYTHON SOURCE LINES 87-128
 
 
 
@@ -161,7 +163,7 @@ ramps fast enough to drive the nerve response just above its threshold.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 127-134
+.. GENERATED FROM PYTHON SOURCE LINES 129-136
 
 Designing under gentler limits
 ------------------------------
@@ -171,7 +173,7 @@ with a lower slew rate, and check it against the same scanner. A scanner can sen
 such design limits with its own (``design_max_slew``), and pulserver then
 hands your sequence function the gentler ``system``.
 
-.. GENERATED FROM PYTHON SOURCE LINES 134-158
+.. GENERATED FROM PYTHON SOURCE LINES 136-160
 
 .. code-block:: Python
 
@@ -201,7 +203,7 @@ hands your sequence function the gentler ``system``.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 159-170
+.. GENERATED FROM PYTHON SOURCE LINES 161-172
 
 The same TE and TR, with the nerve response under its threshold.
 
@@ -215,7 +217,7 @@ blocks the scanner prepares once, and lists the order to play them in. The
 result is the **cache** the scanner loads, written beside the Pulseq file by
 :func:`~pulserver.ir.convert`:
 
-.. GENERATED FROM PYTHON SOURCE LINES 170-182
+.. GENERATED FROM PYTHON SOURCE LINES 172-184
 
 .. code-block:: Python
 
@@ -247,12 +249,12 @@ result is the **cache** the scanner loads, written beside the Pulseq file by
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 183-185
+.. GENERATED FROM PYTHON SOURCE LINES 185-187
 
 Segment 0 excites, encodes and reads out; segment 1 is the wait until the
 next TR. Every TR plays the two of them in turn, as the scanner will:
 
-.. GENERATED FROM PYTHON SOURCE LINES 185-224
+.. GENERATED FROM PYTHON SOURCE LINES 187-226
 
 
 
@@ -266,7 +268,7 @@ next TR. Every TR plays the two of them in turn, as the scanner will:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 225-242
+.. GENERATED FROM PYTHON SOURCE LINES 227-244
 
 What changes from one TR to the next
 ------------------------------------
@@ -286,7 +288,7 @@ plays the segment, the *instance* sets everything else:
 :func:`~pulserver.ir.play` walks the cache with the same C library the
 scanner links, one entry per block played, so you can read these values:
 
-.. GENERATED FROM PYTHON SOURCE LINES 242-262
+.. GENERATED FROM PYTHON SOURCE LINES 244-264
 
 .. code-block:: Python
 
@@ -308,7 +310,7 @@ scanner links, one entry per block played, so you can read these values:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 263-286
+.. GENERATED FROM PYTHON SOURCE LINES 265-288
 
 The first TRs are the dummy TRs: the same segment, with no phase encoding
 and the ADC off. Then the phase-encoding amplitude steps through the 64
@@ -337,7 +339,7 @@ What this lesson did, stated the way you would ask an agent for it:
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.700 seconds)
+   **Total running time of the script:** (0 minutes 0.620 seconds)
 
 
 .. _sphx_glr_download_generated_gallery_01-course_03_scanner_representation.py:

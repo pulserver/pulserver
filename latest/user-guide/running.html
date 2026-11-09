@@ -217,6 +217,7 @@
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/protocol-wire.html">Protocol text blocks</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/reconstruction-proxy.html">Reconstruction proxy</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/sar-ratios.html">SAR ratios against a reference pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/sequence-definitions.html">Sequence definitions</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
@@ -658,8 +659,8 @@ pulses are designed as given.</p>
 checks hold every physical axis. Logical axes played together add on one
 physical axis, so under an oblique prescription a design held to <code class="docutils literal notranslate"><span class="pre">max_grad</span></code> and
 <code class="docutils literal notranslate"><span class="pre">max_slew</span></code> per logical axis can exceed them on a physical one and is refused.
-Two design limits cap what each logical axis is designed under, derated by the
-scanner for the prescription’s rotation:</p>
+Two design limits cap what each logical axis is designed under, the scanner’s
+limits for the prescription’s rotation:</p>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
 <tr class="row-odd"><th class="head"><p>Limit</p></th>
@@ -668,13 +669,13 @@ scanner for the prescription’s rotation:</p>
 </thead>
 <tbody>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">design_max_grad</span></code></p></td>
-<td><p>Gradient amplitude each logical axis is designed under, in the <code class="docutils literal notranslate"><span class="pre">grad_unit</span></code> of <code class="docutils literal notranslate"><span class="pre">max_grad</span></code></p></td>
+<td><p>Gradient amplitude each logical axis is designed under, in the <code class="docutils literal notranslate"><span class="pre">grad_unit</span></code> of <code class="docutils literal notranslate"><span class="pre">max_grad</span></code>: the coil’s per-axis limit, scaled by the share the prescription’s rotation leaves each logical axis with all three active</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">design_max_slew</span></code></p></td>
-<td><p>Slew rate each logical axis is designed under, in the <code class="docutils literal notranslate"><span class="pre">slew_unit</span></code> of <code class="docutils literal notranslate"><span class="pre">max_slew</span></code></p></td>
+<td><p>Slew rate each logical axis is designed under, in the <code class="docutils literal notranslate"><span class="pre">slew_unit</span></code> of <code class="docutils literal notranslate"><span class="pre">max_slew</span></code>, the coil’s per-axis slew rate scaled by the same share</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">design_max_grad_any_rotation</span></code>, <code class="docutils literal notranslate"><span class="pre">design_max_slew_any_rotation</span></code></p></td>
-<td><p>The same for a design that must hold under any rotation: one whose scan follows motion-correction poses</p></td>
+<td><p>The same for a design that must hold under any rotation, one whose scan follows motion-correction poses: limits derated by the scanner so that no rotation puts more than the per-axis limit on a physical axis</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">pmc_enable</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">1</span></code> when the scan follows the poses its reconstruction publishes, <code class="docutils literal notranslate"><span class="pre">0</span></code> otherwise</p></td>
@@ -700,6 +701,22 @@ axes to <code class="docutils literal notranslate"><span class="pre">max_grad</s
 on one physical axis. A sequence without <code class="docutils literal notranslate"><span class="pre">EnablePmc</span></code>, or a scan with
 <code class="docutils literal notranslate"><span class="pre">pmc_enable</span></code> <code class="docutils literal notranslate"><span class="pre">0</span></code>, is designed under <code class="docutils literal notranslate"><span class="pre">design_max_grad</span></code> and <code class="docutils literal notranslate"><span class="pre">design_max_slew</span></code>.
 The manifest’s <code class="docutils literal notranslate"><span class="pre">design_rotation</span></code> records which, <code class="docutils literal notranslate"><span class="pre">any</span></code> or <code class="docutils literal notranslate"><span class="pre">prescribed</span></code>.</p>
+<p>A design at these limits can stimulate peripheral nerves past <code class="docutils literal notranslate"><span class="pre">pns_limit</span></code>, or,
+for a scan following poses, sum to a slew rate past <code class="docutils literal notranslate"><span class="pre">max_slew</span></code> over the axes.
+<code class="docutils literal notranslate"><span class="pre">generate</span></code> then designs it again at a lower slew rate, modelled on the
+response it measured, at most three times, lowering it further where the
+plugin cannot lay the design out at that rate, and checks every problem again
+on each new design; <code class="docutils literal notranslate"><span class="pre">validate</span></code> does the same on the representative sequence a
+plugin’s evaluation states (<a class="reference internal" href="scanner-sequences.html#evaluating-a-protocol"><span class="std std-ref">Protocol evaluation</span></a>), so the console
+shows what <code class="docutils literal notranslate"><span class="pre">generate</span></code> designs. A design past a gradient amplitude limit is
+refused, since no slew rate brings it down. Each file of a design records the
+slew rate it was designed under, per logical axis, in its <code class="docutils literal notranslate"><span class="pre">DesignMaxSlew</span></code>
+definition, and the manifest records it as <code class="docutils literal notranslate"><span class="pre">design_max_slew_t_per_m_per_s</span></code>,
+with the passes as <code class="docutils literal notranslate"><span class="pre">slew_passes</span></code>. A strict plugin
+(<a class="reference internal" href="../generated/pulserver.design.SequencePlugin.strict_limits.html#pulserver.design.SequencePlugin.strict_limits" title="pulserver.design.SequencePlugin.strict_limits"><code class="xref py py-attr docutils literal notranslate"><span class="pre">strict_limits</span></code></a>), whose files set
+<code class="docutils literal notranslate"><span class="pre">StrictLimits</span></code>, or a design whose sequence sets <code class="docutils literal notranslate"><span class="pre">StrictLimits</span></code> itself, is
+refused as designed; the manifest’s <code class="docutils literal notranslate"><span class="pre">strict_limits</span></code> records which. An imported
+chain is never designed again.</p>
 <p>A design limit above the scanner’s leaves the scanner’s, and one left out is the
 scanner’s; a design dead time below the scanner’s leaves the scanner’s. The
 design dead times are the room a playout needs around an RF pulse or a readout

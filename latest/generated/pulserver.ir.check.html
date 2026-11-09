@@ -215,6 +215,7 @@
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/protocol-wire.html">Protocol text blocks</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/reconstruction-proxy.html">Reconstruction proxy</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/sar-ratios.html">SAR ratios against a reference pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/sequence-definitions.html">Sequence definitions</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
@@ -534,6 +535,13 @@ returns them, checked in place of reading the files and rotated in
 place.</p></li>
 <li><p><strong>spl_levels</strong> (<em>Sequence</em><em>[</em><a class="reference internal" href="pulserver.ir.SplLevels.html#pulserver.ir.SplLevels" title="pulserver.ir.SplLevels"><em>SplLevels</em></a><em>]</em><em>, </em><em>default=None</em>) – One per file of the chain, as <a class="reference internal" href="pulserver.ir.spl_levels.html#pulserver.ir.spl_levels" title="pulserver.ir.spl_levels"><code class="xref py py-func docutils literal notranslate"><span class="pre">spl_levels()</span></code></a> returns them for
 <code class="docutils literal notranslate"><span class="pre">rotation</span></code>, held to the limits in place of computing them.</p></li>
+<li><p><strong>readings</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="(in Python v3.15)"><em>dict</em></a><em>, </em><em>default=None</em>) – Filled, where given, with the largest reading over the chain of the
+gradient checks, each as a fraction of its limit: <code class="docutils literal notranslate"><span class="pre">&quot;grad&quot;</span></code> and
+<code class="docutils literal notranslate"><span class="pre">&quot;slew&quot;</span></code>, the gradient amplitude and slew rate on a physical axis;
+<code class="docutils literal notranslate"><span class="pre">&quot;vector_grad&quot;</span></code> and <code class="docutils literal notranslate"><span class="pre">&quot;vector_slew&quot;</span></code>, the same summed over the
+axes, under <code class="docutils literal notranslate"><span class="pre">limits.follows_poses</span></code> for a chain that sets
+<code class="docutils literal notranslate"><span class="pre">EnablePmc</span></code>; and <code class="docutils literal notranslate"><span class="pre">&quot;pns&quot;</span></code>, the nerve response over
+<code class="docutils literal notranslate"><span class="pre">limits.pns_limit</span></code>, where a nerve model is given.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>

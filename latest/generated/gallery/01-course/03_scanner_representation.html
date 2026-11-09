@@ -217,6 +217,7 @@
 <li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/protocol-wire.html">Protocol text blocks</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/reconstruction-proxy.html">Reconstruction proxy</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/sar-ratios.html">SAR ratios against a reference pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/sequence-definitions.html">Sequence definitions</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../../../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
@@ -580,8 +581,10 @@ its limits. Here is an example rheobase-chronaxie model:</p>
 <div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>PNS of 104% of the chronaxie threshold exceeds 100%, on z in block 26
 </pre></div>
 </div>
-<p>The design is refused. On a scanner this message is what the operator reads
-instead of a scan starting, and nothing is played.
+<p>The design is refused. On a scanner the design service then designs it again
+at a lower slew rate, as this lesson does by hand below; for a plugin that
+asks to be held strictly, this message is what the operator reads instead
+of a scan starting, and nothing is played.
 <a class="reference internal" href="../../../explanations/safety-checks.html"><span class="doc">Safety checks</span></a> lists every check and what each one
 needs from the scanner.</p>
 <p>The figure shows why. Over the first 12 ms of a TR, the gradients stay
@@ -676,7 +679,7 @@ with pulserver.ir.convert, report its segments, and plot the
 phase-encoding amplitude and RF phase of every TR from pulserver.ir.play.
 </pre></div>
 </div>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.700 seconds)</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.620 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-generated-gallery-01-course-03-scanner-representation-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../../../_downloads/fa654f562122bb648cecb3c26391d482/03_scanner_representation.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">03_scanner_representation.ipynb</span></code></a></p>

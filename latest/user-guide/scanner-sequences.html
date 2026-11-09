@@ -219,6 +219,7 @@
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/protocol-wire.html">Protocol text blocks</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/reconstruction-proxy.html">Reconstruction proxy</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/sar-ratios.html">SAR ratios against a reference pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/sequence-definitions.html">Sequence definitions</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
@@ -790,6 +791,15 @@ makes the protocol invalid, but the reply names only its type, as in
 <code class="docutils literal notranslate"><span class="pre">TypeError</span> <span class="pre">in</span> <span class="pre">Timed.evaluate</span></code>, and the exception is logged as an error with its
 traceback. A request that names an entry the protocol does not declare, or an
 option a choice does not offer, is invalid in the same way.</p>
+<p>An evaluation that designs the sequence, or one repetition of it, states that
+design as its representative <code class="docutils literal notranslate"><span class="pre">sequence</span></code>. The design service checks peripheral
+nerve stimulation and slew rate on it, rotated to the prescription, and
+evaluates the protocol again at a lower slew rate while it exceeds them, as
+<code class="docutils literal notranslate"><span class="pre">generate</span></code> does with the whole design (<a class="reference internal" href="running.html#scanner-limits"><span class="std std-ref">Scanner limits</span></a>); without one,
+the console shows the protocol at the design limits and only <code class="docutils literal notranslate"><span class="pre">generate</span></code> lowers
+the slew rate. A plugin that sets
+<a class="reference internal" href="../generated/pulserver.design.SequencePlugin.strict_limits.html#pulserver.design.SequencePlugin.strict_limits" title="pulserver.design.SequencePlugin.strict_limits"><code class="xref py py-attr docutils literal notranslate"><span class="pre">strict_limits</span></code></a> is never designed again:
+its files set <code class="docutils literal notranslate"><span class="pre">StrictLimits</span></code>, and a design past a limit is refused.</p>
 <p><a class="reference internal" href="../generated/pulserver.design.SequencePlugin.generate.html#pulserver.design.SequencePlugin.generate" title="pulserver.design.SequencePlugin.generate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">generate()</span></code></a> builds the sequence of a
 requested protocol. The default calls the sequence function with the arguments
 of the protocol; a plugin overrides it to return a sequence, or a list of them,
@@ -1275,6 +1285,9 @@ definition. A multi-echo sequence lists every echo time, and the <code class="do
 holds the first.</p></li>
 <li><p><strong>Invalid protocols.</strong> A prescription the design refuses is invalid, with
 the message of its error.</p></li>
+<li><p><strong>Representative sequence.</strong> The repetition, on which the design service
+checks nerve stimulation and slew rate before the scan is designed. <code class="docutils literal notranslate"><span class="pre">epi3d</span></code>,
+<code class="docutils literal notranslate"><span class="pre">fse3d</span></code> and <code class="docutils literal notranslate"><span class="pre">fse_pd3d</span></code> state none.</p></li>
 <li><p><strong>RF layout.</strong> The first TR of the repetition, its shot repeated once per
 slice of the largest packet, with the TR as its period; for the balanced
 steady state, the TR after the half-angle pulse. The TR of a fast spin echo
@@ -1299,6 +1312,8 @@ request names under <code class="docutils literal notranslate"><span class="pre"
 <ul class="simple">
 <li><p><a class="reference internal" href="../explanations/protocol.html"><span class="doc">Protocol resolution</span></a>: resolution, presets, units and precision.</p></li>
 <li><p><a class="reference internal" href="../api/design.html"><span class="doc">Scanner sequences</span></a>: the scanner-sequence interface and its entries.</p></li>
+<li><p><a class="reference internal" href="../developer-guide/internals/sequence-definitions.html"><span class="doc">Sequence definitions</span></a>: the definitions a
+design writes and the services read.</p></li>
 </ul>
 </section>
 </section>

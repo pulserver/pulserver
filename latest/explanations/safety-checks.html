@@ -219,6 +219,7 @@
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/protocol-wire.html">Protocol text blocks</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/reconstruction-proxy.html">Reconstruction proxy</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/sar-ratios.html">SAR ratios against a reference pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/sequence-definitions.html">Sequence definitions</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
@@ -492,6 +493,7 @@
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#division-of-responsibility">Division of responsibility</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#method">Method</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#physical-frame">Physical frame</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#slew-rate-and-nerve-stimulation">Slew rate and nerve stimulation</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#limit-sources">Limit sources</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#sound-pressure-and-sar">Sound pressure and SAR</a></li>
 </ul>
@@ -538,6 +540,9 @@ patient safety.</p>
 <li><p><strong>Designs under per-logical-axis limits and checks against the coil’s per-physical-axis limits.</strong></p>
 <p>Code: <code class="docutils literal notranslate"><span class="pre">design_max_grad</span></code>, <code class="docutils literal notranslate"><span class="pre">design_max_slew</span></code> in the call’s limits. Test: <em>an oblique design is held under the design limits and checked against the scanner’s</em> (<code class="docutils literal notranslate"><span class="pre">test_design_service.py</span></code>).</p>
 </li>
+<li><p><strong>Designs a scan past the nerve or slew-rate limit again at a lower slew rate, and the console’s protocol with it; refuses a strict design as designed.</strong></p>
+<p>Code: <code class="docutils literal notranslate"><span class="pre">pulserver.host._slew</span></code>, the representative <code class="docutils literal notranslate"><span class="pre">sequence</span></code> of <a class="reference internal" href="../generated/pulserver.design.Evaluation.html#pulserver.design.Evaluation" title="pulserver.design.Evaluation"><code class="xref py py-class docutils literal notranslate"><span class="pre">Evaluation</span></code></a>, <a class="reference internal" href="../generated/pulserver.design.SequencePlugin.strict_limits.html#pulserver.design.SequencePlugin.strict_limits" title="pulserver.design.SequencePlugin.strict_limits"><code class="xref py py-attr docutils literal notranslate"><span class="pre">strict_limits</span></code></a>, the <code class="docutils literal notranslate"><span class="pre">DesignMaxSlew</span></code> and <code class="docutils literal notranslate"><span class="pre">StrictLimits</span></code> definitions. Tests: <em>a design past the nerve limit is designed again at a lower slew rate</em>; <em>a strict plugin is refused as designed and says so in its files</em>; <em>a sequence setting StrictLimits unannounced is refused as designed</em>; <em>validate reports the slew rate generate designs at</em>; <em>a shipped FSE at the hardware slew rate is designed within the nerve limit</em>; <em>a lower slew rate is not tried for an amplitude past its limit</em> (<code class="docutils literal notranslate"><span class="pre">test_slew_derate.py</span></code>).</p>
+</li>
 <li><p><strong>Designs a scan that follows motion-correction poses for every rotation, and checks it so.</strong></p>
 <p>Code: <code class="docutils literal notranslate"><span class="pre">design_max_grad_any_rotation</span></code>, <code class="docutils literal notranslate"><span class="pre">design_max_slew_any_rotation</span></code> and <code class="docutils literal notranslate"><span class="pre">pmc_enable</span></code> in the call’s limits; <code class="docutils literal notranslate"><span class="pre">CheckLimits.follows_poses</span></code>. Tests: <em>a navigated scan at a site following poses is designed for every rotation</em>; <em>the vector is held to the axis limit only where poses may turn the scan</em>; <em>a sequence setting EnablePmc unannounced is refused where poses could turn it</em> (<code class="docutils literal notranslate"><span class="pre">test_any_rotation.py</span></code>).</p>
 </li>
@@ -559,7 +564,7 @@ patient safety.</p>
 <li><p><strong>Refuses an arbitrary gradient longer than one axis’s waveform memory, <code class="docutils literal notranslate"><span class="pre">ir_wave_max_samples</span></code> at <code class="docutils literal notranslate"><span class="pre">ir_wave_raster_us</span></code>.</strong></p>
 <p>Code: <code class="docutils literal notranslate"><span class="pre">CheckLimits(wave_memory=...)</span></code>. Test: <em>an arbitrary gradient longer than the waveform memory is refused</em> (<code class="docutils literal notranslate"><span class="pre">test_ir_checks.py</span></code>).</p>
 </li>
-<li><p><strong>Checks PNS under the scanner’s nerve model (chronaxie or SAFE), up to a fraction of its threshold.</strong></p>
+<li><p><strong>Checks PNS under the scanner’s nerve model (chronaxie or SAFE), its response summed over the axes, up to a fraction of its threshold.</strong></p>
 <p>Code: <code class="docutils literal notranslate"><span class="pre">CheckLimits(pns=...,</span> <span class="pre">pns_limit=...)</span></code>, <code class="docutils literal notranslate"><span class="pre">pypulseqpp.safety.check_pns</span></code>. Test: <em>PNS is refused from the fraction of threshold the limits allow</em> (<code class="docutils literal notranslate"><span class="pre">test_ir_checks.py</span></code>).</p>
 </li>
 <li><p><strong>Refuses gradient trains in the forbidden bands of mechanical resonance, on the physical axis they play on, read over a 20 ms window: a train shorter than that drives a band less.</strong> A band whose table states no amplitude is held to 8 mT/m. A stated amplitude is read as an echo-spacing lockout reads it: the band is refused when it holds a line above 6 mT/m while the axis’s gradient exceeds the amplitude. A window that exceeds a band is read again over 80 ms; a steady line that then lies outside the band, at 80 % of its amplitude or more, is leakage through the 20 ms window and is not refused.</p>
@@ -586,6 +591,12 @@ patient safety.</p>
 <section id="division-of-responsibility">
 <h2>Division of responsibility<a class="headerlink" href="#division-of-responsibility" title="Link to this heading">#</a></h2>
 <ul class="simple">
+<li><p><strong>The design limits</strong>, by the interpreter, from the scanner’s gradient
+specification and the prescription’s rotation.</p></li>
+<li><p><strong>The waveforms played</strong>, those of the file. A slew rate is lowered by
+designing again, so the file is what plays and states the slew rate in its
+<code class="docutils literal notranslate"><span class="pre">DesignMaxSlew</span></code> definition; an interpreter refuses what it cannot play and
+changes no waveform.</p></li>
 <li><p><strong>SAR, RF coil heating and gradient heating</strong>, in the vendor’s routines,
 from the RF pulses and gradients the interpreter passes on, as for a product
 sequence.</p></li>
@@ -613,15 +624,35 @@ converted into the IR cache with its sound pressure levels and SAR ratios.</span
 <h3>Physical frame<a class="headerlink" href="#physical-frame" title="Link to this heading">#</a></h3>
 <p>Two logical axes at 0.8 of the amplitude limit put <span class="math notranslate nohighlight">\(0.8\sqrt{2}\)</span> of it on one
 physical axis at 45°. So the sequence is designed under <code class="docutils literal notranslate"><span class="pre">design_max_grad</span></code> and
-<code class="docutils literal notranslate"><span class="pre">design_max_slew</span></code>, which the scanner derates for the prescription, less the
-design margin of <code class="docutils literal notranslate"><span class="pre">pypulseqpp.apply_system_derates</span></code>, and checked on the physical
-axes against <code class="docutils literal notranslate"><span class="pre">max_grad</span></code> and <code class="docutils literal notranslate"><span class="pre">max_slew</span></code> as sent. The rotation arrives
-in the protocol’s <code class="docutils literal notranslate"><span class="pre">fov_rotation_ij</span></code> entries; your sequence function never sees
-it. A scan that follows motion-correction poses is turned again during the
-scan, by rotations no check sees: a sequence that sets <code class="docutils literal notranslate"><span class="pre">EnablePmc</span></code> there is
-designed under the <code class="docutils literal notranslate"><span class="pre">_any_rotation</span></code> limits, and its gradient amplitude and slew
-rate summed over the three axes are held to the per-axis limits, the most any
-rotation can put on one axis.</p>
+<code class="docutils literal notranslate"><span class="pre">design_max_slew</span></code>, the share of each coil’s limits the prescription’s rotation
+leaves a logical axis with all three active, less the design margin of
+<code class="docutils literal notranslate"><span class="pre">pypulseqpp.apply_system_derates</span></code>. Every scan is then checked as it plays:
+rotated, on each physical axis, against <code class="docutils literal notranslate"><span class="pre">max_grad</span></code> and <code class="docutils literal notranslate"><span class="pre">max_slew</span></code>, the coil’s
+own per-axis limits. Each physical gradient has its own amplifier, so these
+are the limits of the scan’s own rotation; the gradient summed over the axes is
+not limited by them. The rotation arrives in the protocol’s <code class="docutils literal notranslate"><span class="pre">fov_rotation_ij</span></code>
+entries; your sequence function never sees it.</p>
+<p>A scan that follows motion-correction poses is turned again during the scan,
+by rotations no check sees: where the site follows poses (<code class="docutils literal notranslate"><span class="pre">pmc_enable</span></code>) and
+the sequence sets <code class="docutils literal notranslate"><span class="pre">EnablePmc</span></code>, it is designed under the <code class="docutils literal notranslate"><span class="pre">_any_rotation</span></code>
+limits, and its gradient amplitude and slew rate summed over the three axes, a
+root sum of squares, are held to the per-axis limits, the most any rotation
+can put on one axis.</p>
+</section>
+<section id="slew-rate-and-nerve-stimulation">
+<h3>Slew rate and nerve stimulation<a class="headerlink" href="#slew-rate-and-nerve-stimulation" title="Link to this heading">#</a></h3>
+<p>A gradient ramp stimulates peripheral nerves by its field’s rate of change,
+which sums over the axes. The nerve model responds to a ramp of amplitude step
+<span class="math notranslate nohighlight">\(\Delta G\)</span> at slew rate <span class="math notranslate nohighlight">\(S\)</span> with <span class="math notranslate nohighlight">\(\Delta G / (b\,(c + \Delta G/S))\)</span>, for
+rheobase <span class="math notranslate nohighlight">\(b\)</span> and chronaxie <span class="math notranslate nohighlight">\(c\)</span>: a short ramp at a high slew rate stimulates
+less than its slew rate alone suggests, so the slew rate a scan may play
+depends on the amplitudes it ramps. The design limits are the coil’s; a design
+whose response then exceeds <code class="docutils literal notranslate"><span class="pre">pns_limit</span></code> is designed again at a lower slew
+rate, chosen from the response it measured, as a vendor sequence lowers its
+ramps for its own waveforms. The console’s protocol is evaluated the same
+way, on the plugin’s representative sequence. A plugin that wants a design
+refused rather than adjusted is strict, and says so in its files with the
+<code class="docutils literal notranslate"><span class="pre">StrictLimits</span></code> definition (<a class="reference internal" href="../developer-guide/internals/sequence-definitions.html"><span class="doc">Sequence definitions</span></a>).</p>
 </section>
 <section id="limit-sources">
 <h3>Limit sources<a class="headerlink" href="#limit-sources" title="Link to this heading">#</a></h3>
@@ -649,6 +680,8 @@ refused on PNS, and the same design accepted when made at a lower slew rate.</p>
 <li><p><a class="reference internal" href="architecture.html"><span class="doc">Architecture</span></a>: what is stored once a design passes.</p></li>
 <li><p><a class="reference internal" href="../api/ir.html"><span class="doc">IR conversion</span></a>: <a class="reference internal" href="../generated/pulserver.ir.check.html#pulserver.ir.check" title="pulserver.ir.check"><code class="xref py py-func docutils literal notranslate"><span class="pre">check()</span></code></a>, <a class="reference internal" href="../generated/pulserver.ir.CheckLimits.html#pulserver.ir.CheckLimits" title="pulserver.ir.CheckLimits"><code class="xref py py-class docutils literal notranslate"><span class="pre">CheckLimits</span></code></a>
 and <a class="reference internal" href="../generated/pulserver.ir.sar_ratios.html#pulserver.ir.sar_ratios" title="pulserver.ir.sar_ratios"><code class="xref py py-func docutils literal notranslate"><span class="pre">sar_ratios()</span></code></a>.</p></li>
+<li><p><a class="reference internal" href="../developer-guide/internals/sequence-definitions.html"><span class="doc">Sequence definitions</span></a>: the definitions a
+design writes and the checks read.</p></li>
 </ul>
 </section>
 </section>
@@ -704,6 +737,7 @@ and <a class="reference internal" href="../generated/pulserver.ir.sar_ratios.htm
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#division-of-responsibility">Division of responsibility</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#method">Method</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#physical-frame">Physical frame</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#slew-rate-and-nerve-stimulation">Slew rate and nerve stimulation</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#limit-sources">Limit sources</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#sound-pressure-and-sar">Sound pressure and SAR</a></li>
 </ul>
