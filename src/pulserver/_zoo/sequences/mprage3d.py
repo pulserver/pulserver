@@ -131,4 +131,5 @@ class Mprage3D(SequencePlugin):
             protocol.replace(achieved(self, shot)),
             (a["n_dummy"] + references + trains) * shot.duration()[0],
             rf_layout=rf_layout(shot, scaled=True),
+            sequence=shot,
         )

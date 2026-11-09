@@ -141,7 +141,12 @@ def _wave_budget(limits: Mapping[str, Any]) -> ir.WaveBudget | None:
     return ir.WaveBudget(**given)
 
 
-def design_system(limits: Mapping[str, Any], *, any_rotation: bool = False) -> pp.Opts:
+def design_system(
+    limits: Mapping[str, Any],
+    *,
+    any_rotation: bool = False,
+    max_slew: float | None = None,
+) -> pp.Opts:
     """Return the limits an app is designed under: the scanner limits less the design margin.
 
     The scanner limits of :func:`split_limits`, with the gradient amplitude and
@@ -163,7 +168,10 @@ def design_system(limits: Mapping[str, Any], *, any_rotation: bool = False) -> p
     derated by ``pypulseqpp.apply_system_derates``: the gradient amplitude,
     the slew rate and the peak B1 are designed to ``pypulseqpp.MAX_GRAD_DERATE``,
     ``MAX_SLEW_DERATE`` and ``MAX_B1_DERATE`` of them, a margin the modules
-    that derate again do not take a second time. The checks hold the
+    that derate again do not take a second time. ``max_slew``, in Hz/m/s,
+    caps the slew rate of the result further: the slew rate a design that
+    exceeded the nerve-stimulation or slew-rate limit is made again under.
+    The checks hold the
     waveforms played in the physical frame to the scanner's ``max_grad`` and
     ``max_slew`` themselves, and the design's identity and manifest record
     the limits as the scanner sent them.
@@ -191,7 +199,10 @@ def design_system(limits: Mapping[str, Any], *, any_rotation: bool = False) -> p
         system = copy.copy(system)
         for name, value in floors.items():
             setattr(system, name, max(getattr(system, name), value))
-    return pp.apply_system_derates(system)
+    system = pp.apply_system_derates(system)
+    if max_slew is not None and max_slew < system.max_slew:
+        system = pp.cap_system(system, max_slew=max_slew, slew_unit="Hz/m/s")
+    return system
 
 
 def follows_poses(limits: Mapping[str, Any]) -> bool:

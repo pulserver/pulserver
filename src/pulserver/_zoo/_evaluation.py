@@ -173,8 +173,9 @@ def evaluation(
     ``repetition`` gives the arguments that design one repetition, its view
     the first of the scan and no dummy before it, and the number of
     repetitions the scan acquires; the dummies are played before them
-    (:func:`dummies`). The entries the design achieves are read from it, and
-    the RF layout is its first TR.
+    (:func:`dummies`). The entries the design achieves are read from it, the
+    RF layout is its first TR, and it is the evaluation's representative
+    sequence.
 
     A sequence with slices is designed for one slice at the shortest TR,
     which is one shot, and the TR and the scan time follow from the packets
@@ -197,6 +198,7 @@ def evaluation(
             protocol.replace(achieved(plugin, main)),
             (dummies(a, duration) + repetitions) * duration,
             rf_layout=rf_layout(main, scaled, banded=banded),
+            sequence=main,
         )
     one |= {"n_slices": 1, "tr": None}
     main = plugin.app(system, **(protocol.arguments | one))
@@ -217,6 +219,7 @@ def evaluation(
         rf_layout=rf_layout(
             main, scaled, copies=max(sizes), period=max(cycles), banded=banded
         ),
+        sequence=main,
     )
 
 

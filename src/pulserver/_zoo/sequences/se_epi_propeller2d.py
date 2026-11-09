@@ -87,6 +87,7 @@ class SeEpiPropeller2D(SequencePlugin):
             rf_layout=rf_layout(
                 main, scaled=False, copies=max(sizes), period=max(passes)
             ),
+            sequence=main,
         )
 
 

@@ -89,6 +89,7 @@ def inversion_train(
         protocol.replace(values),
         count * repetition,
         rf_layout=_train(layout, excitations),
+        sequence=main,
     )
 
 

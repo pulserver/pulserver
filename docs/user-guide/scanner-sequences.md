@@ -264,6 +264,16 @@ makes the protocol invalid, but the reply names only its type, as in
 traceback. A request that names an entry the protocol does not declare, or an
 option a choice does not offer, is invalid in the same way.
 
+An evaluation that designs the sequence, or one repetition of it, states that
+design as its representative `sequence`. The design service checks peripheral
+nerve stimulation and slew rate on it, rotated to the prescription, and
+evaluates the protocol again at a lower slew rate while it exceeds them, as
+`generate` does with the whole design ({ref}`scanner-limits`); without one,
+the console shows the protocol at the design limits and only `generate` lowers
+the slew rate. A plugin that sets
+{attr}`~pulserver.design.SequencePlugin.strict_limits` is never designed again:
+its files set `StrictLimits`, and a design past a limit is refused.
+
 {meth}`~pulserver.design.SequencePlugin.generate` builds the sequence of a
 requested protocol. The default calls the sequence function with the arguments
 of the protocol; a plugin overrides it to return a sequence, or a list of them,
@@ -616,6 +626,9 @@ repetition from the modules their function is built from.
   holds the first.
 - **Invalid protocols.** A prescription the design refuses is invalid, with
   the message of its error.
+- **Representative sequence.** The repetition, on which the design service
+  checks nerve stimulation and slew rate before the scan is designed. `epi3d`,
+  `fse3d` and `fse_pd3d` state none.
 - **RF layout.** The first TR of the repetition, its shot repeated once per
   slice of the largest packet, with the TR as its period; for the balanced
   steady state, the TR after the half-angle pulse. The TR of a fast spin echo
@@ -637,3 +650,5 @@ request names under `log`, or else to the server's standard error
 
 * {doc}`../explanations/protocol`: resolution, presets, units and precision.
 * {doc}`../api/design`: the scanner-sequence interface and its entries.
+* {doc}`../developer-guide/internals/sequence-definitions`: the definitions a
+  design writes and the services read.

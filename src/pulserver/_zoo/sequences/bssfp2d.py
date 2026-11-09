@@ -110,6 +110,7 @@ class Bssfp2D(SequencePlugin):
             protocol.replace(achieved(self, line)),
             a["n_slices"] * train,
             rf_layout=rf_layout(line, scaled=True, start=once - tr),
+            sequence=line,
         )
 
 

@@ -77,12 +77,21 @@ class Evaluation:
         states no estimate and is not invalid. Every control of the layout must
         be an entry of :attr:`SequencePlugin.protocol` whose value in
         ``protocol`` is positive, or the protocol is invalid.
+    sequence
+        A representative design of the protocol, such as the one repetition
+        or echo train the evaluation designed, in the logical frame. The
+        design service checks nerve stimulation and slew rate on it before
+        the scan is designed, and lowers the slew rate the protocol is
+        designed under where they exceed their limits, so that the console
+        shows what will play. ``None``, the default, states none: the slew
+        rate is then lowered only when the generated design fails the check.
     """
 
     protocol: Protocol
     duration: float = 0.0
     info: str = ""
     rf_layout: RfLayout | tuple[()] = ()
+    sequence: pp.Sequence | None = None
 
 
 def _warn_deprecated(cls: type) -> None:
@@ -222,6 +231,13 @@ class SequencePlugin:
         :func:`~pulserver.design.option` are added, each an
         :class:`OptionParam` at its user entry, named in the user entry's
         name.
+    strict_limits : bool
+        Whether a design that exceeds a limit is refused as designed. By
+        default, ``False``, the design service lowers the slew rate a design
+        exceeding the nerve-stimulation or slew-rate limit is made under and
+        designs it again; a strict plugin's design is never adjusted, and each
+        file it writes sets the ``StrictLimits`` definition. A design whose
+        sequence sets ``StrictLimits`` itself is held strictly too.
 
     Raises
     ------
@@ -246,6 +262,7 @@ class SequencePlugin:
 
     app: ClassVar[Callable[..., Any]]
     protocol: ClassVar[Mapping[ProtocolKey, Entry]] = {}
+    strict_limits: ClassVar[bool] = False
 
     _deprecated_alias: ClassVar[bool] = False
 
@@ -465,14 +482,21 @@ class SequencePlugin:
         request: Mapping[ProtocolKey, Any],
         directory: Path | str,
         exam: Path | str | None = None,
+        definitions: Mapping[str, Any] | None = None,
     ) -> tuple[Validation, list[str], list[tuple[Path, pp.Sequence]]]:
-        """Return what :meth:`design` returns, with each written path and its sequence as written."""
+        """Return what :meth:`design` returns, with each written path and its sequence as written.
+
+        Each file also sets ``definitions``, where given.
+        """
         validation, protocol = self._validated(system, request, exam)
         if protocol is None:
             return validation, [], []
         built = _hook(self.generate, system, protocol, exam)
         paths = _write(
-            built, Path(directory) / _FIRST_FILE, _averages(self.protocol, protocol)
+            built,
+            Path(directory) / _FIRST_FILE,
+            _averages(self.protocol, protocol),
+            definitions,
         )
         chain = [built] if isinstance(built, pp.Sequence) else built
         return validation, paths, list(zip(map(Path, paths), chain, strict=True))
@@ -499,6 +523,16 @@ class SequencePlugin:
         exam: Path | str | None = None,
     ) -> tuple[Validation, Protocol | None]:
         """Return the validation of a request and the protocol it requests, ``None`` where invalid."""
+        validation, protocol, _ = self._evaluated(system, request, exam)
+        return validation, protocol
+
+    def _evaluated(
+        self,
+        system: pp.Opts,
+        request: Mapping[ProtocolKey, Any],
+        exam: Path | str | None = None,
+    ) -> tuple[Validation, Protocol | None, pp.Sequence | None]:
+        """Return what :meth:`_validated` returns and the evaluation's representative sequence, ``None`` where it states none."""
         listing = self.listing()
         values = {key: p.value for key, p in listing.items() if p.editable}
         values.update(request)
@@ -515,6 +549,7 @@ class SequencePlugin:
                 self.protocol, evaluation.protocol
             )
             info = evaluation.info
+            sequence = evaluation.sequence
         except _INFEASIBLE as error:
             message = str(error) or type(error).__name__
             _log.warning(
@@ -527,9 +562,10 @@ class SequencePlugin:
             message = f"{type(error).__name__} in {name}.evaluate"
             _log.error("%s", message, exc_info=True)
         else:
-            return Validation(True, duration or None, info, wire, layout), protocol
+            valid = Validation(True, duration or None, info, wire, layout)
+            return valid, protocol, sequence
         asked = {key: value for key, value in values.items() if key in listing}
-        return Validation(False, None, message, asked), None
+        return Validation(False, None, message, asked), None, None
 
 
 class ScannerSequence(SequencePlugin):
@@ -641,12 +677,16 @@ def _averages(entries: Mapping[ProtocolKey, Entry], protocol: Protocol) -> int:
 
 
 def _write(
-    built: pp.Sequence | list[pp.Sequence], first: Path, averages: int = 1
+    built: pp.Sequence | list[pp.Sequence],
+    first: Path,
+    averages: int = 1,
+    definitions: Mapping[str, Any] | None = None,
 ) -> list[str]:
     """Write a sequence or a chain of them as signed binary Pulseq; return the paths in play order.
 
-    Each sequence is deduplicated in place before it is written, and the main
-    sequence, the last, then played ``averages`` times in its block table.
+    Each sequence sets ``definitions`` and is deduplicated in place before it
+    is written, and the main sequence, the last, then played ``averages``
+    times in its block table.
     """
     chain = [built] if isinstance(built, pp.Sequence) else built
     if (
@@ -663,6 +703,8 @@ def _write(
         first.with_name(f"{first.stem}_{name}.seq") for name in later[: len(chain) - 1]
     ]
     for seq, path, following in zip(chain, paths, [*paths[1:], None], strict=True):
+        for key, value in (definitions or {}).items():
+            seq.set_definition(key=key, value=value)
         if following is not None:
             seq.set_definition(key="NextSequence", value=following.name)
         seq.remove_duplicates(in_place=True)

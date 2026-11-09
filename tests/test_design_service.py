@@ -513,11 +513,14 @@ def test_an_oblique_design_is_held_under_the_design_limits_and_checked_against_t
         "max_slew": ANY_ORIENTATION["design_max_slew"],
     }
     for limits in (LIMITS, {**LIMITS, **derated}):
-        status, text = generate(store, "gre2d", oblique, limits=limits)
-        assert status == 1
-        assert "slew rate of" in text
+        lowered = store.manifest(
+            generated(generate(store, "gre2d", oblique, limits=limits))
+        )
+        assert lowered["slew_passes"] >= 1
+        assert lowered["design_max_slew_t_per_m_per_s"] < 0.9 * LIMITS["max_slew"]
     design = generated(generate(store, "gre2d", oblique, limits=ANY_ORIENTATION))
     assert store.manifest(design)["limits"] == ANY_ORIENTATION
+    assert store.manifest(design)["slew_passes"] == 0
 
 
 def test_a_request_is_validated_under_the_design_limits(store):

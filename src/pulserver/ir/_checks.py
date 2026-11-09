@@ -5,9 +5,11 @@ from __future__ import annotations
 import contextlib
 import copy
 import io
+import threading
 from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -188,6 +190,7 @@ def check(
     limits: CheckLimits | None = None,
     designed: list[tuple[Path, pp.Sequence]] | None = None,
     spl_levels: Sequence[SplLevels] | None = None,
+    readings: dict[str, float] | None = None,
 ) -> list[str]:
     """Return the problems of a chain under a scanner's limits, in the physical frame.
 
@@ -229,6 +232,14 @@ def check(
     spl_levels : Sequence[SplLevels], default=None
         One per file of the chain, as :func:`spl_levels` returns them for
         ``rotation``, held to the limits in place of computing them.
+    readings : dict, default=None
+        Filled, where given, with the largest reading over the chain of the
+        gradient checks, each as a fraction of its limit: ``"grad"`` and
+        ``"slew"``, the gradient amplitude and slew rate on a physical axis;
+        ``"vector_grad"`` and ``"vector_slew"``, the same summed over the
+        axes, under ``limits.follows_poses`` for a chain that sets
+        ``EnablePmc``; and ``"pns"``, the nerve response over
+        ``limits.pns_limit``, where a nerve model is given.
 
     Returns
     -------
@@ -250,8 +261,11 @@ def check(
         enables_pmc(sequence) for _, sequence in chain_read
     )
     problems = []
+    largest = _Largest(readings)
     for index, (path, sequence) in enumerate(chain_read):
-        found = _problems(sequence, system, turn, limits, response, any_rotation)
+        found = _problems(
+            sequence, system, turn, limits, response, any_rotation, largest
+        )
         if spl_levels is not None:
             found += _spl_problems(spl_levels[index], limits)
         if len(chain_read) > 1:
@@ -282,7 +296,9 @@ def _problems(
     limits: CheckLimits,
     response: safety.AcousticResponse | None,
     any_rotation: bool = False,
+    largest: _Largest | None = None,
 ) -> list[str]:
+    largest = _Largest(None) if largest is None else largest
     opts = copy.copy(system)
     for name in _RASTERS:
         setattr(opts, name, getattr(sequence, name))
@@ -301,16 +317,44 @@ def _problems(
     if limits.wave_memory > 0:
         problems += _long_gradients(sequence, limits.wave_memory)
     checks = [
-        (_limit, safety.check_max_grad, "gradient amplitude", "mT/m", 1e3),
-        (_limit, safety.check_max_slew, "slew rate", "T/m/s", 1.0),
+        (
+            _limit,
+            safety.check_max_grad,
+            "gradient amplitude",
+            "mT/m",
+            1e3,
+            largest.into("grad"),
+        ),
+        (
+            _limit,
+            safety.check_max_slew,
+            "slew rate",
+            "T/m/s",
+            1.0,
+            largest.into("slew"),
+        ),
     ]
     if any_rotation:
         checks += [
-            (_vector, safety.check_max_grad, "gradient amplitude", "mT/m", 1e3),
-            (_vector, safety.check_max_slew, "slew rate", "T/m/s", 1.0),
+            (
+                _vector,
+                safety.check_max_grad,
+                "gradient amplitude",
+                "mT/m",
+                1e3,
+                largest.into("vector_grad"),
+            ),
+            (
+                _vector,
+                safety.check_max_slew,
+                "slew rate",
+                "T/m/s",
+                1.0,
+                largest.into("vector_slew"),
+            ),
         ]
     if limits.pns is not None:
-        checks.append((_pns, limits))
+        checks.append((_pns, limits, largest.into("pns")))
     if limits.bands:
         checks.append((_resonance, limits))
     if response is not None:
@@ -431,6 +475,24 @@ def _raster_steps(shapes: Any, row: np.ndarray) -> float:
     return float(np.max(shapes[times - 1].decompressed()))
 
 
+class _Largest:
+    """The largest reading of each check over a chain, kept in a caller's dict from the checks' threads."""
+
+    def __init__(self, readings: dict[str, float] | None) -> None:
+        self._readings = readings
+        self._lock = threading.Lock()
+
+    def into(self, key: str) -> Any:
+        """Return the call that records a reading under ``key``, or ``None`` when nothing is kept."""
+        if self._readings is None:
+            return None
+        return partial(self._record, self._readings, key)
+
+    def _record(self, readings: dict[str, float], key: str, value: float) -> None:
+        with self._lock:
+            readings[key] = max(value, readings.get(key, 0.0))
+
+
 def _limit(
     sequence: pp.Sequence,
     system: pp.Opts,
@@ -438,8 +500,11 @@ def _limit(
     name: str,
     unit: str,
     scale: float,
+    record: Any = None,
 ) -> list[str]:
     is_ok, found = check(sequence, system)
+    if record is not None and found.limit > 0:
+        record(found.per_axis.value / found.limit)
     if is_ok:
         return []
     peak = found.per_axis
@@ -457,10 +522,13 @@ def _vector(
     name: str,
     unit: str,
     scale: float,
+    record: Any = None,
 ) -> list[str]:
     """Return the problem of a peak summed over the axes above the per-axis limit, which some rotation puts on one axis."""
     _, found = check(sequence, system)
     peak = found.vector
+    if record is not None and found.limit > 0:
+        record(peak.value / found.limit)
     if not found.limit > 0 or peak.value <= found.limit:
         return []
     return [
@@ -479,9 +547,13 @@ def enables_pmc(sequence: pp.Sequence) -> bool:
     return bool(np.any(np.asarray(value, dtype=float) != 0))
 
 
-def _pns(sequence: pp.Sequence, system: pp.Opts, limits: CheckLimits) -> list[str]:
+def _pns(
+    sequence: pp.Sequence, system: pp.Opts, limits: CheckLimits, record: Any = None
+) -> list[str]:
     _, found = safety.check_pns(sequence, limits.pns, system=system)
     peak = found.peak
+    if record is not None:
+        record(peak.value / limits.pns_limit)
     if peak.value < limits.pns_limit:
         return []
     axis = max(found.axes, key=lambda reading: reading.value).axis

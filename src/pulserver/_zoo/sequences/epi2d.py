@@ -130,6 +130,7 @@ class Epi2D(SequencePlugin):
             protocol.replace(achieved(self, volume) | {UIParam.TR: tr}),
             played * sum(cycles) + groups * sequences.duration(calibration),
             rf_layout=rf_layout(volume, scaled=True, copies=max(sizes), period=tr),
+            sequence=volume,
         )
 
 
