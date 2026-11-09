@@ -282,8 +282,19 @@ def played_time(
         Limits and rasters the scan is segmented under.
     timing : SequencerTiming
         The sequencer's segment timing.
-    vendor, label_column_map, profile, grouping, designed
-        As for :func:`convert`.
+    vendor : int, default=0
+        ``PULSEG_VENDOR_*`` code, as for :func:`convert`.
+    label_column_map : Sequence[int], default=(0, 1, 2)
+        Label state indices of the three readout label columns, as for
+        :func:`convert`.
+    profile : VendorProfile, default=None
+        What the cache holds its numbers as, as for :func:`convert`.
+    grouping : Grouping, default=None
+        How a repetition's blocks are grouped into segments, as for
+        :func:`convert`.
+    designed : list[tuple[Path, pypulseqpp.Sequence]], default=None
+        The chain as designed, segmented in place of reading the files, as
+        for :func:`convert`.
 
     Raises
     ------
