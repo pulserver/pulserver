@@ -639,6 +639,164 @@
     <span class="p">)</span>
 
 
+<div class="viewcode-block" id="SequencerTiming">
+<a class="viewcode-back" href="../../../generated/pulserver.ir.SequencerTiming.html#pulserver.ir.SequencerTiming">[docs]</a>
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">SequencerTiming</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""How a playout's sequencer plays the segment instances of a scan.</span>
+
+<span class="sd">    A property of the playout, not of the sequence: the C library's</span>
+<span class="sd">    ``pulseg_sequencer_timing``. The sequencer takes ``gap_us`` after every</span>
+<span class="sd">    segment instance, in no block, and plays an instance that is not a pure</span>
+<span class="sd">    delay ``tail_us`` past its blocks. A pure delay that waits for no trigger</span>
+<span class="sd">    gives that time back, playing a shorter wait but never one under</span>
+<span class="sd">    ``min_wait_us``, so the scan keeps the time its file states wherever such</span>
+<span class="sd">    a delay follows; :func:`played_time` gives what a scan plays.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    gap_us</span>
+<span class="sd">        Time between two segment instances, in µs.</span>
+<span class="sd">    tail_us</span>
+<span class="sd">        Time an instance that is not a pure delay plays past its blocks, in µs.</span>
+<span class="sd">    min_wait_us</span>
+<span class="sd">        Shortest wait a pure delay plays, in µs.</span>
+<span class="sd">    raster_us</span>
+<span class="sd">        Raster a wait is played on, in µs.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If a time is negative or the raster is not positive.</span>
+<span class="sd">    """</span>
+
+    <span class="n">gap_us</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">tail_us</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">min_wait_us</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">raster_us</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">__post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">min</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">gap_us</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">tail_us</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">min_wait_us</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">raster_us</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">"segment times must not be negative and the raster must be positive"</span>
+            <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="PlayedTime">
+<a class="viewcode-back" href="../../../generated/pulserver.ir.PlayedTime.html#pulserver.ir.PlayedTime">[docs]</a>
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">PlayedTime</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""The time a scan plays and the time its blocks take, in s.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    blocks</span>
+<span class="sd">        The blocks of the scan, prescan-only subsequences left out.</span>
+<span class="sd">    played</span>
+<span class="sd">        What the scan plays under a :class:`SequencerTiming`.</span>
+<span class="sd">    """</span>
+
+    <span class="n">blocks</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">played</span><span class="p">:</span> <span class="nb">float</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">extra</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The time the scan plays past its blocks, in s."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">played</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">blocks</span></div>
+
+
+
+<div class="viewcode-block" id="played_time">
+<a class="viewcode-back" href="../../../generated/pulserver.ir.played_time.html#pulserver.ir.played_time">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">played_time</span><span class="p">(</span>
+    <span class="n">seq_path</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">system</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">,</span>
+    <span class="n">timing</span><span class="p">:</span> <span class="n">SequencerTiming</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">vendor</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
+    <span class="n">label_column_map</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span>
+    <span class="n">profile</span><span class="p">:</span> <span class="n">VendorProfile</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">grouping</span><span class="p">:</span> <span class="n">Grouping</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">designed</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="n">Path</span><span class="p">,</span> <span class="n">pp</span><span class="o">.</span><span class="n">Sequence</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="o">**</span><span class="n">_</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">PlayedTime</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the time a chain plays under a sequencer's segment timing.</span>
+
+<span class="sd">    The chain is segmented as :func:`convert` segments it under the same</span>
+<span class="sd">    options, without writing a cache, and walked as the scan plays it.</span>
+<span class="sd">    Conversion options this does not need (``cache_ext``, ``wave_budget``)</span>
+<span class="sd">    are accepted and ignored, so the options :func:`convert` takes can be</span>
+<span class="sd">    passed whole.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    seq_path : Path | str</span>
+<span class="sd">        The first file of the chain.</span>
+<span class="sd">    system : pypulseqpp.Opts</span>
+<span class="sd">        Limits and rasters the scan is segmented under.</span>
+<span class="sd">    timing : SequencerTiming</span>
+<span class="sd">        The sequencer's segment timing.</span>
+<span class="sd">    vendor : int, default=0</span>
+<span class="sd">        ``PULSEG_VENDOR_*`` code, as for :func:`convert`.</span>
+<span class="sd">    label_column_map : Sequence[int], default=(0, 1, 2)</span>
+<span class="sd">        Label state indices of the three readout label columns, as for</span>
+<span class="sd">        :func:`convert`.</span>
+<span class="sd">    profile : VendorProfile, default=None</span>
+<span class="sd">        What the cache holds its numbers as, as for :func:`convert`.</span>
+<span class="sd">    grouping : Grouping, default=None</span>
+<span class="sd">        How a repetition's blocks are grouped into segments, as for</span>
+<span class="sd">        :func:`convert`.</span>
+<span class="sd">    designed : list[tuple[Path, pypulseqpp.Sequence]], default=None</span>
+<span class="sd">        The chain as designed, segmented in place of reading the files, as</span>
+<span class="sd">        for :func:`convert`.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If a file of the chain cannot be read or segmented.</span>
+<span class="sd">    """</span>
+    <span class="n">payload</span> <span class="o">=</span> <span class="n">_payload</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="n">seq_path</span><span class="p">),</span> <span class="n">system</span><span class="p">,</span> <span class="kc">False</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="n">designed</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">_played_time</span><span class="p">(</span>
+        <span class="n">payload</span><span class="p">,</span>
+        <span class="n">system</span><span class="p">,</span>
+        <span class="n">timing</span><span class="p">,</span>
+        <span class="n">vendor</span><span class="o">=</span><span class="n">vendor</span><span class="p">,</span>
+        <span class="n">label_column_map</span><span class="o">=</span><span class="n">label_column_map</span><span class="p">,</span>
+        <span class="n">profile</span><span class="o">=</span><span class="n">profile</span><span class="p">,</span>
+        <span class="n">grouping</span><span class="o">=</span><span class="n">grouping</span><span class="p">,</span>
+    <span class="p">)</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_played_time</span><span class="p">(</span>
+    <span class="n">payload</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]],</span>
+    <span class="n">system</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">,</span>
+    <span class="n">timing</span><span class="p">:</span> <span class="n">SequencerTiming</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">vendor</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span>
+    <span class="n">label_column_map</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span>
+    <span class="n">profile</span><span class="p">:</span> <span class="n">VendorProfile</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">grouping</span><span class="p">:</span> <span class="n">Grouping</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="o">**</span><span class="n">_</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">PlayedTime</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Segment the libraries :func:`_payload` returned and return the time they play, as :func:`played_time`.</span>
+
+<span class="sd">    The libraries are copies, so the sequences they were taken from may change</span>
+<span class="sd">    while this runs; the segmentation releases the GIL.</span>
+<span class="sd">    """</span>
+    <span class="n">found</span> <span class="o">=</span> <span class="n">require</span><span class="p">(</span><span class="s2">"played_time_from_libraries"</span><span class="p">)(</span>
+        <span class="n">payload</span><span class="p">,</span>
+        <span class="o">*</span><span class="n">_rasters</span><span class="p">(</span><span class="n">system</span><span class="p">),</span>
+        <span class="nb">int</span><span class="p">(</span><span class="n">vendor</span><span class="p">),</span>
+        <span class="nb">list</span><span class="p">(</span><span class="n">label_column_map</span><span class="p">),</span>
+        <span class="kc">None</span> <span class="k">if</span> <span class="n">profile</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">profile</span><span class="o">.</span><span class="n">as_pairs</span><span class="p">(),</span>
+        <span class="kc">None</span> <span class="k">if</span> <span class="n">grouping</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">grouping</span><span class="o">.</span><span class="n">as_values</span><span class="p">(),</span>
+        <span class="p">[</span><span class="n">timing</span><span class="o">.</span><span class="n">gap_us</span><span class="p">,</span> <span class="n">timing</span><span class="o">.</span><span class="n">tail_us</span><span class="p">,</span> <span class="n">timing</span><span class="o">.</span><span class="n">min_wait_us</span><span class="p">,</span> <span class="n">timing</span><span class="o">.</span><span class="n">raster_us</span><span class="p">],</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">PlayedTime</span><span class="p">(</span><span class="mf">1e-6</span> <span class="o">*</span> <span class="n">found</span><span class="p">[</span><span class="s2">"blocks_us"</span><span class="p">],</span> <span class="mf">1e-6</span> <span class="o">*</span> <span class="n">found</span><span class="p">[</span><span class="s2">"played_us"</span><span class="p">])</span>
+
+
 <div class="viewcode-block" id="cache_path">
 <a class="viewcode-back" href="../../../generated/pulserver.ir.cache_path.html#pulserver.ir.cache_path">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">cache_path</span><span class="p">(</span><span class="n">seq_path</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span> <span class="n">cache_ext</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">".pseg"</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Path</span><span class="p">:</span>

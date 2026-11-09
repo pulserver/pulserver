@@ -68,6 +68,9 @@ from.
    summary
    play
    plan_waves
+   played_time
+   SequencerTiming
+   PlayedTime
    WaveBudget
    Grouping
    VendorProfile

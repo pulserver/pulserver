@@ -225,6 +225,14 @@ gradient heating from it.
 | `vop_coil` | Transmit configuration the scanner reports; the VOP file's `transmit` metadata must name the same one |
 | `acoustic_file` | HDF5 file of the gradient coil's acoustic transfer function, at a path the design calls can read; the peak and A-weighted average sound pressure levels are held to the limits of IEC 60601-2-33 and written into the cache |
 | `acoustic_interval_us` | Sampling interval in µs that the bins of `acoustic_file` refer to; given with it |
+| `segment_gap_us`, `segment_tail_us`, `segment_min_wait_us`, `segment_raster_us` | How the scanner's sequencer plays segments ({class}`~pulserver.ir.SequencerTiming`), in µs: the time it takes after every segment, how far an active segment plays past its blocks, the shortest wait a pure delay plays, and the raster a wait is played on. `segment_gap_us` is given with any of them |
+
+With the sequencer's timing, a design's manifest records the time the scan
+plays, `played_time_s`, beside the time its blocks take, `blocks_time_s`
+({func}`~pulserver.ir.played_time`). A pure delay gives the time between
+segments back, so a scan whose repetitions end in a wait of more than about a
+millisecond plays the time its file states; one whose segments follow each
+other without a delay plays longer by that time per segment.
 
 A call refuses limits it cannot read. A design is identified by the contents
 of the VOP, vendor and acoustic files as well as by their paths.

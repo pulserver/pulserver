@@ -33,6 +33,7 @@
    ~CheckLimits.follows_poses
    ~CheckLimits.pns
    ~CheckLimits.pns_limit
+   ~CheckLimits.sequencer_timing
    ~CheckLimits.spl_average_limit
    ~CheckLimits.spl_peak_limit
    ~CheckLimits.vop_coil

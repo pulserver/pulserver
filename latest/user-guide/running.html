@@ -819,9 +819,18 @@ gradient heating from it.</p>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">acoustic_interval_us</span></code></p></td>
 <td><p>Sampling interval in µs that the bins of <code class="docutils literal notranslate"><span class="pre">acoustic_file</span></code> refer to; given with it</p></td>
 </tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">segment_gap_us</span></code>, <code class="docutils literal notranslate"><span class="pre">segment_tail_us</span></code>, <code class="docutils literal notranslate"><span class="pre">segment_min_wait_us</span></code>, <code class="docutils literal notranslate"><span class="pre">segment_raster_us</span></code></p></td>
+<td><p>How the scanner’s sequencer plays segments (<a class="reference internal" href="../generated/pulserver.ir.SequencerTiming.html#pulserver.ir.SequencerTiming" title="pulserver.ir.SequencerTiming"><code class="xref py py-class docutils literal notranslate"><span class="pre">SequencerTiming</span></code></a>), in µs: the time it takes after every segment, how far an active segment plays past its blocks, the shortest wait a pure delay plays, and the raster a wait is played on. <code class="docutils literal notranslate"><span class="pre">segment_gap_us</span></code> is given with any of them</p></td>
+</tr>
 </tbody>
 </table>
 </div>
+<p>With the sequencer’s timing, a design’s manifest records the time the scan
+plays, <code class="docutils literal notranslate"><span class="pre">played_time_s</span></code>, beside the time its blocks take, <code class="docutils literal notranslate"><span class="pre">blocks_time_s</span></code>
+(<a class="reference internal" href="../generated/pulserver.ir.played_time.html#pulserver.ir.played_time" title="pulserver.ir.played_time"><code class="xref py py-func docutils literal notranslate"><span class="pre">played_time()</span></code></a>). A pure delay gives the time between
+segments back, so a scan whose repetitions end in a wait of more than about a
+millisecond plays the time its file states; one whose segments follow each
+other without a delay plays longer by that time per segment.</p>
 <p>A call refuses limits it cannot read. A design is identified by the contents
 of the VOP, vendor and acoustic files as well as by their paths.</p>
 </section>
