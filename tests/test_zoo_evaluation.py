@@ -19,7 +19,7 @@ from pulserver._zoo._evaluation import achieved, rf_layout
 from pulserver._zoo._saturation import explicit_bands
 from pulserver._zoo._slab import slab
 from pulserver._zoo._user import LINE_SPACING, SHARED
-from pulserver.design import Protocol, StatedParam, load_plugin
+from pulserver.design import Protocol, RfLayout, StatedParam, load_plugin
 from pulserver.host import call
 from pulserver.host._limits import design_system
 from pulserver.protocol import (
@@ -591,6 +591,36 @@ def test_an_evaluation_states_the_values_and_the_scan_time_of_the_design(
     assert abs(evaluation.duration - played) <= rounding + 1e-9
 
 
+def _strongest_train(main):
+    """Return the layout and amplitudes of the train of ``main`` playing the most RF power."""
+    instances = main.rf_instances()
+    uses = [instances.definitions[n].use for n in instances.definition]
+    pulses = np.flatnonzero(main.libraries().blocks[:, 0])
+    ends = np.cumsum(main.libraries().block_durations)
+    firsts = [i for i, use in enumerate(uses) if use == "excitation"]
+    best = None
+    for k, first in enumerate(firsts):
+        last = firsts[k + 1] if k + 1 < len(firsts) else len(uses)
+        begin = pulses[first]
+        stop = pulses[last] if last < len(uses) else ends.size
+        duration = ends[stop - 1] - (ends[begin - 1] if begin else 0.0)
+        power = main.calc_rf_power(block_range=(begin + 1, stop))[3] / duration
+        if best is None or power > best[0]:
+            best = (power, first, last, duration)
+    _, first, last, duration = best
+    played = np.flatnonzero(instances.amplitude[first:last] != 0.0) + first
+    layout = RfLayout(
+        pp.RfInstances(
+            instances.definitions,
+            instances.definition[played],
+            instances.amplitude[played],
+        ),
+        tuple(None for _ in played),
+        float(duration),
+    )
+    return layout, layout.instances.amplitude.copy()
+
+
 @pytest.mark.parametrize(("name", "changes"), SCANS)
 def test_an_evaluation_states_as_its_layout_a_regular_tr_of_the_design(
     zoo, name, changes
@@ -618,13 +648,9 @@ def test_an_evaluation_states_as_its_layout_a_regular_tr_of_the_design(
     expected = rf_layout(main, scaled, start=start, banded=banded)
     amplitude = expected.instances.amplitude.copy()
     if name in OPTIMIZED:
-        # A train holds the pulses of the longest train, those beyond its own
-        # length at zero amplitude; the layout plays them all.
-        uses = [
-            expected.instances.definitions[n].use for n in expected.instances.definition
-        ]
-        refocusing = np.array([use == "refocusing" for use in uses])
-        amplitude[refocusing] = amplitude[refocusing].max()
+        # The layout is the train of the largest RF power, its pulses past its
+        # own length, at zero amplitude, left out.
+        expected, amplitude = _strongest_train(main)
     definition = layout.instances.definition.tolist()
     played = layout.instances.amplitude
     control = layout.control
@@ -1470,10 +1496,11 @@ def test_busse_evaluation_counts_startup_and_matches_generated_scan_time(mode):
         (15, "busse_centre_angle_deg"),
         (16, "busse_startup_echoes"),
         (17, "busse_centre_echo"),
-        (18, "rf_overlap"),
         (19, "crusher_cycles"),
     ):
         assert plugin.protocol[UIParam.user_value(index)].argument == argument
+    # User 18 was the RF dead-time overlap, which every train now plays.
+    assert UIParam.user_value(18) not in plugin.protocol
     assert plugin.protocol[UIParam.FLIP].argument == "busse_maximum_angle_deg"
 
 
@@ -1641,3 +1668,35 @@ def test_pd_dual_region_duration_and_conservative_rf_cover_played_trains():
         duration = ends[last - 1] - (ends[first - 1] if first else 0.0)
         power = main.calc_rf_power(block_range=(first + 1, last))[3] / duration
         assert _layout_power(evaluation.rf_layout) >= power
+
+
+@WITH_BLOCHSIM
+@pytest.mark.parametrize(
+    ("name", "options"),
+    [
+        ("fse3d", {"refocusing": "dual_region"}),
+        ("fse3d", {"refocusing": "busse_dual_region"}),
+        ("fse_pd3d", {"dual_region": True}),
+    ],
+)
+def test_a_peripheral_tr_shorter_than_the_longest_train_is_refused_by_evaluation(
+    name, options
+):
+    """The evaluation refuses what the generation would, with its message."""
+    plugin = load_plugin(_plugins.SEQUENCES / f"{name}.py", options)
+    request = {
+        "nx": 64,
+        "ny": 32,
+        "nslices": 8,
+        "etl": 28,
+        "TR": 800000,
+        "user0_value": 0,
+        "user12_value": 20,
+        "user13_value": 20,
+    }
+    protocol = _protocol(plugin, request)
+    with pytest.raises(ValueError, match=r"TR of 20\.0 ms is shorter than") as refused:
+        plugin.evaluate(SYSTEM, protocol)
+    with pytest.raises(ValueError) as generated:
+        plugin.generate(SYSTEM, protocol)
+    assert str(refused.value) == str(generated.value)
