@@ -32,6 +32,9 @@ the cache layout in {doc}`../developer-guide/internals/ir-cache`.
 | {obj}`~pulserver.ir.summary` | Subsequences, segments, readouts, readout labels and RF spectral statistics of a sequence, from the chain or from its cache. |
 | {obj}`~pulserver.ir.play` | Every block a cache plays, resolved as the scanner's playout resolves it, with its gradient waveforms on request. |
 | {obj}`~pulserver.ir.plan_waves` | Where a playout holds a cache's waves in its waveform memory, all at once or a ring of slots per position, and whether it loads them in time: the layout the cache carries, or one for another budget. |
+| {obj}`~pulserver.ir.played_time` | The time a chain plays under a sequencer's segment timing, against the time its blocks take. |
+| {obj}`~pulserver.ir.SequencerTiming` | How a playout's sequencer plays segments: the time between them, an active segment's tail, the shortest wait a pure delay plays and its raster. |
+| {obj}`~pulserver.ir.PlayedTime` | The time a chain plays and the time its blocks take. |
 | {obj}`~pulserver.ir.WaveBudget` | The waveform memory, gradient raster, load rate and slots per position a playout affords the waves, which a cache is converted for. |
 | {obj}`~pulserver.ir.Grouping` | The rule by which a repetition's blocks are grouped into virtual segments: where a boundary may fall, where it must, and which runs are split. |
 | {obj}`~pulserver.ir.VendorProfile` | What a cache holds its numbers as, for the machine that reads it: a sequencer that plays integers is given integers, already scaled, so it converts nothing while it plays. |

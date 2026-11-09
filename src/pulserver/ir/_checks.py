@@ -101,6 +101,10 @@ class CheckLimits:
         rotations the check never sees, so its gradient amplitude and slew
         rate summed over the three axes are held to the per-axis limits: any
         rotation can put the whole vector on one axis.
+    sequencer_timing
+        How the playout's sequencer plays segment instances, from which
+        :func:`pulserver.ir.played_time` tells whether the scan keeps the time
+        its file states; ``None`` where the scanner states none.
 
     Raises
     ------
@@ -125,6 +129,7 @@ class CheckLimits:
     spl_peak_limit: float = 140.0
     spl_average_limit: float = 99.0
     follows_poses: bool = False
+    sequencer_timing: Any = None
 
     def __post_init__(self) -> None:
         if self.pns_limit <= 0.0:

@@ -1,11 +1,13 @@
 """The limits a design call carries: scanner limits, conversion options and check limits."""
 
 import cmath
+import json
 from pathlib import Path
 
 import numpy as np
 import pypulseqpp as pp
 import pytest
+from _host import LIMITS, generate
 from pypulseqpp import safety
 
 from pulserver import ir
@@ -245,6 +247,32 @@ WAVE_MEMORY = {
 def test_the_waveform_memory_is_read_into_the_conversion_options():
     _, options, _ = split_limits({**SCANNER, **WAVE_MEMORY})
     assert options["wave_budget"] == ir.WaveBudget(4096, 4.0, 0.01, 0.25, 3)
+
+
+SEGMENTS = {
+    "segment_gap_us": 250,
+    "segment_tail_us": 4,
+    "segment_min_wait_us": 500,
+    "segment_raster_us": 4,
+}
+
+
+def test_the_sequencer_timing_is_read_into_the_check_limits():
+    _, _, checked = split_limits({**SCANNER, **SEGMENTS})
+    assert checked.sequencer_timing == ir.SequencerTiming(250, 4, 500, 4)
+    assert split_limits(SCANNER)[2].sequencer_timing is None
+
+
+def test_a_sequencer_timing_without_its_gap_is_refused():
+    with pytest.raises(ValueError, match="segment_gap_us"):
+        split_limits({**SCANNER, "segment_tail_us": 4})
+
+
+def test_a_design_under_a_sequencer_timing_records_the_time_it_plays(tmp_path):
+    store = DesignStore(tmp_path / "designs", "scan")
+    design = generate(store, "gre2d", {}, limits={**LIMITS, **SEGMENTS})
+    manifest = json.loads((store.directory(design) / "manifest.json").read_text())
+    assert manifest["played_time_s"] >= manifest["blocks_time_s"] > 0.0
 
 
 @pytest.mark.parametrize("missing", ["ir_wave_max_samples", "ir_wave_raster_us"])

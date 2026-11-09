@@ -195,6 +195,45 @@ extern "C"
     int pulseg_get_segment_plays(
         const pulseg_collection *coll, int short_delay_us, pulseg_segment_plays *info);
 
+    /**
+     * @brief Return the wait a pure-delay instance plays, and carry the scan's lag.
+     *
+     * @p lag_us is how much longer than its blocks the scan has played so
+     * far, the gap after the previous instance included; an instance that is
+     * not a pure delay adds its tail and gap to it. A pure delay that waits
+     * for no trigger plays its duration less the lag and its own gap, rounded
+     * down to the raster and never under the least wait, so that the scan
+     * keeps its file's time wherever the delay is long enough. A delay no
+     * longer than the tail that follows an instance that is not a pure delay
+     * is not played: that tail was the whole of it. A delay that waits for an
+     * input trigger plays its duration less that tail and keeps its gap: its
+     * time is the trigger's.
+     *
+     * @param[in]     timing        The sequencer's segment timing.
+     * @param[in]     delay_us      The delay the file states (us).
+     * @param[in]     after_active  Whether the instance before is not a pure delay.
+     * @param[in]     waits_trigger Whether the delay waits for an input trigger.
+     * @param[in,out] lag_us        The scan's lag, updated past this instance.
+     * @return The wait to play (us); 0 when the delay is not played.
+     */
+    int pulseg_delay_wait_us(const pulseg_sequencer_timing *timing, int delay_us, int after_active,
+                             int waits_trigger, long *lag_us);
+
+    /**
+     * @brief Return the time a scan plays under a sequencer's segment timing.
+     *
+     * Walks the scan table as the scan plays it, prescan-only subsequences
+     * left out, with pulseg_delay_wait_us() for every pure delay; a delay
+     * waits when its trigger is an input one.
+     *
+     * @param[in]  coll   Loaded collection.
+     * @param[in]  timing The sequencer's segment timing.
+     * @param[out] info   Receives the times.
+     * @return PULSEG_SUCCESS on success, negative error code on failure.
+     */
+    int pulseg_get_played_time(const pulseg_collection *coll, const pulseg_sequencer_timing *timing,
+                               pulseg_played_time *info);
+
     /* ================================================================== */
     /*  Segment table getters (copy to caller buffer)                     */
     /* ================================================================== */

@@ -38,7 +38,7 @@ from ..design import (
 )
 from ..design._plugin import requested_options
 from ..ir._checks import _RASTERS, enables_pmc
-from ..ir._convert import _payload, _read_chain, _write_cache
+from ..ir._convert import _payload, _played_time, _read_chain, _write_cache
 from ..mrd._sequence import designed_chain
 from ..protocol import (
     Parameter,
@@ -507,8 +507,17 @@ def _generate(
         offset = prescribed_offset(validation.values)
         rotation = prescribed_rotation(validation.values)
         readings: dict[str, float] = {}
+        played: dict[str, Any] = {}
         problems = _check_and_convert(
-            paths[0], system, checked, offset, options, rotation, chain, readings
+            paths[0],
+            system,
+            checked,
+            offset,
+            options,
+            rotation,
+            chain,
+            readings,
+            played,
         )
         if problems:
             if _slew.exceeds(readings):
@@ -535,6 +544,7 @@ def _generate(
             "design_max_slew_t_per_m_per_s": slew,
             "slew_passes": passes,
             "strict_limits": strict or _sets_strict(chain),
+            **played,
         }
         design = store.commit(identity, staged, manifest)
     except BaseException:
@@ -987,6 +997,7 @@ def _check_and_convert(
     rotation: Any,
     designed: list[tuple[Path, pp.Sequence]] | None = None,
     readings: dict[str, float] | None = None,
+    record: dict[str, Any] | None = None,
 ) -> list[str]:
     """Check the chain in the frame of ``rotation`` while its cache is written; return the problems.
 
@@ -999,6 +1010,9 @@ def _check_and_convert(
     sound pressure levels are taken first, held to the limits by the check
     and written into the cache. The cache is segmented from copies of the
     chain moved to ``fov_offset`` while the check rotates the chain in place.
+    Where the limits state the sequencer's segment
+    timing, the time the chain plays (:func:`pulserver.ir.played_time`) is
+    put into ``record`` as ``played_time_s``, beside ``blocks_time_s``.
     """
     if designed is None:
         designed = _read_chain(Path(seq_path), True)
@@ -1016,8 +1030,21 @@ def _check_and_convert(
     writer = _converting(
         seq_path, system, checked, fov_offset, options, designed, levels
     )
-    with ThreadPoolExecutor(1) as pool:
+    timing = checked.sequencer_timing
+    with ThreadPoolExecutor(2) as pool:
         cache = pool.submit(writer)
+        # The libraries are copied here, before the check rotates the chain.
+        played = (
+            None
+            if timing is None or record is None
+            else pool.submit(
+                _played_time,
+                _payload(Path(seq_path), system, False, None, designed),
+                system,
+                timing,
+                **options,
+            )
+        )
         problems = ir.check(
             seq_path,
             system,
@@ -1028,6 +1055,10 @@ def _check_and_convert(
             readings=readings,
         )
         cache.result()
+        if played is not None:
+            found = played.result()
+            record["played_time_s"] = found.played
+            record["blocks_time_s"] = found.blocks
     return problems
 
 

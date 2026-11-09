@@ -1,8 +1,13 @@
 /*
- * Count the segment instances and the scan time of collections written by
- * hand, so that every case is spelled out: a block table, the segment each
- * stream position belongs to, and what the counts must be. Exits non-zero
- * and names the case on the first count that differs.
+ * Count the segment instances, the scan time and the time played under a
+ * sequencer's segment timing of collections written by hand, so that every
+ * case is spelled out: a block table, the segment each stream position
+ * belongs to, and what the counts must be. Exits non-zero and names the case
+ * on the first count that differs.
+ *
+ * The timing is a 7 T's: 250 us after every segment, active segments 4 us
+ * past their blocks, a pure delay's wait never under 500 us, on a 4 us
+ * raster.
  *
  * A segment is a run of blocks that play together; a pure delay is a segment
  * of one block that has no event. Blocks: 0 and 1 carry events (290 and 94
@@ -112,17 +117,22 @@ static void build(pulseg_collection *coll, pulseg_sequence_descriptor *desc, con
 }
 
 static void check(const char *what, const stream *s, int short_us, double total_us,
-                  int instances, int short_delays)
+                  int instances, int short_delays, double extra_us)
 {
     pulseg_collection coll;
     pulseg_sequence_descriptor desc;
     pulseg_scan_time_info time = PULSEG_SCAN_TIME_INFO_INIT;
     pulseg_segment_plays plays = PULSEG_SEGMENT_PLAYS_INIT;
+    pulseg_sequencer_timing timing = {250, 4, 500, 4};
+    pulseg_played_time played = PULSEG_PLAYED_TIME_INIT;
     char label[96];
 
     build(&coll, &desc, s);
     pulseg_get_scan_time(&coll, &time);
     pulseg_get_segment_plays(&coll, short_us, &plays);
+    pulseg_get_played_time(&coll, &timing, &played);
+    sprintf(label, "%s: time played past the blocks", what);
+    expect(label, extra_us, played.played_us - played.blocks_us);
     sprintf(label, "%s: scan time", what);
     expect(label, total_us, (double)time.total_duration_us);
     sprintf(label, "%s: segment instances", what);
@@ -147,7 +157,8 @@ int main(void)
             blocks[3 * i + 2] = 2; segments[3 * i + 2] = 1;
         }
         s.length = L; s.blocks = blocks; s.segments = segments; s.override_us = NULL;
-        check("event segment and long delay", &s, 4, N * (290.0 + 94 + 45536), 2 * N, 0);
+        /* The delay gives back both gaps and the tail: the file's time. */
+        check("event segment and long delay", &s, 4, N * (290.0 + 94 + 45536), 2 * N, 0, 0.0);
     }
 
     /* The same with a 4 us delay in place of the long one: a delay the
@@ -164,8 +175,10 @@ int main(void)
             blocks[3 * i + 2] = 3; segments[3 * i + 2] = 2;
         }
         s.length = L; s.blocks = blocks; s.segments = segments; s.override_us = NULL;
-        check("event segment and 4 us delay", &s, 4, N * (290.0 + 94 + 4), 2 * N, N);
-        check("a limit below the delay", &s, 3, N * (290.0 + 94 + 4), 2 * N, 0);
+        /* The tail covers the delay, which is not played; the gap after
+         * the event segment is played on top. */
+        check("event segment and 4 us delay", &s, 4, N * (290.0 + 94 + 4), 2 * N, N, N * 250.0);
+        check("a limit below the delay", &s, 3, N * (290.0 + 94 + 4), 2 * N, 0, N * 250.0);
     }
 
     /* A segment played twice in a row is two instances, and two repetitions
@@ -175,7 +188,8 @@ int main(void)
         static int blocks[L] = {0, 1, 0, 1}, segments[L] = {0, 0, 0, 0};
         stream s;
         s.length = L; s.blocks = blocks; s.segments = segments; s.override_us = NULL;
-        check("one segment twice in a row", &s, 4, 2 * (290.0 + 94), 2, 0);
+        /* No delay gives anything back. */
+        check("one segment twice in a row", &s, 4, 2 * (290.0 + 94), 2, 0, 2 * 254.0);
     }
 
     /* A delay's own duration is the one in the block table where it has one:
@@ -187,7 +201,10 @@ int main(void)
         static int override_us[L] = {-1, -1, 3, -1, -1, 100};
         stream s;
         s.length = L; s.blocks = blocks; s.segments = segments; s.override_us = override_us;
-        check("a delay stretched in its instance", &s, 4, 2 * (290.0 + 94) + 3 + 100, 4, 1);
+        /* The 3 us delay is covered; the 100 us one plays its least wait,
+         * 500 us, and gives nothing back. */
+        check("a delay stretched in its instance", &s, 4, 2 * (290.0 + 94) + 3 + 100, 4, 1,
+              254.0 - 3 + 254 + 500 + 250 - 100);
     }
 
     /* A delay after a delay is played whole. */
@@ -196,7 +213,10 @@ int main(void)
         static int blocks[L] = {2, 3, 0}, segments[L] = {1, 2, 3};
         stream s;
         s.length = L; s.blocks = blocks; s.segments = segments; s.override_us = NULL;
-        check("a delay after a delay", &s, 4, 45536.0 + 4 + 290, 3, 0);
+        /* The long delay gives its own gap back, to the 4 us raster below
+         * it (2 us short); the 4 us one, after a delay, plays its least wait. */
+        check("a delay after a delay", &s, 4, 45536.0 + 4 + 290, 3, 0,
+              -2.0 + 500 + 250 - 4 + 254);
     }
 
     /* The sum of a long scan is the sum of its blocks to the microsecond: 20000
@@ -214,7 +234,8 @@ int main(void)
             blocks[3 * i + 2] = 2; segments[3 * i + 2] = 1;
         }
         s.length = L; s.blocks = blocks; s.segments = segments; s.override_us = NULL;
-        check("a scan of 1e9 us", &s, 4, (double)(float)(N * (290.0 + 94 + 45536)), 2 * N, 0);
+        check("a scan of 1e9 us", &s, 4, (double)(float)(N * (290.0 + 94 + 45536)), 2 * N, 0,
+              0.0);
     }
 
     if (failures)

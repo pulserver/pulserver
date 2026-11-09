@@ -680,6 +680,46 @@ typedef struct pulseg_segment_plays
 #define PULSEG_SEGMENT_PLAYS_INIT {0, 0}
 /* clang-format on */
 
+/**
+ * @brief How a vendor's sequencer plays the segment instances of a scan.
+ *
+ * The sequencer takes @c gap_us after every instance, in no block, and plays
+ * an instance that is not a pure delay @c tail_us past its blocks. A pure
+ * delay that waits for no trigger gives that time back: it plays a shorter
+ * wait, never under @c min_wait_us, so that the scan keeps the time its file
+ * states. Used by pulseg_delay_wait_us() and pulseg_get_played_time().
+ */
+typedef struct pulseg_sequencer_timing
+{
+    int gap_us;      /**< time between two instances, in no block (us) */
+    int tail_us;     /**< time an instance that is not a pure delay plays past its blocks (us) */
+    int min_wait_us; /**< shortest wait a pure delay plays (us) */
+    int raster_us;   /**< raster a wait is played on (us), at least 1 */
+} pulseg_sequencer_timing;
+
+/* clang-format off */
+#define PULSEG_SEQUENCER_TIMING_INIT {0, 0, 0, 1}
+/* clang-format on */
+
+/**
+ * @brief The time a scan plays, against the time its blocks take.
+ *
+ * Returned by pulseg_get_played_time(). @c played_us exceeds @c blocks_us by
+ * the gaps and tails no pure delay could give back: those of instances that
+ * are not pure delays and are not followed by one, and those a delay too
+ * short to keep its least wait left over.
+ */
+typedef struct pulseg_played_time
+{
+    double blocks_us;      /**< the blocks of the scan (us), prescan-only subsequences left out */
+    double played_us;      /**< what the scan plays (us) */
+    int segment_instances; /**< segment instances played */
+} pulseg_played_time;
+
+/* clang-format off */
+#define PULSEG_PLAYED_TIME_INIT {0.0, 0.0, 0}
+/* clang-format on */
+
 /* ================================================================== */
 /*  Collection-level sequence flags                                   */
 /* ================================================================== */

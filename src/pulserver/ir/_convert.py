@@ -192,6 +192,144 @@ def _held(budget: WaveBudget | None) -> tuple[int, float, float, float, int] | N
     )
 
 
+@dataclass(frozen=True)
+class SequencerTiming:
+    """How a playout's sequencer plays the segment instances of a scan.
+
+    A property of the playout, not of the sequence: the C library's
+    ``pulseg_sequencer_timing``. The sequencer takes ``gap_us`` after every
+    segment instance, in no block, and plays an instance that is not a pure
+    delay ``tail_us`` past its blocks. A pure delay that waits for no trigger
+    gives that time back, playing a shorter wait but never one under
+    ``min_wait_us``, so the scan keeps the time its file states wherever such
+    a delay follows; :func:`played_time` gives what a scan plays.
+
+    Attributes
+    ----------
+    gap_us
+        Time between two segment instances, in µs.
+    tail_us
+        Time an instance that is not a pure delay plays past its blocks, in µs.
+    min_wait_us
+        Shortest wait a pure delay plays, in µs.
+    raster_us
+        Raster a wait is played on, in µs.
+
+    Raises
+    ------
+    ValueError
+        If a time is negative or the raster is not positive.
+    """
+
+    gap_us: int
+    tail_us: int = 0
+    min_wait_us: int = 0
+    raster_us: int = 1
+
+    def __post_init__(self) -> None:
+        if min(self.gap_us, self.tail_us, self.min_wait_us) < 0 or self.raster_us <= 0:
+            raise ValueError(
+                "segment times must not be negative and the raster must be positive"
+            )
+
+
+@dataclass(frozen=True)
+class PlayedTime:
+    """The time a scan plays and the time its blocks take, in s.
+
+    Attributes
+    ----------
+    blocks
+        The blocks of the scan, prescan-only subsequences left out.
+    played
+        What the scan plays under a :class:`SequencerTiming`.
+    """
+
+    blocks: float
+    played: float
+
+    @property
+    def extra(self) -> float:
+        """The time the scan plays past its blocks, in s."""
+        return self.played - self.blocks
+
+
+def played_time(
+    seq_path: Path | str,
+    system: pp.Opts,
+    timing: SequencerTiming,
+    *,
+    vendor: int = 0,
+    label_column_map: Sequence[int] = (0, 1, 2),
+    profile: VendorProfile | None = None,
+    grouping: Grouping | None = None,
+    designed: list[tuple[Path, pp.Sequence]] | None = None,
+    **_: Any,
+) -> PlayedTime:
+    """Return the time a chain plays under a sequencer's segment timing.
+
+    The chain is segmented as :func:`convert` segments it under the same
+    options, without writing a cache, and walked as the scan plays it.
+    Conversion options this does not need (``cache_ext``, ``wave_budget``)
+    are accepted and ignored, so the options :func:`convert` takes can be
+    passed whole.
+
+    Parameters
+    ----------
+    seq_path : Path | str
+        The first file of the chain.
+    system : pypulseqpp.Opts
+        Limits and rasters the scan is segmented under.
+    timing : SequencerTiming
+        The sequencer's segment timing.
+    vendor, label_column_map, profile, grouping, designed
+        As for :func:`convert`.
+
+    Raises
+    ------
+    ValueError
+        If a file of the chain cannot be read or segmented.
+    """
+    payload = _payload(Path(seq_path), system, False, None, designed)
+    return _played_time(
+        payload,
+        system,
+        timing,
+        vendor=vendor,
+        label_column_map=label_column_map,
+        profile=profile,
+        grouping=grouping,
+    )
+
+
+def _played_time(
+    payload: list[dict[str, Any]],
+    system: pp.Opts,
+    timing: SequencerTiming,
+    *,
+    vendor: int = 0,
+    label_column_map: Sequence[int] = (0, 1, 2),
+    profile: VendorProfile | None = None,
+    grouping: Grouping | None = None,
+    **_: Any,
+) -> PlayedTime:
+    """Segment the libraries :func:`_payload` returned and return the time they play, as :func:`played_time`.
+
+    The libraries are copies, so the sequences they were taken from may change
+    while this runs; the segmentation releases the GIL.
+    """
+    found = require("played_time_from_libraries")(
+        payload,
+        *_rasters(system),
+        int(vendor),
+        list(label_column_map),
+        None if profile is None else profile.as_pairs(),
+        None if grouping is None else grouping.as_values(),
+        [timing.gap_us, timing.tail_us, timing.min_wait_us, timing.raster_us],
+    )
+    return PlayedTime(1e-6 * found["blocks_us"], 1e-6 * found["played_us"])
+
+
 def cache_path(seq_path: Path | str, cache_ext: str = ".pseg") -> Path:
     """Return the cache file of a sequence: its last suffix replaced by ``cache_ext``."""
     return Path(seq_path).with_suffix(cache_ext)
