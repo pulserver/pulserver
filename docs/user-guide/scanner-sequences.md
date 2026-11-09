@@ -520,7 +520,8 @@ shorter than the longest train is refused at evaluation as at generation.
 The console's RF estimate is the train of the largest RF power, each train
 playing its own number of refocusing pulses in its own TR, the first as
 designed and the rest at the train's peak angle; the designed sequence is
-costed at predownload.
+costed at predownload. `fse3d` and `fse_pd3d` ask to be costed under the SAR
+burst limits.
 
 Busse modes play startup pulses without acquisition and use the same RF widths
 and echo spacing in every shot. All shots retain the longest train layout,
