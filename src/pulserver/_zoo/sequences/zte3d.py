@@ -93,4 +93,5 @@ class Zte3D(SequencePlugin):
             protocol.replace(achieved(self, main)),
             shells * shell,
             rf_layout=rf_layout(main, scaled=True),
+            sequence=main,
         )

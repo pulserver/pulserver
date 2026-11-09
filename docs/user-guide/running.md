@@ -131,14 +131,14 @@ pulses are designed as given.
 checks hold every physical axis. Logical axes played together add on one
 physical axis, so under an oblique prescription a design held to `max_grad` and
 `max_slew` per logical axis can exceed them on a physical one and is refused.
-Two design limits cap what each logical axis is designed under, derated by the
-scanner for the prescription's rotation:
+Two design limits cap what each logical axis is designed under, the scanner's
+limits for the prescription's rotation:
 
 | Limit | Meaning |
 | --- | --- |
-| `design_max_grad` | Gradient amplitude each logical axis is designed under, in the `grad_unit` of `max_grad` |
-| `design_max_slew` | Slew rate each logical axis is designed under, in the `slew_unit` of `max_slew` |
-| `design_max_grad_any_rotation`, `design_max_slew_any_rotation` | The same for a design that must hold under any rotation: one whose scan follows motion-correction poses |
+| `design_max_grad` | Gradient amplitude each logical axis is designed under, in the `grad_unit` of `max_grad`: the coil's per-axis limit, scaled by the share the prescription's rotation leaves each logical axis with all three active |
+| `design_max_slew` | Slew rate each logical axis is designed under, in the `slew_unit` of `max_slew`, the coil's per-axis slew rate scaled by the same share |
+| `design_max_grad_any_rotation`, `design_max_slew_any_rotation` | The same for a design that must hold under any rotation, one whose scan follows motion-correction poses: limits derated by the scanner so that no rotation puts more than the per-axis limit on a physical axis |
 | `pmc_enable` | `1` when the scan follows the poses its reconstruction publishes, `0` otherwise |
 | `design_rf_dead_time` | Least delay of an RF pulse in its block, in s |
 | `design_rf_ringdown_time` | Least time from the end of an RF pulse to the end of its block, in s |
@@ -153,6 +153,23 @@ axes to `max_grad` and `max_slew`, since a rotation can put the whole vector
 on one physical axis. A sequence without `EnablePmc`, or a scan with
 `pmc_enable` `0`, is designed under `design_max_grad` and `design_max_slew`.
 The manifest's `design_rotation` records which, `any` or `prescribed`.
+
+A design at these limits can stimulate peripheral nerves past `pns_limit`, or,
+for a scan following poses, sum to a slew rate past `max_slew` over the axes.
+`generate` then designs it again at a lower slew rate, modelled on the
+response it measured, at most three times, lowering it further where the
+plugin cannot lay the design out at that rate, and checks every problem again
+on each new design; `validate` does the same on the representative sequence a
+plugin's evaluation states ({ref}`evaluating-a-protocol`), so the console
+shows what `generate` designs. A design past a gradient amplitude limit is
+refused, since no slew rate brings it down. Each file of a design records the
+slew rate it was designed under, per logical axis, in its `DesignMaxSlew`
+definition, and the manifest records it as `design_max_slew_t_per_m_per_s`,
+with the passes as `slew_passes`. A strict plugin
+({attr}`~pulserver.design.SequencePlugin.strict_limits`), whose files set
+`StrictLimits`, or a design whose sequence sets `StrictLimits` itself, is
+refused as designed; the manifest's `strict_limits` records which. An imported
+chain is never designed again.
 
 A design limit above the scanner's leaves the scanner's, and one left out is the
 scanner's; a design dead time below the scanner's leaves the scanner's. The

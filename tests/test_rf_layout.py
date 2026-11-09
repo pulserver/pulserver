@@ -659,9 +659,9 @@ def test_validations_asked_for_their_layout_evaluate_the_default_protocol_once(
     requests = []
     validated = _service._validated
 
-    def counting(path, limits, request, exam=None):
+    def counting(path, limits, request, exam=None, **lower):
         requests.append(dict(request))
-        return validated(path, limits, request, exam)
+        return validated(path, limits, request, exam, **lower)
 
     monkeypatch.setattr(_service, "_validated", counting)
     for flip in (60.0, 120.0):

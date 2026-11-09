@@ -87,4 +87,5 @@ class Bssfp3D(SequencePlugin):
             protocol.replace(achieved(self, view)),
             a["n_phase_cycles"] * cycle,
             rf_layout=rf_layout(view, scaled=True),
+            sequence=view,
         )

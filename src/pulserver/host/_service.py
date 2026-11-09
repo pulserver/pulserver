@@ -7,6 +7,7 @@ the designs it adds to a :class:`~pulserver.host.DesignStore`.
 
 from __future__ import annotations
 
+import copy
 import datetime
 import functools
 import hashlib
@@ -22,7 +23,9 @@ from functools import lru_cache, partial
 from pathlib import Path
 from typing import Any, NamedTuple
 
+import numpy as np
 import pypulseqpp as pp
+from pypulseqpp import safety
 
 from .. import __version__, _plugins, ir
 from .._plugins import PluginPath
@@ -34,6 +37,7 @@ from ..design import (
     load_plugin,
 )
 from ..design._plugin import requested_options
+from ..ir._checks import _RASTERS, enables_pmc
 from ..ir._convert import _payload, _read_chain, _write_cache
 from ..mrd._sequence import designed_chain
 from ..protocol import (
@@ -50,6 +54,7 @@ from ..protocol import (
     prescribed_offset,
     prescribed_rotation,
 )
+from . import _slew
 from ._blocks import import_averages, parse_import
 from ._limits import design_system, follows_poses, split_limits
 from ._push import push as push_design
@@ -178,13 +183,17 @@ def validate(
     amplitudes are the layout's own. ``exam`` is the directory of the current
     exam's cache, which the plugin's hooks read where they take it. The
     plugin is loaded at the options of ``block``, as :func:`list_protocol`
-    loads it, and the block is read against that listing.
+    loads it, and the block is read against that listing. Where the
+    evaluation states a representative sequence and the plugin is not strict,
+    the request is evaluated again at a lower slew rate while that sequence
+    exceeds the nerve-stimulation or slew-rate limit, as :func:`generate`
+    designs it, and the slew rate it ends at is where :func:`generate` starts.
     """
     variant = _variant(plugins, plugin, block)
     listing = _listing(variant)
     request = _request(block, listing)
     limits = _read(limits)
-    validation = _validated(variant, limits, request, exam)
+    validation = _validated(variant, limits, request, exam, lower=True)
     listed: list[float] = []
     if rf_layout and validation.valid and validation.rf_layout is not None:
         default = _default_rf_layout(
@@ -232,6 +241,17 @@ def generate(
     :func:`validate` passes it; for a plugin whose hooks take it, the files of
     the exam's cache are part of the design's identity.
 
+    A design whose only problems a lower slew rate eases -- nerve stimulation,
+    slew rate on a physical axis or, for a scan following poses, summed over
+    the axes -- is made again at a lower slew rate, at most
+    ``_slew.PASSES`` times, starting where :func:`validate` left the request;
+    its other problems are checked again on each new design. Each file then
+    sets ``DesignMaxSlew``, the slew rate per logical axis it was designed
+    under in T/m/s, and the manifest records it and the passes. A strict
+    plugin (:attr:`~pulserver.design.SequencePlugin.strict_limits`), whose
+    files set ``StrictLimits``, or a design that sets ``StrictLimits`` itself,
+    is refused as designed.
+
     Raises
     ------
     CallError
@@ -242,24 +262,151 @@ def generate(
     listing = _listing(variant)
     request = _request(block, listing)
     limits = _read(limits)
-    _, options, _ = split_limits(limits)
     scanner = _plugin(variant)
-    design = design_system(limits, any_rotation=_any_rotation(limits, scanner))
-    requested = {key: p.value for key, p in listing.items() if p.editable}
-    requested.update(request)
     if not scanner.reads_exam:
         exam = None
+    strict = _declares_strict(scanner)
+    remembered = _slew.key(variant, limits, request)
+    ceiling = None if strict else _LOWERED.get(remembered)
+    tried: list[tuple[float, dict[str, float]]] = []
+    stepped = 0
+    while True:
+        try:
+            reply = _generate_under(
+                plugin,
+                variant,
+                listing,
+                request,
+                limits,
+                scanner,
+                store,
+                push,
+                exam,
+                ceiling,
+                len(tried) + stepped,
+                strict,
+            )
+        except _Infeasible as error:
+            # A layout the plugin cannot make at the lowered slew rate: lower
+            # it again, without a reading to model the step on.
+            if ceiling is None or stepped == _slew.PASSES:
+                raise CallError(str(error)) from None
+            _log.info("%s: %s; designing again at a lower slew rate", plugin, error)
+            stepped += 1
+            ceiling *= _slew.TARGET
+            continue
+        except _SlewExcess as excess:
+            if strict or excess.strict or len(tried) == _slew.PASSES:
+                raise CallError(str(excess)) from None
+            tried.append((excess.slew, excess.readings))
+            ceiling = _slew.lowered(tried)
+            _log.info(
+                "%s: designed at %.1f T/m/s, %s; designing again at %.1f T/m/s",
+                plugin,
+                excess.slew / excess.gamma,
+                _readings_text(excess.readings),
+                ceiling / excess.gamma,
+            )
+            continue
+        if not strict:
+            _LOWERED.put(remembered, ceiling)
+        return reply
+
+
+#: The slew rate each request was last lowered to.
+_LOWERED = _slew.Remembered()
+
+
+class _Infeasible(CallError):
+    """A request the plugin's evaluation refuses."""
+
+
+class _SlewExcess(CallError):
+    """A design whose problems include one a lower slew rate eases."""
+
+    def __init__(
+        self,
+        problems: str,
+        slew: float,
+        gamma: float,
+        readings: dict[str, float],
+        strict: bool,
+    ) -> None:
+        super().__init__(problems)
+        self.slew = slew
+        self.gamma = gamma
+        self.readings = readings
+        self.strict = strict
+
+
+def _readings_text(readings: Mapping[str, float]) -> str:
+    names = {"pns": "PNS", "slew": "slew rate", "vector_slew": "summed slew rate"}
+    return ", ".join(
+        f"{names[k]} at {100 * v:.0f} % of its limit"
+        for k, v in readings.items()
+        if k in names
+    )
+
+
+def _declares_strict(scanner: SequencePlugin) -> bool:
+    """Whether a plugin asks for its designs to be refused as designed, :attr:`~pulserver.design.SequencePlugin.strict_limits`."""
+    return bool(getattr(type(scanner), "strict_limits", False))
+
+
+def _sets_strict(chain: list[tuple[Path, pp.Sequence]]) -> bool:
+    """Whether a file of a chain sets ``StrictLimits``."""
+    for _, sequence in chain:
+        value = sequence.definitions.get("StrictLimits")
+        if value is not None and any(float(v) != 0.0 for v in np.ravel(value)):
+            return True
+    return False
+
+
+def _generate_under(
+    plugin,
+    variant,
+    listing,
+    request,
+    limits,
+    scanner,
+    store,
+    push,
+    exam,
+    ceiling,
+    passes,
+    strict,
+):
+    """Resolve, design, check and store a request with the slew rate capped at ``ceiling``; see :func:`generate`."""
+    _, options, _ = split_limits(limits)
+    design = design_system(
+        limits, any_rotation=_any_rotation(limits, scanner), max_slew=ceiling
+    )
+    requested = {key: p.value for key, p in listing.items() if p.editable}
+    requested.update(request)
     validation = scanner.validate(design, requested, exam)
     if validation.valid and validation.values != requested:
         validation = scanner.validate(design, validation.values, exam)
     if not validation.valid:
-        raise CallError(validation.info)
+        raise _Infeasible(validation.info)
     shortest = requested.get(UIParam.TR) == TRPreset.MINIMUM
     for _ in range(_WAVE_RETRIES):
         try:
             return _generate(
-                plugin, limits, listing, scanner, variant, validation, store, push, exam
+                plugin,
+                limits,
+                listing,
+                scanner,
+                variant,
+                validation,
+                store,
+                push,
+                exam,
+                design,
+                passes,
+                strict,
             )
+        except _SlewExcess:
+            raise
         except (CallError, ValueError) as error:
             # The conversion raises a waveform memory it cannot load in time.
             longer = _tr_for_wave_loading(str(error), validation.values, options)
@@ -309,13 +456,34 @@ def _tr_for_wave_loading(
     return math.ceil(float(tr) + 1.1 * late_us / float(budget.headroom))
 
 
-def _generate(plugin, limits, listing, scanner, variant, validation, store, push, exam):
-    """Design, check, convert and store ``validation``'s values; see :func:`generate`."""
+def _generate(
+    plugin,
+    limits,
+    listing,
+    scanner,
+    variant,
+    validation,
+    store,
+    push,
+    exam,
+    design,
+    passes=0,
+    strict=False,
+):
+    """Design under ``design``, check, convert and store ``validation``'s values; see :func:`generate`.
+
+    Raises :class:`_SlewExcess` for a design whose problems include one a
+    lower slew rate eases.
+    """
     system, options, checked = split_limits(limits)
     any_rotation = _any_rotation(limits, scanner)
-    design = design_system(limits, any_rotation=any_rotation)
+    slew = round(design.max_slew / design.gamma, 4)
+    definitions = {"DesignMaxSlew": slew}
+    if strict:
+        definitions["StrictLimits"] = 1
     source = _source(variant)
     identified = dict(validation.values)
+    identified["design_max_slew_t_per_m_per_s"] = slew
     if scanner.options:
         identified["options"] = dict(scanner.options)
     if exam is not None:
@@ -327,7 +495,7 @@ def _generate(plugin, limits, listing, scanner, variant, validation, store, push
     staged = store.stage()
     try:
         accepted, paths, written = scanner._design(
-            design, validation.values, staged, exam
+            design, validation.values, staged, exam, definitions
         )
         if not accepted.valid:
             raise CallError(accepted.info)
@@ -338,10 +506,19 @@ def _generate(plugin, limits, listing, scanner, variant, validation, store, push
         chain = designed_chain(written)
         offset = prescribed_offset(validation.values)
         rotation = prescribed_rotation(validation.values)
+        readings: dict[str, float] = {}
         problems = _check_and_convert(
-            paths[0], system, checked, offset, options, rotation, chain
+            paths[0], system, checked, offset, options, rotation, chain, readings
         )
         if problems:
+            if _slew.exceeds(readings):
+                raise _SlewExcess(
+                    "; ".join(problems),
+                    design.max_slew,
+                    design.gamma,
+                    readings,
+                    strict or _sets_strict(chain),
+                )
             raise CallError("; ".join(problems))
         (staged / "resolved.protocol").write_text(
             format_values(validation.values, listing)
@@ -355,6 +532,9 @@ def _generate(plugin, limits, listing, scanner, variant, validation, store, push
             "scan_time": validation.duration,
             "fov_offset_mm": [1e3 * value for value in offset],
             "design_rotation": "any" if any_rotation else "prescribed",
+            "design_max_slew_t_per_m_per_s": slew,
+            "slew_passes": passes,
+            "strict_limits": strict or _sets_strict(chain),
         }
         design = store.commit(identity, staged, manifest)
     except BaseException:
@@ -583,10 +763,146 @@ def _validated(
     limits: Mapping[str, Any],
     request: Mapping[ProtocolKey, Any],
     exam: str | None = None,
+    lower: bool = False,
 ) -> Validation:
+    """Return the validation of a request under the design limits.
+
+    With ``lower``, a plugin that is not strict and whose evaluation states a
+    representative sequence is evaluated again at a lower slew rate while
+    that sequence, rotated to the prescription, exceeds the nerve-stimulation
+    or slew-rate limit, starting from the slew rate the request was last
+    lowered to; the slew rate it ends at is remembered for :func:`generate`.
+    A request still exceeding them after ``_slew.PASSES`` passes is invalid.
+    """
     scanner = _plugin(variant)
-    design = design_system(limits, any_rotation=_any_rotation(limits, scanner))
-    return scanner.validate(design, request, exam)
+    any_rotation = _any_rotation(limits, scanner)
+    if not lower or _declares_strict(scanner):
+        design = design_system(limits, any_rotation=any_rotation)
+        return scanner.validate(design, request, exam)
+    remembered = _slew.key(variant, limits, request)
+    family = _slew.key(variant, limits, {})
+    system, _, checked = split_limits(limits)
+    ceiling = _LOWERED.get(remembered)
+    if ceiling is None:
+        guessed = _guessed(
+            scanner,
+            limits,
+            request,
+            exam,
+            family,
+            system,
+            checked,
+            any_rotation,
+        )
+        if guessed is not None:
+            _LOWERED.put(remembered, guessed[0])
+            return guessed[1]
+    tried: list[tuple[float, dict[str, float]]] = []
+    stepped = 0
+    while True:
+        design = design_system(limits, any_rotation=any_rotation, max_slew=ceiling)
+        validation, _, sequence = scanner._evaluated(design, request, exam)
+        if not validation.valid and ceiling is not None and stepped < _slew.PASSES:
+            # A layout the plugin cannot make at the lowered slew rate.
+            stepped += 1
+            ceiling *= _slew.TARGET
+            continue
+        if (
+            not validation.valid
+            or sequence is None
+            or _sets_strict([(Path(), sequence)])
+        ):
+            break
+        readings = _representative_readings(
+            sequence,
+            system,
+            checked,
+            prescribed_rotation(validation.values),
+            any_rotation,
+        )
+        if not _slew.exceeds(readings):
+            break
+        if len(tried) == _slew.PASSES:
+            return Validation(
+                False,
+                None,
+                f"no slew rate tried keeps the design within its limits: "
+                f"{_readings_text(readings)} at {design.max_slew / design.gamma:.1f} T/m/s",
+                validation.values,
+            )
+        tried.append((design.max_slew, readings))
+        ceiling = _slew.lowered(tried)
+        _log.debug(
+            "evaluated at %.1f T/m/s, %s; evaluating again at %.1f T/m/s",
+            design.max_slew / design.gamma,
+            _readings_text(readings),
+            ceiling / design.gamma,
+        )
+    _LOWERED.put(remembered, ceiling)
+    _LOWERED.put(family, ceiling)
+    return validation
+
+
+#: A slew rate a plugin's last request was lowered to is kept for the next
+#: request only when its readings reach this fraction of their limits: below
+#: it the gradients would be slower than the limits ask.
+_NEAR = 0.85
+
+
+def _guessed(scanner, limits, request, exam, family, system, checked, any_rotation):
+    """Return the slew rate and validation of a request evaluated at the slew rate the plugin's last request under these limits was lowered to.
+
+    ``None`` where none was, or where at that slew rate the request is
+    invalid, exceeds a limit, or keeps every reading below :data:`_NEAR` of
+    its limit: the request is then searched for from the design limits.
+    """
+    ceiling = _LOWERED.get(family)
+    if ceiling is None:
+        return None
+    design = design_system(limits, any_rotation=any_rotation, max_slew=ceiling)
+    validation, _, sequence = scanner._evaluated(design, request, exam)
+    if not validation.valid or sequence is None:
+        return None
+    readings = _representative_readings(
+        sequence, system, checked, prescribed_rotation(validation.values), any_rotation
+    )
+    eased = [readings.get(key, 0.0) for key in _slew.READINGS]
+    if _slew.exceeds(readings) or max(eased) < _NEAR:
+        return None
+    return ceiling, validation
+
+
+def _representative_readings(
+    sequence: pp.Sequence,
+    system: pp.Opts,
+    checked: ir.CheckLimits,
+    rotation: Any,
+    any_rotation: bool,
+) -> dict[str, float]:
+    """Return the gradient readings of a representative sequence rotated to the prescription, as :func:`pulserver.ir.check` fills its ``readings``."""
+    opts = copy.copy(system)
+    for name in _RASTERS:
+        setattr(opts, name, getattr(sequence, name))
+    turned = sequence
+    if rotation is not None:
+        turned = pp.TransformFOV(
+            rotation=np.asarray(rotation, dtype=float)
+        ).apply_to_sequence(sequence, in_place=False)
+    readings: dict[str, float] = {}
+    turns = any_rotation and enables_pmc(sequence)
+    for check, name in (
+        (safety.check_max_grad, "grad"),
+        (safety.check_max_slew, "slew"),
+    ):
+        _, found = check(turned, opts)
+        if found.limit > 0:
+            readings[name] = found.per_axis.value / found.limit
+            if turns:
+                readings[f"vector_{name}"] = found.vector.value / found.limit
+    if checked.pns is not None:
+        _, nerve = safety.check_pns(turned, checked.pns, system=opts)
+        readings["pns"] = nerve.peak.value / checked.pns_limit
+    return readings
 
 
 def _any_rotation(limits: Mapping[str, Any], scanner: SequencePlugin) -> bool:
@@ -670,8 +986,11 @@ def _check_and_convert(
     options: dict[str, Any],
     rotation: Any,
     designed: list[tuple[Path, pp.Sequence]] | None = None,
+    readings: dict[str, float] | None = None,
 ) -> list[str]:
     """Check the chain in the frame of ``rotation`` while its cache is written; return the problems.
+
+    ``readings`` is filled as :func:`pulserver.ir.check` fills it.
 
     The chain is ``designed`` when given, else read once from ``seq_path`` and
     verified. A receive calibration generated from it
@@ -706,6 +1025,7 @@ def _check_and_convert(
             limits=checked,
             designed=designed,
             spl_levels=levels,
+            readings=readings,
         )
         cache.result()
     return problems

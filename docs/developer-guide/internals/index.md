@@ -11,6 +11,7 @@ authors.
 | {doc}`protocol-wire` | RF layout, protocol keys and values, and the protocol text blocks |
 | {doc}`reconstruction-proxy` | Reconstruction units, image headers, enrichment and trajectory rules, readout placement and workers |
 | {doc}`sar-ratios` | pTx SAR ratios from VOPs against a reference pulse |
+| {doc}`sequence-definitions` | The `[DEFINITIONS]` entries pulserver and the interpreters read or write |
 | {doc}`virtual-scanner` | Played trajectory, signal model, coils, Fourier engine, export, test coverage and scan clock |
 
 ```{toctree}
@@ -21,5 +22,6 @@ ir-cache
 protocol-wire
 reconstruction-proxy
 sar-ratios
+sequence-definitions
 virtual-scanner
 ```
