@@ -968,6 +968,44 @@ PYBIND11_MODULE(_ext, module)
         "The summary a written cache carries.");
 
     module.def(
+        "played_time_from_libraries",
+        [](const py::list &chain,
+           float rf_raster_us,
+           float grad_raster_us,
+           float adc_raster_us,
+           float block_raster_us,
+           int vendor,
+           const std::array<int, 3> &label_column_map,
+           const std::optional<std::array<float, 12>> &profile,
+           const std::optional<std::array<float, 5>> &grouping,
+           const std::array<int, 4> &timing)
+        {
+            const pulseg_opts opts = make_opts(
+                rf_raster_us,
+                grad_raster_us,
+                adc_raster_us,
+                block_raster_us,
+                vendor,
+                label_column_map,
+                PULSEG_CACHE_EXT_DEFAULT,
+                profile,
+                grouping);
+            const Collection coll = convert(chain, opts);
+            const pulseg_sequencer_timing sequencer = {timing[0], timing[1], timing[2], timing[3]};
+            pulseg_played_time info = PULSEG_PLAYED_TIME_INIT;
+            require(unlocked([&] { return pulseg_get_played_time(coll.get(), &sequencer, &info); }),
+                    "played time");
+            py::dict out;
+            out["blocks_us"] = info.blocks_us;
+            out["played_us"] = info.played_us;
+            out["segment_instances"] = info.segment_instances;
+            return out;
+        },
+        "Segment a chain read into libraries, as convert_libraries does without writing a "
+        "cache, and return the time it plays under a sequencer timing (gap, tail, least "
+        "wait, raster, in us): pure delays give the gaps and tails back.");
+
+    module.def(
         "play_cache",
         [](const std::string &cache_path, int source_size, bool waveforms)
         { return play(load(cache_path, source_size).get(), waveforms); },

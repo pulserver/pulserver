@@ -348,6 +348,101 @@ int pulseg_get_segment_plays(
     return PULSEG_SUCCESS;
 }
 
+static long round_down_to(long value, int raster)
+{
+    long r;
+    if (raster <= 1)
+        return value;
+    r = value % raster;
+    if (r < 0)
+        r += raster;
+    return value - r;
+}
+
+static long round_up_to(long value, int raster)
+{
+    long down = round_down_to(value, raster);
+    return (down == value) ? value : down + raster;
+}
+
+int pulseg_delay_wait_us(const pulseg_sequencer_timing *timing, int delay_us, int after_active,
+                         int waits_trigger, long *lag_us)
+{
+    long wait;
+    const int raster = (timing->raster_us > 0) ? timing->raster_us : 1;
+
+    if (after_active && round_up_to(delay_us, raster) <= timing->tail_us)
+    {
+        *lag_us -= delay_us;
+        return 0;
+    }
+    if (waits_trigger)
+        wait = round_up_to(delay_us, raster) - (after_active ? timing->tail_us : 0);
+    else
+    {
+        wait = round_down_to((long)delay_us - *lag_us - timing->gap_us, raster);
+        if (wait < timing->min_wait_us)
+            wait = round_up_to(timing->min_wait_us, raster);
+    }
+    *lag_us += wait + timing->gap_us - delay_us;
+    return (int)wait;
+}
+
+int pulseg_get_played_time(const pulseg_collection *coll, const pulseg_sequencer_timing *timing,
+                           pulseg_played_time *info)
+{
+    pulseg_scan_time_info blocks = PULSEG_SCAN_TIME_INFO_INIT;
+    int i, n, bt_idx, seg_id, delay_us, rc, tid, waits;
+    int after_active = 0;
+    long lag = 0;
+    const pulseg_sequence_descriptor *desc;
+    const pulseg_block_table_element *bte;
+
+    if (!coll || !timing || !info)
+        return PULSEG_ERR_NULL_POINTER;
+    rc = pulseg_get_scan_time(coll, &blocks);
+    if (PULSEG_FAILED(rc))
+        return rc;
+
+    info->segment_instances = 0;
+    for (i = 0; i < coll->num_subsequences; ++i)
+    {
+        desc = &coll->descriptors[i];
+        if (desc->prescan_only)
+            continue;
+        for (n = 0; n < desc->exec_stream_len; ++n)
+        {
+            if (!exec_starts_instance(desc, n))
+                continue;
+            seg_id = pulseg__exec_seg_id(desc, n);
+            if (seg_id < 0 || seg_id >= desc->num_unique_segments)
+                continue;
+            if (segment_def_is_pure_delay(desc, seg_id))
+            {
+                bt_idx = pulseg__exec_block_idx(desc, n);
+                bte = &desc->block_table[bt_idx];
+                delay_us = (bte->duration_us >= 0) ? bte->duration_us
+                                                   : desc->base_blocks[bte->id].duration_us;
+                tid = desc->segment_definitions[seg_id].trigger_id;
+                waits = (tid >= 0 && tid < desc->num_triggers &&
+                         desc->trigger_events[tid].trigger_type == PULSEG_TRIGGER_TYPE_INPUT);
+                if (pulseg_delay_wait_us(timing, delay_us, after_active, waits, &lag))
+                    info->segment_instances += 1;
+                after_active = 0;
+            }
+            else
+            {
+                lag += timing->tail_us + timing->gap_us;
+                info->segment_instances += 1;
+                after_active = 1;
+            }
+        }
+    }
+    info->blocks_us = (double)blocks.total_duration_us;
+    info->played_us = info->blocks_us + (double)lag;
+    return PULSEG_SUCCESS;
+}
+
 /* ================================================================== */
 /*  RF accessors                                                      */
 /* ================================================================== */

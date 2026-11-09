@@ -23,7 +23,14 @@ _WAVE_BUDGET = {
     "ir_wave_headroom": ("headroom", float),
     "ir_wave_slots": ("slots", int),
 }
-_CHECK_PREFIXES = ("pns_", "forbidden_band_", "vop_", "acoustic_", "adc_gap")
+_CHECK_PREFIXES = (
+    "pns_",
+    "forbidden_band_",
+    "vop_",
+    "acoustic_",
+    "adc_gap",
+    "segment_",
+)
 _DESIGN_LIMITS = {"design_max_grad": "max_grad", "design_max_slew": "max_slew"}
 _ANY_ROTATION = {
     "design_max_grad_any_rotation": "max_grad",
@@ -57,6 +64,13 @@ _VOP = (
     "vop_local_limit",
 )
 _ACOUSTIC = ("acoustic_file", "acoustic_interval_us")
+#: The sequencer's segment timing, in µs: ``pulserver.ir.SequencerTiming``.
+_SEGMENT = {
+    "segment_gap_us": "gap_us",
+    "segment_tail_us": "tail_us",
+    "segment_min_wait_us": "min_wait_us",
+    "segment_raster_us": "raster_us",
+}
 
 
 def split_limits(
@@ -294,6 +308,10 @@ def check_limits(limits: Mapping[str, Any]) -> ir.CheckLimits:
       local SAR limits in W/kg in its current operating mode.
     - ``pmc_enable``, a site setting, says whether a scan follows the poses
       its reconstruction publishes (:func:`follows_poses`).
+    - ``segment_gap_us``, ``segment_tail_us``, ``segment_min_wait_us`` and
+      ``segment_raster_us`` are the sequencer's segment timing in µs
+      (:class:`pulserver.ir.SequencerTiming`); ``segment_gap_us`` is required
+      with any of them.
     - ``adc_gap_us`` is the least time in µs from the end of one ADC to the
       start of the next that the scanner's receiver can start a readout in.
     - ``ir_wave_max_samples`` and ``ir_wave_raster_us``, the waveform memory
@@ -316,7 +334,8 @@ def check_limits(limits: Mapping[str, Any]) -> ir.CheckLimits:
     unknown = [
         k
         for k in keys
-        if k not in (*_CHRONAXIE, "pns_limit", *_VOP, *_ACOUSTIC, "adc_gap_us")
+        if k
+        not in (*_CHRONAXIE, "pns_limit", *_VOP, *_ACOUSTIC, *_SEGMENT, "adc_gap_us")
         and not _SAFE.fullmatch(k)
         and not _BAND.fullmatch(k)
     ]
@@ -326,6 +345,13 @@ def check_limits(limits: Mapping[str, Any]) -> ir.CheckLimits:
         "pns": _nerve_model(limits),
         "follows_poses": follows_poses(limits),
     }
+    segment = {
+        name: int(limits[key]) for key, name in _SEGMENT.items() if key in limits
+    }
+    if segment:
+        if "gap_us" not in segment:
+            raise ValueError("a segment timing needs segment_gap_us")
+        arguments["sequencer_timing"] = ir.SequencerTiming(**segment)
     if "pns_limit" in limits:
         arguments["pns_limit"] = float(limits["pns_limit"])
     numbered = sorted(
