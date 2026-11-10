@@ -16,6 +16,8 @@ from _host import LIMITS, value_block
 from pulserver import _plugins
 from pulserver._zoo import ZOO_PAIRS
 from pulserver._zoo._evaluation import achieved, rf_layout
+from pulserver._zoo._evaluation import arguments as app_arguments
+from pulserver._zoo._fse import bounding_train
 from pulserver._zoo._saturation import explicit_bands
 from pulserver._zoo._slab import slab
 from pulserver._zoo._user import LINE_SPACING, SHARED
@@ -107,6 +109,11 @@ OPTIMIZED = ("fse3d+OPTIMIZED", "fse3d+DUAL_REGION")
 WITH_BLOCHSIM = pytest.mark.skipif(
     importlib.util.find_spec("blochsim") is None, reason="needs blochsim"
 )
+#: The shipped sequences whose refocusing angles a prescribed signal fixes,
+#: with the argument that holds the largest. Their evaluation solves for no
+#: train: it designs as many pulses at that angle, which last as long and
+#: bound the RF, and keeps the TE prescribed.
+PRESCRIBED = {"fse_pd3d": "pd_maximum_angle_deg"}
 
 # The defaults, and prescriptions that change what the repetitions of a scan
 # are counted from: slices in packets of unequal size at a requested TR or in
@@ -475,6 +482,13 @@ def _main(plugin, protocol):
     return _chain(plugin.generate(SYSTEM, protocol))[-1]
 
 
+def _bounding(plugin, protocol, peak):
+    """The main sequence of the scan whose trains play every pulse of ``protocol``'s at its angle ``peak``."""
+    a = app_arguments(plugin, protocol)
+    constant = protocol.arguments | bounding_train(a, a[peak])
+    return _chain(plugin.app(SYSTEM, **constant))[-1]
+
+
 def _excitations(sequence):
     """The number of excitation pulses ``sequence`` plays."""
     instances = sequence.rf_instances()
@@ -582,7 +596,11 @@ def test_an_evaluation_states_the_values_and_the_scan_time_of_the_design(
     evaluation = plugin.evaluate(SYSTEM, protocol)
     chain = _chain(plugin.generate(SYSTEM, protocol))
 
-    expected = protocol.replace(achieved(plugin, chain[-1]))
+    values = achieved(plugin, chain[-1])
+    if name in PRESCRIBED:
+        # The effective TE follows from the angles the design solves for.
+        del values[UIParam.TE]
+    expected = protocol.replace(values)
     assert evaluation.protocol.to_wire() == expected.to_wire()
     # The delay closing a TR is rounded up to the block raster, so each TR the
     # design plays lasts the TR it states or one raster more.
@@ -635,6 +653,9 @@ def test_an_evaluation_states_as_its_layout_a_regular_tr_of_the_design(
         main = _chain(
             plugin.app(SYSTEM, **(protocol.arguments | {"flip_modulation": "constant"}))
         )[-1]
+    elif name in PRESCRIBED:
+        # The layout plays the train at its largest angle.
+        main = _bounding(plugin, protocol, PRESCRIBED[name])
     else:
         main = _main(plugin, protocol)
     # The first TR holds the largest packet of slices; a balanced steady state
@@ -647,7 +668,7 @@ def test_an_evaluation_states_as_its_layout_a_regular_tr_of_the_design(
     banded = UIParam.EXSAT_MASK in plugin.protocol
     expected = rf_layout(main, scaled, start=start, banded=banded)
     amplitude = expected.instances.amplitude.copy()
-    if name in OPTIMIZED:
+    if name in OPTIMIZED or name in PRESCRIBED:
         # The layout is the train of the largest RF power, its pulses past its
         # own length, at zero amplitude, left out.
         expected, amplitude = _strongest_train(main)
@@ -806,10 +827,14 @@ def test_each_zoo_layout_plays_the_rf_power_of_the_last_tr_of_the_design(zoo, na
 
     layout = plugin.evaluate(SYSTEM, protocol).rf_layout
 
-    assert _layout_power(layout) == pytest.approx(
-        _last_tr_power(_main(plugin, protocol), LAST_TR_BLOCKS.get(name)),
-        rel=POWER_RTOL,
-    )
+    designed = _last_tr_power(_main(plugin, protocol), LAST_TR_BLOCKS.get(name))
+    if name in PRESCRIBED:
+        # The train at its largest angle plays at least the power of the
+        # train the design solves for.
+        assert _layout_power(layout) >= designed
+        bound = _bounding(plugin, protocol, PRESCRIBED[name])
+        designed = _last_tr_power(bound, LAST_TR_BLOCKS.get(name))
+    assert _layout_power(layout) == pytest.approx(designed, rel=POWER_RTOL)
 
 
 @pytest.mark.parametrize("name", SHIPPED)
@@ -994,10 +1019,13 @@ def test_the_listed_definitions_and_the_validated_layout_play_the_rf_power_of_th
 
     assert set(layout.definition) <= {record.index for record in listed}
     plugin = zoo[name]
-    main = _main(plugin, _protocol(plugin, changes))
-    assert _wire_power(listed, layout) == pytest.approx(
-        _last_tr_power(main, LAST_TR_BLOCKS.get(name)), rel=POWER_RTOL
-    )
+    protocol = _protocol(plugin, changes)
+    designed = _last_tr_power(_main(plugin, protocol), LAST_TR_BLOCKS.get(name))
+    if name in PRESCRIBED:
+        assert _wire_power(listed, layout) >= designed
+        bound = _bounding(plugin, protocol, PRESCRIBED[name])
+        designed = _last_tr_power(bound, LAST_TR_BLOCKS.get(name))
+    assert _wire_power(listed, layout) == pytest.approx(designed, rel=POWER_RTOL)
 
 
 @pytest.mark.parametrize("name", ["fse3d+NAVIGATOR", "mprage3d+NAVIGATOR"])
@@ -1506,6 +1534,7 @@ def test_busse_evaluation_counts_startup_and_matches_generated_scan_time(mode):
 
 @WITH_BLOCHSIM
 def test_busse_effective_te_selects_an_echo_and_explicit_echo_takes_precedence():
+    """The design selects the centre echo; the evaluation keeps the TE prescribed."""
     plugin = load_plugin(_plugins.SEQUENCES / "fse3d.py", {"refocusing": "busse"})
     common = {
         "nx": 64,
@@ -1515,20 +1544,95 @@ def test_busse_effective_te_selects_an_echo_and_explicit_echo_takes_precedence()
         "TR": 1800000,
         "user0_value": 0,
     }
-    default = plugin.evaluate(SYSTEM, _protocol(plugin, common))
-    requested_te = default.protocol.arguments["busse_effective_te"] * 1e6 + 5000.0
-    later = plugin.evaluate(SYSTEM, _protocol(plugin, common | {"TE": requested_te}))
-    assert (
-        later.protocol.arguments["busse_effective_te"]
-        > default.protocol.arguments["busse_effective_te"]
-    )
-    explicit = plugin.evaluate(
-        SYSTEM, _protocol(plugin, common | {"TE": requested_te, "user17_value": 5})
-    )
-    assert (
-        explicit.protocol.arguments["busse_effective_te"]
-        < later.protocol.arguments["busse_effective_te"]
-    )
+
+    def designed(changes):
+        protocol = _protocol(plugin, common | changes)
+        evaluation = plugin.evaluate(SYSTEM, protocol)
+        assert evaluation.protocol.to_wire()["TE"] == protocol.to_wire()["TE"]
+        definitions = _main(plugin, evaluation.protocol).definitions
+        return (
+            float(definitions["EffectiveEchoTime"][0]),
+            int(definitions["BusseCentreEcho"][0]),
+        )
+
+    default, midpoint = designed({})
+    requested_te = round(default * 1e6 + 5000.0)
+    later, selected = designed({"TE": requested_te})
+    assert later > default
+    assert selected > midpoint
+    explicit, echo = designed({"TE": requested_te, "user17_value": 5})
+    assert echo == 5
+    assert explicit < later
+
+
+@pytest.mark.parametrize(
+    ("name", "options"),
+    [
+        ("fse3d", {"refocusing": "busse"}),
+        ("fse3d", {"refocusing": "busse_dual_region"}),
+        ("fse_pd3d", {}),
+        ("fse_pd3d", {"dual_region": True}),
+    ],
+)
+def test_a_prescribed_signal_train_is_not_solved_for_by_its_evaluation(
+    monkeypatch, name, options
+):
+    """The evaluation is a simplified design: the angles are the design's to find."""
+    import pypulseqpp._busse as busse
+    import pypulseqpp._fse_contrast as contrast
+    import pypulseqpp._pd as pd
+
+    def solved(*_args, **_kwargs):
+        raise AssertionError("the evaluation solved for a refocusing train")
+
+    for module, solver in (
+        (pp, "make_busse_schedule"),
+        (busse, "make_busse_schedule"),
+        (busse, "_schedule"),
+        (busse, "_make_busse_schedules"),
+        (contrast, "_select_busse_centre"),
+        (contrast, "calc_fse_effective_te"),
+        (pd, "_pd_schedule"),
+        (pd, "_make_pd_schedules"),
+    ):
+        monkeypatch.setattr(module, solver, solved)
+    plugin = load_plugin(_plugins.SEQUENCES / f"{name}.py", options)
+    request = {"nx": 64, "ny": 32, "nslices": 8, "etl": 20, "TR": 1800000}
+
+    reply = plugin.validate(SYSTEM, request | {"TE": 30000})
+
+    assert reply.valid, reply.info
+    assert reply.values["TE"] == 30000
+    assert reply.rf_layout is not None
+
+
+@pytest.mark.parametrize(
+    ("name", "options", "changes", "refused"),
+    [
+        ("fse3d", {"refocusing": "busse"}, {"user15_value": 20.0}, "minimum < centre"),
+        ("fse3d", {"refocusing": "busse"}, {"user17_value": 19}, "centre echo 19"),
+        (
+            "fse3d",
+            {"refocusing": "busse"},
+            {"user17_value": 0, "user16_value": 2},
+            "centre echo 0",
+        ),
+        ("fse_pd3d", {}, {"user14_value": 150.0}, "first, final <= maximum"),
+        ("fse_pd3d", {}, {"user15_value": 150.0}, "first, final <= maximum"),
+    ],
+)
+def test_a_prescription_no_train_realizes_is_refused_by_the_evaluation_without_a_solve(
+    name, options, changes, refused
+):
+    plugin = load_plugin(_plugins.SEQUENCES / f"{name}.py", options)
+    request = {"nx": 64, "ny": 32, "nslices": 8, "etl": 20, "TR": 1800000}
+
+    reply = plugin.validate(SYSTEM, request | changes)
+
+    assert not reply.valid
+    assert refused in reply.info
+    with pytest.raises(ValueError):
+        plugin.generate(SYSTEM, _protocol(plugin, request | changes))
 
 
 @WITH_BLOCHSIM
@@ -1564,7 +1668,7 @@ def test_fse_ordering_choices_keep_their_indices_across_refocusing_modes(mode):
 
 
 @WITH_BLOCHSIM
-def test_busse_ui_te_and_mrd_annotation_use_contrast_equivalent_te():
+def test_busse_te_prescribes_and_the_mrd_annotation_states_the_contrast_equivalent_te():
     from pulserver.mrd import SequenceDefinitions
 
     plugin = load_plugin(_plugins.SEQUENCES / "fse3d.py", {"refocusing": "busse"})
@@ -1579,17 +1683,18 @@ def test_busse_ui_te_and_mrd_annotation_use_contrast_equivalent_te():
         "user0_value": 0,
     }
     evaluation = plugin.evaluate(SYSTEM, _protocol(plugin, request))
+    # The console keeps the TE prescribed; the design reaches the nearest
+    # echo's, within half the step between two echoes.
+    assert evaluation.protocol.arguments["busse_effective_te"] == pytest.approx(54e-3)
     main = _chain(plugin.generate(SYSTEM, evaluation.protocol))[-1]
     effective = float(main.definitions["EffectiveEchoTime"][0])
     physical = float(main.definitions["TE"][0])
     assert physical > effective
-    assert effective == pytest.approx(
-        evaluation.protocol.arguments["busse_effective_te"], abs=1.01e-4
-    )
+    assert effective == pytest.approx(54e-3, abs=main.definitions["EchoSpacing"][0])
     assert SequenceDefinitions.from_sequence(main).te == (effective,)
 
 
-def test_pd_ui_te_and_mrd_annotation_use_contrast_equivalent_te():
+def test_pd_te_prescribes_and_the_mrd_annotation_states_the_contrast_equivalent_te():
     from pulserver.mrd import SequenceDefinitions
 
     plugin = load_plugin(_plugins.SEQUENCES / "fse_pd3d.py")
@@ -1605,12 +1710,11 @@ def test_pd_ui_te_and_mrd_annotation_use_contrast_equivalent_te():
         "user0_value": 0,
     }
     evaluation = plugin.evaluate(SYSTEM, _protocol(plugin, request))
+    assert evaluation.protocol.arguments["pd_effective_te"] == pytest.approx(28e-3)
     main = _chain(plugin.generate(SYSTEM, evaluation.protocol))[-1]
     effective = float(main.definitions["EffectiveEchoTime"][0])
     assert float(main.definitions["TE"][0]) > effective
-    assert effective == pytest.approx(
-        evaluation.protocol.arguments["pd_effective_te"], abs=1e-9
-    )
+    assert effective == pytest.approx(28e-3, abs=main.definitions["EchoSpacing"][0])
     assert SequenceDefinitions.from_sequence(main).te == (effective,)
 
 

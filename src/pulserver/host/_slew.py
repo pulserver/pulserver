@@ -8,6 +8,8 @@ from collections import OrderedDict
 from collections.abc import Hashable, Mapping, Sequence
 from typing import Any
 
+from . import _memo
+
 #: Designs made again at a lower slew rate modelled on the readings, and
 #: again at a lower one where the plugin cannot make the layout, before a
 #: request is refused.
@@ -23,6 +25,9 @@ READINGS = ("pns", "slew", "vector_slew")
 
 #: The readings of :func:`pulserver.ir.check` no slew rate eases.
 AMPLITUDES = ("grad", "vector_grad")
+
+# The entries of :mod:`pulserver.host._memo` the remembered slew rates are.
+_KIND = "slew"
 
 
 def exceeds(readings: Mapping[str, float]) -> bool:
@@ -87,33 +92,41 @@ def _nerve_slew(samples: Sequence[tuple[float, float]]) -> float:
 class Remembered:
     """The slew rate each request was last lowered to, so a design starts from what its validation found.
 
-    Kept per process for the most recent requests; a request is a key built by
-    :func:`key`.
+    A request is a key built by :func:`key`. Kept in this process for the
+    most recent requests and, under a warm server, among the entries its
+    calls keep (:mod:`pulserver.host._memo`), where the call that generates a
+    request finds what the call that validated it left. A request searched
+    and left at the design limits is remembered as such, with no slew rate.
     """
 
     def __init__(self, size: int = 256) -> None:
         self._size = size
-        self._slews: OrderedDict[Hashable, float] = OrderedDict()
+        self._slews: OrderedDict[Hashable, float | None] = OrderedDict()
         self._lock = threading.Lock()
 
-    def get(self, key: Hashable) -> float | None:
-        """Return the slew rate a request was lowered to, ``None`` if it was not."""
+    def entry(self, key: str) -> tuple[bool, float | None]:
+        """Return whether a request was searched, and the slew rate it was lowered to, ``None`` if it was not lowered."""
+        found, slew = _memo.read(_KIND, key)
+        if found:
+            return True, None if slew is None else float(slew)
         with self._lock:
-            slew = self._slews.get(key)
-            if slew is not None:
-                self._slews.move_to_end(key)
-            return slew
+            if key not in self._slews:
+                return False, None
+            self._slews.move_to_end(key)
+            return True, self._slews[key]
 
-    def put(self, key: Hashable, slew: float | None) -> None:
-        """Remember the slew rate a request was lowered to, or that it was not lowered."""
+    def get(self, key: str) -> float | None:
+        """Return the slew rate a request was lowered to, ``None`` if it was not."""
+        return self.entry(key)[1]
+
+    def put(self, key: str, slew: float | None) -> None:
+        """Remember the slew rate a request was lowered to, or that it was searched and not lowered."""
         with self._lock:
-            if slew is None:
-                self._slews.pop(key, None)
-                return
             self._slews[key] = slew
             self._slews.move_to_end(key)
             while len(self._slews) > self._size:
                 self._slews.popitem(last=False)
+        _memo.write(_KIND, key, slew)
 
 
 def key(

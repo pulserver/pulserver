@@ -1,7 +1,8 @@
 """Fast spin echo on the scanner: SAR burst limits, and the RF layout of trains that differ in length and TR."""
 
 import functools
-from collections.abc import Callable, Sequence
+import math
+from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
 import numpy as np
@@ -29,6 +30,104 @@ def sar_burst(app: Callable[..., Any]) -> Callable[..., Any]:
         return designed
 
     return design
+
+
+def bounding_train(a: Mapping[str, Any], peak_deg: float) -> dict[str, Any]:
+    """Return the arguments that design the constant train bounding a train whose angles a prescribed signal fixes.
+
+    A Busse or PD train plays its startup echoes and then its acquired ones
+    at angles an inverse extended-phase-graph solve finds, none above
+    ``peak_deg``. The train of as many pulses at ``peak_deg`` lasts as long,
+    its pulses and gradients being the same but for the angles, and plays at
+    least the RF power: an evaluation designs it, and the solve is left to
+    the design of the scan. ``a`` holds the arguments of the full design.
+    """
+    startup = a["busse_startup_echoes"]
+    periphery = a["etl_periphery"]
+    return {
+        "flip_modulation": "constant",
+        "refocusing_angle_deg": peak_deg,
+        "etl": a["etl"] + startup,
+        "etl_periphery": None if periphery is None else periphery + startup,
+        "busse_centre_echo": None,
+        "busse_effective_te": None,
+        "busse_optimize": False,
+        "pd_effective_te": None,
+        "pd_optimize": False,
+    }
+
+
+def check_busse(a: Mapping[str, Any]) -> None:
+    """Refuse a Busse prescription no train realizes, as its design would: the checks that take no solve.
+
+    Raises
+    ------
+    ValueError
+        If the angles are not ``0 < minimum < centre < maximum < 180``
+        degrees, the effective TE is not positive, or no acquired echo, or
+        not the one asked for, lies after the sixth pulse and before the last
+        of every train.
+    """
+    angles = [a[f"busse_{name}_angle_deg"] for name in ("minimum", "centre", "maximum")]
+    if not all(map(math.isfinite, angles)) or not (
+        0 < angles[0] < angles[1] < angles[2] < 180
+    ):
+        raise ValueError(
+            "the Busse angles must satisfy 0 < minimum < centre < maximum < 180 degrees"
+        )
+    startup = a["busse_startup_echoes"]
+    shortest = (
+        a["etl"] if a["etl_periphery"] is None else min(a["etl"], a["etl_periphery"])
+    )
+    first, last = max(0, 6 - startup), shortest - 2
+    centre = a["busse_centre_echo"]
+    target = a["busse_effective_te"]
+    if centre is None and target is not None:
+        if not math.isfinite(target) or target <= 0:
+            raise ValueError("the effective TE must be positive and finite")
+        if first > last:
+            raise ValueError(
+                "no acquired echo lies after the sixth pulse and before the last "
+                "of every train"
+            )
+        return
+    if centre is None:
+        centre = (a["etl"] - 1) // 2
+    if not first <= centre <= last:
+        raise ValueError(
+            f"the centre echo {centre} must lie after the sixth pulse and before "
+            f"the last of every train: from {first} to {last}"
+        )
+
+
+def check_pd(a: Mapping[str, Any]) -> None:
+    """Refuse a PD prescription no train realizes, as its design would: the checks that take no solve.
+
+    Raises
+    ------
+    ValueError
+        If the angles are not ``0 < first, final <= maximum < 180`` degrees,
+        the signal-tail onset is not a fraction between 0 and 1, or a train
+        acquires fewer than two echoes.
+    """
+    first, maximum, final = (
+        a[f"pd_{name}_angle_deg"] for name in ("first", "maximum", "final")
+    )
+    periphery = a.get("pd_final_angle_periphery_deg")
+    finals = [final] if periphery is None else [final, periphery]
+    if not all(map(math.isfinite, (first, maximum, *finals))) or not (
+        0 < first <= maximum < 180 and all(0 < angle <= maximum for angle in finals)
+    ):
+        raise ValueError(
+            "the PD angles must satisfy 0 < first, final <= maximum < 180 degrees"
+        )
+    if not 0 < a["pd_plateau_fraction"] < 1:
+        raise ValueError("the signal-tail onset must be a fraction between 0 and 1")
+    shortest = (
+        a["etl"] if a["etl_periphery"] is None else min(a["etl"], a["etl_periphery"])
+    )
+    if shortest < 2:
+        raise ValueError("a PD train acquires at least two echoes after its startup")
 
 
 def echo_train_layout(

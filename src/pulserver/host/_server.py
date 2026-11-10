@@ -1,4 +1,4 @@
-"""The warm design server: one pre-imported process, one forked child per call."""
+"""The warm design server: one pre-imported process, one forked child per call, and what the calls keep for each other."""
 
 from __future__ import annotations
 
@@ -17,6 +17,7 @@ from typing import Any
 
 from .._logs import configure, redirect
 from .._plugins import PluginPath, directories, names
+from . import _memo
 
 _log = logging.getLogger("pulserver.host")
 
@@ -73,12 +74,12 @@ def answer(request: Mapping[str, Any]) -> tuple[int, str]:
 
 
 def _logged(request: Mapping[str, Any]) -> tuple[int, str]:
-    """Answer ``request``, logging the call, its outcome and its duration.
+    """Answer ``request``, logging the call, its outcome, its duration and the processor time it took.
 
     A request naming a file under ``log`` has the rest of its child's output
     appended there, so the calls one scan makes can be logged beside it.
     """
-    started = time.monotonic()
+    started, worked = time.monotonic(), time.process_time()
     call = f"{request.get('call')} {request.get('plugin') or ''}".rstrip()
     if request.get("log"):
         _log.info("%s: logged to %s", call, request["log"])
@@ -91,7 +92,13 @@ def _logged(request: Mapping[str, Any]) -> tuple[int, str]:
     except Exception:
         _log.exception("%s: failed after %.2f s", call, time.monotonic() - started)
         raise
-    _log.info("%s: status %d in %.2f s", call, code, time.monotonic() - started)
+    _log.info(
+        "%s: status %d in %.3f s, %.3f s of processor time",
+        call,
+        code,
+        time.monotonic() - started,
+        time.process_time() - worked,
+    )
     return code, output
 
 
@@ -104,7 +111,11 @@ class DesignServer:
     hold; no plugin code designs in it, and no derivative is taken in it. A
     call is answered in a child forked from it, which inherits what the
     parent imported, answers as :func:`answer` does and exits: nothing a call
-    does outlives its child. A child that ends without
+    does outlives its child but the designs it stores and the entries it
+    keeps for the calls after it (:mod:`pulserver.host._memo`) -- the replies
+    of ``list`` and ``validate``, the RF a plugin lists and the slew rate
+    each request was lowered to -- in a directory the server makes when it
+    starts serving and removes when it stops. A child that ends without
     a reply, a crash of plugin code among them, is answered with an ``ERROR``
     line naming its exit status. Calls run concurrently, one child each.
 
@@ -149,6 +160,7 @@ class DesignServer:
         listener.listen(64)
         listener.settimeout(_POLL)
         _log.info("serving design calls on %s", self.socket_path)
+        _log.info("keeping what the calls share in %s", _memo.start())
         try:
             while not self._stopping:
                 self._reap()
@@ -170,6 +182,7 @@ class DesignServer:
             listener.close()
             self.socket_path.unlink(missing_ok=True)
             self._end_children()
+            _memo.stop()
 
     def stop(self) -> None:
         """Make :meth:`serve` return within one poll; safe to call from a signal handler."""

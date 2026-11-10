@@ -13,10 +13,14 @@ from pulserver._zoo._evaluation import (
     achieved,
     arguments,
     dummies,
-    rf_layout,
     waved,
 )
-from pulserver._zoo._fse import echo_train_layout, sar_burst
+from pulserver._zoo._fse import (
+    bounding_train,
+    check_pd,
+    echo_train_layout,
+    sar_burst,
+)
 from pulserver._zoo._pmc import navigated
 from pulserver._zoo._slab import slab
 from pulserver._zoo._user import (
@@ -218,21 +222,21 @@ class FsePd3D(SequencePlugin):
 
     def evaluate(self, system, protocol):
         # A TR is one echo train. The design of the centre view plays one
-        # train of the full length at a constant refocusing angle, which is
-        # the peak of an optimized train and so bounds its RF. The RF of a
+        # train of the full length, startup echoes included, at a constant
+        # refocusing angle: the maximum of the PD train, which no pulse of it
+        # exceeds, so the train bounds its RF and lasts as long. The angles
+        # are solved for when the scan is designed, not here. The RF of a
         # train does not depend on the view order.
         a = arguments(self, protocol)
+        check_pd(a)
         one = {
             "n_dummy": 0,
             "ry": a["n_y"],
             "rz": a["n_z"],
             "n_acs_y": 0,
             "n_acs_z": 0,
-            "flip_modulation": "pd",
-            "pd_optimize": False,
-            "busse_optimize": False,
             "ordering": "radial",
-        }
+        } | bounding_train(a, a["pd_maximum_angle_deg"])
         train = self.app(system, **(protocol.arguments | one))
         tr = train.duration()[0]
         tr_periphery = tr if a["tr_periphery"] is None else a["tr_periphery"]
@@ -266,18 +270,14 @@ class FsePd3D(SequencePlugin):
         times = [pp.round_to_raster(time, raster) for time in times]
         references = -(-calibrating // lengths[0]) if waved(a) else 0
         leading = dummies(a, times[0]) + references
+        # The effective TE a train reaches follows from its angles: the
+        # protocol keeps the one prescribed, and the design records the one
+        # of the nearest echo as its EffectiveEchoTime.
+        values = achieved(self, train)
+        del values[UIParam.TE]
         return Evaluation(
-            protocol.replace(achieved(self, train)),
+            protocol.replace(values),
             leading * times[0] + sum(times),
             sequence=train,
-            rf_layout=(
-                echo_train_layout(
-                    train,
-                    lengths,
-                    times,
-                    peak_deg=a["pd_final_angle_periphery_deg"] or None,
-                )
-                if FIT_CONTROLS or individual
-                else rf_layout(train, scaled=False, period=times[0])
-            ),
+            rf_layout=echo_train_layout(train, lengths, times),
         )

@@ -256,6 +256,13 @@ error of that call, and not while the operator edits the protocol. An
 `evaluate` that builds or checks the design rejects such a protocol when it is
 evaluated.
 
+The console waits for every evaluation, so `evaluate` is a simplified design
+and not the design: it states the scan time exactly, an upper bound of the RF
+and one repetition whose gradients stand for the scan's, and leaves to
+`generate` whatever takes a solve, an optimization or the whole scan. Where
+the angles of a train are solved for, the train at their largest angle lasts
+as long and bounds its RF.
+
 `ValueError` and `AssertionError`, which pypulseqpp and PyPulseq raise for an
 event or a timing they cannot realize, reject the protocol with the message of
 the error as `info`, and are logged as a warning. Any other exception also
@@ -519,8 +526,9 @@ and optimized modes its refocusing pulse is 180°. A TR or peripheral TR
 shorter than the longest train is refused at evaluation as at generation.
 The console's RF estimate is the train of the largest RF power, each train
 playing its own number of refocusing pulses in its own TR, the first as
-designed and the rest at the train's peak angle; the designed sequence is
-costed at predownload. `fse3d` and `fse_pd3d` ask to be costed under the SAR
+designed and the rest at the train's peak angle, which for a Busse or PD
+train is the maximum angle prescribed, every pulse of the estimate playing
+it; the designed sequence is costed at predownload. `fse3d` and `fse_pd3d` ask to be costed under the SAR
 burst limits.
 
 Busse modes play startup pulses without acquisition and use the same RF widths
@@ -534,8 +542,10 @@ TE**, using relaxed and relaxation-free CPMG EPG with reference T1/T2 of
 its prescribed centre angle. The default uses the midpoint; an explicit
 `user17` echo index takes precedence. The optimizer preserves the selected
 reference effective TE within 0.1 ms. The achieved value is recorded in
-`EffectiveEchoTime` and reported to the UI and MRD header; `TE` remains the
-physical excitation-to-centre-echo time. This reference contrast annotation
+`EffectiveEchoTime` and reported to the MRD header; `TE` remains the
+physical excitation-to-centre-echo time. The console keeps the TE
+prescribed, or its Minimum preset: the angles that fix the achieved value are
+solved for when the scan is designed, not while the protocol is edited. This reference contrast annotation
 does not model all tissues, B1 variation or inter-shot steady state. The selected echo must precede the last acquired echo in every
 train. `busse_radial` requires centre echo 0 and identical trains. `pclo`
 uses Rydén's pivot-centre, linear-outer ring permutation for an arbitrary
@@ -642,7 +652,9 @@ repetition from the modules their function is built from.
 - **Representative sequence.** The repetition, on which the design service
   checks nerve stimulation and slew rate before the scan is designed. That of
   `fse3d` and `fse_pd3d` is the packed echo train their evaluation designs,
-  as long as the longest train; `epi3d` states none.
+  as long as the longest train, startup echoes included, at a constant
+  refocusing angle: the largest of a Busse or PD train, whose angles only
+  `generate` solves for; `epi3d` states none.
 - **RF layout.** The first TR of the repetition, its shot repeated once per
   slice of the largest packet, with the TR as its period; for the balanced
   steady state, the TR after the half-angle pulse. The TR of a fast spin echo
