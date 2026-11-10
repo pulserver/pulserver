@@ -30,9 +30,9 @@ patient safety.
 - **Designs under per-logical-axis limits and checks against the coil's per-physical-axis limits.**
 
   Code: `design_max_grad`, `design_max_slew` in the call's limits. Test: *an oblique design is held under the design limits and checked against the scanner's* (`test_design_service.py`).
-- **Designs a scan past the nerve or slew-rate limit again at a lower slew rate, and the console's protocol with it; refuses a strict design as designed.**
+- **Lowers the slew rate of a scan past the nerve or slew-rate limit on the envelope of its repetition and designs the scan once at that rate, and the console's protocol on its representative sequence; refuses a strict design as designed.**
 
-  Code: `pulserver.host._slew`, the representative `sequence` of {class}`~pulserver.design.Evaluation`, {attr}`~pulserver.design.SequencePlugin.strict_limits`, the `DesignMaxSlew` and `StrictLimits` definitions. Tests: *a design past the nerve limit is designed again at a lower slew rate*; *a strict plugin is refused as designed and says so in its files*; *a sequence setting StrictLimits unannounced is refused as designed*; *validate reports the slew rate generate designs at*; *a shipped FSE at the hardware slew rate is designed within the nerve limit*; *a lower slew rate is not tried for an amplitude past its limit* (`test_slew_derate.py`).
+  Code: `pulserver.host._slew`, the representative `sequence` of {class}`~pulserver.design.Evaluation`, {meth}`~pulserver.design.SequencePlugin.envelope` and {func}`~pulserver.design.repetition_envelope`, {attr}`~pulserver.design.SequencePlugin.strict_limits`, the `DesignMaxSlew` and `StrictLimits` definitions. Tests: *a design past the nerve limit is designed once at the slew rate its envelope finds*; *a design its envelope misjudges is designed again at a lower slew rate*; *a strict plugin is refused as designed and says so in its files*; *a sequence setting StrictLimits unannounced is refused as designed*; *validate reports the slew rate generate designs at*; *a shipped FSE at the hardware slew rate is designed once within the nerve limit*; *a lower slew rate is not tried for an amplitude past its limit* (`test_slew_derate.py`); *the envelope of a shipped scan reads at least what the scan does* (`test_envelope.py`).
 - **Designs a scan that follows motion-correction poses for every rotation, and checks it so.**
 
   Code: `design_max_grad_any_rotation`, `design_max_slew_any_rotation` and `pmc_enable` in the call's limits; `CheckLimits.follows_poses`. Tests: *a navigated scan at a site following poses is designed for every rotation*; *the vector is held to the axis limit only where poses may turn the scan*; *a sequence setting EnablePmc unannounced is refused where poses could turn it* (`test_any_rotation.py`).
@@ -135,12 +135,28 @@ which sums over the axes. The nerve model responds to a ramp of amplitude step
 $\Delta G$ at slew rate $S$ with $\Delta G / (b\,(c + \Delta G/S))$, for
 rheobase $b$ and chronaxie $c$: a short ramp at a high slew rate stimulates
 less than its slew rate alone suggests, so the slew rate a scan may play
-depends on the amplitudes it ramps. The design limits are the coil's; a design
-whose response then exceeds `pns_limit` is designed again at a lower slew
-rate, chosen from the response it measured, as a vendor sequence lowers its
-ramps for its own waveforms. The console's protocol is evaluated the same
-way, on the plugin's representative sequence. A plugin that wants a design
-refused rather than adjusted is strict, and says so in its files with the
+depends on the amplitudes it ramps. The design limits are the coil's; a scan
+whose response would exceed `pns_limit` is designed at a lower slew rate,
+chosen from the response measured at the last one tried, as a vendor sequence
+lowers its ramps for its own waveforms.
+
+The slew rate is searched on a bound of the scan rather than on the scan.
+Every copy of a scan's repetition plays the same blocks, which differ from
+copy to copy only in their gradient amplitudes and rotation: the phase and
+partition encodes and their rewinders, a spoke's angle. At each block these
+are, per copy, one vector per gradient shape, and the copies' vectors fill a
+line or a plane. The envelope plays the repetition at the vertices of an
+interval or a polygon circumscribing them, blocks that vary together held at
+the same vertex. Slew rate on any axis, under any prescription rotation, and
+the nerve response, a linear filter of it, are convex in those vectors, so the
+envelope reads at least what the scan does, in one repetition per vertex
+instead of every copy; a scan whose blocks vary in more than a plane, a blade
+turned while it is phase encoded, is its own envelope. The scan is then
+designed and checked once, and the check of the scan stays the gate: a scan
+still past a limit is designed again. The console's protocol is evaluated on
+the plugin's representative sequence alone, which designs no scan. A plugin
+that wants a design refused rather than adjusted is strict, and says so in its
+files with the
 `StrictLimits` definition ({doc}`../developer-guide/internals/sequence-definitions`).
 
 ### Limit sources

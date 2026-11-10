@@ -40,6 +40,7 @@ from ._entries import (
     _choice,
     _parameter,
 )
+from ._envelope import repetition_envelope
 from ._options import Declared, OptionValue, declared_options, loading_options
 from ._rf import RfLayout
 
@@ -83,8 +84,11 @@ class Evaluation:
         design service checks nerve stimulation and slew rate on it before
         the scan is designed, and lowers the slew rate the protocol is
         designed under where they exceed their limits, so that the console
-        shows what will play. ``None``, the default, states none: the slew
-        rate is then lowered only when the generated design fails the check.
+        shows what will play; the generated design's
+        :meth:`SequencePlugin.envelope` lowers it further where the scan
+        needs it. ``None``, the default, states none: the console then shows
+        the protocol at the design limits, and only the envelope lowers the
+        slew rate.
     """
 
     protocol: Protocol
@@ -203,8 +207,10 @@ class SequencePlugin:
     evaluates to itself.
 
     :meth:`validate` evaluates a request with :meth:`evaluate`, and
-    :meth:`design` generates and writes it with :meth:`generate`. A subclass
-    overrides the hooks :meth:`evaluate` and :meth:`generate`, and does not
+    :meth:`design` generates and writes it with :meth:`generate`;
+    :meth:`envelope` bounds a generated design's gradients for the design
+    service's slew-rate search. A subclass overrides the hooks
+    :meth:`evaluate`, :meth:`generate` and :meth:`envelope`, and does not
     override :meth:`validate` or :meth:`design`.
 
     Attributes
@@ -234,9 +240,10 @@ class SequencePlugin:
     strict_limits : bool
         Whether a design that exceeds a limit is refused as designed. By
         default, ``False``, the design service lowers the slew rate a design
-        exceeding the nerve-stimulation or slew-rate limit is made under and
-        designs it again; a strict plugin's design is never adjusted, and each
-        file it writes sets the ``StrictLimits`` definition. A design whose
+        exceeding the nerve-stimulation or slew-rate limit is made under, on
+        its :meth:`envelope` and on the design itself; a strict plugin's
+        design is never adjusted, and each file it writes sets the
+        ``StrictLimits`` definition. A design whose
         sequence sets ``StrictLimits`` itself is held strictly too.
 
     Raises
@@ -391,6 +398,30 @@ class SequencePlugin:
         """
         return self.app(system, **protocol.arguments)
 
+    def envelope(self, sequence: pp.Sequence) -> pp.Sequence:
+        """Return the worst case of a designed sequence's gradients, on which the design service lowers the slew rate.
+
+        The hook a subclass overrides where the default does not bound its
+        design. The default is :func:`repetition_envelope`: one repetition of
+        the scan, played at every extreme of its gradients, or the sequence
+        itself where its repetitions differ in more than gradient amplitude
+        and rotation.
+
+        Parameters
+        ----------
+        sequence : pypulseqpp.Sequence
+            A sequence :meth:`generate` returned, or one of a chain it
+            returned, as designed: not written, rotated or deduplicated.
+
+        Returns
+        -------
+        pypulseqpp.Sequence
+            A sequence whose slew rate on any axis, slew rate summed over the
+            axes and nerve response reach at least those of ``sequence``,
+            under any prescription rotation.
+        """
+        return repetition_envelope(sequence)
+
     def validate(
         self,
         system: pp.Opts,
@@ -476,6 +507,18 @@ class SequencePlugin:
         validation, paths, _ = self._design(system, request, directory, exam)
         return validation, paths
 
+    def _built(
+        self,
+        system: pp.Opts,
+        request: Mapping[ProtocolKey, Any],
+        exam: Path | str | None = None,
+    ) -> tuple[Validation, Protocol | None, pp.Sequence | list[pp.Sequence] | None]:
+        """Return the validation of a request, its protocol and what :meth:`generate` builds for it, as :meth:`design` builds it; ``None`` twice where invalid."""
+        validation, protocol = self._validated(system, request, exam)
+        if protocol is None:
+            return validation, None, None
+        return validation, protocol, _hook(self.generate, system, protocol, exam)
+
     def _design(
         self,
         system: pp.Opts,
@@ -483,15 +526,20 @@ class SequencePlugin:
         directory: Path | str,
         exam: Path | str | None = None,
         definitions: Mapping[str, Any] | None = None,
+        built: tuple[Validation, Protocol, pp.Sequence | list[pp.Sequence]]
+        | None = None,
     ) -> tuple[Validation, list[str], list[tuple[Path, pp.Sequence]]]:
         """Return what :meth:`design` returns, with each written path and its sequence as written.
 
-        Each file also sets ``definitions``, where given.
+        Each file also sets ``definitions``, where given. ``built`` is what
+        :meth:`_built` returned for the same limits, request and exam, written
+        in place of building it again.
         """
-        validation, protocol = self._validated(system, request, exam)
+        validation, protocol, built = (
+            self._built(system, request, exam) if built is None else built
+        )
         if protocol is None:
             return validation, [], []
-        built = _hook(self.generate, system, protocol, exam)
         paths = _write(
             built,
             Path(directory) / _FIRST_FILE,

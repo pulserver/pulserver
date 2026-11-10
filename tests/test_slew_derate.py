@@ -25,7 +25,8 @@ SITE = {
 #: Bipolar lobes at nine tenths of the amplitude limit, ramped as fast as
 #: the design's slew rate allows. ``{strict}`` makes the plugin strict,
 #: ``{sets}`` makes its sequence set StrictLimits itself, ``{evaluate}``
-#: states the design as the evaluation's representative sequence.
+#: states the design as the evaluation's representative sequence, and
+#: ``{blind}`` states an envelope that plays nothing.
 PLUGIN = '''"""Bipolar lobes ramped at the design's slew rate."""
 
 import pypulseqpp as pp
@@ -40,7 +41,7 @@ def lobes(system, nx=8):
     for _ in range(4):
         seq.add_block(lobe)
         seq.add_block(pp.scale_grad(lobe, -1.0))
-    seq.add_block(pp.make_delay(5e-3))
+        seq.add_block(pp.make_delay(5e-3))
     if {sets}:
         seq.set_definition(key="StrictLimits", value=1)
     return seq
@@ -55,6 +56,11 @@ class Lobes(SequencePlugin):
         if not {evaluate}:
             return Evaluation(protocol)
         return Evaluation(protocol, sequence=lobes(system, **protocol.arguments))
+
+    def envelope(self, sequence):
+        if {blind}:
+            return pp.Sequence(sequence.system)
+        return super().envelope(sequence)
 '''
 
 BLOCK = f"{PROTOCOL_BEGIN}\nnx: 8\n{PROTOCOL_END}\n"
@@ -65,14 +71,15 @@ def plugins(tmp_path):
     folder = tmp_path / "plugins"
     folder.mkdir()
     variants = {
-        "auto": ("False", "False", "False"),
-        "evaluated": ("False", "False", "True"),
-        "strict": ("True", "False", "False"),
-        "unannounced": ("False", "True", "False"),
+        "auto": ("False", "False", "False", "False"),
+        "evaluated": ("False", "False", "True", "False"),
+        "strict": ("True", "False", "False", "False"),
+        "unannounced": ("False", "True", "False", "False"),
+        "blind": ("False", "False", "False", "True"),
     }
-    for name, (strict, sets, evaluate) in variants.items():
+    for name, (strict, sets, evaluate, blind) in variants.items():
         (folder / f"{name}.py").write_text(
-            PLUGIN.format(strict=strict, sets=sets, evaluate=evaluate)
+            PLUGIN.format(strict=strict, sets=sets, evaluate=evaluate, blind=blind)
         )
     return folder
 
@@ -82,6 +89,20 @@ def _forget():
     service._LOWERED = _slew.Remembered()
     yield
     service._LOWERED = _slew.Remembered()
+
+
+@pytest.fixture
+def checks(monkeypatch):
+    """The designs generate checks and converts, counted."""
+    made = []
+    check_and_convert = service._check_and_convert
+
+    def counted(*args, **kwargs):
+        made.append(args[0])
+        return check_and_convert(*args, **kwargs)
+
+    monkeypatch.setattr(service, "_check_and_convert", counted)
+    return made
 
 
 def _generate(tmp_path, plugins, plugin):
@@ -108,19 +129,29 @@ def _pns(sequence):
     return pp.safety.check_pns(sequence, model, system=pp.Opts(**LIMITS))[1].peak.value
 
 
-def test_a_design_past_the_nerve_limit_is_designed_again_at_a_lower_slew_rate(
-    tmp_path, plugins
+def test_a_design_past_the_nerve_limit_is_designed_once_at_the_slew_rate_its_envelope_finds(
+    tmp_path, plugins, checks
 ):
     design = service.design_system(SITE)
     assert _pns(service._plugin(service._variant(plugins, "auto")).app(design)) > 1.0
     manifest, sequence, _ = _generate(tmp_path, plugins, "auto")
-    assert manifest["slew_passes"] >= 1
+    assert len(checks) == 1
+    assert manifest["slew_passes"] == 0
     assert manifest["strict_limits"] is False
     assert _pns(sequence) <= SITE["pns_limit"]
     designed = manifest["design_max_slew_t_per_m_per_s"]
     assert designed < design.max_slew / design.gamma
     assert sequence.definitions["DesignMaxSlew"][0] == pytest.approx(designed)
     assert "StrictLimits" not in sequence.definitions
+
+
+def test_a_design_its_envelope_misjudges_is_designed_again_at_a_lower_slew_rate(
+    tmp_path, plugins, checks
+):
+    manifest, sequence, _ = _generate(tmp_path, plugins, "blind")
+    assert manifest["slew_passes"] >= 1
+    assert len(checks) == manifest["slew_passes"] + 1
+    assert _pns(sequence) <= SITE["pns_limit"]
 
 
 def test_a_strict_plugin_is_refused_as_designed_and_says_so_in_its_files(
@@ -233,8 +264,8 @@ SEVEN_T = {
 }
 
 
-def test_a_shipped_fse_at_the_hardware_slew_rate_is_designed_within_the_nerve_limit(
-    tmp_path,
+def test_a_shipped_fse_at_the_hardware_slew_rate_is_designed_once_within_the_nerve_limit(
+    tmp_path, checks
 ):
     from pulserver import _plugins
 
@@ -258,17 +289,19 @@ def test_a_shipped_fse_at_the_hardware_slew_rate_is_designed_within_the_nerve_li
     sequence = pp.Sequence()
     sequence.read(str(directory / "sequence.seq"))
     model = pp.safety.ChronaxieModel(SEVEN_T["pns_chronaxie"], SEVEN_T["pns_rheobase"])
-    assert manifest["slew_passes"] >= 1
+    assert len(checks) == 1
+    assert manifest["slew_passes"] == 0
     assert manifest["design_max_slew_t_per_m_per_s"] < 0.9 * SEVEN_T["max_slew"]
     assert pp.safety.check_pns(sequence, model)[1].peak.value <= SEVEN_T["pns_limit"]
 
 
 @pytest.mark.parametrize("plugin", ["fse3d", "fse_pd3d"])
 def test_a_shipped_fse_is_lowered_at_validation_from_its_echo_train(tmp_path, plugin):
-    """The evaluation's echo train is checked, and generate starts where it left off.
+    """The evaluation's echo train is checked, and generate goes on from there on the envelope of the scan.
 
     The train acquires fewer peripheral views than the scan, so the scan's
-    partition encodes may lower the slew rate once more at generation.
+    partition encodes may lower the slew rate once more, on the envelope,
+    before the scan is designed once.
     """
     from pulserver import _plugins
 
@@ -290,6 +323,7 @@ def test_a_shipped_fse_is_lowered_at_validation_from_its_echo_train(tmp_path, pl
     sequence = pp.Sequence()
     sequence.read(str(directory / "sequence.seq"))
     model = pp.safety.ChronaxieModel(SEVEN_T["pns_chronaxie"], SEVEN_T["pns_rheobase"])
-    assert manifest["slew_passes"] <= 1
-    assert manifest["design_max_slew_t_per_m_per_s"] * 42.576e6 <= max(lowered)
+    assert manifest["slew_passes"] == 0
+    # The manifest states the slew rate to a tenth of a mT/m/ms.
+    assert manifest["design_max_slew_t_per_m_per_s"] <= max(lowered) / 42.576e6 + 1e-4
     assert pp.safety.check_pns(sequence, model)[1].peak.value <= SEVEN_T["pns_limit"]

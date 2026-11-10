@@ -17,6 +17,7 @@ from ._entries import (
     StringListParam,
     TimeParam,
 )
+from ._envelope import repetition_envelope
 from ._options import OptionError, option
 from ._plugin import (
     Evaluation,
@@ -52,4 +53,5 @@ __all__ = [
     "load_plugin",
     "option",
     "recon_parameters",
+    "repetition_envelope",
 ]

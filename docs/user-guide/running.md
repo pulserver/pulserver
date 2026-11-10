@@ -156,16 +156,24 @@ The manifest's `design_rotation` records which, `any` or `prescribed`.
 
 A design at these limits can stimulate peripheral nerves past `pns_limit`, or,
 for a scan following poses, sum to a slew rate past `max_slew` over the axes.
-`generate` then designs it again at a lower slew rate, modelled on the
-response it measured, at most three times, lowering it further where the
-plugin cannot lay the design out at that rate, and checks every problem again
-on each new design; `validate` does the same on the representative sequence a
-plugin's evaluation states ({ref}`evaluating-a-protocol`), so the console
-shows what `generate` designs. A design past a gradient amplitude limit is
-refused, since no slew rate brings it down. Each file of a design records the
-slew rate it was designed under, per logical axis, in its `DesignMaxSlew`
-definition, and the manifest records it as `design_max_slew_t_per_m_per_s`,
-with the passes as `slew_passes`. A strict plugin
+`generate` lowers the slew rate before it checks the scan: on the
+representative sequence a plugin's evaluation states
+({ref}`evaluating-a-protocol`), then on the envelope of the design
+({meth}`~pulserver.design.SequencePlugin.envelope`), one repetition of the scan
+played at every extreme of its gradients, whose nerve response and slew rates
+reach at least the scan's. Each lowers the slew rate at most three times,
+modelled on the readings at the last rate tried, and lowers it further where
+the plugin cannot lay the design out at that rate. The scan is then designed,
+checked and converted once; a scan still past a limit is designed again at a
+lower slew rate, at most three times, and every problem is checked again on
+each new design. `validate` searches the representative sequence alone, which
+designs no scan, so the console shows the protocol at the slew rate `generate`
+goes on from. A design past a gradient amplitude
+limit is refused, since no slew rate brings it down. Each file of a design
+records the slew rate it was designed under, per logical axis, in its
+`DesignMaxSlew` definition, and the manifest records it as
+`design_max_slew_t_per_m_per_s`, with the times the scan was designed again
+after its check as `slew_passes`. A strict plugin
 ({attr}`~pulserver.design.SequencePlugin.strict_limits`), whose files set
 `StrictLimits`, or a design whose sequence sets `StrictLimits` itself, is
 refused as designed; the manifest's `strict_limits` records which. An imported

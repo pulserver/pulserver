@@ -268,9 +268,10 @@ An evaluation that designs the sequence, or one repetition of it, states that
 design as its representative `sequence`. The design service checks peripheral
 nerve stimulation and slew rate on it, rotated to the prescription, and
 evaluates the protocol again at a lower slew rate while it exceeds them, as
-`generate` does with the whole design ({ref}`scanner-limits`); without one,
-the console shows the protocol at the design limits and only `generate` lowers
-the slew rate. A plugin that sets
+`generate` does before it goes on to the envelope of the whole design
+({ref}`scanner-limits`). Without one, the console shows
+the protocol at the design limits and only `generate` lowers the slew rate. A
+plugin that sets
 {attr}`~pulserver.design.SequencePlugin.strict_limits` is never designed again:
 its files set `StrictLimits`, and a design past a limit is refused.
 
@@ -280,6 +281,17 @@ of the protocol; a plugin overrides it to return a sequence, or a list of them,
 built another way. `validate` and `design` are not overridden: they are the
 boundary between a request and the code of a plugin, and `design` writes
 nothing for an invalid request.
+
+{meth}`~pulserver.design.SequencePlugin.envelope` returns the worst case of a
+sequence `generate` built: a sequence whose slew rates and nerve response reach
+at least those of the scan under any prescription rotation, on which the
+design service lowers the slew rate before the scan is checked. The default,
+{func}`~pulserver.design.repetition_envelope`, plays one repetition of the scan
+at every extreme its gradient amplitudes and rotations reach over the copies
+of that repetition, and is the scan itself where a block's gradients vary in
+more than a plane or the copies differ in a block. A plugin overrides it for a
+bound of its own; one that returns the sequence leaves the search to the
+representative sequence and the check of the scan.
 
 (exam-cache)=
 ## Exam cache
@@ -643,6 +655,10 @@ repetition from the modules their function is built from.
   checks nerve stimulation and slew rate before the scan is designed. That of
   `fse3d` and `fse_pd3d` is the packed echo train their evaluation designs,
   as long as the longest train; `epi3d` states none.
+- **Envelope.** The default for every shipped sequence. That of
+  `gre_propeller2d`, `se_propeller2d`, `gre_stack_of_blades3d`,
+  `se_stack_of_blades3d` and `zte3d`, whose blocks turn with the blade or the
+  spoke while their encodes vary, is the scan itself.
 - **RF layout.** The first TR of the repetition, its shot repeated once per
   slice of the largest packet, with the TR as its period; for the balanced
   steady state, the TR after the half-angle pulse. The TR of a fast spin echo

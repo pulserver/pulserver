@@ -25,6 +25,7 @@ control variable, are described in {doc}`../explanations/protocol`.
 | {obj}`~pulserver.design.ScannerSequence` | Deprecated name of {class}`~pulserver.design.SequencePlugin`. |
 | {obj}`~pulserver.design.load_plugin` | Import a plugin file and instantiate the sequence plugin it defines. |
 | {obj}`~pulserver.design.load_exam` | Open the cache of the current exam, given to a design hook as `exam`. |
+| {obj}`~pulserver.design.repetition_envelope` | One repetition of a design played at every extreme of its gradients, on which the design service lowers the slew rate. |
 
 ## Options
 
