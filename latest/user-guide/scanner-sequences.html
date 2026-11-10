@@ -1080,8 +1080,8 @@ GE scanner:</p>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">fse_pd3d</span></code></p></td>
 <td><p>PD controls</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">user14</span></code>–<code class="docutils literal notranslate"><span class="pre">user19</span></code>, <code class="docutils literal notranslate"><span class="pre">user22</span></code></p></td>
-<td><p>First/final angles, startup count, explicit centre echo, RF-dead-time overlap, crusher cycles, signal-tail onset fraction</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">user14</span></code>–<code class="docutils literal notranslate"><span class="pre">user17</span></code>, <code class="docutils literal notranslate"><span class="pre">user19</span></code>, <code class="docutils literal notranslate"><span class="pre">user22</span></code></p></td>
+<td><p>First/final angles, startup count, explicit centre echo, crusher cycles, signal-tail onset fraction</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">flip</span></code> gives peak angle; TE is reference contrast-equivalent TE</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">fse_pd3d</span></code></p></td>
@@ -1110,59 +1110,65 @@ GE scanner:</p>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">fse3d</span></code></p></td>
 <td><p>Busse controls</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">user14</span></code>–<code class="docutils literal notranslate"><span class="pre">user19</span></code></p></td>
-<td><p>Minimum angle, centre angle, startup count, acquired centre echo (<code class="docutils literal notranslate"><span class="pre">-1</span></code>: midpoint), RF-dead-time overlap, crusher cycles</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">user14</span></code>–<code class="docutils literal notranslate"><span class="pre">user17</span></code></p></td>
+<td><p>Minimum angle, centre angle, startup count, acquired centre echo (<code class="docutils literal notranslate"><span class="pre">-1</span></code>: midpoint)</p></td>
 <td><p>Busse modes only; <code class="docutils literal notranslate"><span class="pre">flip</span></code> gives the maximum angle</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">fse3d</span></code>, <code class="docutils literal notranslate"><span class="pre">fse_pd3d</span></code>, <code class="docutils literal notranslate"><span class="pre">mprage3d</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">fse3d</span></code></p></td>
+<td><p>Crusher cycles</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">user19</span></code></p></td>
+<td><p>Read-axis crusher area in cycles across one readout voxel, default 0.5</p></td>
+<td><p>Every refocusing mode</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">fse3d</span></code>, <code class="docutils literal notranslate"><span class="pre">fse_pd3d</span></code>, <code class="docutils literal notranslate"><span class="pre">mprage3d</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">navigator</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">user36</span></code></p></td>
 <td><p>Three-plane navigators; the design sets <code class="docutils literal notranslate"><span class="pre">EnablePmc</span></code>, and <code class="docutils literal notranslate"><span class="pre">pmc</span></code> publishes each pose to the scan</p></td>
 <td><p>None</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">gre3d</span></code>, <code class="docutils literal notranslate"><span class="pre">gre_multiecho3d</span></code>, <code class="docutils literal notranslate"><span class="pre">mprage3d</span></code>, <code class="docutils literal notranslate"><span class="pre">fse3d</span></code>, <code class="docutils literal notranslate"><span class="pre">fse_pd3d</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">gre3d</span></code>, <code class="docutils literal notranslate"><span class="pre">gre_multiecho3d</span></code>, <code class="docutils literal notranslate"><span class="pre">mprage3d</span></code>, <code class="docutils literal notranslate"><span class="pre">fse3d</span></code>, <code class="docutils literal notranslate"><span class="pre">fse_pd3d</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">wave</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">user37</span></code></p></td>
 <td><p>Wave-CAIPI; the calibration region is acquired first without the wave, and <code class="docutils literal notranslate"><span class="pre">pics</span></code> and <code class="docutils literal notranslate"><span class="pre">pmc</span></code> reconstruct the wave-encoded volume</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">user10</span></code> and <code class="docutils literal notranslate"><span class="pre">user11</span></code>: wave amplitude and cycles</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">gre3d</span></code>, <code class="docutils literal notranslate"><span class="pre">se3d</span></code>, <code class="docutils literal notranslate"><span class="pre">gre_multiecho3d</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">gre3d</span></code>, <code class="docutils literal notranslate"><span class="pre">se3d</span></code>, <code class="docutils literal notranslate"><span class="pre">gre_multiecho3d</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">elliptical</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">user40</span></code></p></td>
 <td><p>Only the phase encodes inside the ky-kz ellipse; on by default</p></td>
 <td><p>None</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">gre_multiecho2d</span></code>, <code class="docutils literal notranslate"><span class="pre">gre_multiecho3d</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">gre_multiecho2d</span></code>, <code class="docutils literal notranslate"><span class="pre">gre_multiecho3d</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">flyback</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">user41</span></code></p></td>
 <td><p>Monopolar echoes, on by default; off reads even echoes reversed</p></td>
 <td><p>None</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">gre_multiecho3d</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">gre_multiecho3d</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">qsm_anatomy</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">user13</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">&quot;phantom&quot;</span></code> (0, the default), <code class="docutils literal notranslate"><span class="pre">&quot;brain&quot;</span></code> (1) or <code class="docutils literal notranslate"><span class="pre">&quot;body&quot;</span></code> (2): the maps the <code class="docutils literal notranslate"><span class="pre">qsm</span></code> reconstruction makes, stated to it as the <code class="docutils literal notranslate"><span class="pre">QsmAnatomy</span></code> recon parameter</p></td>
 <td><p>None</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">gre_multiecho3d</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">gre_multiecho3d</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">sampling</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">user12</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">&quot;lattice&quot;</span></code>, the CAIPIRINHA lattice, the default; or <code class="docutils literal notranslate"><span class="pre">&quot;poisson&quot;</span></code>: a variable-density Poisson-disc draw at the undersampling <code class="docutils literal notranslate"><span class="pre">ry</span> <span class="pre">*</span> <span class="pre">rz</span></code>, for the compressed-sensing <code class="docutils literal notranslate"><span class="pre">pics</span></code> solve</p></td>
 <td><p>None</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">zte3d</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">zte3d</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">scheme</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">user43</span></code></p></td>
 <td><p>Spokes ordered <code class="docutils literal notranslate"><span class="pre">&quot;spiral&quot;</span></code>, at a constant step across many rings; <code class="docutils literal notranslate"><span class="pre">&quot;meridian&quot;</span></code>; or <code class="docutils literal notranslate"><span class="pre">&quot;quiet&quot;</span></code>, the default: the spiral’s directions in steps about a ring gap long, every other shell played backwards</p></td>
 <td><p>None</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">bssfp2d</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">bssfp2d</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">retrospective</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">user44</span></code></p></td>
 <td><p>ECG gating: off, prospective, each heartbeat triggered and acquired once per cardiac phase; on, retrospective, each segment cycled over a heartbeat and binned into cardiac phases by the reconstruction</p></td>
 <td><p>None</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">gre_spiral2d</span></code>, <code class="docutils literal notranslate"><span class="pre">se_spiral2d</span></code>, <code class="docutils literal notranslate"><span class="pre">gre_stack_of_spirals3d</span></code>, <code class="docutils literal notranslate"><span class="pre">se_stack_of_spirals3d</span></code>, <code class="docutils literal notranslate"><span class="pre">mprage_stack_of_spirals3d</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">gre_spiral2d</span></code>, <code class="docutils literal notranslate"><span class="pre">se_spiral2d</span></code>, <code class="docutils literal notranslate"><span class="pre">gre_stack_of_spirals3d</span></code>, <code class="docutils literal notranslate"><span class="pre">se_stack_of_spirals3d</span></code>, <code class="docutils literal notranslate"><span class="pre">mprage_stack_of_spirals3d</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">variable_density</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">user42</span></code></p></td>
 <td><p>Variable-density spirals</p></td>
@@ -1171,6 +1177,17 @@ GE scanner:</p>
 </tbody>
 </table>
 </div>
+<p>Every 3D FSE train is packed: the read prephaser shares the excitation block
+and each echo’s rewinders end in the next refocusing pulse’s dead time, so the
+train plays as one segment. Where the excitation and prephaser take more than
+half an echo spacing, the first interval alone is longer, and in <code class="docutils literal notranslate"><span class="pre">constant</span></code>
+and optimized modes its refocusing pulse is 180°. A TR or peripheral TR
+shorter than the longest train is refused at evaluation as at generation.
+The console’s RF estimate is the train of the largest RF power, each train
+playing its own number of refocusing pulses in its own TR, the first as
+designed and the rest at the train’s peak angle; the designed sequence is
+costed at predownload. <code class="docutils literal notranslate"><span class="pre">fse3d</span></code> and <code class="docutils literal notranslate"><span class="pre">fse_pd3d</span></code> ask to be costed under the SAR
+burst limits.</p>
 <p>Busse modes play startup pulses without acquisition and use the same RF widths
 and echo spacing in every shot. All shots retain the longest train layout,
 with zero RF amplitude after each shot’s own ETL. TR, acquired ETL and angle
@@ -1286,8 +1303,9 @@ holds the first.</p></li>
 <li><p><strong>Invalid protocols.</strong> A prescription the design refuses is invalid, with
 the message of its error.</p></li>
 <li><p><strong>Representative sequence.</strong> The repetition, on which the design service
-checks nerve stimulation and slew rate before the scan is designed. <code class="docutils literal notranslate"><span class="pre">epi3d</span></code>,
-<code class="docutils literal notranslate"><span class="pre">fse3d</span></code> and <code class="docutils literal notranslate"><span class="pre">fse_pd3d</span></code> state none.</p></li>
+checks nerve stimulation and slew rate before the scan is designed. That of
+<code class="docutils literal notranslate"><span class="pre">fse3d</span></code> and <code class="docutils literal notranslate"><span class="pre">fse_pd3d</span></code> is the packed echo train their evaluation designs,
+as long as the longest train; <code class="docutils literal notranslate"><span class="pre">epi3d</span></code> states none.</p></li>
 <li><p><strong>RF layout.</strong> The first TR of the repetition, its shot repeated once per
 slice of the largest packet, with the TR as its period; for the balanced
 steady state, the TR after the half-angle pulse. The TR of a fast spin echo

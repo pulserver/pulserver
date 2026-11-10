@@ -494,12 +494,13 @@ GE scanner:
 | Plugin | Option | User entry | Choices | Entries added |
 | --- | --- | --- | --- | --- |
 | `fse3d` | `refocusing` | `user38` | `"constant"`; `"optimized"`, a train designed with blochsim and shared by every shot; `"dual_region"`, direct-angle trains for the centre and periphery; `"busse"`, prescribed-PSS inverse EPG with forward-EPG control fitting; or `"busse_dual_region"`, independent Busse endpoint fits with a cubic control transition | Flip angle: the refocusing angle at TE for direct-angle designs, first/final maximum for Busse. Both dual-region options add `user12` and `user13`, TR and ETL at the periphery |
-| `fse_pd3d` | PD controls | `user14`–`user19`, `user22` | First/final angles, startup count, explicit centre echo, RF-dead-time overlap, crusher cycles, signal-tail onset fraction | `flip` gives peak angle; TE is reference contrast-equivalent TE |
+| `fse_pd3d` | PD controls | `user14`–`user17`, `user19`, `user22` | First/final angles, startup count, explicit centre echo, crusher cycles, signal-tail onset fraction | `flip` gives peak angle; TE is reference contrast-equivalent TE |
 | `fse_pd3d` | `dual_region` | `user20` | Off: shared train; on: centre/periphery controls with cubic transition | `user12`/`user13`: peripheral TR/ETL; `user23`: final angle, 0 inherits |
 | `fse_pd3d` | `fit_controls` | `user21` | Off: prescribed inverse-EPG train; on: CPU multi-tissue/B1 control fitting | Requires the design extra |
 | `fse3d`, `fse_pd3d` | `ordering` | `user39` | `"radial"`: PCLO for identical trains, Buonincontri assignment for varying trains; `"pclo"`, `"busse_radial"` (radius then polar angle, centre echo 0), and `"shuffling"` require identical trains | None |
 | `mprage3d` | `ordering` | `user39` | `"radial"`, each partition's lines centre-out, or `"shuffling"`: Poisson-disc lines in random order, for a time-resolved reconstruction | None |
-| `fse3d` | Busse controls | `user14`–`user19` | Minimum angle, centre angle, startup count, acquired centre echo (`-1`: midpoint), RF-dead-time overlap, crusher cycles | Busse modes only; `flip` gives the maximum angle |
+| `fse3d` | Busse controls | `user14`–`user17` | Minimum angle, centre angle, startup count, acquired centre echo (`-1`: midpoint) | Busse modes only; `flip` gives the maximum angle |
+| `fse3d` | Crusher cycles | `user19` | Read-axis crusher area in cycles across one readout voxel, default 0.5 | Every refocusing mode |
 | `fse3d`, `fse_pd3d`, `mprage3d` | `navigator` | `user36` | Three-plane navigators; the design sets `EnablePmc`, and `pmc` publishes each pose to the scan | None |
 | `gre3d`, `gre_multiecho3d`, `mprage3d`, `fse3d`, `fse_pd3d` | `wave` | `user37` | Wave-CAIPI; the calibration region is acquired first without the wave, and `pics` and `pmc` reconstruct the wave-encoded volume | `user10` and `user11`: wave amplitude and cycles |
 | `gre3d`, `se3d`, `gre_multiecho3d` | `elliptical` | `user40` | Only the phase encodes inside the ky-kz ellipse; on by default | None |
@@ -509,6 +510,18 @@ GE scanner:
 | `zte3d` | `scheme` | `user43` | Spokes ordered `"spiral"`, at a constant step across many rings; `"meridian"`; or `"quiet"`, the default: the spiral's directions in steps about a ring gap long, every other shell played backwards | None |
 | `bssfp2d` | `retrospective` | `user44` | ECG gating: off, prospective, each heartbeat triggered and acquired once per cardiac phase; on, retrospective, each segment cycled over a heartbeat and binned into cardiac phases by the reconstruction | None |
 | `gre_spiral2d`, `se_spiral2d`, `gre_stack_of_spirals3d`, `se_stack_of_spirals3d`, `mprage_stack_of_spirals3d` | `variable_density` | `user42` | Variable-density spirals | `user12`: periphery undersampling |
+
+Every 3D FSE train is packed: the read prephaser shares the excitation block
+and each echo's rewinders end in the next refocusing pulse's dead time, so the
+train plays as one segment. Where the excitation and prephaser take more than
+half an echo spacing, the first interval alone is longer, and in `constant`
+and optimized modes its refocusing pulse is 180°. A TR or peripheral TR
+shorter than the longest train is refused at evaluation as at generation.
+The console's RF estimate is the train of the largest RF power, each train
+playing its own number of refocusing pulses in its own TR, the first as
+designed and the rest at the train's peak angle; the designed sequence is
+costed at predownload. `fse3d` and `fse_pd3d` ask to be costed under the SAR
+burst limits.
 
 Busse modes play startup pulses without acquisition and use the same RF widths
 and echo spacing in every shot. All shots retain the longest train layout,
@@ -627,8 +640,9 @@ repetition from the modules their function is built from.
 - **Invalid protocols.** A prescription the design refuses is invalid, with
   the message of its error.
 - **Representative sequence.** The repetition, on which the design service
-  checks nerve stimulation and slew rate before the scan is designed. `epi3d`,
-  `fse3d` and `fse_pd3d` state none.
+  checks nerve stimulation and slew rate before the scan is designed. That of
+  `fse3d` and `fse_pd3d` is the packed echo train their evaluation designs,
+  as long as the longest train; `epi3d` states none.
 - **RF layout.** The first TR of the repetition, its shot repeated once per
   slice of the largest packet, with the TR as its period; for the balanced
   steady state, the TR after the half-angle pulse. The TR of a fast spin echo
