@@ -273,8 +273,10 @@ makes the protocol invalid, but the reply names only its type, as in
 traceback. A request that names an entry the protocol does not declare, or an
 option a choice does not offer, is invalid in the same way.
 
-An evaluation that designs the sequence, or one repetition of it, states that
-design as its representative `sequence`. The design service checks peripheral
+An evaluation that designs the sequence, or a few repetitions of it, states that
+design as its representative `sequence`: the repetitions whose gradients are
+the largest of the scan, such as the views at the edges of k-space, so that
+what is read on them bounds what the scan plays. The design service checks peripheral
 nerve stimulation and slew rate on it, rotated to the prescription, and
 evaluates the protocol again at a lower slew rate while it exceeds them, as
 `generate` does with the whole design ({ref}`scanner-limits`); without one,
@@ -649,8 +651,14 @@ repetition from the modules their function is built from.
   holds the first.
 - **Invalid protocols.** A prescription the design refuses is invalid, with
   the message of its error.
-- **Representative sequence.** The repetition, on which the design service
-  checks nerve stimulation and slew rate before the scan is designed. That of
+- **Representative sequence.** The repetitions on which the design service
+  checks nerve stimulation and slew rate before the scan is designed. A
+  Cartesian sequence designs the views at the centre and at the edge of each
+  phase-encoding axis, a lattice at half the matrix with no calibration
+  region, partial Fourier or CAIPI shift: the phase encodes of every other
+  view lie between theirs. `mprage3d` designs them as short shots beside the
+  shot its scan time and RF are read from. A sequence that turns one readout,
+  a spoke, a blade or an interleaf, designs its first. That of
   `fse3d` and `fse_pd3d` is the packed echo train their evaluation designs,
   as long as the longest train, startup echoes included, at a constant
   refocusing angle: the largest of a Busse or PD train; `epi3d` states none.

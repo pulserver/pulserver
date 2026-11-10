@@ -13,12 +13,14 @@ from pulserver._zoo._evaluation import (
     achieved,
     arguments,
     dummies,
+    extremes,
     waved,
 )
 from pulserver._zoo._fse import (
     bounding_train,
     echo_train_layout,
     effective_te,
+    one_train,
     sar_burst,
 )
 from pulserver._zoo._pmc import navigated
@@ -250,29 +252,30 @@ class Fse3D(SequencePlugin):
         protocol.pop(UIParam.user_value(8), None)
 
     def evaluate(self, system, protocol):
-        # A TR is one echo train. The design of the centre view plays one
-        # train of the full length at a constant refocusing angle, which is
-        # the peak of an optimized train and so bounds its RF. The RF of a
-        # train does not depend on the view order. A Busse train is bounded
-        # the same way, by as many pulses at its maximum angle; its angles
-        # are solved for only to state its effective TE, and to refuse a
-        # prescription no train realizes, once per train under a warm server.
+        # A TR is one echo train. The design of the centre and edge views
+        # plays one train of the full length at a constant refocusing angle,
+        # which is the peak of an optimized train and so bounds its RF; its
+        # echoes at the edges of k-space play the largest phase encodes of
+        # the scan, so its gradients bound the scan's. The RF of a train does
+        # not depend on the view order. A Busse train is bounded the same
+        # way, by as many pulses at its maximum angle; its angles are solved
+        # for only to state its effective TE, and to refuse a prescription no
+        # train realizes, once per train under a warm server, on the centre
+        # view alone.
         a = arguments(self, protocol)
         one = {
             "n_dummy": 0,
-            "ry": a["n_y"],
-            "rz": a["n_z"],
-            "n_acs_y": 0,
-            "n_acs_z": 0,
             "flip_modulation": "constant",
             "ordering": "radial",
         }
-        solved = protocol.arguments | one | {"flip_modulation": "busse"}
+        centre = {"ry": a["n_y"], "rz": a["n_z"], "n_acs_y": 0, "n_acs_z": 0}
+        solved = protocol.arguments | one | centre | {"flip_modulation": "busse"}
         # The angles depend on no TR: one solve serves every TR asked for.
         solved |= {"busse_optimize": False, "tr": None}
+        one |= extremes(a, "y", "z")
         if BUSSE:
             one |= bounding_train(a, a["busse_maximum_angle_deg"])
-        train = self.app(system, **(protocol.arguments | one))
+        train, representative = one_train(self.app, system, protocol.arguments | one, a)
         tr = train.duration()[0]
         tr_periphery = tr if a["tr_periphery"] is None else a["tr_periphery"]
         etl_periphery = a["etl"] if a["etl_periphery"] is None else a["etl_periphery"]
@@ -308,6 +311,6 @@ class Fse3D(SequencePlugin):
         return Evaluation(
             protocol.replace(values),
             leading * times[0] + sum(times),
-            sequence=train,
+            sequence=representative,
             rf_layout=echo_train_layout(train, lengths, times),
         )

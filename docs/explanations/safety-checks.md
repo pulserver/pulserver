@@ -32,7 +32,7 @@ patient safety.
   Code: `design_max_grad`, `design_max_slew` in the call's limits. Test: *an oblique design is held under the design limits and checked against the scanner's* (`test_design_service.py`).
 - **Designs a scan past the nerve or slew-rate limit again at a lower slew rate, and the console's protocol with it; refuses a strict design as designed.**
 
-  Code: `pulserver.host._slew`, the representative `sequence` of {class}`~pulserver.design.Evaluation`, {attr}`~pulserver.design.SequencePlugin.strict_limits`, the `DesignMaxSlew` and `StrictLimits` definitions. Tests: *a design past the nerve limit is designed again at a lower slew rate*; *a strict plugin is refused as designed and says so in its files*; *a sequence setting StrictLimits unannounced is refused as designed*; *validate reports the slew rate generate designs at*; *a shipped FSE at the hardware slew rate is designed within the nerve limit*; *a lower slew rate is not tried for an amplitude past its limit* (`test_slew_derate.py`). *generate searches a request no validation searched* (`test_design_memo.py`).
+  Code: `pulserver.host._slew`, the representative `sequence` of {class}`~pulserver.design.Evaluation`, {attr}`~pulserver.design.SequencePlugin.strict_limits`, the `DesignMaxSlew` and `StrictLimits` definitions. Tests: *a design past the nerve limit is designed again at a lower slew rate*; *a strict plugin is refused as designed and says so in its files*; *a sequence setting StrictLimits unannounced is refused as designed*; *validate reports the slew rate generate designs at*; *a shipped FSE at the hardware slew rate is designed once within the nerve limit*; *a lower slew rate is not tried for an amplitude past its limit* (`test_slew_derate.py`). *generate searches a request no validation searched* (`test_design_memo.py`); *one design fixes the nerve response of one ramp under the nerve model*; *a request past the nerve limit is evaluated twice*; *a shipped FSE is lowered at validation from its echo train*; *the representative sequence of a shipped plugin bounds the nerve response of its scan* (`test_slew_derate.py`).
 - **Designs a scan that follows motion-correction poses for every rotation, and checks it so.**
 
   Code: `design_max_grad_any_rotation`, `design_max_slew_any_rotation` and `pmc_enable` in the call's limits; `CheckLimits.follows_poses`. Tests: *a navigated scan at a site following poses is designed for every rotation*; *the vector is held to the axis limit only where poses may turn the scan*; *a sequence setting EnablePmc unannounced is refused where poses could turn it* (`test_any_rotation.py`).
@@ -138,8 +138,11 @@ less than its slew rate alone suggests, so the slew rate a scan may play
 depends on the amplitudes it ramps. The design limits are the coil's; a design
 whose response then exceeds `pns_limit` is designed again at a lower slew
 rate, chosen from the response it measured, as a vendor sequence lowers its
-ramps for its own waveforms. The console's protocol is evaluated the same
-way, on the plugin's representative sequence, and the design starts at the
+ramps for its own waveforms. The response follows $A\,S/(S+x)$, with
+$x = \Delta G/c$ and $A = x/b$ for one ramp, so one reading fixes it under
+the nerve model, and two fix it whatever the waveform. The console's protocol
+is evaluated the same way, on the plugin's representative sequence, which
+plays the largest phase encodes of the scan, and the design starts at the
 slew rate that evaluation ended at. A plugin that wants a design
 refused rather than adjusted is strict, and says so in its files with the
 `StrictLimits` definition ({doc}`../developer-guide/internals/sequence-definitions`).

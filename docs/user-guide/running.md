@@ -161,10 +161,15 @@ response it measured, at most three times, lowering it further where the
 plugin cannot lay the design out at that rate, and checks every problem again
 on each new design; `validate` does the same on the representative sequence a
 plugin's evaluation states ({ref}`evaluating-a-protocol`), so the console
-shows what `generate` designs. The slew rate a request ends at is remembered:
+shows what `generate` designs. It models each step on the readings it has:
+the first on one reading, with the nerve response the plugin's last search
+found or else that of one ramp under the nerve model, so a request past a
+limit is mostly evaluated twice. The slew rate a request ends at is remembered:
 `generate` starts there, the same request validated again is evaluated there
-once, and the plugin's next request under the same limits is tried there
-first. A request no `validate` searched is searched by `generate` the same
+once, and the plugin's next request under the same limits is tried first
+where the readings of this one reach their target, kept where its own
+readings are within their limits and near them, and raised or lowered once,
+as modelled, where they are not. A request no `validate` searched is searched by `generate` the same
 way before it designs the scan. A design past a gradient amplitude limit is
 refused, since no slew rate brings it down. Each file of a design records the
 slew rate it was designed under, per logical axis, in its `DesignMaxSlew`

@@ -835,11 +835,20 @@ def _validated(
     With ``lower``, a plugin that is not strict and whose evaluation states a
     representative sequence is evaluated again at a lower slew rate while
     that sequence, rotated to the prescription, exceeds the nerve-stimulation
-    or slew-rate limit, starting from the slew rate the request was last
-    lowered to; the slew rate a valid request ends at is remembered for
-    :func:`generate`, and for the plugin's next request under these limits,
-    which is evaluated there first. A request searched before is evaluated at
-    the slew rate it ended at. A request still exceeding them after
+    or slew-rate limit. Each slew rate is modelled on the readings taken so
+    far (:func:`pulserver.host._slew.lowered`): the first on one reading,
+    with the nerve response the plugin's last search found or else that of
+    one ramp under the nerve model, so a request is mostly evaluated twice,
+    at the design limits and at the slew rate it keeps.
+
+    A request searched before is evaluated at the slew rate it ended at. One
+    that was not is evaluated first at the slew rate the plugin's last
+    request under these limits ended at, and keeps it where every reading is
+    within its limit and one reaches :data:`_NEAR` of it; where none does,
+    the slew rate is raised once, as modelled. The slew rate a valid request
+    ends at is remembered for :func:`generate`, and for the plugin's next
+    request, which starts where the readings of this one, fitted, reach
+    their target. A request still exceeding its limits after
     ``_slew.PASSES`` passes is invalid.
     """
     scanner = _plugin(variant)
@@ -850,26 +859,24 @@ def _validated(
     remembered = _slew.key(variant, limits, request)
     family = _slew.key(variant, limits, {})
     system, _, checked = split_limits(limits)
+    limit = design_system(limits, any_rotation=any_rotation).max_slew
+    nerve = _nerve(checked, system)
+    response = _RESPONSES.get(family)
     found, ceiling = _LOWERED.entry(remembered)
-    if not found:
-        guessed = _guessed(
-            scanner,
-            limits,
-            request,
-            exam,
-            family,
-            system,
-            checked,
-            any_rotation,
-        )
-        if guessed is not None:
-            _LOWERED.put(remembered, guessed[0])
-            return guessed[1]
+    # A slew rate tried because the plugin's last request ended there.
+    guessed = not found and _LOWERED.get(family) is not None
+    if guessed:
+        ceiling = _LOWERED.get(family)
     tried: list[tuple[float, dict[str, float]]] = []
     stepped = 0
     while True:
         design = design_system(limits, any_rotation=any_rotation, max_slew=ceiling)
         validation, _, sequence = scanner._evaluated(design, request, exam)
+        if not validation.valid and guessed:
+            # Not a slew rate this request is laid out at: it is searched
+            # from the design limits.
+            guessed, ceiling, tried = False, None, []
+            continue
         if not validation.valid and ceiling is not None and stepped < _slew.PASSES:
             # A layout the plugin cannot make at the lowered slew rate.
             stepped += 1
@@ -888,57 +895,87 @@ def _validated(
             prescribed_rotation(validation.values),
             any_rotation,
         )
-        if not _slew.exceeds(readings):
-            break
-        if len(tried) == _slew.PASSES:
-            return Validation(
-                False,
-                None,
-                f"no slew rate tried keeps the design within its limits: "
-                f"{_readings_text(readings)} at {design.max_slew / design.gamma:.1f} T/m/s",
-                validation.values,
-            )
         tried.append((design.max_slew, readings))
-        ceiling = _slew.lowered(tried)
+        if _slew.exceeds(readings):
+            if len(tried) > _slew.PASSES:
+                return Validation(
+                    False,
+                    None,
+                    f"no slew rate tried keeps the design within its limits: "
+                    f"{_readings_text(readings)} at {design.max_slew / design.gamma:.1f} T/m/s",
+                    validation.values,
+                )
+            ceiling = _slew.lowered(tried, nerve, response)
+        elif guessed and len(tried) == 1 and _eased(readings) < _NEAR:
+            # The plugin's last request asked for less than this one may
+            # play: its slew rate is raised to where the readings allow.
+            raised = _slew.fitted(tried, limit, nerve, response)
+            ceiling = None if raised >= limit else raised
+        else:
+            break
         _log.debug(
             "evaluated at %.1f T/m/s, %s; evaluating again at %.1f T/m/s",
             design.max_slew / design.gamma,
             _readings_text(readings),
-            ceiling / design.gamma,
+            (limit if ceiling is None else ceiling) / design.gamma,
         )
     if validation.valid:
         _LOWERED.put(remembered, ceiling)
-        _LOWERED.put(family, ceiling)
+        _LOWERED.put(family, _next(family, tried, ceiling, limit))
     return validation
 
 
-#: A slew rate a plugin's last request was lowered to is kept for the next
-#: request only when its readings reach this fraction of their limits: below
-#: it the gradients would be slower than the limits ask.
+#: The slew rate of a plugin's last request is kept for the next request
+#: only when its readings reach this fraction of their limits: below it the
+#: gradients would be slower than the limits ask.
 _NEAR = 0.85
 
+#: The ``x`` of the nerve response ``A S / (S + x)`` the last search of each
+#: plugin under given limits found, which the next search models its first
+#: step on.
+_RESPONSES = _slew.Remembered(kind="nerve")
 
-def _guessed(scanner, limits, request, exam, family, system, checked, any_rotation):
-    """Return the slew rate and validation of a request evaluated at the slew rate the plugin's last request under these limits was lowered to.
 
-    ``None`` where none was, or where at that slew rate the request is
-    invalid, exceeds a limit, or keeps every reading below :data:`_NEAR` of
-    its limit: the request is then searched for from the design limits.
+def _eased(readings: Mapping[str, float]) -> float:
+    """Return the largest of the readings a lower slew rate eases."""
+    return max(readings.get(key, 0.0) for key in _slew.READINGS)
+
+
+def _nerve(checked: ir.CheckLimits, system: pp.Opts) -> tuple[float, float] | None:
+    """Return the rheobase of a chronaxie nerve model, in the unit of the system's slew rate, and the largest response allowed; ``None`` for another model or none.
+
+    The rheobase is that of the axis that responds most.
     """
-    ceiling = _LOWERED.get(family)
-    if ceiling is None:
+    model = checked.pns
+    if not isinstance(model, safety.ChronaxieModel):
         return None
-    design = design_system(limits, any_rotation=any_rotation, max_slew=ceiling)
-    validation, _, sequence = scanner._evaluated(design, request, exam)
-    if not validation.valid or sequence is None:
-        return None
-    readings = _representative_readings(
-        sequence, system, checked, prescribed_rotation(validation.values), any_rotation
-    )
-    eased = [readings.get(key, 0.0) for key in _slew.READINGS]
-    if _slew.exceeds(readings) or max(eased) < _NEAR:
-        return None
-    return ceiling, validation
+    rheobase = np.atleast_1d(model.rheobase) / np.atleast_1d(model.alpha)
+    return float(rheobase.min()) * system.gamma, float(checked.pns_limit)
+
+
+def _next(
+    family: str,
+    tried: list[tuple[float, dict[str, float]]],
+    ceiling: float | None,
+    limit: float,
+) -> float | None:
+    """Return the slew rate the plugin's next request is evaluated at first, from the search of this one.
+
+    The slew rate this request ended at; or, where its search read the nerve
+    response at two slew rates and that response is what holds the slew rate
+    down, the slew rate at which the response through them reaches its
+    target, which the next request reads before it keeps it. The response is
+    remembered for the plugin's next search.
+    """
+    found = _slew.response_of(tried)
+    if found is None:
+        return ceiling
+    _RESPONSES.put(family, found)
+    readings = tried[-1][1]
+    if readings.get("pns", 0.0) < _eased(readings):
+        return ceiling
+    fitted = _slew.fitted(tried, limit)
+    return None if fitted >= limit else fitted
 
 
 def _representative_readings(

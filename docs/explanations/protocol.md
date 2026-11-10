@@ -47,7 +47,7 @@ writes such a plugin.
   Code: {class}`~pulserver.design.RfLayout`. Tests: *a gre layout is one excitation and lists one definition whatever the matrix*; *a validated amplitude times the listed peak is the peak the instance plays*; *the rf layout is sent only when asked* (`test_rf_layout.py`).
 - **Ships evaluations that design at most two TRs, however large the prescription.**
 
-  Code: the shipped plugins, `src/pulserver/_zoo/sequences/`. Tests: *a zoo evaluation designs two trs at most however large the prescription*; *an evaluation states the values and the scan time of the design* (`test_zoo_evaluation.py`).
+  Code: the shipped plugins, `src/pulserver/_zoo/sequences/`. Tests: *a zoo evaluation designs a few trs however large the prescription*; *an evaluation states the values and the scan time of the design* (`test_zoo_evaluation.py`).
 
 :::
 
