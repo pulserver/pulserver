@@ -5,6 +5,7 @@ import inspect
 
 import pypulseqpp as pp
 from pypulseqpp.sequences.sequence.fse3D_sequence import (
+    PD_PERIPHERY,
     fse3d,
     shot_parameters,
 )
@@ -51,7 +52,7 @@ from pulserver.protocol import (
 #: reconstruction states to the scan.
 NAVIGATOR = option("navigator", False, **OPTIONS["navigator"])
 
-#: Independently prescribed centre/periphery TR, ETL and final angle.
+#: Independently prescribed centre/periphery TR, ETL and target signal.
 DUAL_REGION = option(
     "dual_region", False, user=20, label="PD centre/periphery transition"
 )
@@ -60,8 +61,11 @@ FIT_CONTROLS = option("fit_controls", False, user=21, label="Fit PD controls wit
 WAVE = option("wave", False, **OPTIONS["wave"])
 
 #: Shared trains use Busse radial/PCLO; changing endpoint parameters uses
-#: Buonincontri joint shot/echo assignment. ``radial`` selects from the protocol.
-ORDERINGS = ("radial", "shuffling", "busse_radial", "pclo")
+#: Buonincontri joint shot/echo assignment, the shot index sweeping with the
+#: angle in each radial section. ``radial`` selects from the protocol;
+#: ``buonincontri_golden`` keeps each shot of a transition to one golden-ratio
+#: angle. Indices are released: a new choice goes last.
+ORDERINGS = ("radial", "shuffling", "busse_radial", "pclo", "buonincontri_golden")
 ORDERING = option("ordering", "radial", choices=ORDERINGS, **OPTIONS["ordering"])
 
 
@@ -88,6 +92,25 @@ def on_host(app):
     return designed
 
 
+#: The calibration region bounded by an ellipse rather than a rectangle; with
+#: Poisson-disc sampling only the ellipse is fully sampled.
+ELLIPTICAL_ACS = option("elliptical_acs", False, **OPTIONS["elliptical_acs"])
+
+
+#: Each PD target-signal argument and its peripheral twin, in the order of
+#: ``PD_PERIPHERY``.
+PERIPHERY = {
+    "pd_first_angle_deg": "pd_first_angle_periphery_deg",
+    "pd_plateau_signal": "pd_plateau_signal_periphery",
+    "pd_plateau_slope": "pd_plateau_slope_periphery",
+    "pd_plateau_fraction": "pd_plateau_fraction_periphery",
+    "pd_tail_signal": "pd_tail_signal_periphery",
+    "pd_tail_exponent": "pd_tail_exponent_periphery",
+    "pd_initial_signal": "pd_initial_signal_periphery",
+    "pd_initial_decay": "pd_initial_decay_periphery",
+}
+
+
 class FsePd3D(SequencePlugin):
     app = sar_burst(
         navigated(shortest_at_zero(slab(fse3d), "esp"))
@@ -104,6 +127,13 @@ class FsePd3D(SequencePlugin):
     if ORDERING == "busse_radial":
         app = functools.partial(app, te=None)
         app = functools.partial(app, busse_centre_echo=0)
+    if DUAL_REGION:
+        # The periphery's target signal is the fitted peripheral train's.
+        app = functools.partial(
+            app,
+            **dict(zip(PERIPHERY.values(), PD_PERIPHERY, strict=True)),
+        )
+    app = functools.partial(app, elliptical_acs=ELLIPTICAL_ACS)
     protocol = {
         UIParam.IMAGING_MODE: StatedParam(ImagingMode.THREE_D),
         # Costed under the SAR burst limits, as a product 3D FSE asks to be.
@@ -152,7 +182,6 @@ class FsePd3D(SequencePlugin):
         unit="deg",
         range_min=60.0,
         range_max=179.0,
-        default=140.0,
     )
     if DUAL_REGION:
         protocol |= {
@@ -176,9 +205,9 @@ class FsePd3D(SequencePlugin):
         UIParam.user_value(14): FloatParam(
             "pd_first_angle_deg", unit="deg", range_min=1.0, range_max=179.0
         ),
-        UIParam.user_name(15): Description("Final refocusing flip"),
+        UIParam.user_name(15): Description("Plateau signal"),
         UIParam.user_value(15): FloatParam(
-            "pd_final_angle_deg", unit="deg", range_min=1.0, range_max=179.0
+            "pd_plateau_signal", range_min=0.02, range_max=1.0, range_incr=0.001
         ),
         UIParam.user_name(16): Description("Startup echoes"),
         UIParam.user_value(16): IntParam(
@@ -188,24 +217,44 @@ class FsePd3D(SequencePlugin):
         UIParam.user_value(17): IntParam(
             "busse_centre_echo", range_min=-1, range_max=255, automatic=-1
         ),
+        UIParam.user_name(18): Description("Tail signal over plateau"),
+        UIParam.user_value(18): FloatParam(
+            "pd_tail_signal", range_min=0.0, range_max=1.5, range_incr=0.001
+        ),
         UIParam.user_name(19): Description("Read-axis crusher cycles"),
         UIParam.user_value(19): FloatParam(
             "crusher_cycles", range_min=0.0, range_max=8.0, default=0.5
         ),
-        UIParam.user_name(22): Description("Signal-tail onset fraction"),
+        UIParam.user_name(22): Description("Signal-tail onset"),
         UIParam.user_value(22): FloatParam(
             "pd_plateau_fraction", range_min=0.1, range_max=0.95, range_incr=0.01
         ),
     }
     if DUAL_REGION:
         protocol |= {
-            UIParam.user_name(23): Description("Peripheral final flip, 0 inherits"),
-            UIParam.user_value(23): IntParam(
-                "pd_final_angle_periphery_deg",
-                unit="deg",
-                range_min=0,
-                range_max=179,
-                automatic=0,
+            UIParam.user_name(23): Description("Peripheral plateau signal"),
+            UIParam.user_value(23): FloatParam(
+                "pd_plateau_signal_periphery",
+                range_min=0.02,
+                range_max=1.0,
+                range_incr=0.001,
+                default=PD_PERIPHERY[1],
+            ),
+            UIParam.user_name(24): Description("Peripheral tail signal"),
+            UIParam.user_value(24): FloatParam(
+                "pd_tail_signal_periphery",
+                range_min=0.0,
+                range_max=1.5,
+                range_incr=0.001,
+                default=PD_PERIPHERY[4],
+            ),
+            UIParam.user_name(25): Description("Peripheral signal-tail onset"),
+            UIParam.user_value(25): FloatParam(
+                "pd_plateau_fraction_periphery",
+                range_min=0.1,
+                range_max=0.95,
+                range_incr=0.01,
+                default=PD_PERIPHERY[3],
             ),
         }
 
@@ -241,7 +290,7 @@ class FsePd3D(SequencePlugin):
         individual = (
             tr_periphery != tr
             or etl_periphery != a["etl"]
-            or a["pd_final_angle_periphery_deg"] not in (None, a["pd_final_angle_deg"])
+            or any(a[twin] not in (None, a[name]) for name, twin in PERIPHERY.items())
         )
         length = 1 if individual else a["etl"]
         calibrating, imaging = pp.count_cartesian_plane_sampling(
@@ -275,7 +324,7 @@ class FsePd3D(SequencePlugin):
                     train,
                     lengths,
                     times,
-                    peak_deg=a["pd_final_angle_periphery_deg"] or None,
+                    peak_deg=a["pd_maximum_angle_deg"],
                 )
                 if FIT_CONTROLS or individual
                 else rf_layout(train, scaled=False, period=times[0])

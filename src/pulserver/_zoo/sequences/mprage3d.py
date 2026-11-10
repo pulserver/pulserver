@@ -42,6 +42,11 @@ WAVE = option("wave", False, **OPTIONS["wave"])
 ORDERING = option("ordering", "radial", choices=ORDERINGS, **OPTIONS["ordering"])
 
 
+#: The calibration region bounded by an ellipse rather than a rectangle; with
+#: Poisson-disc sampling only the ellipse is fully sampled.
+ELLIPTICAL_ACS = option("elliptical_acs", False, **OPTIONS["elliptical_acs"])
+
+
 class Mprage3D(SequencePlugin):
     app = (
         navigated(shortest_at_zero(slab(mprage3d), "esp"))
@@ -49,6 +54,7 @@ class Mprage3D(SequencePlugin):
         else shortest_at_zero(slab(mprage3d), "esp")
     )
     app = functools.partial(app, ordering=ORDERING)
+    app = functools.partial(app, elliptical_acs=ELLIPTICAL_ACS)
     protocol = {
         UIParam.IMAGING_MODE: StatedParam(ImagingMode.THREE_D),
         UIParam.EXCITATION: ChoiceParam(

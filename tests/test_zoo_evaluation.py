@@ -1560,7 +1560,13 @@ def test_fse_ordering_choices_keep_their_indices_across_refocusing_modes(mode):
         for entry in plugin.protocol.values()
         if isinstance(entry, OptionParam) and entry.name == "ordering"
     )
-    assert ordering.choices == ("radial", "shuffling", "busse_radial", "pclo")
+    assert ordering.choices == (
+        "radial",
+        "shuffling",
+        "busse_radial",
+        "pclo",
+        "buonincontri_golden",
+    )
 
 
 @WITH_BLOCHSIM
@@ -1648,7 +1654,7 @@ def test_pd_dual_region_duration_and_conservative_rf_cover_played_trains():
         "user0_value": 0,
         "user12_value": 400,
         "user13_value": 20,
-        "user23_value": 140,
+        "user23_value": 0.45,
     }
     evaluation = plugin.evaluate(SYSTEM, _protocol(plugin, request))
     main = _chain(plugin.generate(SYSTEM, evaluation.protocol))[-1]

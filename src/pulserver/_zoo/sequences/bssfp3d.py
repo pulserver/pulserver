@@ -1,11 +1,13 @@
 """pypulseqpp's 3D balanced SSFP bound to the scanner UI, its partitions counted by the number of slices."""
 
+import functools
+
 import pypulseqpp as pp
 from pypulseqpp.sequences.sequence.bssfp3D_sequence import bssfp3d
 
 from pulserver._zoo._evaluation import achieved, arguments, rf_layout
 from pulserver._zoo._slab import slab
-from pulserver._zoo._user import OWN, user_entries
+from pulserver._zoo._user import OPTIONS, OWN, user_entries
 from pulserver.design import (
     ChoiceParam,
     Description,
@@ -15,12 +17,18 @@ from pulserver.design import (
     SequencePlugin,
     StatedParam,
     TimeParam,
+    option,
 )
 from pulserver.protocol import Excitation, ImagingMode, TRPreset, UIParam
+
+#: The calibration region bounded by an ellipse rather than a rectangle; with
+#: Poisson-disc sampling only the ellipse is fully sampled.
+ELLIPTICAL_ACS = option("elliptical_acs", False, **OPTIONS["elliptical_acs"])
 
 
 class Bssfp3D(SequencePlugin):
     app = slab(bssfp3d)
+    app = functools.partial(app, elliptical_acs=ELLIPTICAL_ACS)
     protocol = {
         UIParam.IMAGING_MODE: StatedParam(ImagingMode.THREE_D),
         UIParam.EXCITATION: ChoiceParam(

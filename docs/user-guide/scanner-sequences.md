@@ -486,7 +486,7 @@ option entry holds no index of a choice is refused, and so is one stating an
 entry its options hide. The options join the design's identity and its
 manifest.
 
-The shipped plugins declare their shared options at `user36` to `user44`, each
+The shipped plugins declare their shared options at `user35` to `user44`, each
 at the same user entry in every plugin. An option one plugin alone has takes
 one of its own entries, from `user12`; `user45` reaches no console entry on a
 GE scanner:
@@ -494,13 +494,14 @@ GE scanner:
 | Plugin | Option | User entry | Choices | Entries added |
 | --- | --- | --- | --- | --- |
 | `fse3d` | `refocusing` | `user38` | `"constant"`; `"optimized"`, a train designed with blochsim and shared by every shot; `"dual_region"`, direct-angle trains for the centre and periphery; `"busse"`, prescribed-PSS inverse EPG with forward-EPG control fitting; or `"busse_dual_region"`, independent Busse endpoint fits with a cubic control transition | Flip angle: the refocusing angle at TE for direct-angle designs, first/final maximum for Busse. Both dual-region options add `user12` and `user13`, TR and ETL at the periphery |
-| `fse_pd3d` | PD controls | `user14`–`user17`, `user19`, `user22` | First/final angles, startup count, explicit centre echo, crusher cycles, signal-tail onset fraction | `flip` gives peak angle; TE is reference contrast-equivalent TE |
-| `fse_pd3d` | `dual_region` | `user20` | Off: shared train; on: centre/periphery controls with cubic transition | `user12`/`user13`: peripheral TR/ETL; `user23`: final angle, 0 inherits |
-| `fse_pd3d` | `fit_controls` | `user21` | Off: prescribed inverse-EPG train; on: CPU multi-tissue/B1 control fitting | Requires the design extra |
-| `fse3d`, `fse_pd3d` | `ordering` | `user39` | `"radial"`: PCLO for identical trains, Buonincontri assignment for varying trains; `"pclo"`, `"busse_radial"` (radius then polar angle, centre echo 0), and `"shuffling"` require identical trains | None |
+| `fse_pd3d` | PD controls | `user14`–`user19`, `user22` | First angle, plateau signal, startup count, explicit centre echo, tail signal over plateau, crusher cycles, signal-tail onset | `flip` bounds every angle (default 150°); TE is reference contrast-equivalent TE |
+| `fse_pd3d` | `dual_region` | `user20` | Off: shared train; on: the periphery's own target signal, the fitted peripheral one by default, with a cubic transition | `user12`/`user13`: peripheral TR/ETL; `user23`–`user25`: peripheral plateau signal, tail signal and tail onset |
+| `fse_pd3d` | `fit_controls` | `user21` | Off: prescribed inverse-EPG train; on: CPU multi-tissue/B1 fit of the signal-tail onset | Requires the design extra |
+| `fse3d`, `fse_pd3d` | `ordering` | `user39` | `"radial"`: PCLO for identical trains, Buonincontri assignment for varying trains, the shot index sweeping with the angle in each radial section; `"pclo"`, `"busse_radial"` (radius then polar angle, centre echo 0), and `"shuffling"` require identical trains; `"buonincontri_golden"` (index 4) requires varying trains and keeps each shot to one golden-ratio angle | None |
 | `mprage3d` | `ordering` | `user39` | `"radial"`, each partition's lines centre-out, or `"shuffling"`: Poisson-disc lines in random order, for a time-resolved reconstruction | None |
 | `fse3d` | Busse controls | `user14`–`user17` | Minimum angle, centre angle, startup count, acquired centre echo (`-1`: midpoint) | Busse modes only; `flip` gives the maximum angle |
 | `fse3d` | Crusher cycles | `user19` | Read-axis crusher area in cycles across one readout voxel, default 0.5 | Every refocusing mode |
+| `fse3d`, `fse_pd3d`, `mprage3d`, `bssfp3d`, `gre3d`, `gre_multiecho3d`, `se3d` | `elliptical_acs` | `user35` | The calibration region bounded by the ky-kz ellipse inscribed in its rectangle; off by default. Under Poisson-disc sampling only the ellipse is fully sampled, the corners of its rectangle are drawn as the rest | None |
 | `fse3d`, `fse_pd3d`, `mprage3d` | `navigator` | `user36` | Three-plane navigators; the design sets `EnablePmc`, and `pmc` publishes each pose to the scan | None |
 | `gre3d`, `gre_multiecho3d`, `mprage3d`, `fse3d`, `fse_pd3d` | `wave` | `user37` | Wave-CAIPI; the calibration region is acquired first without the wave, and `pics` and `pmc` reconstruct the wave-encoded volume | `user10` and `user11`: wave amplitude and cycles |
 | `gre3d`, `se3d`, `gre_multiecho3d` | `elliptical` | `user40` | Only the phase encodes inside the ky-kz ellipse; on by default | None |
@@ -541,28 +542,35 @@ train. `busse_radial` requires centre echo 0 and identical trains. `pclo`
 uses Rydén's pivot-centre, linear-outer ring permutation for an arbitrary
 centre echo in identical trains. `radial` selects PCLO for identical trains
 or Buonincontri joint shot/echo assignment for a centre/periphery parameter
-transition. The menu retains the same choice indices across refocusing modes.
+transition, in which, as in Fig. 2C of the abstract, the shot index sweeps
+with the angle within each radial section; `buonincontri_golden` instead gives
+each shot one angle, the golden-ratio fraction of its place in the transition,
+so every arc of a ring holds the whole range of TRs. The menu retains the
+same choice indices across refocusing modes.
 Sampling acceleration and the CAIPI shift are independent of this ordering
 choice. The PSF objective is an idealized design
 model, not a measurement of the scanner reconstruction.
 
-The `fse_pd3d` preset designs a PD signal evolution with an initial decrease,
-near-constant middle and gently declining quadratic tail, following Mugler's
-prescribed-signal design principle. Relaxation-aware inverse EPG enforces
-independent first, maximum and final angles. Minimum/centre angles and RF
-peak position are calculated outputs. A final angle equal to the maximum
-allows the RF maximum to extend to the final pulse. This is an independent PD design,
-not a numerical reconstruction of Siemens PDvar*.
+The `fse_pd3d` preset designs each train by relaxation-aware inverse EPG of a
+target signal, after Mugler's prescribed-signal principle ([Mugler et al.,
+ISMRM 1999, abstract 1631](https://cds.ismrm.org/ismrm-1999/PDF6/1631.pdf)):
+an initial decrease from the second echo, a plateau and a late tail,
+{func}`pypulseqpp.make_pd_schedule`. Its defaults are fitted to the central and
+peripheral trains read off Fig. 1 of Buonincontri et al. (Proc. ISMRM 2025,
+abstract 566-05-007), the only reference they were fitted to; this is not a
+numerical reconstruction of the PDvar* trains of that figure. Every angle is
+bounded by `flip`. Under `dual_region` each shot's target signal is a cubic
+step between the centre's and the periphery's, and every shot's train is
+designed from its own target in one batched pass, 0.1 s for the 586 shots of
+that abstract's transition on one CPU thread.
 
-The optional control fit adjusts signal-tail onset, retaining the prescribed
-first/maximum/final angles, reference effective TE, centre signal and signed
-contrast constraints. The transition uses two endpoint fits and batched
-inverse EPG. ESP and RF widths are shared; every shot keeps the longest-train
-layout with zero RF amplitude after its own acquired ETL. Shared trains use
-PCLO/basic Busse radial; changing endpoint parameters uses Buonincontri joint
-assignment. Default inverse design, listing and evaluation import no Torch.
-First and final angles must not exceed the maximum. The reference signal
-prescription follows [Mugler et al., ISMRM 1999, abstract 1631](https://cds.ismrm.org/ismrm-1999/PDF6/1631.pdf); numerical envelope controls are independently chosen.
+The optional control fit moves the signal-tail onset within 0.1 of the train,
+retaining the other target parameters, reference effective TE, centre signal
+and signed contrast. ESP and RF widths are shared; every shot keeps the
+longest-train layout with zero RF amplitude after its own acquired ETL.
+Shared trains use PCLO/basic Busse radial; changing endpoint parameters uses
+Buonincontri joint assignment. Default inverse design, listing and evaluation
+import no Torch.
 
 ### Diffusion tables
 

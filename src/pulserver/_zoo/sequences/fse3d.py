@@ -85,8 +85,11 @@ if OPTIMIZED and importlib.util.find_spec("blochsim") is None:
     )
 
 #: Shared trains use Busse radial/PCLO; changing endpoint parameters uses
-#: Buonincontri joint shot/echo assignment. ``radial`` selects from the protocol.
-ORDERINGS = ("radial", "shuffling", "busse_radial", "pclo")
+#: Buonincontri joint shot/echo assignment, the shot index sweeping with the
+#: angle in each radial section. ``radial`` selects from the protocol;
+#: ``buonincontri_golden`` keeps each shot of a transition to one golden-ratio
+#: angle. Indices are released: a new choice goes last.
+ORDERINGS = ("radial", "shuffling", "busse_radial", "pclo", "buonincontri_golden")
 ORDERING = option("ordering", "radial", choices=ORDERINGS, **OPTIONS["ordering"])
 
 
@@ -116,6 +119,11 @@ def on_host(app):
     return designed
 
 
+#: The calibration region bounded by an ellipse rather than a rectangle; with
+#: Poisson-disc sampling only the ellipse is fully sampled.
+ELLIPTICAL_ACS = option("elliptical_acs", False, **OPTIONS["elliptical_acs"])
+
+
 class Fse3D(SequencePlugin):
     app = sar_burst(
         navigated(shortest_at_zero(slab(fse3d), "esp"))
@@ -136,6 +144,7 @@ class Fse3D(SequencePlugin):
         app = functools.partial(app, te=None)
         if BUSSE:
             app = functools.partial(app, busse_centre_echo=0)
+    app = functools.partial(app, elliptical_acs=ELLIPTICAL_ACS)
     protocol = {
         UIParam.IMAGING_MODE: StatedParam(ImagingMode.THREE_D),
         # Costed under the SAR burst limits, as a product 3D FSE asks to be.

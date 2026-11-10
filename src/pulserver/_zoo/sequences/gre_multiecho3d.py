@@ -79,12 +79,18 @@ def _stating_anatomy(app: Any) -> Any:
     return design
 
 
+#: The calibration region bounded by an ellipse rather than a rectangle; with
+#: Poisson-disc sampling only the ellipse is fully sampled.
+ELLIPTICAL_ACS = option("elliptical_acs", False, **OPTIONS["elliptical_acs"])
+
+
 class GreMultiecho3D(SequencePlugin):
     app = shortest_at_zero(slab(gre_multiecho3d), "echo_spacing")
     app = functools.partial(
         app, elliptical_sampling=ELLIPTICAL, flyback=FLYBACK, sampling=SAMPLING
     )
     app = _stating_anatomy(app)
+    app = functools.partial(app, elliptical_acs=ELLIPTICAL_ACS)
     protocol = {
         UIParam.IMAGING_MODE: StatedParam(ImagingMode.THREE_D),
         UIParam.EXCITATION: ChoiceParam(

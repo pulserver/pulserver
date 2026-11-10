@@ -99,6 +99,7 @@ OPTIONS = {
     name: {"user": user, "label": label}
     for user, (name, label) in enumerate(
         (
+            ("elliptical_acs", "Elliptical calibration"),
             ("navigator", "Navigator"),
             ("wave", "Wave-CAIPI"),
             ("refocusing", "Refocusing train"),
@@ -109,7 +110,7 @@ OPTIONS = {
             ("scheme", "Spoke order"),
             ("retrospective", "Retrospective gating"),
         ),
-        start=36,
+        start=35,
     )
 }
 

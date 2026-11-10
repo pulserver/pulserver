@@ -1133,7 +1133,7 @@ def test_padded_prescribed_trains_keep_one_active_segment_and_one_closing_delay(
             busse_centre_angle_periphery_deg=65,
         )
         if family == "pd":
-            protocol["pd_final_angle_periphery_deg"] = 140
+            protocol["pd_tail_signal_periphery"] = 0.5
     sequence = sequences.fse3D_sequence(system, **protocol)
     path = tmp_path / "padded_fse.seq"
     sequence.write(path)

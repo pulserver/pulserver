@@ -22,8 +22,14 @@ from pulserver.protocol import Excitation, ImagingMode, TEPreset, TRPreset, UIPa
 ELLIPTICAL = option("elliptical", True, **OPTIONS["elliptical"])
 
 
+#: The calibration region bounded by an ellipse rather than a rectangle; with
+#: Poisson-disc sampling only the ellipse is fully sampled.
+ELLIPTICAL_ACS = option("elliptical_acs", False, **OPTIONS["elliptical_acs"])
+
+
 class Se3D(SequencePlugin):
     app = functools.partial(slab(se3d), elliptical_sampling=ELLIPTICAL)
+    app = functools.partial(app, elliptical_acs=ELLIPTICAL_ACS)
     protocol = {
         UIParam.IMAGING_MODE: StatedParam(ImagingMode.THREE_D),
         UIParam.EXCITATION: ChoiceParam(

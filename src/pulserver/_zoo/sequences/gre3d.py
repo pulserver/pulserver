@@ -27,9 +27,15 @@ WAVE = option("wave", False, **OPTIONS["wave"])
 ELLIPTICAL = option("elliptical", True, **OPTIONS["elliptical"])
 
 
+#: The calibration region bounded by an ellipse rather than a rectangle; with
+#: Poisson-disc sampling only the ellipse is fully sampled.
+ELLIPTICAL_ACS = option("elliptical_acs", False, **OPTIONS["elliptical_acs"])
+
+
 class Gre3D(SequencePlugin):
     app = slab(gre3d)
     app = functools.partial(app, elliptical_sampling=ELLIPTICAL)
+    app = functools.partial(app, elliptical_acs=ELLIPTICAL_ACS)
     protocol = {
         UIParam.IMAGING_MODE: StatedParam(ImagingMode.THREE_D),
         UIParam.EXCITATION: ChoiceParam(
