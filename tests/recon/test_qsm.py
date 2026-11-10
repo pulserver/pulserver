@@ -200,12 +200,31 @@ def test_the_phantom_maps_are_rss_t2star_and_a_medi_qsm_with_positive_paramagnet
     assert np.median(chi[minus]) == pytest.approx(-0.2, rel=0.2)
 
 
+def test_synthstrip_weights_in_the_site_library_come_before_the_environments(
+    tmp_path, monkeypatch
+):
+    monkeypatch.delenv("FASTQSM_SYNTHSTRIP_WEIGHTS", raising=False)
+    library, prefix = tmp_path / "lib", tmp_path / "env"
+    for root in (library, prefix):
+        weights = root / qsm.SYNTHSTRIP_WEIGHTS
+        weights.parent.mkdir(parents=True)
+        weights.write_bytes(b"")
+    monkeypatch.setenv("PULSERVER_SITE_PACKAGES", str(library))
+    monkeypatch.setattr(qsm.sys, "prefix", str(prefix))
+    assert qsm.synthstrip_weights() == str(library.resolve() / qsm.SYNTHSTRIP_WEIGHTS)
+    monkeypatch.delenv("PULSERVER_SITE_PACKAGES")
+    monkeypatch.setattr(qsm._site_packages, "_configured", None)
+    assert qsm.synthstrip_weights() == str(prefix / qsm.SYNTHSTRIP_WEIGHTS)
+
+
 def test_synthstrip_weights_are_the_named_file_else_the_shipped_one(
     tmp_path, monkeypatch
 ):
     monkeypatch.setenv("FASTQSM_SYNTHSTRIP_WEIGHTS", "/named.pt")
     assert qsm.synthstrip_weights() == "/named.pt"
     monkeypatch.delenv("FASTQSM_SYNTHSTRIP_WEIGHTS")
+    monkeypatch.delenv("PULSERVER_SITE_PACKAGES", raising=False)
+    monkeypatch.setattr(qsm._site_packages, "_configured", None)
     monkeypatch.setattr(qsm.sys, "prefix", str(tmp_path))
     assert qsm.synthstrip_weights() is None
     shipped = tmp_path / qsm.SYNTHSTRIP_WEIGHTS

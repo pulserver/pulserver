@@ -12,6 +12,7 @@ from typing import Any
 
 import numpy as np
 
+from ... import _site_packages
 from ...mrd._metadata import user_parameter
 from .._buffers import ReconData
 from ..plugin import ReconContext, ReconResult
@@ -42,8 +43,8 @@ GAMMA_HZ_T = 42.57747892e6
 #: The paramagnetic Gd vials of a phantom map positive when it is right.
 PHASE_SIGN = 1
 
-#: Where an installer puts FreeSurfer's SynthStrip weights, under the Python
-#: environment's prefix.
+#: Where FreeSurfer's SynthStrip weights are installed, under the site library
+#: (``pulserver site install``) or under the Python environment's prefix.
 SYNTHSTRIP_WEIGHTS = "share/fastqsm/synthstrip.1.pt"
 
 #: Echo time of the SWI echo at 3 T, scaled by 3 T / B0.
@@ -203,12 +204,16 @@ class QsmRecon(PicsRecon):
 
 
 def synthstrip_weights() -> str | None:
-    """Return the SynthStrip weights: ``FASTQSM_SYNTHSTRIP_WEIGHTS``, else :data:`SYNTHSTRIP_WEIGHTS` in the environment's prefix when it is there."""
+    """Return the SynthStrip weights: ``FASTQSM_SYNTHSTRIP_WEIGHTS``, else :data:`SYNTHSTRIP_WEIGHTS` in the site library, else in the environment's prefix, where it is there."""
     named = os.environ.get("FASTQSM_SYNTHSTRIP_WEIGHTS")
     if named:
         return named
-    shipped = Path(sys.prefix) / SYNTHSTRIP_WEIGHTS
-    return str(shipped) if shipped.is_file() else None
+    library = _site_packages.directory()
+    for root in ([library] if library is not None else []) + [Path(sys.prefix)]:
+        shipped = root / SYNTHSTRIP_WEIGHTS
+        if shipped.is_file():
+            return str(shipped)
+    return None
 
 
 def _echo_times(header: Any) -> list[float]:
