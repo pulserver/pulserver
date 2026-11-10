@@ -1124,7 +1124,6 @@ def test_padded_prescribed_trains_keep_one_active_segment_and_one_closing_delay(
         "tr": 1.8,
         "n_dummy": 0,
         "flip_modulation": family,
-        "rf_overlap": True,
     }
     if varying:
         protocol.update(

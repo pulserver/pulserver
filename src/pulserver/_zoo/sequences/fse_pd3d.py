@@ -3,7 +3,6 @@
 import functools
 import inspect
 
-import numpy as np
 import pypulseqpp as pp
 from pypulseqpp.sequences.sequence.fse3D_sequence import (
     fse3d,
@@ -17,6 +16,7 @@ from pulserver._zoo._evaluation import (
     rf_layout,
     waved,
 )
+from pulserver._zoo._fse import echo_train_layout, sar_burst
 from pulserver._zoo._pmc import navigated
 from pulserver._zoo._slab import slab
 from pulserver._zoo._user import (
@@ -27,19 +27,25 @@ from pulserver._zoo._user import (
     wave_entries,
 )
 from pulserver.design import (
-    BoolParam,
     ChoiceParam,
+    ConfigParam,
     Description,
     Evaluation,
     FloatParam,
     IntParam,
-    RfLayout,
     SequencePlugin,
     StatedParam,
     TimeParam,
     option,
 )
-from pulserver.protocol import Excitation, ImagingMode, TEPreset, TRPreset, UIParam
+from pulserver.protocol import (
+    ConfigKey,
+    Excitation,
+    ImagingMode,
+    TEPreset,
+    TRPreset,
+    UIParam,
+)
 
 #: Three-plane navigators after each train, whose pose the ``pmc``
 #: reconstruction states to the scan.
@@ -83,7 +89,7 @@ def on_host(app):
 
 
 class FsePd3D(SequencePlugin):
-    app = (
+    app = sar_burst(
         navigated(shortest_at_zero(slab(fse3d), "esp"))
         if NAVIGATOR
         else shortest_at_zero(slab(fse3d), "esp")
@@ -100,6 +106,8 @@ class FsePd3D(SequencePlugin):
         app = functools.partial(app, busse_centre_echo=0)
     protocol = {
         UIParam.IMAGING_MODE: StatedParam(ImagingMode.THREE_D),
+        # Costed under the SAR burst limits, as a product 3D FSE asks to be.
+        ConfigKey.ENABLE_SAR_BURST_MODE: ConfigParam(1),
         UIParam.EXCITATION: ChoiceParam(
             "excitation", Excitation, default=Excitation.SLAB
         ),
@@ -180,8 +188,6 @@ class FsePd3D(SequencePlugin):
         UIParam.user_value(17): IntParam(
             "busse_centre_echo", range_min=-1, range_max=255, automatic=-1
         ),
-        UIParam.user_name(18): Description("Overlap RF dead time"),
-        UIParam.user_value(18): BoolParam("rf_overlap", default=False),
         UIParam.user_name(19): Description("Read-axis crusher cycles"),
         UIParam.user_value(19): FloatParam(
             "crusher_cycles", range_min=0.0, range_max=8.0, default=0.5
@@ -259,33 +265,19 @@ class FsePd3D(SequencePlugin):
         raster = system.block_duration_raster
         times = [pp.round_to_raster(time, raster) for time in times]
         references = -(-calibrating // lengths[0]) if waved(a) else 0
+        leading = dummies(a, times[0]) + references
         return Evaluation(
             protocol.replace(achieved(self, train)),
-            (dummies(a, times[0]) + references) * times[0] + sum(times),
+            leading * times[0] + sum(times),
+            sequence=train,
             rf_layout=(
-                _longest_train(train, min(times))
+                echo_train_layout(
+                    train,
+                    lengths,
+                    times,
+                    peak_deg=a["pd_final_angle_periphery_deg"] or None,
+                )
                 if FIT_CONTROLS or individual
                 else rf_layout(train, scaled=False, period=times[0])
             ),
         )
-
-
-def _longest_train(train: pp.Sequence, period: float) -> RfLayout:
-    """Return the RF layout of the longest train of the scan at its shortest TR.
-
-    A train holds as many refocusing pulses as the longest train, those beyond
-    its own length at zero amplitude; the layout plays them all at the nominal
-    refocusing angle.
-    """
-    layout = rf_layout(train, scaled=False, period=period)
-    instances = layout.instances
-    refocusing = np.array(
-        [instances.definitions[n].use == "refocusing" for n in instances.definition]
-    )
-    amplitude = instances.amplitude.copy()
-    amplitude[refocusing] = amplitude[refocusing].max()
-    return RfLayout(
-        pp.RfInstances(instances.definitions, instances.definition, amplitude),
-        layout.control,
-        period,
-    )
