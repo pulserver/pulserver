@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import base64
 import contextlib
+import functools
 import importlib.util
 import json
 import logging
@@ -113,8 +115,9 @@ class DesignServer:
     parent imported, answers as :func:`answer` does and exits: nothing a call
     does outlives its child but the designs it stores and the entries it
     keeps for the calls after it (:mod:`pulserver.host._memo`) -- the replies
-    of ``list`` and ``validate``, the RF a plugin lists and the slew rate
-    each request was lowered to -- in a directory the server makes when it
+    of ``list`` and ``validate``, the RF a plugin lists, the slew rate each
+    request was lowered to and the SLR pulses pypulseqpp designed
+    (:func:`keep_pulse_designs`) -- in a directory the server makes when it
     starts serving and removes when it stops. A child that ends without
     a reply, a crash of plugin code among them, is answered with an ``ERROR``
     line naming its exit status. Calls run concurrently, one child each.
@@ -161,6 +164,7 @@ class DesignServer:
         listener.settimeout(_POLL)
         _log.info("serving design calls on %s", self.socket_path)
         _log.info("keeping what the calls share in %s", _memo.start())
+        keep_pulse_designs()
         try:
             while not self._stopping:
                 self._reap()
@@ -237,6 +241,55 @@ class DesignServer:
                 _wait(pid, _GRACE)
             connection.close()
         self._children.clear()
+
+
+def keep_pulse_designs() -> None:
+    """Keep the SLR pulse designs of pypulseqpp among the entries the server's calls share.
+
+    pypulseqpp caches each design, a least-squares or equiripple filter that
+    takes a tenth of a second or more, in the process that made it, and a
+    call's process ends with it: every evaluation of a sequence with a
+    selective spin echo, a saturation band or a fat saturation designed its
+    pulses again. From here on the first child that designs a pulse keeps it
+    (:mod:`pulserver.host._memo`) and the children after it read it. A design
+    is a function of its arguments and of the pypulseqpp the server imported.
+    Does nothing where pypulseqpp no longer holds the cached design under
+    ``_slr._design``, or where it is kept already.
+    """
+    import numpy as np
+    from pypulseqpp import _slr
+
+    design = getattr(_slr, "_design", None)
+    if design is None or getattr(design, "kept", False):
+        return
+
+    @functools.wraps(design)
+    def kept(*arguments: Any) -> Any:
+        key = repr(arguments)
+        found, entry = _memo.read(_DESIGNS, key)
+        if found:
+            samples = np.frombuffer(
+                base64.b64decode(entry["samples"]), dtype=entry["dtype"]
+            )
+            return samples.reshape(entry["shape"]).copy()
+        designed = design(*arguments)
+        _memo.write(
+            _DESIGNS,
+            key,
+            {
+                "dtype": designed.dtype.str,
+                "shape": list(designed.shape),
+                "samples": base64.b64encode(designed.tobytes()).decode(),
+            },
+        )
+        return designed
+
+    kept.kept = True
+    _slr._design = kept
+
+
+# The entries of :mod:`pulserver.host._memo` the kept pulse designs are.
+_DESIGNS = "pulse-design"
 
 
 def _warm_design() -> None:

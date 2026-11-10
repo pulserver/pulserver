@@ -410,3 +410,47 @@ def test_the_children_of_a_warm_server_share_what_they_keep(plugins, tmp_path):
         process.wait(timeout=60.0)
     assert not Path(kept[0]).exists()
     assert "of processor time" in log.read_text()
+
+
+def test_a_pulse_design_is_kept_for_the_calls_after_the_one_that_made_it(
+    serving, monkeypatch
+):
+    import numpy as np
+    from pypulseqpp import _slr
+
+    from pulserver.host import _server
+
+    made = []
+    design = _slr._design
+
+    def counted(*arguments):
+        made.append(arguments)
+        return design(*arguments)
+
+    # pypulseqpp caches the design per process; a child starts without it.
+    monkeypatch.setattr(_slr, "_design", counted)
+    _server.keep_pulse_designs()
+    arguments = (128, 4.0, "ex", "ls", 0.01, 0.01, True, False)
+    first = _slr._design(*arguments)
+    again = _slr._design(*arguments)
+    assert len(made) == 1
+    assert again.dtype == first.dtype
+    assert np.array_equal(again, first)
+    again[0] += 1.0
+    assert np.array_equal(_slr._design(*arguments), first)
+    # Other arguments are another design.
+    other = _slr._design(128, 6.0, "ex", "ls", 0.01, 0.01, True, False)
+    assert len(made) == 2
+    assert not np.array_equal(other, first)
+    # Kept once: a second call wraps nothing.
+    kept = _slr._design
+    _server.keep_pulse_designs()
+    assert _slr._design is kept
+
+
+def test_pypulseqpp_caches_the_design_the_server_keeps():
+    """The server keeps what ``pypulseqpp._slr._design`` returns: the name and the cache are pypulseqpp's."""
+    from pypulseqpp import _slr
+
+    assert callable(getattr(_slr, "_design", None))
+    assert hasattr(_slr._design, "cache_info")
