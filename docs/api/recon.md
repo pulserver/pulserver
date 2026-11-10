@@ -62,7 +62,10 @@ sensitivity maps, noise prewhitening and coil compression are the subject of
 
 | Object | Description |
 | --- | --- |
+| {obj}`~pulserver.recon.Corrections` | The corrections the shipped reconstructions make to a stream's images, in order: Fermi k-space filter, gradient nonlinearity, N4 receive field of the magnitude. |
+| {obj}`~pulserver.recon.fermi_filtered` | Return a complex image with its k-space multiplied by the Fermi window. |
 | {obj}`~pulserver.recon.gradient_unwarped` | Return an image resampled from where its voxels were acquired to where they belong. |
+| {obj}`~pulserver.recon.IntensityCorrection` | Divide the magnitude images of a unit by the receive field N4 estimates from them, one field per slice and set. |
 
 ## Buffers and results
 

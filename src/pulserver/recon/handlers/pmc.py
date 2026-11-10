@@ -55,12 +55,28 @@ class PmcRecon(PicsTrainRecon):
         As :class:`~pulserver.recon.handlers.pics_train.PicsTrainRecon`.
     iterations : int, default=30
         As :class:`~pulserver.recon.handlers.pics_train.PicsTrainRecon`.
+    kspace_filter, gradient_unwarp, intensity_correction : bool, default=True
+        As :class:`~pulserver.recon.handlers.pics.PicsRecon`; the navigators
+        are not corrected.
     """
 
     def __init__(
-        self, matrix: int = 32, wavelet: float = 0.005, iterations: int = 30
+        self,
+        matrix: int = 32,
+        wavelet: float = 0.005,
+        iterations: int = 30,
+        *,
+        kspace_filter: bool = True,
+        gradient_unwarp: bool = True,
+        intensity_correction: bool = True,
     ) -> None:
-        super().__init__(wavelet, iterations)
+        super().__init__(
+            wavelet,
+            iterations,
+            kspace_filter=kspace_filter,
+            gradient_unwarp=gradient_unwarp,
+            intensity_correction=intensity_correction,
+        )
         self.triggers["navigator"] = NAVIGATOR
         self.matrix = matrix
 

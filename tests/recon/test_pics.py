@@ -40,11 +40,19 @@ NOISE = "ACQ_IS_NOISE_MEASUREMENT"
 UNDERSAMPLING = 7e-2
 
 
+#: The corrections off: the images are compared with those of the solve alone.
+UNCORRECTED = {
+    "kspace_filter": False,
+    "gradient_unwarp": False,
+    "intensity_correction": False,
+}
+
+
 class Recording:
-    """Keeps what each unit returns, in the list a stream's copy shares."""
+    """Keeps what each unit returns, in the list a stream's copy shares; corrections off unless asked for."""
 
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+        super().__init__(*args, **{**UNCORRECTED, **kwargs})
         self.results = []
 
     def recon(self, context, branch, data):
@@ -536,6 +544,150 @@ def test_a_multi_echo_scan_sends_the_real_and_imaginary_parts_of_each_echo_as_se
         modulus = np.abs(real.data + 1j * imaginary.data)
         np.testing.assert_allclose(modulus, magnitude.data, rtol=1e-5, atol=1e-6)
         assert np.abs(imaginary.data).max() > 0
+
+
+def with_user_strings(header, **values):
+    """``header`` stating each of ``values`` as a user parameter string, as the proxy writes recon parameters."""
+    header.userParameters = SimpleNamespace(
+        userParameterLong=[],
+        userParameterDouble=[],
+        userParameterString=[
+            SimpleNamespace(name=name, value=value) for name, value in values.items()
+        ],
+    )
+    return header
+
+
+#: A gradient coil table whose field is linear, as bartorch reads it: the
+#: correction it states is the identity.
+LINEAR_COIL = "\n".join(
+    ["GRADWARPTYPE 1"]
+    + [
+        f"SCALE{axis}{order} {1.0 if order == 1 else 0.0:.9e}"
+        for axis in "XYZ"
+        for order in range(1, 11)
+    ]
+    + ["DELTA 0.0"]
+)
+
+
+class Unwarped:
+    """A gradient nonlinearity correction standing in for bartorch's: the identity, recording what it was given."""
+
+    shape = (1, MATRIX, MATRIX)
+
+    def __init__(self):
+        self.seen = []
+
+    def __call__(self, tensor):
+        self.seen.append(tensor.clone())
+        return tensor
+
+
+@pytest.fixture
+def unwarp(monkeypatch):
+    """Make ``Gradunwarp.from_mrd`` return an :class:`Unwarped` for every unit."""
+    tools = pytest.importorskip("bartorch.tools")
+    correction = Unwarped()
+    correction.shape = (2, MATRIX, MATRIX)
+    monkeypatch.setattr(
+        tools.Gradunwarp,
+        "from_mrd",
+        classmethod(lambda cls, header, reference: correction),
+    )
+    return correction
+
+
+@pytest.mark.parametrize(
+    ("parameter", "argument", "tag"),
+    [
+        ("KSpaceFilter", "kspace_filter", "FERMI"),
+        ("GradientUnwarp", "gradient_unwarp", "GRADUNWARP"),
+        ("IntensityCorrection", "intensity_correction", "N4"),
+    ],
+)
+@pytest.mark.parametrize(
+    ("default", "stated", "applied"),
+    [(True, None, True), (True, "0", False), (False, "1", True), (False, None, False)],
+)
+def test_each_correction_is_made_unless_the_header_turns_it_off(
+    unwarp, parameter, argument, tag, default, stated, applied
+):
+    pytest.importorskip("SimpleITK")
+    plugin = Images(**{argument: default})
+    values = {"gradient_coefficients": LINEAR_COIL}
+    if stated is not None:
+        values[parameter] = stated
+    header = with_user_strings(calibration_header(COILS, MATRIX), **values)
+
+    reconstruct(stream(vials(), range(MATRIX)), header, plugin=plugin)
+
+    (image,) = results(plugin)
+    assert (tag in image.attributes["ImageProcessingHistory"]) is applied
+
+
+def test_the_corrections_run_in_order_fermi_then_unwarp_then_n4_and_each_says_so(
+    unwarp, caplog
+):
+    pytest.importorskip("SimpleITK")
+    plugin = Images(kspace_filter=True, gradient_unwarp=True, intensity_correction=True)
+    header = with_user_strings(
+        calibration_header(COILS, MATRIX), gradient_coefficients=LINEAR_COIL
+    )
+
+    with caplog.at_level("INFO", logger="pulserver.recon"):
+        reconstruct(stream(vials(), range(MATRIX)), header, plugin=plugin)
+
+    (image,) = results(plugin)
+    assert image.attributes["ImageProcessingHistory"] == [
+        "PULSERVER",
+        "PYTHON",
+        "PICS",
+        "FERMI",
+        "GRADUNWARP",
+        "N4",
+    ]
+    # The unwarp is given the filtered complex image, before its magnitude.
+    (seen,) = unwarp.seen
+    assert seen.is_complex()
+    text = caplog.text
+    assert "Fermi k-space filter on" in text
+    assert (
+        "gradient nonlinearity correction on, coil table from user parameter gradient_coefficients"
+        in text
+    )
+    assert "Fermi k-space filter of a (32, 32) image" in text
+    assert "gradient nonlinearity corrected for a (32, 32) image" in text
+    assert "N4 receive field of slice 0, set 0" in text
+
+
+def test_a_header_stating_no_coil_table_is_not_unwarped_and_the_log_says_why(caplog):
+    plugin = Images(gradient_unwarp=True)
+
+    with caplog.at_level("INFO", logger="pulserver.recon"):
+        reconstruct(stream(vials(), range(MATRIX)), plugin=plugin)
+
+    (image,) = results(plugin)
+    assert "GRADUNWARP" not in image.attributes["ImageProcessingHistory"]
+    assert (
+        "gradient nonlinearity correction off: the header states no gradient coil table"
+        in caplog.text
+    )
+
+
+def test_the_fermi_filter_smooths_the_image_of_the_solve_and_keeps_its_content():
+    kspace = vials()
+
+    (filtered,) = reconstruct(
+        stream(kspace, range(MATRIX)), plugin=Images(kspace_filter=True)
+    )[1]
+    (solved,) = reconstruct(stream(kspace, range(MATRIX)), plugin=Images())[1]
+
+    def variation(image):
+        return float(np.abs(np.diff(image, axis=-1)).sum() / image.sum())
+
+    assert variation(filtered) < 0.95 * variation(solved)
+    assert np.corrcoef(filtered.ravel(), solved.ravel())[0, 1] > 0.95
 
 
 def test_a_single_echo_scan_sends_its_magnitude_alone(device):

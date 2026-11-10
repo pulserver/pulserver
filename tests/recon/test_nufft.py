@@ -14,16 +14,17 @@ import numpy as np
 import pytest
 
 from pulserver import recon
+from pulserver.recon._correct import fermi_profile
 from pulserver.recon.handlers.nufft import NufftRecon, _within
 
 MATRIX, FOV_MM, COILS, SAMPLES, LINES = 16, 220.0, 2, 24, 4
 
 
 class Solves(NufftRecon):
-    """Keeps what each solve of a stream is given in the list the stream's copy shares, and returns zeros."""
+    """Keeps what each solve of a stream is given in the list the stream's copy shares, and returns zeros; Fermi filter off unless asked for."""
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, kspace_filter=False):
+        super().__init__(kspace_filter=kspace_filter)
         self.solved = []
 
     def _solved(self, samples, points, device, volume=None):
@@ -278,6 +279,44 @@ def test_a_stack_of_segments_is_solved_partition_by_partition_over_all_its_shots
         np.testing.assert_allclose(samples, expected if centre else 0, atol=1e-6)
     (_, image) = closed[-1]
     assert image.data.shape == (partitions, MATRIX, MATRIX)
+
+
+def test_a_stacks_partitions_are_fermi_filtered_before_they_are_transformed():
+    partitions = 8
+    points = blades(1)
+    data = noise(1, LINES, COILS, SAMPLES)
+    acquisitions = []
+    for partition in range(partitions):
+        for line in range(LINES):
+            acquisitions.append(
+                readout(
+                    data[0, line],
+                    points[0, line],
+                    segment=0,
+                    line=line,
+                    kspace_encode_step_2=partition,
+                )
+            )
+    acquisitions[-1].setFlag(ismrmrd.ACQ_LAST_IN_MEASUREMENT)
+    plain, filtered = Solves(), Solves(kspace_filter=True)
+    stack = header(depth=partitions, partitions=partitions)
+
+    play(plain, stack, acquisitions)
+    play(filtered, stack, acquisitions)
+
+    def along_partitions(plugin):
+        planes = np.stack([samples for samples, _ in plugin.solved], axis=1)
+        return np.fft.fftshift(
+            np.fft.fft(np.fft.ifftshift(planes, axes=1), axis=1), axes=1
+        )
+
+    profile = fermi_profile((partitions, MATRIX, MATRIX), 0)
+    np.testing.assert_allclose(
+        along_partitions(filtered),
+        along_partitions(plain) * profile[None, :, None, None],
+        atol=1e-5,
+    )
+    assert profile[0] == pytest.approx(0.5, abs=1e-3)
 
 
 def test_slices_counted_as_partitions_by_the_header_are_not_a_stack():

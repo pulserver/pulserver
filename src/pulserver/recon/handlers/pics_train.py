@@ -30,10 +30,26 @@ class PicsTrainRecon(PicsRecon):
         ``lambda``, relative to the data scaling ``pics`` estimates.
     iterations : int, default=30
         Iterations of the solve.
+    kspace_filter, gradient_unwarp, intensity_correction : bool, default=True
+        As :class:`~pulserver.recon.handlers.pics.PicsRecon`.
     """
 
-    def __init__(self, wavelet: float = 0.005, iterations: int = 30) -> None:
-        super().__init__(wavelet, iterations)
+    def __init__(
+        self,
+        wavelet: float = 0.005,
+        iterations: int = 30,
+        *,
+        kspace_filter: bool = True,
+        gradient_unwarp: bool = True,
+        intensity_correction: bool = True,
+    ) -> None:
+        super().__init__(
+            wavelet,
+            iterations,
+            kspace_filter=kspace_filter,
+            gradient_unwarp=gradient_unwarp,
+            intensity_correction=intensity_correction,
+        )
         self.merge = ("contrast",)
         self.gadgets = (Prewhiten(), AsymmetricEcho(), RemoveReadoutOversampling())
 

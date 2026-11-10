@@ -13,7 +13,7 @@ from ...mrd._acquisitions import AcquisitionFlag
 from ...mrd._images import center_crop
 from .._buffers import ReconBuffer, ReconData
 from .._calibration import CoilCompression, coil_maps
-from .._correct import gradient_unwarped, states_gradient_coefficients
+from .._correct import Corrections
 from ..gadgets import (
     AsymmetricEcho,
     CompressChannels,
@@ -100,6 +100,11 @@ class PicsRecon(ReconPlugin):
     reconstructed by :meth:`wave_image`, with the readout oversampling the
     wave spreads the image into.
 
+    Each complex image the solve returns, before its magnitude is taken, is
+    Fermi filtered in k-space over its encoded axes, then corrected for
+    gradient nonlinearity, and its magnitude divided by the receive field
+    (:class:`~pulserver.recon.Corrections`).
+
     Parameters
     ----------
     wavelet : float, default=0.005
@@ -109,13 +114,23 @@ class PicsRecon(ReconPlugin):
     virtual_coils : int | None, default=VIRTUAL_COILS
         Receive channels beyond this many are compressed to it; ``None``
         keeps every channel.
+    kspace_filter, gradient_unwarp, intensity_correction : bool, default=True
+        The corrections of :class:`~pulserver.recon.Corrections` made where
+        the header states no recon parameter for them.
     """
+
+    #: The corrections of the stream, made when it starts; ``None`` before.
+    corrections: Corrections | None = None
 
     def __init__(
         self,
         wavelet: float = 0.005,
         iterations: int = 30,
         virtual_coils: int | None = VIRTUAL_COILS,
+        *,
+        kspace_filter: bool = True,
+        gradient_unwarp: bool = True,
+        intensity_correction: bool = True,
     ) -> None:
         super().__init__(
             triggers={"imaging": AcquisitionFlag.LAST_IN_SLICE},
@@ -134,6 +149,18 @@ class PicsRecon(ReconPlugin):
         self.wavelet = wavelet
         self.iterations = iterations
         self.virtual_coils = virtual_coils
+        self.kspace_filter = kspace_filter
+        self.gradient_unwarp = gradient_unwarp
+        self.intensity_correction = intensity_correction
+
+    def startup(self, context: ReconContext) -> None:
+        super().startup(context)
+        self.corrections = Corrections(
+            context.header,
+            kspace_filter=self.kspace_filter,
+            gradient_unwarp=self.gradient_unwarp,
+            intensity_correction=self.intensity_correction,
+        )
 
     def recon(
         self, context: ReconContext, branch: str, data: ReconData
@@ -145,14 +172,15 @@ class PicsRecon(ReconPlugin):
         buffer = data.data
         if buffer is None:
             return None
+        corrections = self.corrections
         if buffer.space.cartesian:
             image = self.image(averaged(buffer), buffer.image_shape, context, data)
         else:
             image = self.wave_image(context, data)
         history = ["PULSERVER", "PYTHON", "PICS"]
-        if states_gradient_coefficients(context.header):
-            image = gradient_unwarped(image, context, data)
-            history.append("GRADUNWARP")
+        if corrections is not None:
+            image = corrections.unwarped(image, context, data)
+            history += corrections.applied()
         attributes = {"ImageProcessingHistory": history}
         results = [ReconResult(np.abs(image), attributes=attributes)]
         if np.iscomplexobj(image) and self._contrasts_are_images(context, buffer):
@@ -170,6 +198,8 @@ class PicsRecon(ReconPlugin):
                     attributes=attributes,
                 ),
             ]
+        if corrections is not None:
+            results = corrections.intensity_corrected(results, data)
         return results if len(results) > 1 else results[0]
 
     def _contrasts_are_images(self, context: ReconContext, buffer: ReconBuffer) -> bool:
@@ -191,7 +221,11 @@ class PicsRecon(ReconPlugin):
         context: ReconContext,
         data: ReconData,
     ) -> np.ndarray:
-        """Return the complex image of ``(coils, [partitions,] phase encodes, readout)`` k-space, cropped to ``shape``."""
+        """Return the complex image of ``(coils, [partitions,] phase encodes, readout)`` k-space, cropped to ``shape``.
+
+        Fermi filtered over its axes of more than one point where the
+        stream's :attr:`corrections` say so.
+        """
         import torch
 
         volume = kspace if kspace.ndim == 4 else kspace[:, None]
@@ -205,7 +239,12 @@ class PicsRecon(ReconPlugin):
         image = partial_fourier(image, sampled).numpy()
         if kspace.ndim == 3:
             image = image[0]
-        return np.array(center_crop(image, shape[-image.ndim :]))
+        return self._filtered(np.array(center_crop(image, shape[-image.ndim :])))
+
+    def _filtered(self, image: np.ndarray) -> np.ndarray:
+        if self.corrections is None:
+            return image
+        return self.corrections.filtered(image)
 
     def wave_image(self, context: ReconContext, data: ReconData) -> np.ndarray:
         """Return the complex image ``(partitions, phase encodes, readout)`` of a wave-CAIPI volume.
@@ -226,7 +265,7 @@ class PicsRecon(ReconPlugin):
         ``|P F_yz Psi F_x S x - y|^2 + lambda |W x|_1``, ``Psi`` the
         point-spread function (:func:`bartorch.linop.WaveSense`), over the maps
         :func:`nlinv_estimate` estimates from the calibration region, cropped
-        to the readout field of view.
+        to the readout field of view, and Fermi filtered as :meth:`image` is.
 
         Raises
         ------
@@ -278,7 +317,7 @@ class PicsRecon(ReconPlugin):
             maxiter=self.iterations,
         )
         image = scaling * solve(measured * (1.0 / scaling), encoding)
-        return image.numpy()
+        return self._filtered(image.numpy())
 
 
 PLUGIN = PicsRecon()

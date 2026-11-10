@@ -52,6 +52,9 @@ write such a plugin.
 - **Ships a `pics` plugin with prewhitening, coil compression, partial Fourier and asymmetric echo.**
 
   Code: `src/pulserver/_zoo/recon/pics.py`. Tests: *every other phase encode and the centre reconstruct to the image of all lines*; *a partial fourier image is closer to the full one than the solve of its lines alone*; *homodyne over two partial fourier axes together beats one axis after the other*; *a multi echo scan sends the real and imaginary parts of each echo as series of their own*; *channels beyond the virtual coils are compressed before the maps and the solve* (`test_pics.py`).
+- **Corrects the images of every shipped reconstruction in one order, each step on unless the scan or the site turns it off: a Fermi filter of the solved image's k-space, gradient nonlinearity, and the N4 receive field of the magnitude, one per slice and set.**
+
+  Code: {class}`~pulserver.recon.Corrections`, {func}`~pulserver.recon.fermi_filtered`, {func}`~pulserver.recon.gradient_unwarped`, {class}`~pulserver.recon.IntensityCorrection`. Tests: *each correction is made unless the header turns it off*; *the corrections run in order fermi then unwarp then n4 and each says so*; *a header stating no coil table is not unwarped and the log says why* (`test_pics.py`); *the filtered image has the k space of the image times the fermi window* (`test_correct.py`); *a stacks partitions are fermi filtered before they are transformed* (`test_nufft.py`); *a shaded uniform object is flattened and keeps its mean*; *later contrasts and repetitions of a slice share its first field* (`test_intensity_correction.py`); *the magnitude series is intensity corrected and the echoes the maps take are not* (`test_qsm.py`).
 - **Keeps a unit's k-space, maps and solver vectors on the host, the encoding computing on the series' GPU.**
 
   Code: `pics_image` in `src/pulserver/recon/handlers/pics.py`. Test: *the solve on host k space is bartorchs pics with the image on the host* (`test_pics.py`).
@@ -63,7 +66,7 @@ write such a plugin.
 
 ## Division of responsibility
 
-- **bartorch** computes the whitening, the compression basis, the coil maps and the reconstruction.
+- **bartorch** computes the whitening, the compression basis, the coil maps, the reconstruction, the Fermi window, the gradient nonlinearity correction and the N4 field.
 - **Your plugin** chooses the gadgets, the axes, the triggers and the reconstruction.
 
 ## Method

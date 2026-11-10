@@ -177,3 +177,57 @@ def test_a_correction_that_fails_returns_the_image_and_says_so(monkeypatch, capl
 
     assert out is image
     assert "not corrected for gradient nonlinearity" in caplog.text
+
+
+def centred_fft(image, axes):
+    shifted = np.fft.ifftshift(image, axes=axes)
+    return np.fft.fftshift(np.fft.fftn(shifted, axes=axes, norm="ortho"), axes=axes)
+
+
+@pytest.mark.parametrize("shape", [(24, 32), (6, 20, 16), (1, 40, 40)])
+def test_the_filtered_image_has_the_k_space_of_the_image_times_the_fermi_window(shape):
+    bartorch = pytest.importorskip("bartorch")
+    from pulserver.recon import fermi_filtered
+
+    rng = np.random.default_rng(0)
+    image = (rng.standard_normal(shape) + 1j * rng.standard_normal(shape)).astype(
+        np.complex64
+    )
+    axes = tuple(axis for axis, n in enumerate(shape) if n > 1)
+
+    filtered = fermi_filtered(image)
+
+    window = bartorch.fermi_window(tuple(shape[axis] for axis in axes)).numpy()
+    window = window.reshape([n if n > 1 else 1 for n in shape])
+    np.testing.assert_allclose(
+        centred_fft(filtered, axes),
+        centred_fft(image, axes) * window,
+        atol=1e-4 * np.abs(image).max(),
+    )
+    assert filtered.shape == image.shape
+    assert filtered.dtype == np.complex64
+
+
+def test_a_real_image_stays_real_and_the_edge_of_k_space_is_halved():
+    pytest.importorskip("bartorch")
+    from pulserver.recon import fermi_filtered
+
+    rng = np.random.default_rng(1)
+    image = rng.random((64, 64)).astype(np.complex64)
+
+    filtered = fermi_filtered(image)
+
+    assert np.abs(filtered.imag).max() < 1e-5 * np.abs(filtered.real).max()
+    ratio = np.abs(centred_fft(filtered, (0, 1))) / np.abs(centred_fft(image, (0, 1)))
+    assert ratio[32, 0] == pytest.approx(0.5, abs=1e-3)
+    assert ratio[32, 32] > 0.95
+
+
+def test_the_partition_profile_is_the_volume_window_through_its_centre():
+    bartorch = pytest.importorskip("bartorch")
+    from pulserver.recon._correct import fermi_profile
+
+    window = bartorch.fermi_window((8, 64, 48)).numpy()
+
+    np.testing.assert_allclose(fermi_profile((8, 64, 48), 0), window[:, 32, 24])
+    assert fermi_profile((8, 64, 48), 0)[0] == pytest.approx(0.5, abs=1e-3)
