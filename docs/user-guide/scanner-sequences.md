@@ -665,9 +665,9 @@ repetition from the modules their function is built from.
   definition. A multi-echo sequence lists every echo time, and the `TE` entry
   holds the first. `epi2d` and `epi3d` state in the protocol's note why the
   bandwidth differs from the one asked: the sampling interval is a multiple
-  of the ADC raster, and where the design's slew rate cannot sweep a
+  of the ADC raster, and where the design's gradient limits cannot sweep a
   ramp-sampled line in the time its samples take at the requested interval,
-  the next multiple that it can.
+  the next multiple that they can.
 - **Invalid protocols.** A prescription the design refuses is invalid, with
   the message of its error.
 - **Representative sequence.** The repetitions on which the design service

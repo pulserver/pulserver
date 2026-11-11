@@ -109,8 +109,8 @@ def bandwidth_note(
 
     The dwell is a multiple of ``system.adc_raster_time``: the one nearest
     the request, unless the read gradient cannot sweep a ramp-sampled line in
-    the time ``samples`` take at that dwell under the design's slew rate,
-    which then sets it.
+    the time ``samples`` take at that dwell under the design's gradient
+    limits, which then set it.
     """
     achieved = 1.0 / dwell
     if abs(achieved - requested_hz) <= 1e-6 * requested_hz:
@@ -119,9 +119,8 @@ def bandwidth_note(
     nearest = max(1, round(1.0 / (requested_hz * raster))) * raster
     if dwell > nearest * (1 + 1e-9):
         why = (
-            f"at the design's slew rate of {system.max_slew / system.gamma:.1f} "
-            "T/m/s a ramp-sampled line needs longer than the "
-            f"{1e3 * samples * nearest:.3f} ms its {samples} "
+            "under the design's gradient limits a ramp-sampled line needs longer "
+            f"than the {1e3 * samples * nearest:.3f} ms its {samples} "
             f"samples take at {1e-3 / nearest:.0f} kHz, and the sampling interval "
             f"steps by the {1e6 * raster:g} us ADC raster"
         )

@@ -1,5 +1,6 @@
 """The shipped scanner sequences' evaluations: their scan time, the values they read back and the RF they state."""
 
+import dataclasses
 import functools
 import importlib.util
 import inspect
@@ -832,7 +833,11 @@ def test_resolving_a_resolved_zoo_protocol_changes_nothing(zoo, name):
     first = plugin.validate(SYSTEM, shortest)
 
     assert first.valid, first.info
-    assert plugin.validate(SYSTEM, first.values) == first
+    # The note may say why a value asked for was not reached, which the
+    # resolved protocol no longer asks for.
+    assert dataclasses.replace(
+        plugin.validate(SYSTEM, first.values), info=""
+    ) == dataclasses.replace(first, info="")
 
 
 @pytest.mark.parametrize("name", SHIPPED)
@@ -2000,12 +2005,13 @@ def test_a_peripheral_tr_shorter_than_the_longest_train_is_refused_by_evaluation
 def test_a_bandwidth_the_slew_rate_cannot_reach_is_stated_with_why():
     from pulserver._zoo._evaluation import bandwidth_note
 
-    system = pp.Opts(max_slew=93.9, slew_unit="T/m/s", adc_raster_time=2e-6)
+    system = pp.Opts(adc_raster_time=2e-6)
 
     note = bandwidth_note(system, 500e3, 256, 4e-6)
 
-    assert note.startswith("bandwidth 250 kHz, not 500 kHz: ")
-    assert "93.9 T/m/s" in note
+    assert note.startswith(
+        "bandwidth 250 kHz, not 500 kHz: under the design's gradient"
+    )
     assert "0.512 ms its 256 samples take at 500 kHz" in note
     assert "2 us ADC raster" in note
 
