@@ -5,8 +5,9 @@ A call returns the reply the interpreter parses: the text blocks of
 the designs it adds to a :class:`~pulserver.host.DesignStore` and, under a
 warm server, what the server keeps for the calls after it
 (:mod:`pulserver.host._memo`): the replies of ``list`` and ``validate``, the
-RF a plugin lists, the slew rate each request was lowered to and what a
-plugin keeps of its own, such as the effective TE of a solved echo train.
+RF a plugin lists, the slew rate each request was lowered to, what a
+plugin keeps of its own, such as the effective TE of a solved echo train,
+and the SLR pulses pypulseqpp designed.
 """
 
 from __future__ import annotations

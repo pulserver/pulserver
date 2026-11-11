@@ -264,15 +264,15 @@ def keep_pulse_designs() -> None:
         return
 
     @functools.wraps(design)
-    def kept(*arguments: Any) -> Any:
-        key = repr(arguments)
+    def kept(*arguments: Any, **named: Any) -> Any:
+        key = repr((arguments, sorted(named.items())))
         found, entry = _memo.read(_DESIGNS, key)
         if found:
             samples = np.frombuffer(
                 base64.b64decode(entry["samples"]), dtype=entry["dtype"]
             )
             return samples.reshape(entry["shape"]).copy()
-        designed = design(*arguments)
+        designed = design(*arguments, **named)
         _memo.write(
             _DESIGNS,
             key,

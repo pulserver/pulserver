@@ -448,6 +448,39 @@ def test_a_pulse_design_is_kept_for_the_calls_after_the_one_that_made_it(
     assert _slr._design is kept
 
 
+def test_a_pulse_designed_through_pypulseqpp_is_the_same_kept_or_not(
+    serving, monkeypatch
+):
+    """Through pypulseqpp's own entry to the design, however it passes its arguments on."""
+    import numpy as np
+    from pypulseqpp import _slr
+
+    from pulserver.host import _server
+
+    def designed():
+        return _slr.design_slr(256, 4.0, pulse_type="ex")
+
+    plain = designed()
+    made = []
+    design = _slr._design
+
+    def counted(*arguments, **named):
+        made.append((arguments, named))
+        return design(*arguments, **named)
+
+    monkeypatch.setattr(_slr, "_design", counted)
+    _server.keep_pulse_designs()
+    first = designed()
+    again = designed()
+    assert len(made) == 1
+    assert np.array_equal(first, plain)
+    assert np.array_equal(again, plain)
+    # Named arguments reach the design, and are another key than none.
+    named = _slr._design(*made[0][0][:-1], root_flip=made[0][0][-1])
+    assert np.array_equal(named, plain)
+    assert len(made) == 2
+
+
 def test_pypulseqpp_caches_the_design_the_server_keeps():
     """The server keeps what ``pypulseqpp._slr._design`` returns: the name and the cache are pypulseqpp's."""
     from pypulseqpp import _slr
