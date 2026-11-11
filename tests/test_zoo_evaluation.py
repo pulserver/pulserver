@@ -16,7 +16,7 @@ from _host import LIMITS, value_block
 
 from pulserver import _plugins
 from pulserver._zoo import ZOO_PAIRS
-from pulserver._zoo._evaluation import achieved, densest, rf_layout
+from pulserver._zoo._evaluation import achieved, cartesian_2d, densest, rf_layout
 from pulserver._zoo._evaluation import arguments as app_arguments
 from pulserver._zoo._fse import bounding_train
 from pulserver._zoo._saturation import explicit_bands
@@ -1308,6 +1308,58 @@ def _output_starts(seq):
             starts.append(time)
         time += seq.block_durations[n]
     return starts
+
+
+@pytest.mark.parametrize("name", ["epi2d", "epi3d", "fse3d", "fse_pd3d"])
+def test_an_echo_train_states_the_echo_spacing_of_its_design(zoo, name):
+    plugin = zoo[name]
+    protocol = _protocol(plugin, CHANGED[name])
+
+    evaluation = plugin.evaluate(SYSTEM, protocol)
+    main = _chain(plugin.generate(SYSTEM, protocol))[-1]
+
+    assert evaluation.echo_spacing == pytest.approx(main.definitions["EchoSpacing"][0])
+
+
+@pytest.mark.parametrize("name", ["epi2d", "epi3d"])
+def test_an_oversampled_epi_states_the_bandwidth_of_a_pixel_of_its_field_of_view(
+    zoo, name
+):
+    plugin = zoo[name]
+    protocol = _protocol(plugin, CHANGED[name] | {"num_frames": 3})
+
+    evaluation = plugin.evaluate(SYSTEM, protocol)
+    main = _chain(plugin.generate(SYSTEM, protocol))[-1]
+
+    # Twice the samples of the matrix span the readout field of view.
+    tables = main.libraries()
+    dwell = tables.adc[tables.blocks[tables.blocks[:, 4] > 0, 4][0] - 1, 1]
+    n_x = main.definitions["Matrix"][0]
+    assert evaluation.pixel_bandwidth == pytest.approx(1.0 / (dwell * 2 * n_x))
+    # A frame of the time series is a volume.
+    assert evaluation.frame_time == pytest.approx(evaluation.protocol[UIParam.TR])
+
+
+def test_a_single_frame_and_a_gradient_echo_state_no_frame_time_and_no_echo_spacing(
+    zoo,
+):
+    epi = zoo["epi2d"].evaluate(SYSTEM, _protocol(zoo["epi2d"], CHANGED["epi2d"]))
+    gre = zoo["gre2d"].evaluate(SYSTEM, _protocol(zoo["gre2d"], CHANGED["gre2d"]))
+
+    assert epi.frame_time is None
+    assert (gre.echo_spacing, gre.pixel_bandwidth, gre.frame_time) == (None, None, None)
+
+
+def test_an_ungated_cine_states_a_frame_of_every_line(zoo):
+    plugin = zoo["bssfp2d"]
+    protocol = _protocol(plugin, CHANGED["bssfp2d"] | {"num_frames": 4})
+
+    evaluation = plugin.evaluate(SYSTEM, protocol)
+
+    _, lines = cartesian_2d(app_arguments(plugin, protocol))
+    assert evaluation.frame_time == pytest.approx(
+        lines * evaluation.protocol[UIParam.TR]
+    )
 
 
 def test_a_cine_is_gated_at_the_heart_rate_asked_for(zoo):

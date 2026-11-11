@@ -105,8 +105,12 @@ class Bssfp2D(SequencePlugin):
         n_dummy = _dummies(a, tr, gating)
         frames = a["n_phases"] if gating == "none" else 1
         train = once + (n_dummy + frames * lines - 1) * tr
+        # A frame of an ungated cine plays every line once; a gated one's
+        # cardiac phase plays the lines of a segment.
+        frame_time = lines * tr if a["n_phases"] > 1 else None
         if gating != "none":
             g = _segmented(a, tr, protocol)
+            frame_time = g["views_per_segment"] * tr
             segments = _segments(a, g["views_per_segment"])
             rr = 60.0 / a["heart_rate_bpm"]
             if gating == "prospective":
@@ -120,6 +124,7 @@ class Bssfp2D(SequencePlugin):
             a["n_slices"] * train,
             rf_layout=rf_layout(line, scaled=True, start=once - tr),
             sequence=line,
+            frame_time=frame_time,
         )
 
 

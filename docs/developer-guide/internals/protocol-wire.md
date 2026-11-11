@@ -171,3 +171,27 @@ request, as does every run where the evaluation at the default protocol is
 invalid. `control` is the wire name of the entry the amplitude is proportional
 to, or `-`. A reader skips the blocks it does not know.
 
+(display-block)=
+## Display figures
+
+An evaluation may state figures of its design that a console shows and the
+operator does not set ({class}`~pulserver.protocol.Display`): the echo spacing
+of an EPI or FSE train, the receive bandwidth across one pixel of the readout
+field of view, and the time one frame of a time series or cine takes. A valid
+`validate` reply that states any ends with a `[Display]` block, one line per
+figure stated:
+
+```text
+[Display]
+EchoSpacing: <s>
+PixelBandwidth: <Hz>
+FrameTime: <s>
+[Display End]
+```
+
+A console reading no block, from an older server or for a figure not stated,
+falls back on what it computes itself: the bandwidth over the readout matrix
+for the pixel bandwidth, the scan time for the frame time. The pixel
+bandwidth is stated where the readout is oversampled, where that fallback
+would be too large by the oversampling factor.
+

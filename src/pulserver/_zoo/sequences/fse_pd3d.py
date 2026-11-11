@@ -282,4 +282,5 @@ class FsePd3D(SequencePlugin):
             leading * times[0] + sum(times),
             sequence=representative,
             rf_layout=echo_train_layout(train, lengths, times),
+            echo_spacing=train.definitions["EchoSpacing"][0],
         )

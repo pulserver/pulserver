@@ -15,6 +15,7 @@ from pulserver._zoo._evaluation import (
     dummies,
     first_readout,
     packets,
+    pixel_bandwidth,
     rf_layout,
 )
 from pulserver._zoo._user import user_entries
@@ -137,8 +138,9 @@ class Epi2D(SequencePlugin):
         layout = rf_layout(
             volume, scaled=True, copies=max(sizes), period=tr, banded=True
         )
+        values = achieved(self, volume) | {UIParam.TR: tr}
         return Evaluation(
-            protocol.replace(achieved(self, volume) | {UIParam.TR: tr}),
+            protocol.replace(values),
             played * sum(cycles) + groups * sequences.duration(calibration),
             info=bandwidth_note(
                 system, a["readout_bandwidth_hz"], *first_readout(volume)
@@ -147,6 +149,9 @@ class Epi2D(SequencePlugin):
                 layout, *(RfLayout.of(prescan, None) for prescan in calibration)
             ),
             sequence=volume,
+            echo_spacing=volume.definitions["EchoSpacing"][0],
+            pixel_bandwidth=pixel_bandwidth(values[UIParam.BANDWIDTH], a),
+            frame_time=tr if n_frames > 1 else None,
         )
 
 

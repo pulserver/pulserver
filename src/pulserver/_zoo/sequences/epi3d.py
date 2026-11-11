@@ -26,6 +26,7 @@ from pulserver._zoo._evaluation import (
     bandwidth_note,
     densest,
     dummies,
+    pixel_bandwidth,
     rf_layout,
 )
 from pulserver._zoo._slab import slab
@@ -231,6 +232,9 @@ class Epi3D(SequencePlugin):
             rf_layout=densest(
                 rf_layout(excitation, scaled=True, copies=volume), *prescans
             ),
+            echo_spacing=epi.esp,
+            pixel_bandwidth=pixel_bandwidth(values[UIParam.BANDWIDTH], a),
+            frame_time=tr if a["n_frames"] > 1 else None,
         )
 
 

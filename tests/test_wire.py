@@ -3,6 +3,7 @@ import pytest
 from pulserver.protocol import (
     PROTOCOL_BEGIN,
     PROTOCOL_END,
+    Display,
     InputMode,
     Kind,
     Parameter,
@@ -103,12 +104,35 @@ def test_a_value_its_entry_cannot_take_is_an_error_naming_the_entry():
         Validation(True, 1.5, "TA = 0:02", {"TE": 2800, "TR": 6460, "fov": 180.0}),
         Validation(True, None, "", {"swap_phase_freq": True}),
         Validation(False, None, "the requested TR is too short", {"TR": 1000}),
+        Validation(
+            True, 60.0, "", {"TR": 6460}, display=Display(5.2e-4, 976.5625, 2.0)
+        ),
+        Validation(True, 60.0, "", {"TR": 6460}, display=Display(echo_spacing=5.2e-4)),
     ],
-    ids=["valid", "no-duration", "invalid"],
+    ids=["valid", "no-duration", "invalid", "display", "echo-spacing"],
 )
 def test_a_validation_reply_round_trips(validation):
     reply = format_validation(validation, LISTING)
     assert parse_validation(reply, LISTING) == validation
+
+
+def test_a_display_block_follows_the_values_and_states_only_the_figures_given():
+    validation = Validation(
+        True, 1.0, "", {"TR": 6460}, display=Display(frame_time=2.0)
+    )
+
+    reply = format_validation(validation, LISTING)
+
+    assert reply.endswith("[Display]\nFrameTime: 2.0\n[Display End]\n")
+    assert "[Display]" not in format_validation(
+        Validation(True, 1.0, "", {"TR": 6460}), LISTING
+    )
+
+
+def test_an_invalid_reply_states_no_display_block():
+    validation = Validation(False, None, "no", {"TR": 1000}, display=Display(2e-3))
+
+    assert "[Display]" not in format_validation(validation, LISTING)
 
 
 def test_a_dropdown_without_options_is_refused():

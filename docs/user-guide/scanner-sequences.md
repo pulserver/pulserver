@@ -230,7 +230,10 @@ scanner limits and the requested {class}`~pulserver.design.Protocol`, in the
 units of the sequence function's arguments, and returns an
 {class}`~pulserver.design.Evaluation`: the protocol holding the values the
 design achieves, the scan time in seconds, a note shown with the valid protocol
-and, optionally, the RF layout ({ref}`stating-the-rf-layout`). Returning `None`
+and, optionally, the RF layout ({ref}`stating-the-rf-layout`) and the figures a
+console displays: the echo spacing of a train, the bandwidth of a pixel of an
+oversampled readout and the time one frame of a scan of several takes
+({ref}`display-block`). Returning `None`
 accepts the protocol unchanged. Raising an exception makes the protocol
 invalid:
 

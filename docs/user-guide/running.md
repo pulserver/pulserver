@@ -37,7 +37,7 @@ directory name, not starting with `.`.
 | Call | Reply |
 | --- | --- |
 | `list` | `PROTOCOL` and the plugin's listing block at the options of the value block in `--values` ({ref}`plugin-options`); with `--rf-definitions`, the `[RfDefinitions]` block |
-| `validate` | `VALID <seconds>` or `INVALID`, an `INFO` line and the value block of the resolved protocol; with `--rf-layout`, a valid reply ends with the `[RfLayout]` block |
+| `validate` | `VALID <seconds>` or `INVALID`, an `INFO` line and the value block of the resolved protocol; with `--rf-layout`, a valid reply continues with the `[RfLayout]` block; a valid reply whose evaluation states display figures ends with the `[Display]` block |
 | `generate` | `GENERATED <id>`, the identifier of the design in the scan's directory |
 | `import` | `IMPORTED <id>` |
 | `push` | `PUSHED <count>`: the designs sent, not counting those the intake already holds |
