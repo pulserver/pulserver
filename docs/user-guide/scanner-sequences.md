@@ -448,7 +448,11 @@ increment, as `user12`.
 slice's k-space is acquired that many times back to back, a free-running series
 that keeps its steady state from one frame to the next and is reconstructed as
 one image per frame; under prospective ECG gating they are the cardiac phases of
-each heartbeat, and retrospective gating sets its own from the heart rate.
+each heartbeat, and retrospective gating sets its own from the heart rate. A
+gated slice waits for one trigger, at its start under prospective gating, and
+then runs free at the heart rate entered: every slice is one train with no
+rest in it, and repetitions that do not acquire fill each heartbeat after its
+cardiac phases.
 
 ### Console controls
 
@@ -529,7 +533,7 @@ GE scanner:
 | `gre_multiecho3d` | `qsm_anatomy` | `user13` | `"phantom"` (0, the default), `"brain"` (1) or `"body"` (2): the maps the `qsm` reconstruction makes, stated to it as the `QsmAnatomy` recon parameter | None |
 | `gre_multiecho3d` | `sampling` | `user12` | `"lattice"`, the CAIPIRINHA lattice, the default; or `"poisson"`: a variable-density Poisson-disc draw at the undersampling `ry * rz`, for the compressed-sensing `pics` solve | None |
 | `zte3d` | `scheme` | `user43` | Spokes ordered `"spiral"`, at a constant step across many rings; `"meridian"`; or `"quiet"`, the default: the spiral's directions in steps about a ring gap long, every other shell played backwards | None |
-| `bssfp2d` | `retrospective` | `user44` | ECG gating: off, prospective, each heartbeat triggered and acquired once per cardiac phase; on, retrospective, each segment cycled over a heartbeat and binned into cardiac phases by the reconstruction | None |
+| `bssfp2d` | `retrospective` | `user44` | ECG gating: off, prospective, each slice triggered once and every heartbeat of the heart rate entered acquired once per cardiac phase; on, retrospective, each segment cycled over a heartbeat and binned into cardiac phases by the reconstruction | None |
 | `gre_spiral2d`, `se_spiral2d`, `gre_stack_of_spirals3d`, `se_stack_of_spirals3d`, `mprage_stack_of_spirals3d` | `variable_density` | `user42` | Variable-density spirals | `user12`: periphery undersampling |
 
 Every 3D FSE train is packed: the read prephaser shares the excitation block

@@ -1374,7 +1374,7 @@ def test_a_cine_is_gated_at_the_heart_rate_asked_for(zoo):
     [("bssfp2d", "prospective"), ("bssfp2d+RETROSPECTIVE", "retrospective")],
 )
 @pytest.mark.parametrize("ry", [2, 3])  # Ry 3 leaves a shorter last segment
-def test_an_ecg_trigger_gates_the_cine_with_a_segment_per_heartbeat(
+def test_an_ecg_trigger_gates_the_cine_with_a_segment_per_nominal_heartbeat(
     zoo, name, gating, ry
 ):
     plugin = zoo[name]
@@ -1390,23 +1390,33 @@ def test_an_ecg_trigger_gates_the_cine_with_a_segment_per_heartbeat(
     lines = main.definitions["TR"][0] * gated["views_per_segment"] * 20
     assert lines <= 1.0 - gated["trigger_delay"]
     phases = _phase_labels(main)
+    assert (
+        abs(evaluation.duration - main.duration()[0])
+        <= 2 * SYSTEM.block_duration_raster
+    )
     if gating == "prospective":
+        # One trigger opens the slice, and the heartbeats after the first
+        # start a nominal heartbeat apart: within a repetition of it.
         segments = len(
             module._segments(_arguments(plugin, protocol), gated["views_per_segment"])
         )
-        assert evaluation.duration == pytest.approx(segments * 1.0)
         assert phases == set(range(20))
-    else:
-        assert (
-            abs(evaluation.duration - main.duration()[0])
-            <= 2 * SYSTEM.block_duration_raster
-        )
+        assert segments - 1 < evaluation.duration < segments * 1.0 + 0.1
+        assert _triggers(main) == 1
 
 
 def _arguments(plugin, protocol):
     from pulserver._zoo._evaluation import arguments
 
     return arguments(plugin, protocol)
+
+
+def _triggers(sequence):
+    """The blocks of ``sequence`` that wait for a trigger."""
+    return sum(
+        getattr(sequence.get_block(b), "trig", None) is not None
+        for b in range(1, sequence.num_blocks + 1)
+    )
 
 
 def _phase_labels(sequence):
