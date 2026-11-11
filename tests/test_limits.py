@@ -249,17 +249,6 @@ def test_the_waveform_memory_is_read_into_the_conversion_options():
     assert options["wave_budget"] == ir.WaveBudget(4096, 4.0, 0.01, 0.25, 3)
 
 
-def test_the_span_a_limit_states_is_read_into_the_grouping():
-    _, options, _ = split_limits({**SCANNER, "ir_span_blocks": 1024})
-    assert options["grouping"] == ir.Grouping(span_blocks=1024)
-    assert "grouping" not in split_limits(SCANNER)[1]
-
-
-def test_a_negative_span_limit_is_refused():
-    with pytest.raises(ValueError, match="span_blocks"):
-        split_limits({**SCANNER, "ir_span_blocks": -1})
-
-
 SEGMENTS = {
     "segment_gap_us": 250,
     "segment_tail_us": 4,
@@ -284,24 +273,6 @@ def test_a_design_under_a_sequencer_timing_records_the_time_it_plays(tmp_path):
     design = generate(store, "gre2d", {}, limits={**LIMITS, **SEGMENTS})
     manifest = json.loads((store.directory(design) / "manifest.json").read_text())
     assert manifest["played_time_s"] >= manifest["blocks_time_s"] > 0.0
-
-
-def test_a_design_under_a_span_limit_plays_its_slice_as_one_segment(tmp_path):
-    """A balanced SSFP slice has no wait in it: one segment start, where it had one a repetition."""
-    limits = {**LIMITS, **SEGMENTS}
-    protocol = {"nx": 32, "ny": 32, "bandwidth": 25e3, "num_frames": 2}
-    alone = DesignStore(tmp_path / "alone", "scan")
-    spanned = DesignStore(tmp_path / "spanned", "scan")
-    one = generate(alone, "bssfp2d", protocol, limits=limits)
-    two = generate(
-        spanned, "bssfp2d", protocol, limits={**limits, "ir_span_blocks": 4096}
-    )
-    played = json.loads((alone.directory(one) / "manifest.json").read_text())
-    in_spans = json.loads((spanned.directory(two) / "manifest.json").read_text())
-    start = 1e-6 * (SEGMENTS["segment_gap_us"] + SEGMENTS["segment_tail_us"])
-    assert in_spans["blocks_time_s"] == played["blocks_time_s"]
-    assert in_spans["played_time_s"] - in_spans["blocks_time_s"] == pytest.approx(start)
-    assert played["played_time_s"] - played["blocks_time_s"] > 10 * start
 
 
 @pytest.mark.parametrize("missing", ["ir_wave_max_samples", "ir_wave_raster_us"])

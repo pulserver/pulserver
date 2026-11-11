@@ -630,7 +630,7 @@ def test_a_design_is_converted_under_the_vendor_file_its_limits_name(tmp_path, s
     vendor.write_text(
         "[Grouping]\nboundary_gradient_hz_per_m: 100\nsplit_by_pulses: true\n"
         "split_by_readouts: true\nsplit_navigators: true\n"
-        "split_edge_delays: false\nspan_blocks: 0\n[Grouping End]\n[VendorProfile]\n"
+        "split_edge_delays: false\n[Grouping End]\n[VendorProfile]\n"
         + "".join(
             f"{name}: float32 0\n"
             for name in (
