@@ -128,6 +128,7 @@ SCANS = [pytest.param(name, {}, id=name) for name in SHIPPED] + [
     )
     for name, label, changes in (
         ("bssfp2d", "slices", {"nslices": 3, "TR": 6000, "ny": 64}),
+        ("bssfp2d", "frames", {"nslices": 2, "num_frames": 3, "ny": 32}),
         ("bssfp3d", "longer-tr", {"TR": 9000, "nslices": 8, "ny": 32}),
         ("bssfp3d", "undersampled", {"nslices": 12, "ny": 48, "Ry": 2, "Rz": 2}),
         ("epi2d", "undersampled", {"Ry": 2}),

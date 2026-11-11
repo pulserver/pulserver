@@ -441,6 +441,12 @@ function takes, at the same user entry in every plugin, each as a
 `bssfp3d` takes its number of phase cycles, each a train with its own RF phase
 increment, as `user12`.
 
+`bssfp2d` takes its frames from the console's number of frames. Ungated, each
+slice's k-space is acquired that many times back to back, a free-running series
+that keeps its steady state from one frame to the next and is reconstructed as
+one image per frame; under prospective ECG gating they are the cardiac phases of
+each heartbeat, and retrospective gating sets its own from the heart rate.
+
 ### Console controls
 
 The excitation, the fat saturation, the multiband factor and the explicit

@@ -93,16 +93,18 @@ class Bssfp2D(SequencePlugin):
 
     def evaluate(self, system, protocol):
         # Each slice plays its own train: the half-angle pulse, then one TR per
-        # repetition. The design of the centre and edge lines plays those
-        # repetitions of one slice; ``once`` is the train of one line.
+        # repetition, ungated its lines once per frame. The design of the
+        # centre and edge lines of one frame plays those repetitions of one
+        # slice; ``once`` is the train of one line.
         a = arguments(self, protocol)
         one, lines = cartesian_2d(a)
-        line = self.app(system, **(_ungated(protocol) | one | {"n_slices": 1}))
+        line = self.app(system, **(_ungated(protocol) | one | _ONE_TRAIN))
         tr = line.definitions["TR"][0]
         once = line.duration()[0] - (len(_designed_lines(a)) - 1) * tr
         gating = _gating(protocol)
         n_dummy = _dummies(a, tr, gating)
-        train = once + (n_dummy + lines - 1) * tr
+        frames = a["n_phases"] if gating == "none" else 1
+        train = once + (n_dummy + frames * lines - 1) * tr
         if gating != "none":
             g = _segmented(a, tr, protocol)
             segments = _segments(a, g["views_per_segment"])
@@ -119,6 +121,11 @@ class Bssfp2D(SequencePlugin):
             rf_layout=rf_layout(line, scaled=True, start=once - tr),
             sequence=line,
         )
+
+
+#: The app's arguments for one train of one slice: ungated, the frames are
+#: counted rather than designed.
+_ONE_TRAIN = {"n_slices": 1, "n_phases": 1}
 
 
 def _designed_lines(a) -> list[int]:
@@ -206,5 +213,5 @@ def _gated(plugin, system, protocol) -> dict:
         return arguments_
     a = arguments(plugin, protocol)
     one, _ = cartesian_2d(a)
-    line = plugin.app(system, **(arguments_ | one | {"n_slices": 1}))
+    line = plugin.app(system, **(arguments_ | one | _ONE_TRAIN))
     return arguments_ | _segmented(a, line.definitions["TR"][0], protocol)
