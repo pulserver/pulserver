@@ -553,7 +553,9 @@ train. `busse_radial` requires centre echo 0 and identical trains. `pclo`
 uses Rydén's pivot-centre, linear-outer ring permutation for an arbitrary
 centre echo in identical trains, except that a centre echo in the second half
 of the train is not mirrored: the echoes after it take the outer rings in
-order, so a decaying train weights k-space less at every larger radius. `radial` selects PCLO for identical trains
+order, so a train whose signal is flat up to the centre echo and decays
+after it, as a Busse train's is, weights k-space flat and then decreasing
+outwards. `radial` selects PCLO for identical trains
 or Buonincontri joint shot/echo assignment for a centre/periphery parameter
 transition. The menu retains the same choice indices across refocusing modes.
 Sampling acceleration and the CAIPI shift are independent of this ordering
