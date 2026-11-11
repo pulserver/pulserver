@@ -318,7 +318,8 @@ def test_one_design_fixes_the_nerve_response_of_one_ramp_under_the_nerve_model()
     response = _ramp(80e-3)
     first = 180.0
     assert response(first) > 1.0
-    second = _slew.lowered([(first, {"pns": response(first)})], nerve=(70.0, 0.98))
+    one = [(first, {"pns": response(first)})]
+    second = _slew.fitted(one, first * _slew.TARGET, nerve=(70.0, 0.98))
     assert second < first
     assert response(second) == pytest.approx(_slew.TARGET, rel=1e-9)
     # Without the nerve model the step is proportional, and falls short.
@@ -334,7 +335,7 @@ def test_one_design_fixes_the_nerve_response_where_an_earlier_search_found_it():
     assert found == pytest.approx(100.0)
     assert _slew.response_of(searched[:1]) is None
     # A later design is lowered, or raised, onto the target at once.
-    lower = _slew.lowered([(180.0, {"pns": response(180.0)})], response=found)
+    lower = _slew.fitted([(180.0, {"pns": response(180.0)})], 171.0, response=found)
     assert response(lower) == pytest.approx(_slew.TARGET)
     raised = _slew.fitted([(50.0, {"pns": response(50.0)})], 180.0, response=found)
     assert 50.0 < raised < 180.0
@@ -386,6 +387,9 @@ def test_a_request_past_the_nerve_limit_is_evaluated_twice(tmp_path, plugins):
         ("mprage3d", {"nx": 64, "ny": 64, "nslices": 32}),
         ("fse3d", {"nx": 64, "ny": 64, "nslices": 32, "etl": 32}),
         ("gre_stack_of_stars3d", {"nx": 64, "nslices": 16}),
+        ("gre_radial2d", {"nx": 64}),
+        ("se_propeller2d", {"nx": 64}),
+        ("gre_spiral2d", {"nx": 64}),
     ],
 )
 def test_the_representative_sequence_of_a_shipped_plugin_bounds_the_nerve_response_of_its_scan(
@@ -404,9 +408,30 @@ def test_the_representative_sequence_of_a_shipped_plugin_bounds_the_nerve_respon
     built = scanner.generate(design, protocol)
     scan = built if isinstance(built, pp.Sequence) else built[-1]
 
-    def nerve(sequence):
-        return service._representative_readings(sequence, system, checked, None, False)[
-            "pns"
-        ]
+    def read(sequence, rotation=None):
+        return service._representative_readings(
+            sequence, system, checked, rotation, False
+        )
 
-    assert nerve(representative) >= 0.99 * nerve(scan)
+    assert read(representative)["pns"] >= 0.99 * read(scan)["pns"]
+    # Oblique, either way round: the scan reads no more than the margin the
+    # search holds a reading of the representative sequence to.
+    for angles in ((35.0, -40.0, 25.0), (-35.0, 40.0, -25.0)):
+        rotation = _rotation(*angles)
+        bound, played = read(representative, rotation), read(scan, rotation)
+        # A blade is designed as one line, without the phase encodes of its
+        # others: its scan reads a fraction more than the margin.
+        margin = 1.035 if "propeller" in plugin else 1.0005 / service._HELD
+        for reading in ("pns", "slew", "grad"):
+            assert played[reading] <= bound[reading] * margin, reading
+
+
+def _rotation(about_x, about_y, about_z):
+    """The rotation by the three angles, in degrees, about x, then y, then z."""
+    import numpy as np
+
+    a, b, c = np.radians([about_x, about_y, about_z])
+    turn_x = [[1, 0, 0], [0, np.cos(a), -np.sin(a)], [0, np.sin(a), np.cos(a)]]
+    turn_y = [[np.cos(b), 0, np.sin(b)], [0, 1, 0], [-np.sin(b), 0, np.cos(b)]]
+    turn_z = [[np.cos(c), -np.sin(c), 0], [np.sin(c), np.cos(c), 0], [0, 0, 1]]
+    return np.array(turn_z) @ np.array(turn_y) @ np.array(turn_x)

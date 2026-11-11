@@ -845,7 +845,9 @@ def _validated(
     that was not is evaluated first at the slew rate the plugin's last
     request under these limits ended at, and keeps it where every reading is
     within its limit and one reaches :data:`_NEAR` of it; where none does,
-    the slew rate is raised once, as modelled. The slew rate a valid request
+    the slew rate is raised once, as modelled. A reading is held to
+    :data:`_HELD` of its limit, not to the limit, since the scan may read a
+    little more than its representative sequence. The slew rate a valid request
     ends at is remembered for :func:`generate`, and for the plugin's next
     request, which starts where the readings of this one, fitted, reach
     their target. A request still exceeding its limits after
@@ -896,16 +898,18 @@ def _validated(
             any_rotation,
         )
         tried.append((design.max_slew, readings))
-        if _slew.exceeds(readings):
-            if len(tried) > _slew.PASSES:
-                return Validation(
-                    False,
-                    None,
-                    f"no slew rate tried keeps the design within its limits: "
-                    f"{_readings_text(readings)} at {design.max_slew / design.gamma:.1f} T/m/s",
-                    validation.values,
-                )
-            ceiling = _slew.lowered(tried, nerve, response)
+        if _slew.exceeds(readings) and len(tried) > _slew.PASSES:
+            return Validation(
+                False,
+                None,
+                f"no slew rate tried keeps the design within its limits: "
+                f"{_readings_text(readings)} at {design.max_slew / design.gamma:.1f} T/m/s",
+                validation.values,
+            )
+        if _slew.exceeds(readings, _HELD) and len(tried) <= _slew.PASSES:
+            ceiling = _slew.fitted(
+                tried, design.max_slew * _slew.TARGET, nerve, response
+            )
         elif guessed and len(tried) == 1 and _eased(readings) < _NEAR:
             # The plugin's last request asked for less than this one may
             # play: its slew rate is raised to where the readings allow.
@@ -929,6 +933,13 @@ def _validated(
 #: only when its readings reach this fraction of their limits: below it the
 #: gradients would be slower than the limits ask.
 _NEAR = 0.85
+
+#: The fraction of its limit a reading of the representative sequence is
+#: held to. The representative plays the largest phase encodes of the scan
+#: at one edge of k-space, and a readout turned about the slice axis in
+#: eight directions: on an oblique prescription the scan reads up to 3 % more
+#: slew rate at the other edge, or between two directions.
+_HELD = 0.97
 
 #: The ``x`` of the nerve response ``A S / (S + x)`` the last search of each
 #: plugin under given limits found, which the next search models its first

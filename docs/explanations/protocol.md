@@ -4,7 +4,7 @@
 :class: tldr
 
 - Every edit is answered by your plugin's `evaluate`; the scanner shows the value the design achieves.
-- The shipped plugins design one repetition and extrapolate the scan time, so a reply takes tens of milliseconds.
+- The shipped plugins design a few repetitions and extrapolate the scan time, so a reply takes tens of milliseconds.
 - A resolved protocol sent back resolves to itself, and so to the same design.
 ```
 
@@ -45,7 +45,7 @@ writes such a plugin.
 - **Replies, when asked, with the RF layout of one TR.**
 
   Code: {class}`~pulserver.design.RfLayout`. Tests: *a gre layout is one excitation and lists one definition whatever the matrix*; *a validated amplitude times the listed peak is the peak the instance plays*; *the rf layout is sent only when asked* (`test_rf_layout.py`).
-- **Ships evaluations that design at most two TRs, however large the prescription.**
+- **Ships evaluations that design a few TRs, however large the prescription.**
 
   Code: the shipped plugins, `src/pulserver/_zoo/sequences/`. Tests: *a zoo evaluation designs a few trs however large the prescription*; *an evaluation states the values and the scan time of the design* (`test_zoo_evaluation.py`).
 

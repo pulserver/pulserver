@@ -632,10 +632,11 @@ the prescription.
 
 ### Shipped evaluation
 
-Each shipped plugin evaluates a protocol from one repetition of the scan: one
-line, partition, spoke, interleaf, blade line, echo train or inversion shot of
-one slice, without dummy repetitions. Most call the sequence function with the
-arguments that reduce it to that repetition; `epi3d` and `zte3d` build the
+Each shipped plugin evaluates a protocol from a few repetitions of the scan:
+the lines or partitions at the centre and edge of k-space, eight spokes,
+interleaves or blade lines, an echo train or an inversion shot of one slice,
+without dummy repetitions. Most call the sequence function with the
+arguments that reduce it to those repetitions; `epi3d` and `zte3d` build one
 repetition from the modules their function is built from.
 
 - **Scan time.** The duration of the repetition times the number of
@@ -655,10 +656,18 @@ repetition from the modules their function is built from.
   checks nerve stimulation and slew rate before the scan is designed. A
   Cartesian sequence designs the views at the centre and at the edge of each
   phase-encoding axis, a lattice at half the matrix with no calibration
-  region, partial Fourier or CAIPI shift: the phase encodes of every other
-  view lie between theirs. `mprage3d` designs them as short shots beside the
-  shot its scan time and RF are read from. A sequence that turns one readout,
-  a spoke, a blade or an interleaf, designs its first. That of
+  region, partial Fourier or CAIPI shift: the largest phase encode of each
+  axis, at one edge of k-space. `mprage3d` designs them as short shots beside
+  the shot its scan time and RF are read from. A sequence that turns one
+  readout about the slice axis, a spoke, a blade or an interleaf, designs
+  eight of them, evenly spread in angle. The nerve response read on these is
+  the scan's largest under a nerve model that is the same on every axis. On
+  an oblique prescription the scan can read up to about 3 % more slew rate
+  than they do, at the other edge of k-space or between two directions, so
+  the design service holds their readings to 97 % of the limits; a blade is
+  designed as one line, without the phase encodes of its others, and its
+  scan was read 3.3 % above. The check of the generated design still
+  decides. That of
   `fse3d` and `fse_pd3d` is the packed echo train their evaluation designs,
   as long as the longest train, startup echoes included, at a constant
   refocusing angle: the largest of a Busse or PD train; `epi3d` states none.

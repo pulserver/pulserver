@@ -164,7 +164,8 @@ plugin's evaluation states ({ref}`evaluating-a-protocol`), so the console
 shows what `generate` designs. It models each step on the readings it has:
 the first on one reading, with the nerve response the plugin's last search
 found or else that of one ramp under the nerve model, so a request past a
-limit is mostly evaluated twice. The slew rate a request ends at is remembered:
+limit is mostly evaluated twice. It holds a reading to 97 % of its limit:
+the scan can read a little more than its representative sequence. The slew rate a request ends at is remembered:
 `generate` starts there, the same request validated again is evaluated there
 once, and the plugin's next request under the same limits is tried first
 where the readings of this one reach their target, kept where its own

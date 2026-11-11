@@ -792,7 +792,9 @@ def test_a_zoo_evaluation_designs_a_few_trs_however_large_the_prescription(
         main = _chain(chain)[-1]
         tr = main.definitions["TR"][0]
         rounding = SYSTEM.block_duration_raster * _excitations(main)
-        assert main.duration()[0] <= 9 * tr + rounding
+        # ... or a readout in eight directions, up to fifteen where their
+        # count does not divide by eight, at three partitions.
+        assert main.duration()[0] <= 45 * tr + rounding
     if not designed:
         assert built
         assert max(map(_excitations, built)) <= 2

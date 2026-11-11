@@ -34,9 +34,14 @@ def extremes(a: dict[str, Any], *axes: str) -> dict[str, Any]:
     """Return the arguments that play, on each phase-encoding axis of ``axes``, the centre line and the edge of k-space.
 
     The views a sequence function then designs are few, and hold the
-    largest phase encode of each axis: the gradients of the scan, whose other
-    views play encodes between these, stay within theirs, so the nerve
-    stimulation and the slew rate read on these views bound the scan's. The
+    largest phase encode of each axis, at one edge of k-space: the first
+    line. The nerve response read on them is the scan's largest where the
+    nerve model is the same on every axis, since no sign of an encode
+    changes it. The other edge plays the same encodes reversed: on an oblique
+    prescription, where a physical axis sums the logical ones, the scan can
+    read a few per cent more slew rate or amplitude there, which the design
+    service allows for in what it accepts of a reading; under elliptical
+    sampling the views between the two axes are likewise not designed. The
     lattice is whole: no calibration region, partial Fourier or CAIPI shift
     drops or moves a line of it.
     """
@@ -52,6 +57,17 @@ def extremes(a: dict[str, Any], *axes: str) -> dict[str, Any]:
     if "sampling" in a:
         one["sampling"] = "lattice"
     return one
+
+
+#: The directions a readout turned about the slice axis is designed in: the
+#: physical axis an oblique prescription puts most of a readout on reads, of
+#: the nearest of them, the cosine of half their spacing, within 2 %.
+DIRECTIONS = 8
+
+
+def turned(count: int) -> int:
+    """Return the undersampling at which ``count`` readouts spread evenly in angle leave :data:`DIRECTIONS` of them, or all where they are fewer."""
+    return max(1, count // DIRECTIONS)
 
 
 def repetitions_of(main: pp.Sequence) -> tuple[int, float]:
@@ -222,8 +238,8 @@ def evaluation(
     are played before them (:func:`dummies`). The entries the design achieves
     are read from it, the RF layout is its first TR, and it is the
     evaluation's representative sequence: a Cartesian sequence plays the
-    views of :func:`extremes`, whose gradients bound the scan's, and any
-    other its first view.
+    views of :func:`extremes`, and one that turns a readout about the slice
+    axis plays it in :data:`DIRECTIONS` directions (:func:`turned`).
 
     A sequence with slices is designed for one slice at the shortest TR,
     which is one shot, and the TR and the scan time follow from the packets
@@ -340,7 +356,7 @@ def propeller_2d(a: dict[str, Any]) -> tuple[dict[str, Any], int]:
     """
     blades = math.ceil(math.pi * a["n"] / (2 * a["blade_width"]))
     lines = len(range(0, blades, a["ry"])) * a["blade_width"]
-    one = {"n_dummy": 0, "blade_width": 1, "ry": _nyquist_spokes(a["n"])}
+    one = {"n_dummy": 0, "blade_width": 1, "ry": turned(_nyquist_spokes(a["n"]))}
     return one, lines
 
 
@@ -348,13 +364,13 @@ def radial_2d(a: dict[str, Any]) -> tuple[dict[str, Any], int]:
     """One spoke of a 2D radial scan, and its spokes."""
     nyquist = _nyquist_spokes(a["n"])
     spokes = len(range(0, nyquist, a["ry"]))
-    return {"n_dummy": 0, "ry": nyquist}, spokes
+    return {"n_dummy": 0, "ry": turned(nyquist)}, spokes
 
 
 def spiral_2d(a: dict[str, Any]) -> tuple[dict[str, Any], int]:
     """One interleaf of a 2D spiral scan, and its interleaves."""
     interleaves = len(range(0, a["n_shots"], a["ry"]))
-    return {"n_dummy": 0, "ry": a["n_shots"]}, interleaves
+    return {"n_dummy": 0, "ry": turned(a["n_shots"])}, interleaves
 
 
 def stack_of_stars(a: dict[str, Any]) -> tuple[dict[str, Any], int]:
@@ -362,7 +378,7 @@ def stack_of_stars(a: dict[str, Any]) -> tuple[dict[str, Any], int]:
     nyquist = _nyquist_spokes(a["n"])
     spokes = len(range(0, nyquist, a["ry"]))
     partitions = _views(a["n_z"], a["rz"], a["n_acs_z"], a["partial_fourier_z"])
-    one = {"n_dummy": 0} | extremes(a, "z") | {"ry": nyquist}
+    one = {"n_dummy": 0} | extremes(a, "z") | {"ry": turned(nyquist)}
     return one, spokes * partitions
 
 
@@ -380,7 +396,7 @@ def stack_of_blades(a: dict[str, Any]) -> tuple[dict[str, Any], int]:
     one = (
         {"n_dummy": 0}
         | extremes(a, "z")
-        | {"ry": _nyquist_spokes(a["n"]), "blade_width": 1}
+        | {"ry": turned(_nyquist_spokes(a["n"])), "blade_width": 1}
     )
     return one, blades * width * partitions
 
@@ -389,5 +405,5 @@ def stack_of_spirals(a: dict[str, Any]) -> tuple[dict[str, Any], int]:
     """One interleaf at the centre and edge partitions of a stack of spirals, and its views."""
     interleaves = len(range(0, a["n_shots"], a["ry"]))
     partitions = _views(a["n_z"], a["rz"], a["n_acs_z"], a["partial_fourier_z"])
-    one = {"n_dummy": 0} | extremes(a, "z") | {"ry": a["n_shots"]}
+    one = {"n_dummy": 0} | extremes(a, "z") | {"ry": turned(a["n_shots"])}
     return one, interleaves * partitions

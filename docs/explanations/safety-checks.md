@@ -140,7 +140,7 @@ whose response then exceeds `pns_limit` is designed again at a lower slew
 rate, chosen from the response it measured, as a vendor sequence lowers its
 ramps for its own waveforms. The response follows $A\,S/(S+x)$, with
 $x = \Delta G/c$ and $A = x/b$ for one ramp, so one reading fixes it under
-the nerve model, and two fix it whatever the waveform. The console's protocol
+the nerve model, and two readings fix it for any waveform whose response follows that law. The console's protocol
 is evaluated the same way, on the plugin's representative sequence, which
 plays the largest phase encodes of the scan, and the design starts at the
 slew rate that evaluation ended at. A plugin that wants a design
