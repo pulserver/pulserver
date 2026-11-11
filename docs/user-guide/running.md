@@ -324,7 +324,11 @@ after it would work out again:
   starts where its `validate` ended;
 - the effective TE of each Busse or PD echo train `fse3d` and `fse_pd3d`
   evaluated, or why no train realizes it, so the inverse solve that finds it
-  runs once per train and limits.
+  runs once per train and limits;
+- the SLR pulses pypulseqpp designs, which it caches only in the process
+  that designed them: a selective spin echo, a saturation band or a fat
+  saturation is designed by the first call that plays it and read by the
+  calls after it.
 
 Nothing kept outlives the server, which is restarted to take up a changed
 package in any case. A call answered in its own process keeps nothing.
