@@ -32,6 +32,15 @@ SHORTEST_REST = 1e-3
 
 #: Definition that marks the generated subsequence in the cache.
 PRESCAN_ONLY = "PrescanOnly"
+#: Longest file, in s, that reads out without repeating and is still its own
+#: receive calibration. Such a file is one repetition played once, a single
+#: slice or a single shot, and a prescan calibrates on it from its start, as
+#: it does on the repetition of a file that repeats; a longer one is taken as a
+#: scan no repetition stands for, and is given a generated calibration. The
+#: value holds the longest repetition a prescan is given today with room to
+#: spare: one slice of a 2D balanced SSFP cine of 25 frames, about 16 000
+#: blocks and 22 s.
+RECEIVE_CALIBRATION_WHOLE_FILE_S = 60.0
 
 _RF, _GX, _GY, _GZ, _ADC = range(5)
 _log = logging.getLogger(__name__)
@@ -170,10 +179,10 @@ def receive_calibration_sequence(
     amplitudes, the prescan calibrates on that file from its start after the
     tour, and the subsequence is the tour alone, its readouts under
     ``NOPRESCAN``, or None without pTx.
-    So does it where its only file reads out without repeating and the blocks
-    of its best excitation open or close under a gradient: they belong to a
-    train that starts and ends at rest, a bridged slice, and are not played
-    alone.
+    So does it where its only file reads out without repeating and lasts at
+    most :data:`RECEIVE_CALIBRATION_WHOLE_FILE_S`: the file is then one
+    repetition played once, a single slice or a single shot, and is its own
+    calibration as the repetition of a repeating file is.
     Otherwise no repetition stands for the scan, and the tour is followed by
     the calibration: the excitation scoring highest on the sine of its flip
     angle, capped at 90 degrees, times the thickness it excites, the RF
@@ -214,21 +223,13 @@ def receive_calibration_sequence(
     tour = _tour(files, channels) if channels > 1 else []
     reading = [i for i, f in enumerate(files) if f.reads.any()]
     calibration = None
-    if reading and not (len(reading) == 1 and _repeats_alike(files[reading[0]])):
+    if reading and not (len(reading) == 1 and _calibrates_on_itself(files[reading[0]])):
         # Equal signals, to rounding, go to the first in play order.
         calibration = max(
             (span for i in reading for span in _spans(files[i], i, channels)),
             key=lambda span: round(span.signal, SIGNAL_DIGITS),
             default=None,
         )
-    if (
-        calibration is not None
-        and len(reading) == 1
-        and not _rests_at_its_ends(files[calibration.file], calibration)
-    ):
-        # Blocks that open or close under a gradient are part of a longer
-        # train and cannot be played alone: the file then calibrates on itself.
-        calibration = None
     if not tour and calibration is None:
         return None
     if calibration is not None and calibration.balanced:
@@ -240,27 +241,12 @@ def receive_calibration_sequence(
     return _build(files, tour, calibration, system)
 
 
-#: Largest gradient, in Hz/m, at which a block boundary counts as at rest.
-REST_GRADIENT = 100.0
-
-
-def _rests_at_its_ends(f: _File, span: _Span) -> bool:
-    """Whether every gradient is at rest where the span starts and where it stops."""
-
-    def edge(event, closing: bool) -> float:
-        if event is None or event.type == "trap":
-            return 0.0
-        if closing:
-            return float(event.last)
-        return 0.0 if event.delay > 0 else float(event.first)
-
-    opening = f.sequence.get_block(span.first + 1)
-    closing = f.sequence.get_block(span.stop)
-    return all(
-        abs(edge(event, at_end)) <= REST_GRADIENT
-        for block, at_end in ((opening, False), (closing, True))
-        for event in (block.gx, block.gy, block.gz)
-    )
+def _calibrates_on_itself(f: _File) -> bool:
+    """Whether a prescan calibrates on the file from its start: it repeats alike, or is played once and briefly."""
+    size, _ = f.sequence.repetition()
+    if 0 < size < f.blocks.shape[0]:
+        return _repeats_alike(f)
+    return float(f.sequence.duration()[0]) <= RECEIVE_CALIBRATION_WHOLE_FILE_S
 
 
 def _repeats_alike(f: _File) -> bool:

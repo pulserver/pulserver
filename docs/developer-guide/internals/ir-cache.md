@@ -239,9 +239,9 @@ prescan then calibrates on that file from its start, the scan's own steady
 state, the tour's readouts play under `NOPRESCAN`, labelled on its first block,
 and the subsequence is the tour alone, or is not generated without parallel
 transmit. A single file that reads out without repeating calibrates on itself
-too where the blocks of its best excitation open or close under a gradient:
-they are part of a train that starts and ends at rest, a bridged slice, and
-cannot be played alone. Otherwise no repetition stands for the scan, and the tour is followed
+too where it lasts at most `RECEIVE_CALIBRATION_WHOLE_FILE_S` (60 s): it is
+one repetition played once, a single slice or a single shot, and stands for
+itself as the repetition of a repeating file does. Otherwise no repetition stands for the scan, and the tour is followed
 by the calibration, and the tour's readouts set the gain with the
 calibration's: a parallel-transmit pulse a prescan plays without acquiring
 still distorts in the scan. The calibration is the excitation scoring highest on the sine of its flip angle, capped at 90

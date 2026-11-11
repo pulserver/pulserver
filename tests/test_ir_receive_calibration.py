@@ -79,50 +79,32 @@ def test_a_single_sequence_that_repeats_alike_generates_nothing(tmp_path):
     assert cal["subsequence"] == 0
 
 
-def _bridged(count=4):
-    """One train of ``count`` excitations whose blocks join under the slice gradient, played once."""
-    rf, gz, _ = pp.make_sinc_pulse(
-        math.radians(30.0),
-        duration=2e-3,
-        slice_thickness=5e-3,
-        time_bw_product=4,
-        system=SYSTEM,
-        return_gz=True,
-        use="excitation",
-    )
-    level, plateau = 0.1 * gz.amplitude, gz.amplitude
-    top, end, span = gz.rise_time, gz.rise_time + gz.flat_time, pp.calc_duration(gz)
-
-    def selection(first, last):
-        return pp.make_extended_trapezoid(
-            "z",
-            times=[0.0, top, end, span],
-            amplitudes=[first, plateau, plateau, last],
-            system=SYSTEM,
-        )
-
-    def joint(first, last):
-        return pp.make_extended_trapezoid(
-            "z", times=[0.0, 1e-3], amplitudes=[first, last], system=SYSTEM
-        )
-
+def _once(flips=(20.0, 30.0)):
+    """A train played once whose repetitions differ in structure, so that none repeats."""
     seq = pp.Sequence(SYSTEM)
-    for k in range(count):
-        seq.add_block(rf, selection(0.0 if k == 0 else level, level))
-        seq.add_block(
-            pp.make_adc(64, duration=2e-3, system=SYSTEM), joint(level, level)
-        )
-        seq.add_block(joint(level, 0.0 if k == count - 1 else level))
-    seq.set_definition("NumGainCalibrationReadouts", 1)
+    for index, flip in enumerate(flips):
+        _repetition(seq, flip, 5e-3, delay=5e-3 * (index + 1), phase_area=20.0 * index)
     return seq
 
 
-def test_a_bridged_train_played_once_calibrates_on_itself(tmp_path):
-    """No repetition of it starts and ends at rest, so none is played alone."""
-    assert ir.receive_calibration_sequence([_bridged()], SYSTEM) is None
-    path, calibration = _converted(tmp_path, [_bridged()])
+def test_a_brief_file_played_once_calibrates_on_itself(tmp_path):
+    """One repetition played once stands for itself, as a repetition that repeats does."""
+    seq = _once()
+    assert seq.repetition()[0] == seq.num_blocks
+    assert ir.receive_calibration_sequence([seq], SYSTEM) is None
+    path, calibration = _converted(tmp_path, [_once()])
     assert calibration is None
     assert ir.summary(path, SYSTEM, cache_ext=".pseg")["num_subsequences"] == 1
+
+
+def test_a_file_played_once_past_the_threshold_is_calibrated_apart(monkeypatch):
+    from pulserver.ir import _calibration
+
+    seq = _once()
+    monkeypatch.setattr(
+        _calibration, "RECEIVE_CALIBRATION_WHOLE_FILE_S", 0.5 * seq.duration()[0]
+    )
+    assert ir.receive_calibration_sequence([seq], SYSTEM) is not None
 
 
 def test_a_chain_calibrates_on_the_thick_slab_over_the_strong_thin_slice(tmp_path):
