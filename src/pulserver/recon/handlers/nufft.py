@@ -36,7 +36,8 @@ class NufftRecon(ReconPlugin):
     (:func:`bartorch.estimate_density`), which preconditions the solve (Baron
     et al., Magn Reson Med 2018). The step is the reciprocal of the largest
     eigenvalue of the normal operator (``bart pics -e``). An image is its
-    averages summed, and its values are those of the solve, unscaled. A unit
+    averages summed, and its values are those of the solve but for the
+    corrections below. A unit
     of more receive channels than ``virtual_coils`` is compressed to that many
     virtual channels first (:func:`~pulserver.recon.handlers.pics.compressed`).
 

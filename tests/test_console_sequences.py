@@ -26,10 +26,8 @@ SHIPPED = sorted(path.stem for path in SEQUENCES.glob("*.py"))
 # vials: below it on a contrast of its own, a regularised NUFFT's residual
 # streaks, or both.
 AGREEMENT = 0.7
-# EPI displaces a vial off water resonance along the phase encode. The zero
-# echo time image's N4 field flattens the receive shading the gradient echo's
-# reference keeps, which its streaks leave no margin for.
-AGREEMENTS = {"epi2d": 0.6, "zte3d": 0.6}
+# EPI displaces a vial off water resonance along the phase encode.
+AGREEMENTS = {"epi2d": 0.6}
 
 
 def _prescription(**values):

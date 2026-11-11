@@ -55,7 +55,9 @@ def _coefficient_parameter(header: Any) -> str | None:
     return None
 
 
-def gradient_unwarped(image: Any, context: Any, data: Any) -> Any:
+def gradient_unwarped(
+    image: Any, context: Any, data: Any, cache: dict | None = None
+) -> Any:
     """Correct an image for gradient nonlinearity.
 
     The coil's spherical-harmonic field is evaluated at the scanner position of
@@ -75,6 +77,12 @@ def gradient_unwarped(image: Any, context: Any, data: Any) -> Any:
         The plugin's :class:`ReconContext`, whose header states the table.
     data : ReconData
         The plugin's :class:`ReconData`, whose buffer states the geometry.
+    cache : dict, default=None
+        Corrections already built for the stream, by the reference
+        acquisition's encoding space, position and orientation; the one this
+        unit needs is taken from it or added to it. A stream of several units
+        of one geometry, the echoes of a multi-echo scan or the volumes of a
+        time series, so builds its correction once.
 
     Returns
     -------
@@ -99,11 +107,8 @@ def gradient_unwarped(image: Any, context: Any, data: Any) -> Any:
 
     try:
         import torch
-        from bartorch.tools import Gradunwarp
 
-        correction = Gradunwarp.from_mrd(header, reference)
-        if correction.shape[0] == 1:
-            correction = _in_plane(correction, header, reference)
+        correction = _correction(header, reference, cache)
         corrected = correction(torch.as_tensor(image))
     except Exception as error:
         _log.warning("the image was not corrected for gradient nonlinearity: %s", error)
@@ -112,6 +117,39 @@ def gradient_unwarped(image: Any, context: Any, data: Any) -> Any:
     # NumPy arrays carry a ``device`` of their own under the array API, so the
     # type is asked for rather than duck-typed.
     return corrected if isinstance(image, torch.Tensor) else corrected.cpu().numpy()
+
+
+#: Voxels the corrections a stream keeps (:func:`gradient_unwarped`'s
+#: ``cache``) may span together, about two whole-head volumes; the oldest
+#: are dropped beyond it.
+UNWARP_CACHE_VOXELS = 2 * 256**3
+
+
+def _correction(header: Any, reference: Any, cache: dict | None) -> Any:
+    """Return the gradient nonlinearity correction of ``reference``'s geometry, from ``cache`` where it holds it."""
+    from bartorch.tools import Gradunwarp
+
+    key = (
+        int(getattr(reference, "encoding_space_ref", 0) or 0),
+        *(
+            tuple(float(v) for v in getattr(reference, name))
+            for name in ("position", "read_dir", "phase_dir", "slice_dir")
+        ),
+    )
+    if cache is not None and key in cache:
+        cache[key] = cache.pop(key)
+        return cache[key]
+    correction = Gradunwarp.from_mrd(header, reference)
+    if correction.shape[0] == 1:
+        correction = _in_plane(correction, header, reference)
+    if cache is not None:
+        cache[key] = correction
+        while (
+            len(cache) > 1
+            and sum(np.prod(c.shape) for c in cache.values()) > UNWARP_CACHE_VOXELS
+        ):
+            cache.pop(next(iter(cache)))
+    return correction
 
 
 def _in_plane(correction: Any, header: Any, reference: Any) -> Any:
@@ -191,21 +229,36 @@ def fermi_profile(extent: tuple[int, ...], axis: int) -> np.ndarray:
     return window[tuple(centre)].numpy()
 
 
+#: Words a recon parameter turns its correction on or off with, besides a
+#: number (0 off, any other on), in any case.
+SWITCH_WORDS = {
+    "on": True,
+    "true": True,
+    "yes": True,
+    "off": False,
+    "false": False,
+    "no": False,
+}
+
+
 def _stated(header: Any, name: str, default: bool) -> bool:
-    """Whether the recon parameter ``name`` of ``header`` turns its correction on; ``default`` where it is absent or not a number."""
+    """Whether the recon parameter ``name`` of ``header`` turns its correction on; ``default`` where it is absent or neither a number nor one of :data:`SWITCH_WORDS`."""
     from ..mrd._metadata import user_parameter
 
     value = user_parameter(header, name, None)
     if value is None:
         return default
+    word = str(value).strip().lower()
+    if word in SWITCH_WORDS:
+        return SWITCH_WORDS[word]
     try:
-        return float(value) != 0
-    except (TypeError, ValueError):
+        return float(word) != 0
+    except ValueError:
         _log.warning(
-            "recon parameter %s %r is not a number; it is taken as %d",
+            "recon parameter %s %r is neither a number nor on/off; it is taken as %s",
             name,
             value,
-            int(default),
+            "on" if default else "off",
         )
         return default
 
@@ -234,8 +287,10 @@ class Corrections:
        phase images are sent as reconstructed.
 
     The header's recon parameter ``KSpaceFilter``, ``GradientUnwarp`` or
-    ``IntensityCorrection`` turns its step off where it is 0 and on where it is
-    any other number; where the header states none, the argument decides.
+    ``IntensityCorrection`` turns its step off where it is 0 or one of the
+    off words of :data:`SWITCH_WORDS`, and on where it is any other number or
+    an on word; where the header states none, or a value of neither kind, the
+    argument decides.
     Which steps are on, and why any is off, is logged when the stream starts;
     each step is logged when it runs, at ``INFO`` for the first image of the
     stream and at ``DEBUG`` after. A step that fails leaves the image as it
@@ -268,6 +323,7 @@ class Corrections:
         )
         self._applied: list[str] = []
         self._logged: set[str] = set()
+        self._unwarps: dict = {}
         if not unwarp:
             unwarp_state = _off(header, GRADIENT_UNWARP, "gradient_unwarp")
         elif table is None:
@@ -329,11 +385,11 @@ class Corrections:
         return kspace * profile.reshape(shape)
 
     def unwarped(self, image: Any, context: Any, data: Any) -> Any:
-        """Return ``image`` corrected for gradient nonlinearity (:func:`gradient_unwarped`) where the correction is on."""
+        """Return ``image`` corrected for gradient nonlinearity (:func:`gradient_unwarped`) where the correction is on, each geometry's correction built once for the stream."""
         if not self.gradient_unwarp:
             return image
         start = time.perf_counter()
-        corrected = gradient_unwarped(image, context, data)
+        corrected = gradient_unwarped(image, context, data, self._unwarps)
         if corrected is not image:
             self._ran(
                 "GRADUNWARP",
@@ -375,10 +431,13 @@ class IntensityCorrection:
     closes with a magnitude image, and divides every later contrast,
     repetition and cardiac phase of it: echoes and time points keep their
     intensity ratios, so a T2* fit or a time series is not changed by the
-    correction. Make one instance per stream.
+    correction. Each slice of a 2D multi-slice series has a field of its own,
+    of mean 1 inside its own mask, so ratios between slices are not kept.
+    Make one instance per stream.
 
     A magnitude image that is not 2D or 3D once its axes of one point are
-    dropped, or whose mask holds fewer than 64 pixels or 128 voxels, is sent
+    dropped, or whose mask holds fewer than 64 pixels or 128 voxels or less
+    than :data:`N4_MIN_MASK_FRACTION` of the image, is sent
     uncorrected, as are all images when SimpleITK is not installed or
     the estimate fails; the reason is logged.
     """
@@ -454,15 +513,33 @@ class IntensityCorrection:
             key[1],
             squeezed,
             time.perf_counter() - start,
-            "" if field is not None else "; its mask is too small to correct",
+            ""
+            if field is not None
+            else "; its mask is too small to tell shading from contrast, so it is not corrected",
         )
         return self.fields[key]
+
+
+#: Fitting levels of the N4 field. The B-spline mesh of SimpleITK's N4,
+#: one element across the image at the first level, doubles at each. At two
+#: the field varies over half the field of view and keeps the contrast
+#: between compartments a few centimetres across, such as vials in a bath;
+#: at four it also removes a head coil's centre-bright shading at 7 T, and
+#: flattens that contrast towards the bath's.
+N4_FITTING_LEVELS = 2
+
+#: Least fraction of the image N4's Otsu mask must hold. A mask of a few
+#: small compartments, such as vials in air, gives N4 nothing to tell
+#: shading from their contrast by, and its field scrambles their intensities.
+N4_MIN_MASK_FRACTION = 0.05
 
 
 def receive_field(magnitude: np.ndarray) -> np.ndarray | None:
     """Return the N4 field of a 2D or 3D magnitude image, mean 1 inside its Otsu mask and clipped to its range there.
 
-    ``None`` where the mask holds fewer than 64 pixels or 128 voxels.
+    The field is fitted at :data:`N4_FITTING_LEVELS`. ``None`` where the mask
+    holds fewer than 64 pixels or 128 voxels, or less than
+    :data:`N4_MIN_MASK_FRACTION` of the image.
     """
     import SimpleITK as sitk
     import torch
@@ -472,11 +549,12 @@ def receive_field(magnitude: np.ndarray) -> np.ndarray | None:
     mask = sitk.GetArrayFromImage(
         sitk.OtsuThreshold(sitk.GetImageFromArray(image), 0, 1, 200)
     ).astype(bool)
-    if mask.sum() < 16 * 2**image.ndim:
+    if mask.sum() < max(16 * 2**image.ndim, N4_MIN_MASK_FRACTION * mask.size):
         return None
     _, field = bias_field_correct(
         torch.from_numpy(image),
         mask=torch.from_numpy(mask.astype(np.uint8)),
+        iterations=(50,) * N4_FITTING_LEVELS,
         return_field=True,
     )
     field = field.numpy().astype(np.float64)

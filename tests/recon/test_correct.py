@@ -231,3 +231,50 @@ def test_the_partition_profile_is_the_volume_window_through_its_centre():
 
     np.testing.assert_allclose(fermi_profile((8, 64, 48), 0), window[:, 32, 24])
     assert fermi_profile((8, 64, 48), 0)[0] == pytest.approx(0.5, abs=1e-3)
+
+
+def test_a_streams_corrections_build_the_unwarp_of_each_geometry_once(monkeypatch):
+    pytest.importorskip("bartorch.tools")
+    from pulserver.recon import Corrections
+
+    built = []
+
+    def from_mrd(cls, head, reference):
+        built.append(tuple(reference.position))
+        return _Recording()
+
+    import bartorch.tools
+
+    monkeypatch.setattr(bartorch.tools.Gradunwarp, "from_mrd", classmethod(from_mrd))
+    corrections = Corrections(header(COIL))
+    image = np.zeros((4, 16, 16), dtype=np.float32)
+    first, moved = acquisition(), acquisition()
+    moved.position = (0.0, 0.0, 10.0)
+
+    for reference in (first, first, moved, first):
+        corrections.unwarped(image, _Context(header(COIL)), _Data(reference))
+
+    assert built == [(0.0, 0.0, 0.0), (0.0, 0.0, 10.0)]
+
+
+SHIPPED = ("pics", "pics_train", "nufft", "nufft_train", "epi", "pmc", "qsm")
+
+
+@pytest.mark.parametrize("name", SHIPPED)
+def test_every_shipped_reconstruction_makes_the_three_corrections_by_default(name):
+    import importlib
+
+    from conftest import calibration_header
+
+    from pulserver.recon import Corrections, ExamCache, ReconContext
+
+    plugin = importlib.import_module(f"pulserver.recon.handlers.{name}").PLUGIN
+    head = calibration_header(4, 16)
+    head.userParameters = header(COIL).userParameters
+    stream = plugin.spawn()
+    stream.startup(ReconContext(header=head, exam=ExamCache("exam")))
+
+    assert isinstance(stream.corrections, Corrections)
+    assert stream.corrections.kspace_filter
+    assert stream.corrections.gradient_unwarp
+    assert stream.corrections.intensity is not None

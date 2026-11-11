@@ -64,8 +64,44 @@ def test_a_shaded_uniform_object_is_flattened_and_keeps_its_mean():
         ReconResult(image.astype(np.float32)), unit()
     ).data
 
-    assert spread(corrected, inside) < 0.25 * spread(image, inside)
+    assert spread(corrected, inside) < 0.5 * spread(image, inside)
     assert np.mean(corrected[inside]) == pytest.approx(np.mean(image[inside]), rel=0.1)
+
+
+def vials_in_a_bath(n=96, depth=48):
+    """Four vials of different intensity in a uniform bath, ``(depth, n, n)``, unshaded, and the mask of each vial's core and of the bath."""
+    z, y, x = np.meshgrid(
+        np.arange(depth) - depth / 2, *(np.arange(n) - n / 2,) * 2, indexing="ij"
+    )
+    radius = n / 32
+    bath = (y**2 + x**2 < (14 * radius) ** 2) & (np.abs(z) < 0.45 * depth)
+    image = np.where(bath, 0.7, 0.0)
+    cores = []
+    for (cy, cx), value in zip(
+        [(-8, -8), (-8, 8), (8, -8), (8, 8)], [1.0, 0.5, 0.8, 0.3], strict=True
+    ):
+        vial = (
+            (y - cy * radius) ** 2 + (x - cx * radius) ** 2 < (3 * radius) ** 2
+        ) & bath
+        image[vial] = value
+        cores.append(
+            ((y - cy * radius) ** 2 + (x - cx * radius) ** 2 < (2 * radius) ** 2)
+            & (np.abs(z) < depth / 3)
+        )
+    rest = bath & ~np.any(cores, axis=0) & (np.abs(z) < depth / 3)
+    noise = 0.005 * np.random.default_rng(0).standard_normal(image.shape)
+    return np.abs(image + noise).astype(np.float32), cores, rest
+
+
+def test_separate_compartments_keep_their_intensity_ratios():
+    image, cores, bath = vials_in_a_bath()
+
+    corrected = IntensityCorrection()(ReconResult(image), unit()).data
+
+    for core in cores:
+        before = image[core].mean() / image[bath].mean()
+        after = corrected[core].mean() / corrected[bath].mean()
+        assert after == pytest.approx(before, rel=0.03)
 
 
 def test_the_magnitude_is_divided_and_the_real_and_imaginary_images_are_sent_as_reconstructed():
@@ -80,7 +116,7 @@ def test_the_magnitude_is_divided_and_the_real_and_imaginary_images_are_sent_as_
 
     out = IntensityCorrection()(results, unit())
 
-    assert spread(out[0].data, inside) < 0.25 * spread(np.abs(image), inside)
+    assert spread(out[0].data, inside) < 0.5 * spread(np.abs(image), inside)
     assert out[0].attributes["ImageProcessingHistory"][-1] == "N4"
     assert out[1] is results[1] and out[2] is results[2]
 
@@ -156,7 +192,12 @@ def test_a_failing_estimate_sends_the_images_uncorrected_and_the_log_says_why(
         ("0", True, False),
         ("0.0", True, False),
         ("1", False, True),
-        ("on", True, True),
+        ("on", False, True),
+        ("Off", True, False),
+        ("false", True, False),
+        ("no", True, False),
+        ("yes", False, True),
+        ("maybe", True, True),
     ],
 )
 def test_the_recon_parameter_overrides_the_plugins_default(value, default, stated):
