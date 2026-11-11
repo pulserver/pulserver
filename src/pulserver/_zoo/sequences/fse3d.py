@@ -18,6 +18,7 @@ from pulserver._zoo._evaluation import (
 )
 from pulserver._zoo._fse import (
     bounding_train,
+    check_centre_first,
     echo_train_layout,
     effective_te,
     one_train,
@@ -263,6 +264,7 @@ class Fse3D(SequencePlugin):
         # train realizes, once per train under a warm server, on the centre
         # view alone.
         a = arguments(self, protocol)
+        check_centre_first(a)
         one = {
             "n_dummy": 0,
             "flip_modulation": "constant",

@@ -549,7 +549,10 @@ reference effective TE within 0.1 ms. The achieved value is recorded in
 `EffectiveEchoTime` and reported to the UI and MRD header; `TE` remains the
 physical excitation-to-centre-echo time. This reference contrast annotation
 does not model all tissues, B1 variation or inter-shot steady state. The selected echo must precede the last acquired echo in every
-train. `busse_radial` requires centre echo 0 and identical trains. `pclo`
+train. `busse_radial` requires centre echo 0 and identical trains: the
+evaluation refuses a TE other than Minimum for a constant or optimized train,
+and a centre acquired echo other than 0 for a Busse or PD train, so the
+console refuses such a prescription before it is downloaded. `pclo`
 uses Rydén's pivot-centre, linear-outer ring permutation for an arbitrary
 centre echo in identical trains, except that a centre echo in the second half
 of the train is not mirrored: the echoes after it take the outer rings in

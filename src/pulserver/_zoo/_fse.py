@@ -33,6 +33,45 @@ def sar_burst(app: Callable[..., Any]) -> Callable[..., Any]:
     return design
 
 
+def check_centre_first(a: Mapping[str, Any]) -> None:
+    """Refuse a request the ``busse_radial`` view order cannot play.
+
+    The order acquires the centre of k-space at the first acquired echo of
+    every train, and pypulseqpp's ``fse3d`` refuses any other centre echo when
+    the sequence is designed. A Busse train must prescribe that echo as its
+    centre; a PD train must prescribe it, or neither a centre echo nor a TE;
+    any other train must leave its TE at the shortest. Checked in the
+    evaluation, a request the design would refuse is refused when it is
+    prescribed rather than when it is downloaded. ``a`` holds the arguments
+    of the full design.
+
+    Raises
+    ------
+    ValueError
+        If ``a`` orders its views ``busse_radial`` and asks for another
+        centre echo.
+    """
+    if a.get("ordering") != "busse_radial":
+        return
+    modulation = a.get("flip_modulation")
+    centre = a.get("busse_centre_echo")
+    if modulation == "busse":
+        first = centre == 0
+    elif modulation == "pd":
+        first = centre == 0 or (centre is None and a.get("pd_effective_te") is None)
+    else:
+        first = a.get("te") is None
+    if not first:
+        if modulation in ("busse", "pd"):
+            what = "centre acquired echo must be 0"
+        else:
+            what = "TE must be Minimum"
+        raise ValueError(
+            "the busse radial view order acquires the centre of k-space at "
+            f"the first echo: the {what}"
+        )
+
+
 def bounding_train(a: Mapping[str, Any], peak_deg: float) -> dict[str, Any]:
     """Return the arguments that design the constant train bounding a train whose angles a prescribed signal fixes.
 

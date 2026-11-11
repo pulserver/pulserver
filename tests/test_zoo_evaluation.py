@@ -1601,6 +1601,33 @@ def test_a_prescription_no_train_realizes_is_refused_by_the_evaluation_as_by_the
         plugin.generate(SYSTEM, _protocol(plugin, request))
 
 
+@WITH_BLOCHSIM
+@pytest.mark.parametrize(
+    ("name", "options", "changes", "refused"),
+    [
+        ("fse3d", {}, {"TE": 44000}, "TE must be Minimum"),
+        ("fse3d", {"refocusing": "busse"}, {"user17_value": -1}, "must be 0"),
+        ("fse_pd3d", {}, {"TE": 44000, "user17_value": -1}, "must be 0"),
+    ],
+)
+def test_a_centre_echo_the_busse_radial_order_cannot_play_is_refused_by_the_evaluation_as_by_the_design(
+    name, options, changes, refused
+):
+    """The busse radial order acquires the centre of k-space at the first echo, whatever the console carries over."""
+    plugin = load_plugin(
+        _plugins.SEQUENCES / f"{name}.py", options | {"ordering": "busse_radial"}
+    )
+    request = {"nx": 64, "ny": 32, "nslices": 8, "etl": 20, "TR": 1800000}
+
+    assert plugin.validate(SYSTEM, request | {"TE": TEPreset.MINIMUM}).valid
+    reply = plugin.validate(SYSTEM, request | changes)
+
+    assert not reply.valid
+    assert refused in reply.info
+    with pytest.raises(ValueError, match="busse_radial requires centre echo 0"):
+        plugin.generate(SYSTEM, _protocol(plugin, request | changes))
+
+
 @pytest.mark.parametrize(
     ("name", "options"), [("fse3d", {"refocusing": "busse"}), ("fse_pd3d", {})]
 )
