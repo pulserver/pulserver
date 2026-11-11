@@ -235,6 +235,47 @@ def test_an_edited_plugin_is_listed_and_validated_again(plugins, serving):
     assert len(_evaluations(plugins)) > made
 
 
+def test_a_plugin_relinked_with_the_same_modification_time_is_listed_again(
+    plugins, serving
+):
+    # An installer gives every plugin file it extracts the same modification
+    # time; a slot linked to another of them holds another plugin.
+    other = plugins / "other.py"
+    other.write_text(
+        PLUGIN.format(representative=1.0).replace("range_max=100", "range_max=64")
+    )
+    shipped = (plugins / "bound.py").stat().st_mtime_ns
+    os.utime(other, ns=(shipped, shipped))
+    slot = plugins / "sequence5.py"
+    slot.symlink_to(plugins / "bound.py")
+    listed = _call("list", plugins, plugin="sequence5", rf_definitions=True)
+
+    slot.unlink()
+    slot.symlink_to(other)
+
+    relisted = _call("list", plugins, plugin="sequence5", rf_definitions=True)
+    assert relisted != listed
+    assert relisted == _call("list", plugins, plugin="other", rf_definitions=True)
+
+
+def test_a_plugin_staged_where_another_was_starts_at_the_design_limit(plugins, serving):
+    # A plugin's next request starts at the slew rate its last one ended at;
+    # another plugin copied to the same path is not that plugin.
+    slot = plugins / "sequence30.py"
+    slot.write_text((plugins / "bound.py").read_text())
+    _call("validate", plugins, plugin="sequence30", block=block())
+    limit = _evaluations(plugins)[0][1]
+    assert _evaluations(plugins)[-1][1] < 0.9 * limit
+    made = len(_evaluations(plugins))
+
+    slot.write_text((plugins / "milder.py").read_text())
+    _call("validate", plugins, plugin="sequence30", block=block(10))
+
+    (size, first), *_ = _evaluations(plugins)[made:]
+    assert size == 10
+    assert first == pytest.approx(limit, rel=1e-3)
+
+
 def test_generate_starts_at_the_slew_rate_another_call_validated(
     plugins, serving, tmp_path
 ):
