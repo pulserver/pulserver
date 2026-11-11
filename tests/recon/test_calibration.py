@@ -482,6 +482,39 @@ def test_maps_serve_a_unit_acquired_as_they_were():
 
 
 @pytest.mark.parametrize(
+    "field",
+    [
+        "table_position",
+        "position",
+        "read_dir",
+        "phase_dir",
+        "slice_dir",
+        "fov",
+        "extent",
+    ],
+)
+def test_maps_serve_geometry_with_floating_point_roundoff(field):
+    context, data = capture()
+    maps = stored_for(context, data)
+    value = maps.geometry[field]
+    perturbed = (*value[:-1], value[-1] + 1.5e-10)
+    maps = dataclasses.replace(maps, geometry={**maps.geometry, field: perturbed})
+
+    assert maps.incompatibility(data, context) is None
+
+
+@pytest.mark.parametrize(
+    "value", [(5.0, 220.0, 220.001), (5.0, 220.0), None, (5.0, 220.0, np.nan)]
+)
+def test_maps_refuse_changed_or_incomplete_extents(value):
+    context, data = capture()
+    maps = stored_for(context, data)
+    maps = dataclasses.replace(maps, geometry={**maps.geometry, "extent": value})
+
+    assert maps.incompatibility(data, context).startswith("geometry.extent differs")
+
+
+@pytest.mark.parametrize(
     ("field", "stored"),
     [
         ("coils", tuple(f"H{index}" for index in reversed(range(COILS)))),

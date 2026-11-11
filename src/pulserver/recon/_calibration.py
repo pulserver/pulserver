@@ -23,6 +23,23 @@ _log = logging.getLogger("pulserver.recon")
 _ENCODED = ("partition", "phase_encode")
 
 
+def _field_matches(name: str, stored: Any, requested: Any) -> bool:
+    continuous = {
+        "geometry.table_position",
+        "geometry.position",
+        "geometry.read_dir",
+        "geometry.phase_dir",
+        "geometry.slice_dir",
+        "geometry.fov",
+        "geometry.extent",
+    }
+    if name in continuous and stored is not None and requested is not None:
+        return np.shape(stored) == np.shape(requested) and bool(
+            np.allclose(stored, requested, rtol=0, atol=1e-6)
+        )
+    return stored == requested
+
+
 class MissingCalibration(RuntimeError):
     """No source holds a calibration the stream can use.
 
@@ -120,7 +137,9 @@ class CoilSensitivities:
         ``context.noise``, ``basis`` with the compression in
         ``context.coil_compression``, then each component of ``geometry`` with
         that of the unit's imaging k-space, or of its calibration k-space where
-        it holds no imaging data.
+        it holds no imaging data. Continuous geometry fields admit an absolute
+        tolerance of 1e-6 (mm for positions and extents, dimensionless for
+        direction cosines); identifiers and matrix sizes must match exactly.
 
         Returns
         -------
@@ -142,7 +161,7 @@ class CoilSensitivities:
             ),
         )
         for name, stored, requested in fields:
-            if stored != requested:
+            if not _field_matches(name, stored, requested):
                 return f"{name} differs: stored {stored!r}, this unit {requested!r}"
         return None
 
@@ -541,7 +560,7 @@ def _fitted(
         ),
     )
     for name, value, requested in fields:
-        if value != requested:
+        if not _field_matches(name, value, requested):
             rejected.append(
                 f"{where}: {name} differs: stored {value!r}, this unit "
                 f"{requested!r} (estimated by {stored.method} from {origin})"
@@ -549,7 +568,12 @@ def _fitted(
             return None
 
     maps = stored.maps
-    if any(stored.geometry.get(name) != wanted.get(name) for name in _PLACEMENT):
+    if any(
+        not _field_matches(
+            f"geometry.{name}", stored.geometry.get(name), wanted.get(name)
+        )
+        for name in _PLACEMENT
+    ):
         source, target = _placement(stored.geometry), _placement(wanted)
         if source is None or target is None:
             rejected.append(
