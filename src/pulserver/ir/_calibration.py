@@ -170,6 +170,10 @@ def receive_calibration_sequence(
     amplitudes, the prescan calibrates on that file from its start after the
     tour, and the subsequence is the tour alone, its readouts under
     ``NOPRESCAN``, or None without pTx.
+    So does it where its only file reads out without repeating and the blocks
+    of its best excitation open or close under a gradient: they belong to a
+    train that starts and ends at rest, a bridged slice, and are not played
+    alone.
     Otherwise no repetition stands for the scan, and the tour is followed by
     the calibration: the excitation scoring highest on the sine of its flip
     angle, capped at 90 degrees, times the thickness it excites, the RF
@@ -217,6 +221,14 @@ def receive_calibration_sequence(
             key=lambda span: round(span.signal, SIGNAL_DIGITS),
             default=None,
         )
+    if (
+        calibration is not None
+        and len(reading) == 1
+        and not _rests_at_its_ends(files[calibration.file], calibration)
+    ):
+        # Blocks that open or close under a gradient are part of a longer
+        # train and cannot be played alone: the file then calibrates on itself.
+        calibration = None
     if not tour and calibration is None:
         return None
     if calibration is not None and calibration.balanced:
@@ -226,6 +238,29 @@ def receive_calibration_sequence(
             calibration.first + 1,
         )
     return _build(files, tour, calibration, system)
+
+
+#: Largest gradient, in Hz/m, at which a block boundary counts as at rest.
+REST_GRADIENT = 100.0
+
+
+def _rests_at_its_ends(f: _File, span: _Span) -> bool:
+    """Whether every gradient is at rest where the span starts and where it stops."""
+
+    def edge(event, closing: bool) -> float:
+        if event is None or event.type == "trap":
+            return 0.0
+        if closing:
+            return float(event.last)
+        return 0.0 if event.delay > 0 else float(event.first)
+
+    opening = f.sequence.get_block(span.first + 1)
+    closing = f.sequence.get_block(span.stop)
+    return all(
+        abs(edge(event, at_end)) <= REST_GRADIENT
+        for block, at_end in ((opening, False), (closing, True))
+        for event in (block.gx, block.gy, block.gz)
+    )
 
 
 def _repeats_alike(f: _File) -> bool:
