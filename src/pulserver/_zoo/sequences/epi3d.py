@@ -233,7 +233,9 @@ class Epi3D(SequencePlugin):
                 rf_layout(excitation, scaled=True, copies=volume), *prescans
             ),
             echo_spacing=epi.esp,
-            pixel_bandwidth=pixel_bandwidth(values[UIParam.BANDWIDTH], a),
+            pixel_bandwidth=pixel_bandwidth(
+                int(epi.adc.num_samples), float(epi.adc.dwell)
+            ),
             frame_time=tr if a["n_frames"] > 1 else None,
         )
 

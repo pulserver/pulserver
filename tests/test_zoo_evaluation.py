@@ -339,9 +339,9 @@ SCANS = [pytest.param(name, {}, id=name) for name in SHIPPED] + [
 # and an EPI time series whose volume one TR cannot hold.
 REJECTED = [
     pytest.param("bssfp3d", {"TR": 4000, "nslices": 8, "ny": 32}, id="bssfp3d-short"),
-    pytest.param("epi2d", {"nslices": 5, "TR": 300000}, id="epi2d-short"),
+    pytest.param("epi2d", {"nslices": 5, "TR": 10000}, id="epi2d-short"),
     pytest.param(
-        "epi2d", {"nslices": 12, "TR": 2000000, "num_frames": 5}, id="epi2d-frames"
+        "epi2d", {"nslices": 12, "TR": 10000, "num_frames": 5}, id="epi2d-frames"
     ),
     pytest.param(
         "epi3d", {"nx": 64, "ny": 32, "nslices": 8, "TR": 100000}, id="epi3d-short"
@@ -1206,7 +1206,9 @@ CALIBRATED = [
         id="epi2d-multiband",
     ),
     pytest.param(
-        "epi3d", {"Ry": 2, "Rz": 2, "nx": 64, "ny": 64, "nslices": 16}, id="epi3d"
+        "epi3d",
+        {"Ry": 2, "Rz": 2, "nx": 64, "ny": 64, "nslices": 16, "TR": 3000000},
+        id="epi3d",
     ),
 ]
 
@@ -1331,11 +1333,11 @@ def test_an_oversampled_epi_states_the_bandwidth_of_a_pixel_of_its_field_of_view
     evaluation = plugin.evaluate(SYSTEM, protocol)
     main = _chain(plugin.generate(SYSTEM, protocol))[-1]
 
-    # Twice the samples of the matrix span the readout field of view.
     tables = main.libraries()
-    dwell = tables.adc[tables.blocks[tables.blocks[:, 4] > 0, 4][0] - 1, 1]
+    samples, dwell = tables.adc[tables.blocks[tables.blocks[:, 4] > 0, 4][0] - 1, :2]
     n_x = main.definitions["Matrix"][0]
-    assert evaluation.pixel_bandwidth == pytest.approx(1.0 / (dwell * 2 * n_x))
+    assert samples >= 2 * n_x
+    assert evaluation.pixel_bandwidth == pytest.approx(1.0 / (dwell * samples))
     # A frame of the time series is a volume.
     assert evaluation.frame_time == pytest.approx(evaluation.protocol[UIParam.TR])
 

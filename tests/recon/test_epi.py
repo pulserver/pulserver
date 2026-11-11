@@ -45,6 +45,42 @@ def test_a_ramp_sampled_readout_is_resampled_onto_the_readout_grid():
         np.testing.assert_allclose(out[0], _sampled(grid)[order], atol=1e-3)
 
 
+def test_an_epi_with_additional_adc_samples_reconstructs_the_prescribed_readout_grid():
+    import pypulseqpp as pp
+    from pypulseqpp import sequences
+
+    system = pp.Opts(
+        max_slew=50.0,
+        slew_unit="T/m/s",
+        grad_raster_time=4e-6,
+        block_duration_raster=4e-6,
+    )
+    exc = sequences.SpatialSelectiveExcitation(system, 30.0, 0.005)
+    epi = sequences.EpiReadout2D(
+        system,
+        exc.rf,
+        exc.gz,
+        exc.gz_reph,
+        fov=FOV,
+        matrix=(COLUMNS, 4),
+        oversampling=2.0,
+        readout_bandwidth_hz=500e3,
+    )
+    positions = (
+        np.asarray(epi.calculate_kspace()[0])[0, : epi.n_samples] * FOV / COLUMNS
+    )
+    gadget = _ramp_gadget()
+
+    assert epi.n_samples > 2 * COLUMNS
+    grid = (np.arange(COLUMNS) - COLUMNS // 2) / COLUMNS
+    for order in (slice(None), slice(None, None, -1)):
+        acquisition = _acquisition(traj=(positions[order] * COLUMNS / FOV)[:, None])
+        out = gadget(acquisition, _sampled(positions[order])[None])
+
+        assert out.shape == (1, COLUMNS)
+        np.testing.assert_allclose(out[0], _sampled(grid)[order], atol=1e-3)
+
+
 def test_the_navigator_phase_is_removed_from_the_reversed_readouts():
     grid = (np.arange(COLUMNS) - COLUMNS // 2) / COLUMNS
     line = _sampled(grid)

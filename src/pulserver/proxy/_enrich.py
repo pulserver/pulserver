@@ -793,7 +793,7 @@ def _ramp_sampled(readouts: ReadoutTable, index: int) -> bool:
     start = float(adc.delay) - float(g.delay)
     stop = start + int(adc.num_samples) * float(adc.dwell)
     tolerance = 1e-9
-    return g.flat_time > 0 and (
+    return (
         start < g.rise_time - tolerance or stop > g.rise_time + g.flat_time + tolerance
     )
 

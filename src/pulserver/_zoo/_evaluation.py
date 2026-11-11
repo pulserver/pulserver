@@ -145,15 +145,9 @@ _ACHIEVED: dict[ProtocolKey, Callable[[pp.Sequence], float]] = {
 }
 
 
-def pixel_bandwidth(bandwidth: float, a: dict[str, Any]) -> float:
-    """Return the receive bandwidth across one pixel of a readout sampled at ``bandwidth`` Hz.
-
-    At the readout's nominal sample spacing the field of view spans
-    ``readout_oversampling`` times ``n_x`` samples of ``a``, the arguments of
-    the full design, so an oversampled readout spreads a pixel over fewer
-    hertz than its sampling rate over the matrix.
-    """
-    return bandwidth / (a.get("readout_oversampling", 1.0) * a["n_x"])
+def pixel_bandwidth(samples: int, dwell: float) -> float:
+    """Return the nominal pixel bandwidth (Hz), the inverse ADC window duration."""
+    return 1.0 / (samples * dwell)
 
 
 def arguments(plugin: SequencePlugin, protocol: Protocol) -> dict[str, Any]:

@@ -150,7 +150,7 @@ class Epi2D(SequencePlugin):
             ),
             sequence=volume,
             echo_spacing=volume.definitions["EchoSpacing"][0],
-            pixel_bandwidth=pixel_bandwidth(values[UIParam.BANDWIDTH], a),
+            pixel_bandwidth=pixel_bandwidth(*first_readout(volume)),
             frame_time=tr if n_frames > 1 else None,
         )
 
