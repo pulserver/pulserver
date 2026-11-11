@@ -846,11 +846,12 @@ def _validated(
     request under these limits ended at, and keeps it where every reading is
     within its limit and one reaches :data:`_NEAR` of it; where none does,
     the slew rate is raised once, as modelled. A reading is held to
-    :data:`_HELD` of its limit, not to the limit, since the scan may read a
-    little more than its representative sequence. The slew rate a valid request
+    :data:`_HELD` of its limit, not to the limit: the representative sequence
+    bounds the nerve response of the scan, not its slew rate on every
+    oblique prescription. The slew rate a valid request
     ends at is remembered for :func:`generate`, and for the plugin's next
     request, which starts where the readings of this one, fitted, reach
-    their target. A request still exceeding its limits after
+    their target. A request still past :data:`_HELD` of a limit after
     ``_slew.PASSES`` passes is invalid.
     """
     scanner = _plugin(variant)
@@ -898,15 +899,15 @@ def _validated(
             any_rotation,
         )
         tried.append((design.max_slew, readings))
-        if _slew.exceeds(readings) and len(tried) > _slew.PASSES:
+        if _slew.exceeds(readings, _HELD) and len(tried) > _slew.PASSES:
             return Validation(
                 False,
                 None,
-                f"no slew rate tried keeps the design within its limits: "
+                f"no slew rate tried keeps the design within {_HELD:.0%} of its limits: "
                 f"{_readings_text(readings)} at {design.max_slew / design.gamma:.1f} T/m/s",
                 validation.values,
             )
-        if _slew.exceeds(readings, _HELD) and len(tried) <= _slew.PASSES:
+        if _slew.exceeds(readings, _HELD):
             ceiling = _slew.fitted(
                 tried, design.max_slew * _slew.TARGET, nerve, response
             )
@@ -935,10 +936,14 @@ def _validated(
 _NEAR = 0.85
 
 #: The fraction of its limit a reading of the representative sequence is
-#: held to. The representative plays the largest phase encodes of the scan
-#: at one edge of k-space, and a readout turned about the slice axis in
-#: eight directions: on an oblique prescription the scan reads up to 3 % more
-#: slew rate at the other edge, or between two directions.
+#: held to, by every pass of the search and by what it accepts at the end.
+#: The representative bounds the nerve response of the scan, and its slew
+#: rate and amplitude on an axis-aligned prescription. On an oblique one,
+#: where a physical axis sums the logical ones, the scan plays the edge of
+#: k-space the representative does not: over random rotations it read up to
+#: 11 % more slew rate on a physical axis. The margin takes up the first
+#: 3 % of that; past it the check of the generated design finds the excess
+#: and :func:`generate` lowers the slew rate again.
 _HELD = 0.97
 
 #: The ``x`` of the nerve response ``A S / (S + x)`` the last search of each

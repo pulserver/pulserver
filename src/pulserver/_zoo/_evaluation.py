@@ -39,9 +39,10 @@ def extremes(a: dict[str, Any], *axes: str) -> dict[str, Any]:
     nerve model is the same on every axis, since no sign of an encode
     changes it. The other edge plays the same encodes reversed: on an oblique
     prescription, where a physical axis sums the logical ones, the scan can
-    read a few per cent more slew rate or amplitude there, which the design
-    service allows for in what it accepts of a reading; under elliptical
-    sampling the views between the two axes are likewise not designed. The
+    read more slew rate or amplitude there, up to 11 % over random
+    rotations, which the check of the generated design finds; under
+    elliptical sampling the views between the two axes are likewise not
+    designed. The
     lattice is whole: no calibration region, partial Fourier or CAIPI shift
     drops or moves a line of it.
     """

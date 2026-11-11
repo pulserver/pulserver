@@ -414,16 +414,17 @@ def test_the_representative_sequence_of_a_shipped_plugin_bounds_the_nerve_respon
         )
 
     assert read(representative)["pns"] >= 0.99 * read(scan)["pns"]
-    # Oblique, either way round: the scan reads no more than the margin the
-    # search holds a reading of the representative sequence to.
+    # Oblique, either way round: the nerve response of the scan stays that
+    # of the representative sequence. Its slew rate and amplitude on a
+    # physical axis are not bounded there: the scan plays the edge of
+    # k-space the representative does not, up to 11 % more slew rate over
+    # random rotations, which the check of the generated design finds.
     for angles in ((35.0, -40.0, 25.0), (-35.0, 40.0, -25.0)):
         rotation = _rotation(*angles)
         bound, played = read(representative, rotation), read(scan, rotation)
-        # A blade is designed as one line, without the phase encodes of its
-        # others: its scan reads a fraction more than the margin.
-        margin = 1.035 if "propeller" in plugin else 1.0005 / service._HELD
-        for reading in ("pns", "slew", "grad"):
-            assert played[reading] <= bound[reading] * margin, reading
+        assert played["pns"] <= bound["pns"] * 1.01
+        for reading in ("slew", "grad"):
+            assert played[reading] <= bound[reading] * 1.12, reading
 
 
 def _rotation(about_x, about_y, about_z):

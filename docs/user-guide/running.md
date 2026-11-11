@@ -165,7 +165,10 @@ shows what `generate` designs. It models each step on the readings it has:
 the first on one reading, with the nerve response the plugin's last search
 found or else that of one ramp under the nerve model, so a request past a
 limit is mostly evaluated twice. It holds a reading to 97 % of its limit:
-the scan can read a little more than its representative sequence. The slew rate a request ends at is remembered:
+the representative sequence bounds the nerve response of the scan, but on an
+oblique prescription the scan can read up to about 11 % more slew rate on a
+physical axis, which the check of the generated design then finds, and
+`generate` lowers the slew rate again. The slew rate a request ends at is remembered:
 `generate` starts there, the same request validated again is evaluated there
 once, and the plugin's next request under the same limits is tried first
 where the readings of this one reach their target, kept where its own

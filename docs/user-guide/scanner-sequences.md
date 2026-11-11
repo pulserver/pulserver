@@ -661,13 +661,15 @@ repetition from the modules their function is built from.
   the shot its scan time and RF are read from. A sequence that turns one
   readout about the slice axis, a spoke, a blade or an interleaf, designs
   eight of them, evenly spread in angle. The nerve response read on these is
-  the scan's largest under a nerve model that is the same on every axis. On
-  an oblique prescription the scan can read up to about 3 % more slew rate
-  than they do, at the other edge of k-space or between two directions, so
-  the design service holds their readings to 97 % of the limits; a blade is
-  designed as one line, without the phase encodes of its others, and its
-  scan was read 3.3 % above. The check of the generated design still
-  decides. That of
+  the scan's largest under a nerve model that is the same on every axis, and
+  so are the slew rate and the amplitude on an axis-aligned prescription.
+  The slew rate on a physical axis of an oblique prescription is not
+  bounded: the scan plays the other edge of k-space too, and over random
+  rotations it read up to 11 % more than these views (`gre3d`, `se3d`,
+  `mprage3d`; `fse3d` 8 %), the nerve response never more. The design
+  service holds their readings to 97 % of the limits, which takes up the
+  first 3 %; past that the check of the generated design finds the excess
+  and `generate` lowers the slew rate again. That of
   `fse3d` and `fse_pd3d` is the packed echo train their evaluation designs,
   as long as the longest train, startup echoes included, at a constant
   refocusing angle: the largest of a Busse or PD train; `epi3d` states none.
