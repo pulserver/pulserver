@@ -89,10 +89,26 @@ def plugin_path(plugins: PluginPath, plugin: str) -> Path:
 
 
 class _Variant(NamedTuple):
-    """A plugin file and the options it is loaded with, by name."""
+    """A plugin file, the options it is loaded with, by name, and a digest of what the file holds (:func:`_content`).
+
+    The digest makes a variant, and everything kept under it, the plugin the
+    file holds when the call reads it: another plugin staged at the same
+    path, or a link moved to another file, is another variant whatever
+    modification time the file shows.
+    """
 
     path: str
     options: tuple[tuple[str, Any], ...] = ()
+    content: str = ""
+
+
+def _content(path: Path | str) -> str:
+    """Return a digest of what the plugin file at ``path`` holds, a link followed.
+
+    Its modification time does not tell plugins apart: an installer gives
+    every file it extracts the same one, and a copy can keep it.
+    """
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
 def _variant(plugins: PluginPath, plugin: str, block: str = "") -> _Variant:
@@ -107,9 +123,10 @@ def _variant(plugins: PluginPath, plugin: str, block: str = "") -> _Variant:
         If an option entry does not hold the index of one of its choices.
     """
     path = str(plugin_path(plugins, plugin))
+    content = _content(path)
     if not block:
-        return _Variant(path)
-    default = _plugin(_Variant(path))
+        return _Variant(path, (), content)
+    default = _plugin(_Variant(path, (), content))
     entries = {
         key: parameter
         for key, parameter in default.listing().items()
@@ -121,7 +138,7 @@ def _variant(plugins: PluginPath, plugin: str, block: str = "") -> _Variant:
     except ValueError as error:
         raise CallError(str(error)) from None
     changed = {n: v for n, v in options.items() if v != default.options[n]}
-    return _Variant(path, tuple(sorted(changed.items())))
+    return _Variant(path, tuple(sorted(changed.items())), content)
 
 
 def list_protocol(
@@ -146,7 +163,8 @@ def list_protocol(
     Where it is invalid, a warning is logged and the listing is replied
     without the block. ``limits`` is not read unless the definitions are asked for.
     Under a warm server the reply is kept, and replied again to the same call
-    while the plugin file and the files the limits name are unchanged.
+    while the plugin file, what it holds and the files the limits name are
+    unchanged.
 
     Raises
     ------
@@ -203,10 +221,11 @@ def validate(
     designs it, and the slew rate it ends at is where :func:`generate` starts.
 
     Under a warm server the reply is kept, and replied again to the same call
-    while the plugin file and the files the limits name are unchanged, the
-    request is still remembered at the slew rate the reply was evaluated
-    under, which a :func:`generate` that lowers it further changes, and, for
-    a plugin whose hooks take ``exam``, the files of the exam's cache are.
+    while the plugin file, what it holds and the files the limits name are
+    unchanged, the request is still remembered at the slew rate the reply was
+    evaluated under, which a :func:`generate` that lowers it further changes,
+    and, for a plugin whose hooks take ``exam``, the files of the exam's
+    cache are.
     """
     limits = _read(limits)
     key = _call_key("validate", plugins, plugin, limits, block, rf_layout)
@@ -775,7 +794,7 @@ def _mtimes(variant: _Variant) -> tuple[int, ...]:
 
 
 def _plugin(variant: _Variant) -> SequencePlugin:
-    """Return the plugin of a variant, imported again when its file changed.
+    """Return the plugin of a variant, imported again when its file was modified or holds another plugin.
 
     Raises
     ------
@@ -1074,9 +1093,7 @@ def _listed_rf(variant: _Variant, limits: Mapping[str, Any]) -> _ListedRf:
     once per variant, as last modified, and limits: in this process and,
     under a warm server, by the first call that asks.
     """
-    key = json.dumps(
-        [variant.path, repr(variant.options), _mtimes(variant), _limits_key(limits)]
-    )
+    key = json.dumps([repr(variant), _mtimes(variant), _limits_key(limits)])
     found, kept = _memo.read(_LISTED_RF, key)
     if found:
         return _ListedRf(*kept)
@@ -1131,7 +1148,7 @@ def _call_key(
     block: str,
     flag: bool,
 ) -> str:
-    """Return the key the reply of a ``list`` or ``validate`` call is kept under: the plugin file as last modified, the limits, the block and whether the RF is asked for.
+    """Return the key the reply of a ``list`` or ``validate`` call is kept under: the plugin file as last modified and what it holds, the limits, the block and whether the RF is asked for.
 
     The block holds the options the plugin is loaded with, so the key covers
     them; the packages are those the server imported before it kept anything.
@@ -1144,6 +1161,7 @@ def _call_key(
             name,
             str(path),
             path.stat().st_mtime_ns,
+            _content(path),
             None if limits is None else _limits_key(limits),
             block,
             bool(flag),

@@ -269,7 +269,8 @@ status, reply = call("generate", plugins="sequences", plugin="gre2d",
                      store=DesignStore("designs", "scan"))
 ```
 
-A plugin file is imported again when its modification time changes.
+A plugin file is imported again when its modification time changes or it
+holds another plugin, whatever modification time it shows.
 
 ### Design store
 
@@ -323,15 +324,16 @@ directory when it starts serving and removes when it stops, what the calls
 after it would work out again:
 
 - the reply of each `list` and `validate` call, replied again to the same
-  call while the plugin file and the files the limits name are unchanged. A
-  `validate` reply is also dropped when a `generate` lowers the slew rate of
-  its request further, and, for a plugin whose hooks take `exam`, when the
-  files of the exam's cache change;
+  call while the plugin file, what it holds and the files the limits name
+  are unchanged. A `validate` reply is also dropped when a `generate` lowers the
+  slew rate of its request further, and, for a plugin whose hooks take
+  `exam`, when the files of the exam's cache change;
 - the RF definitions a plugin lists under given limits, which `validate`
   states its `[RfLayout]` amplitudes over, so the plugin's default protocol
   is evaluated once and not on every call;
 - the slew rate each request was lowered to, so the `generate` of a request
-  starts where its `validate` ended;
+  starts where its `validate` ended, and the one the plugin's last request
+  ended at, where its next request is evaluated first;
 - the effective TE of each Busse or PD echo train `fse3d` and `fse_pd3d`
   evaluated, or why no train realizes it, so the inverse solve that finds it
   runs once per train and limits;
@@ -339,6 +341,11 @@ after it would work out again:
   that designed them: a selective spin echo, a saturation band or a fat
   saturation is designed by the first call that plays it and read by the
   calls after it.
+
+What is kept for a plugin is kept under what its file holds as well as its
+path and modification time: another plugin staged at the same slot, or a slot
+linked to another plugin file, starts from nothing the first one left, even
+where the installer gave both files the same modification time.
 
 Nothing kept outlives the server, which is restarted to take up a changed
 package in any case. A call answered in its own process keeps nothing.
