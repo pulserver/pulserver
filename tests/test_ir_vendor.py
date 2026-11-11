@@ -19,6 +19,7 @@ split_by_pulses: true
 split_by_readouts: false
 split_navigators: true
 split_edge_delays: false
+span_blocks: 96
 [Grouping End]
 
 [VendorProfile]
@@ -40,6 +41,7 @@ GROUPING = ir.Grouping(
     boundary_gradient_hz_per_m=2000.0,
     split_by_readouts=False,
     split_edge_delays=False,
+    span_blocks=96,
 )
 
 

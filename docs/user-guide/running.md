@@ -206,6 +206,7 @@ Options prefixed `ir_` configure the IR conversion:
 | `ir_label_column_map` | Three Pulseq label state indices, separated by spaces, filling the ADC label columns |
 | `ir_cache_ext` | Extension of the cache file, `.pseg` by default |
 | `ir_vendor_file` | Vendor file the cache is grouped and stored under, read by {func}`~pulserver.ir.read_vendor`; a file it cannot read refuses the call |
+| `ir_span_blocks` | Most blocks one segment of the playout may hold when it carries the segment instances a repetition plays with no pure delay between them ({attr}`~pulserver.ir.Grouping.span_blocks`); stated in place of the vendor file's, and 0, the default, leaves every instance a segment of its own |
 | `ir_wave_max_samples` | Samples of waveform memory per gradient axis of the playout |
 | `ir_wave_raster_us` | Gradient raster of the playout, in µs per sample |
 | `ir_wave_load_us_per_sample` | Time the playout takes to load one sample on one axis, in µs; 0, the default, leaves loading unchecked |
@@ -246,7 +247,9 @@ plays, `played_time_s`, beside the time its blocks take, `blocks_time_s`
 ({func}`~pulserver.ir.played_time`). A pure delay gives the time between
 segments back, so a scan whose repetitions end in a wait of more than about a
 millisecond plays the time its file states; one whose segments follow each
-other without a delay plays longer by that time per segment.
+other without a delay plays longer by that time per segment, unless the
+scanner states `ir_span_blocks` and the segments are those of one repetition,
+carried in a span that takes that time once.
 
 A call refuses limits it cannot read. A design is identified by the contents
 of the VOP, vendor and acoustic files as well as by their paths.

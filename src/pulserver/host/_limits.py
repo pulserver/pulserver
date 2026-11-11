@@ -6,6 +6,7 @@ import cmath
 import copy
 import re
 from collections.abc import Mapping
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -15,7 +16,13 @@ from pypulseqpp import safety
 
 from .. import ir
 
-_IR_OPTIONS = ("ir_vendor", "ir_label_column_map", "ir_cache_ext", "ir_vendor_file")
+_IR_OPTIONS = (
+    "ir_vendor",
+    "ir_label_column_map",
+    "ir_cache_ext",
+    "ir_vendor_file",
+    "ir_span_blocks",
+)
 _WAVE_BUDGET = {
     "ir_wave_max_samples": ("max_samples", int),
     "ir_wave_raster_us": ("raster_us", float),
@@ -80,8 +87,11 @@ def split_limits(
 
     Keys starting with ``ir_`` are conversion options: ``ir_vendor``,
     ``ir_label_column_map`` (three integers separated by spaces),
-    ``ir_cache_ext`` and ``ir_vendor_file`` (the file
-    :func:`pulserver.ir.read_vendor` reads the profile and grouping from). The
+    ``ir_cache_ext``, ``ir_vendor_file`` (the file
+    :func:`pulserver.ir.read_vendor` reads the profile and grouping from) and
+    ``ir_span_blocks`` (the most blocks a span may hold,
+    :attr:`pulserver.ir.Grouping.span_blocks`, stated in place of the vendor
+    file's). The
     fields of :class:`pulserver.ir.WaveBudget`, the waveform memory of the
     playout that the cache lays the waves out for, are the keys prefixed
     ``ir_wave_``; ``ir_wave_max_samples`` and ``ir_wave_raster_us`` are
@@ -103,7 +113,8 @@ def split_limits(
     ValueError
         If ``B0`` is missing, an ``ir_`` key is not a conversion option, the
         vendor file cannot be read, the waveform memory is incomplete or out
-        of range, or the design or check limits are malformed.
+        of range, ``ir_span_blocks`` is negative, or the design or check limits
+        are malformed.
     """
     if "B0" not in limits:
         raise ValueError(
@@ -134,6 +145,11 @@ def split_limits(
             )
         except OSError as error:
             raise ValueError(f"cannot read the vendor file: {error}") from None
+    if "ir_span_blocks" in limits:
+        options["grouping"] = replace(
+            options.get("grouping", ir.Grouping()),
+            span_blocks=int(float(limits["ir_span_blocks"])),
+        )
     budget = _wave_budget(limits)
     if budget is not None:
         options["wave_budget"] = budget

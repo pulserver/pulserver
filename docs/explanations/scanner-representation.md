@@ -31,6 +31,9 @@ its segments.
 - **Cuts virtual segments only where every gradient is near zero, under a tunable grouping.**
 
   Code: {class}`~pulserver.ir.Grouping`. Tests: *the default grouping is what a conversion does unasked*; *a grouping moves the boundaries and not the gradient* (`test_ir_grouping.py`); *a gradient its file ends live may not end the repetition* (`test_ir.py`).
+- **Carries the segments a repetition plays with no wait between them in one segment, up to the span the interpreter states.**
+
+  Code: {attr}`~pulserver.ir.Grouping.span_blocks`, `ir_span_blocks`. Tests: *a preparation and the train it opens play as one segment instance*; *a repetition that is one segment is not joined to the next*; *a run longer than a span is cut where its dummy repetitions start*; *spans move the boundaries and not what a block plays*; *what a segment start is needed for keeps a segment per play* (`test_ir_grouping.py`).
 - **Converts under the grouping and number formats a vendor file states.**
 
   Code: {func}`~pulserver.ir.read_vendor`, `ir_vendor_file`. Tests: *a design is converted under the vendor file its limits name*; *an unreadable vendor file is refused and stores nothing* (`test_design_service.py`); *a vendor file stating anything else is refused* (`test_ir_vendor.py`).
@@ -142,6 +145,33 @@ virtual segment ends and the next begins:
 A repetition whose pulses, timing or arbitrary gradients differ from the
 first plays its own variant of a segment, up to 64 per segment.
 
+An interpreter whose sequencer takes time at every segment instance, and has
+no pure delay to take it from, plays a run of instances longer than the blocks
+state: a steady state at a longer repetition time, an echo train at a longer
+echo spacing, with its first spacing out of step with the others. Such an
+interpreter states `span_blocks`, the most blocks one of its segments may
+hold, and the instances a repetition plays one after another are prepared as
+one virtual segment, a span:
+
+- a run lies within one repetition: a repetition that is one segment, as a
+  Cartesian 3D gradient echo's is, stays one segment an instance, and a span
+  does not grow with the number of repetitions;
+- a run ends at a pure delay and at a navigator, each played alone, and at a
+  segment any instance of which changes a gradient shape, carries a rotation
+  or waits for a trigger;
+- a run of at most `span_blocks` is one span. A segment start inside a steady
+  state disturbs it, so a longer run is cut only where instances that do not
+  acquire follow instances that do, and keeps a segment per instance, and
+  with it one spacing throughout, where it cannot be cut there into spans
+  that fit;
+- a sequence that sets `EnablePmc` takes a pose at every segment instance and
+  is given no span.
+
+Spans move boundaries only: every block plays the events, amplitudes and
+phases it plays without them. A repetition that is one segment plays at the
+spacing its blocks state where it ends in a pure delay that gives the
+sequencer's time back.
+
 ### Vendor configuration
 
 The grouping and the number formats the cache is written in are the
@@ -156,6 +186,7 @@ split_by_pulses: true
 split_by_readouts: true
 split_navigators: true
 split_edge_delays: true
+span_blocks: 0
 [Grouping End]
 [VendorProfile]
 grad_sample: float32 0
@@ -165,7 +196,9 @@ grad_sample: float32 0
 
 A sequencer that can start a segment under a gradient states a large
 `boundary_gradient_hz_per_m`; one that inserts switching time at every
-boundary sets `split_edge_delays: false` to keep segments few. The
+boundary sets `split_edge_delays: false` to keep segments few, and one
+that takes time at every segment instance states `span_blocks`, here or as
+`ir_span_blocks` in its limits. The
 `[VendorProfile]` block gives each waveform and amplitude as a float or as an
 integer with its step, so a sequencer that plays integers converts nothing
 while it plays. The `ir_wave_` limits state the waveform memory the waves are

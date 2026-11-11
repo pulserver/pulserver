@@ -93,7 +93,8 @@ class Grouping:
     fall where the ``NOROT`` or ``PMC`` label changes, since the interpreter
     sets one prescription rotation per segment instance; conversion fails when
     such a change falls under a gradient. The ``split_*`` attributes add
-    boundaries.
+    boundaries, and :attr:`span_blocks` removes those between segment
+    instances that no wait separates.
 
     The default suits an interpreter that begins a segment by setting its
     gradients, so that a boundary falls only where they are at rest.
@@ -114,6 +115,27 @@ class Grouping:
         virtual segment of its own. An interpreter that inserts
         transmit-to-receive switching time at every segment boundary needs as
         few segments as possible, and sets this False.
+    span_blocks
+        Most blocks a span may hold; 0 leaves every play a segment instance of
+        its own. A span is one virtual segment prepared from the segments that
+        a repetition plays one after another with no pure delay between them:
+        the slice of a steady state with the pulse that opens it, an
+        excitation and its echo train. An interpreter that takes time at every
+        segment instance takes it once a span, so the run plays at the spacing
+        its blocks state. A span holds segments of one repetition, so a
+        repetition that is one segment stays one, and a span does not grow
+        with the number of repetitions. A segment start inside a steady state
+        disturbs it: a run longer than this is cut only where plays that do
+        not acquire follow plays that do, and keeps a segment per play where
+        it cannot be cut there into spans that fit. A pure delay and a
+        navigator are played alone, as is a virtual segment any play of which
+        changes a gradient shape, carries a rotation or waits for a trigger,
+        and a sequence that sets ``EnablePmc`` is given no span.
+
+    Raises
+    ------
+    ValueError
+        If ``span_blocks`` is negative.
     """
 
     boundary_gradient_hz_per_m: float = 100.0
@@ -121,6 +143,11 @@ class Grouping:
     split_by_readouts: bool = True
     split_navigators: bool = True
     split_edge_delays: bool = True
+    span_blocks: int = 0
+
+    def __post_init__(self) -> None:
+        if self.span_blocks < 0:
+            raise ValueError("span_blocks must not be negative")
 
     def as_values(self) -> tuple[float, ...]:
         """Return the rule as the extension takes it, in the order C declares it."""
@@ -130,6 +157,7 @@ class Grouping:
             float(self.split_by_readouts),
             float(self.split_navigators),
             float(self.split_edge_delays),
+            float(self.span_blocks),
         )
 
 

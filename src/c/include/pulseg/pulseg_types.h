@@ -211,7 +211,18 @@ typedef struct pulseg_vendor_profile
  *   choice. @c split_edge_delays: a block at the edge of a unit that does
  *   nothing but wait is a unit of its own, rather than carried in the unit
  *   beside it. A machine that inserts transmit-to-receive switching time at
- *   every unit wants as few as it can have and states 0.
+ *   every unit wants as few as it can have and states 0. @c span_blocks:
+ *   the units a repetition plays one after another with no wait between them
+ *   are carried in one unit of up to this many blocks, a span. A machine that
+ *   takes time at every unit start, and has no wait to take it from, plays a
+ *   steady state or an echo train at its spacing only inside a span, and
+ *   states how many blocks one of its units may hold; 0 leaves every play a
+ *   unit of its own. A span holds units of one repetition, so a repetition
+ *   that is one unit stays one. A run longer than a span is cut only where
+ *   plays that do not acquire follow plays that do, and keeps a unit per
+ *   play where it cannot be. A wait and a navigator are played alone, as is
+ *   a unit any play of which changes a gradient shape, carries a rotation or
+ *   waits for a trigger, and a sequence that reads poses is given no span.
  */
 typedef struct pulseg_grouping
 {
@@ -222,13 +233,16 @@ typedef struct pulseg_grouping
     int split_navigators;             /**< a navigator readout is its own unit */
     int split_edge_delays;            /**< a wait at a unit's edge is its own
                                        *   unit                             */
+    int span_blocks;                  /**< blocks a unit of plays that follow
+                                       *   one another may hold; 0 for a
+                                       *   unit per play                    */
 } pulseg_grouping;
 
 /* What a machine that begins a unit by setting its gradients wants: a boundary
  * only where they rest, a unit per distinct pulse and readout, a navigator of
- * its own, and an edge delay of its own. */
+ * its own, an edge delay of its own, and a unit per play. */
 /* clang-format off */
-#define PULSEG_GROUPING_INIT {100.0f, 1, 1, 1, 1}
+#define PULSEG_GROUPING_INIT {100.0f, 1, 1, 1, 1, 0}
 /* clang-format on */
 
 /**

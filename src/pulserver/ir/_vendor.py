@@ -16,7 +16,8 @@ def read_vendor(path: Path | str) -> tuple[VendorProfile, Grouping]:
     The file holds a ``[Grouping]`` and a ``[VendorProfile]`` block, each
     closed by its ``[... End]`` line, with one ``name: value`` line per field
     and every field stated; blank lines and lines starting with ``#`` are
-    skipped. A grouping field is a number or ``true``/``false``; a profile
+    skipped. A grouping field is a number or ``true``/``false``, and
+    ``span_blocks`` a whole number; a profile
     field is a :class:`Format` name and the SI value of one integer step,
     ``0`` for a float::
 
@@ -26,6 +27,7 @@ def read_vendor(path: Path | str) -> tuple[VendorProfile, Grouping]:
         split_by_readouts: true
         split_navigators: true
         split_edge_delays: true
+        span_blocks: 0
         [Grouping End]
         [VendorProfile]
         grad_sample: int16 1.5e-4
@@ -105,6 +107,8 @@ def _fields(kind: type, given: dict[str, str], parse) -> dict:
 def _grouping_value(name: str, text: str) -> float | bool:
     if name == "boundary_gradient_hz_per_m":
         return float(text)
+    if name == "span_blocks":
+        return int(text)
     return _FLAGS[text.lower()]
 
 
