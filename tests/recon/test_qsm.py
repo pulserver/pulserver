@@ -8,6 +8,7 @@ from conftest import calibration_header, coil_phantom
 from test_pics import (
     COILS,
     MATRIX,
+    UNCORRECTED,
     Images,
     contrasts_in_header,
     reconstruct,
@@ -22,10 +23,10 @@ pytest.importorskip("bartorch")
 
 
 class Maps(QsmRecon):
-    """Records the echoes and echo times each call to ``maps`` is given, and makes no map."""
+    """Records the echoes and echo times each call to ``maps`` is given, and makes no map; corrections off unless asked for."""
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, **kwargs):
+        super().__init__(**{**UNCORRECTED, **kwargs})
         self.results = []
         self.calls = []
 
@@ -56,8 +57,11 @@ def magnitudes(results):
     ]
 
 
-def multi_echo(te_ms):
-    echoes = [vials(), coil_phantom(COILS, MATRIX)[2]][: len(te_ms)]
+def multi_echo(te_ms, echoes=None):
+    """Echoes ``vials`` then ``coil_phantom`` unless ``echoes`` gives the k-space of each."""
+    if echoes is None:
+        echoes = [vials(), coil_phantom(COILS, MATRIX)[2]]
+    echoes = list(echoes)[: len(te_ms)]
     acquisitions = []
     for echo, kspace in enumerate(echoes):
         for acquisition in stream(kspace, range(MATRIX)):
@@ -90,6 +94,27 @@ def test_each_echo_is_the_pics_image_and_the_maps_follow_the_last_echo_once(devi
         np.abs(echoes), np.stack(expected), rtol=1e-5, atol=1e-6 * expected[0].max()
     )
     assert te == pytest.approx([3e-3, 8e-3])
+
+
+def test_the_magnitude_series_is_intensity_corrected_and_the_echoes_the_maps_take_are_not():
+    pytest.importorskip("SimpleITK")
+    kspace = coil_phantom(COILS, MATRIX)[2]
+    _, acquisitions, header = multi_echo([3.0, 8.0], echoes=[kspace, 0.5 * kspace])
+    corrected = Maps(kspace_filter=True, intensity_correction=True)
+    filtered = Maps(kspace_filter=True)
+
+    reconstruct(acquisitions, header, plugin=corrected)
+    reconstruct(acquisitions, header, plugin=filtered)
+
+    for result in corrected.results:
+        history = result.attributes["ImageProcessingHistory"]
+        assert "FERMI" in history
+        assert ("N4" in history) is (result.image_type == "magnitude")
+    ((echoes, _),) = corrected.calls
+    ((reference, _),) = filtered.calls
+    np.testing.assert_allclose(
+        echoes, reference, rtol=1e-5, atol=1e-6 * np.abs(reference).max()
+    )
 
 
 def test_a_single_echo_scan_makes_no_maps(device):

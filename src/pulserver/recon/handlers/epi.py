@@ -131,11 +131,38 @@ class EpiRecon(PicsRecon):
     an image of its own, and when PyHySCO is installed (bartorch's ``pyhysco``
     extra, GPL-3.0) each later image of the same slice, or each later volume
     of a 3D scan, is corrected for susceptibility distortion against it
-    (:func:`bartorch.tools.correct_susceptibility`).
+    (:func:`bartorch.tools.correct_susceptibility`). Each image is Fermi
+    filtered before its magnitude is taken, and corrected for gradient
+    nonlinearity and divided by the receive field after the distortion
+    correction, the reference set by a field of its own
+    (:class:`~pulserver.recon.Corrections`).
+
+    Parameters
+    ----------
+    wavelet : float, default=0.005
+        As :class:`~pulserver.recon.handlers.pics.PicsRecon`.
+    iterations : int, default=30
+        As :class:`~pulserver.recon.handlers.pics.PicsRecon`.
+    kspace_filter, gradient_unwarp, intensity_correction : bool, default=True
+        As :class:`~pulserver.recon.handlers.pics.PicsRecon`.
     """
 
-    def __init__(self, wavelet: float = 0.005, iterations: int = 30) -> None:
-        super().__init__(wavelet, iterations)
+    def __init__(
+        self,
+        wavelet: float = 0.005,
+        iterations: int = 30,
+        *,
+        kspace_filter: bool = True,
+        gradient_unwarp: bool = True,
+        intensity_correction: bool = True,
+    ) -> None:
+        super().__init__(
+            wavelet,
+            iterations,
+            kspace_filter=kspace_filter,
+            gradient_unwarp=gradient_unwarp,
+            intensity_correction=intensity_correction,
+        )
         self.gadgets = (Prewhiten(), RampSampling(), EpiPhaseCorrection())
 
     def startup(self, context):

@@ -77,6 +77,18 @@ class QsmRecon(PicsRecon):
     phase, so the scan must sample k-space fully. The
     SynthStrip weights are those of :func:`synthstrip_weights`. Without
     fast-qsm the plugin makes the echoes alone and logs why.
+
+    Each echo is Fermi filtered and corrected for gradient nonlinearity as a
+    complex image, and its magnitude series alone is divided by the receive
+    field (:class:`~pulserver.recon.Corrections`). The maps are made from the
+    real and imaginary series, which the receive field does not divide, so
+    the phase, the masks and the weights are those of the echoes as
+    reconstructed.
+
+    Parameters
+    ----------
+    **kwargs
+        As :class:`~pulserver.recon.handlers.pics.PicsRecon`.
     """
 
     def __init__(self, **kwargs: Any) -> None:

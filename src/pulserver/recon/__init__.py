@@ -6,7 +6,12 @@ from ._calibration import (
     MissingCalibration,
     coil_maps,
 )
-from ._correct import gradient_unwarped
+from ._correct import (
+    Corrections,
+    IntensityCorrection,
+    fermi_filtered,
+    gradient_unwarped,
+)
 from ._exam_image import ExamImage
 from ._figure import figure_rgb
 from ._loader import load_plugin
@@ -41,9 +46,11 @@ __all__ = [
     "CoilCompression",
     "CoilSensitivities",
     "CompressChannels",
+    "Corrections",
     "ExamCache",
     "ExamImage",
     "Gadget",
+    "IntensityCorrection",
     "MissingCalibration",
     "Prewhiten",
     "ReconBuffer",
@@ -53,6 +60,7 @@ __all__ = [
     "ReconResult",
     "RemoveReadoutOversampling",
     "coil_maps",
+    "fermi_filtered",
     "figure_rgb",
     "gradient_unwarped",
     "load_plugin",

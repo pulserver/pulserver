@@ -9,7 +9,7 @@ import numpy as np
 from ...mrd._acquisitions import AcquisitionFlag
 from ...mrd._images import center_crop
 from .._buffers import ReconBuffer, ReconData
-from .._correct import gradient_unwarped, states_gradient_coefficients
+from .._correct import Corrections
 from ..gadgets import Prewhiten
 from ..plugin import ReconContext, ReconPlugin, ReconResult
 from .pics import VIRTUAL_COILS, averaged, compressed, nlinv_estimate, wavelet_axes
@@ -36,7 +36,8 @@ class NufftRecon(ReconPlugin):
     (:func:`bartorch.estimate_density`), which preconditions the solve (Baron
     et al., Magn Reson Med 2018). The step is the reciprocal of the largest
     eigenvalue of the normal operator (``bart pics -e``). An image is its
-    averages summed, and its values are those of the solve, unscaled. A unit
+    averages summed, and its values are those of the solve but for the
+    corrections below. A unit
     of more receive channels than ``virtual_coils`` is compressed to that many
     virtual channels first (:func:`~pulserver.recon.handlers.pics.compressed`).
 
@@ -62,6 +63,13 @@ class NufftRecon(ReconPlugin):
     last readout of each of its segments has arrived. bartorch is imported when
     the first image is made.
 
+    The image is corrected as that of
+    :class:`~pulserver.recon.handlers.pics.PicsRecon` is
+    (:class:`~pulserver.recon.Corrections`): the complex image of each solve
+    is Fermi filtered over its axes before its magnitude is taken, and a
+    stack's k-space along its partitions before they are transformed, by the
+    profile of the window over the stack's extent.
+
     Parameters
     ----------
     wavelet : float, default=0.005
@@ -71,13 +79,22 @@ class NufftRecon(ReconPlugin):
     virtual_coils : int | None, default=VIRTUAL_COILS
         Receive channels beyond this many are compressed to it; ``None``
         keeps every channel.
+    kspace_filter, gradient_unwarp, intensity_correction : bool, default=True
+        As :class:`~pulserver.recon.handlers.pics.PicsRecon`.
     """
+
+    #: The corrections of the stream, made when it starts; ``None`` before.
+    corrections: Corrections | None = None
 
     def __init__(
         self,
         wavelet: float = 0.005,
         iterations: int = 30,
         virtual_coils: int | None = VIRTUAL_COILS,
+        *,
+        kspace_filter: bool = True,
+        gradient_unwarp: bool = True,
+        intensity_correction: bool = True,
     ) -> None:
         super().__init__(
             gadgets=[Prewhiten()],
@@ -91,6 +108,18 @@ class NufftRecon(ReconPlugin):
         self.wavelet = wavelet
         self.iterations = iterations
         self.virtual_coils = virtual_coils
+        self.kspace_filter = kspace_filter
+        self.gradient_unwarp = gradient_unwarp
+        self.intensity_correction = intensity_correction
+
+    def startup(self, context: ReconContext) -> None:
+        super().startup(context)
+        self.corrections = Corrections(
+            context.header,
+            kspace_filter=self.kspace_filter,
+            gradient_unwarp=self.gradient_unwarp,
+            intensity_correction=self.intensity_correction,
+        )
 
     def recon(
         self, context: ReconContext, branch: str, data: ReconData
@@ -110,10 +139,14 @@ class NufftRecon(ReconPlugin):
             kspace, trajectory, played, buffer.image_shape, context.device
         )
         history = ["PULSERVER", "PYTHON", "PICS"]
-        if states_gradient_coefficients(context.header):
-            image = gradient_unwarped(image, context, data)
-            history.append("GRADUNWARP")
-        return ReconResult(image, attributes={"ImageProcessingHistory": history})
+        corrections = self.corrections
+        if corrections is not None:
+            image = corrections.unwarped(image, context, data)
+            history += corrections.applied()
+        result = ReconResult(image, attributes={"ImageProcessingHistory": history})
+        if corrections is not None:
+            result = corrections.intensity_corrected(result, data)
+        return result
 
     def _fitted(
         self,
@@ -145,6 +178,10 @@ class NufftRecon(ReconPlugin):
             volume = tuple(int(n) for n in shape[-3:])
         extent = shape[-2:] if volume is None else volume
         if played.ndim == 2:
+            if self.corrections is not None:
+                kspace = self.corrections.filtered_along(
+                    kspace, 1, (played.shape[0], *extent)
+                )
             kspace = np.fft.fftshift(
                 np.fft.ifft(np.fft.ifftshift(kspace, axes=1), axis=1), axes=1
             )
@@ -179,7 +216,8 @@ class NufftRecon(ReconPlugin):
         """Return the magnitude image of ``(coils, shots, samples)`` k-space and its ``(shots, samples, 3)`` trajectory.
 
         The image is the ``(y, x)`` plane or the ``(z, y, x)`` volume ``shape``,
-        from the samples the matrix holds (:func:`_within`).
+        from the samples the matrix holds (:func:`_within`), Fermi filtered as a
+        complex image where the stream's :attr:`corrections` say so.
         """
         import bartorch
         import torch
@@ -205,7 +243,10 @@ class NufftRecon(ReconPlugin):
             maxiter=self.iterations,
             eigen_step=True,
         )
-        return image.abs().numpy().reshape(maps.shape[-axes:])
+        image = image.cpu().numpy().reshape(maps.shape[-axes:])
+        if self.corrections is not None:
+            image = self.corrections.filtered(image)
+        return np.abs(image)
 
 
 def _within(
