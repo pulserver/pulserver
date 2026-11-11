@@ -663,7 +663,11 @@ repetition from the modules their function is built from.
   and `TR` definitions (`EffectiveEchoTime` takes precedence where supplied), the receiver bandwidth as the inverse of the dwell time
   of its first ADC event, and the slice thickness in its `SliceThickness`
   definition. A multi-echo sequence lists every echo time, and the `TE` entry
-  holds the first.
+  holds the first. `epi2d` and `epi3d` state in the protocol's note why the
+  bandwidth differs from the one asked: the sampling interval is a multiple
+  of the ADC raster, and where the design's slew rate cannot sweep a
+  ramp-sampled line in the time its samples take at the requested interval,
+  the next multiple that it can.
 - **Invalid protocols.** A prescription the design refuses is invalid, with
   the message of its error.
 - **Representative sequence.** The repetitions on which the design service

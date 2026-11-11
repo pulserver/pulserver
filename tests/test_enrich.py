@@ -703,3 +703,38 @@ def test_a_sequence_without_recon_parameters_adds_none_to_the_header(tmp_path):
     enriched = header()
     enrich_header(enriched, table)
     assert user_parameter(enriched, "ReconParameters") is None
+
+
+def _defined(seq, **definitions):
+    for key, value in definitions.items():
+        seq.set_definition(key=key, value=value)
+    return seq
+
+
+def test_the_main_sequence_not_a_prescan_states_the_sequence_parameters(tmp_path):
+    # A gradient-echo calibration ahead of an EPI: its short TE and TR must not
+    # annotate the images.
+    calibration = _defined(pp.Sequence(pp.Opts()), TE=2.9e-3, TR=6.4e-3)
+    add_readout(calibration)
+    main = _defined(pp.Sequence(pp.Opts()), TE=18.2e-3, TR=0.25)
+    add_readout(main)
+
+    enriched = header()
+    enrich_header(enriched, designed(tmp_path, [calibration, main]))
+
+    assert pytest.approx([250.0]) == enriched.sequenceParameters.TR
+    assert pytest.approx([18.2]) == enriched.sequenceParameters.TE
+
+
+def test_a_parameter_the_main_sequence_does_not_state_is_taken_from_the_chain(
+    tmp_path,
+):
+    calibration = _defined(pp.Sequence(pp.Opts()), TE=2.9e-3, TR=6.4e-3, TI=0.9)
+    add_readout(calibration)
+    main = _defined(pp.Sequence(pp.Opts()), TE=18.2e-3, TR=0.25)
+    add_readout(main)
+
+    enriched = header()
+    enrich_header(enriched, designed(tmp_path, [calibration, main]))
+
+    assert pytest.approx([900.0]) == enriched.sequenceParameters.TI

@@ -418,6 +418,16 @@ class Corrections:
         applied, self._applied = list(dict.fromkeys(self._applied)), []
         return applied
 
+    def ran(self, tag: str, message: str, *args: Any) -> None:
+        """Record a step a plugin made to the image itself, such as the EPI susceptibility correction.
+
+        ``tag`` joins the history :meth:`applied` returns, and ``message``, a
+        logging format with ``args``, is logged as each correction's own line
+        is: at ``INFO`` the first time the tag runs in the stream, at
+        ``DEBUG`` after.
+        """
+        self._ran(tag, message, *args)
+
     def _ran(self, tag: str, message: str, *args: Any) -> None:
         self._applied.append(tag)
         level = logging.DEBUG if tag in self._logged else logging.INFO

@@ -20,7 +20,7 @@ from pypulseqpp.sequences.sequence.epi3D_sequence import (
     train_lines,
 )
 
-from pulserver._zoo._evaluation import arguments, dummies, rf_layout
+from pulserver._zoo._evaluation import arguments, bandwidth_note, dummies, rf_layout
 from pulserver._zoo._slab import slab
 from pulserver._zoo._user import user_entries
 from pulserver.design import (
@@ -196,6 +196,12 @@ class Epi3D(SequencePlugin):
         return Evaluation(
             protocol.replace(values),
             duration,
+            info=bandwidth_note(
+                system,
+                a["readout_bandwidth_hz"],
+                int(epi.adc.num_samples),
+                float(epi.adc.dwell),
+            ),
             rf_layout=rf_layout(excitation, scaled=True, copies=volume),
         )
 

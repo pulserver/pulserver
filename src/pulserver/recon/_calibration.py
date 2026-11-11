@@ -7,6 +7,8 @@ __all__ = ["CoilCompression", "CoilSensitivities", "MissingCalibration", "coil_m
 import copy
 import dataclasses
 import hashlib
+import logging
+import time
 from dataclasses import dataclass
 from typing import Any
 
@@ -14,6 +16,8 @@ import numpy as np
 
 from ._buffers import ReconBuffer, ReconData
 from .plugin import COIL_SENSITIVITIES, ReconContext
+
+_log = logging.getLogger("pulserver.recon")
 
 #: The placement axes the calibration k-space of a unit may vary along.
 _ENCODED = ("partition", "phase_encode")
@@ -172,6 +176,10 @@ def coil_maps(
     calibration unit in an encoding space of its own serve the imaging units
     of its slice.
 
+    Maps estimated from a unit's calibration readouts are logged at ``INFO``,
+    with the lines and the time they took; maps stored in the stream or the
+    exam that serve a unit are logged at ``DEBUG``.
+
     Parameters
     ----------
     context : ReconContext
@@ -211,19 +219,38 @@ def coil_maps(
 
     if data.ref is None:
         rejected.append("this unit: it holds no calibration readouts")
+        found = _usable(
+            context.coil_maps.get(location),
+            f"this series, slice {location}",
+            data,
+            context,
+            rejected,
+        )
+        if found is not None:
+            _log.debug(
+                "slice %d takes the coil sensitivities its calibration stored (%s)",
+                location,
+                found.method,
+            )
     else:
+        start = time.perf_counter()
         found = _estimated(context, data.ref, estimate)
         context.coil_maps[location] = found
-
-    if found is None:
-        stored = context.coil_maps.get(location)
-        found = _usable(
-            stored, f"this series, slice {location}", data, context, rejected
+        _log.info(
+            "coil sensitivities of slice %d estimated by %s from %d calibration "
+            "readouts of encoding space %d, maps %s, in %.1f s",
+            location,
+            found.method,
+            int(data.ref.mask.any(axis=-1).sum()),
+            data.ref.space.index,
+            tuple(found.maps.shape),
+            time.perf_counter() - start,
         )
     if found is not None:
         return torch.tensor(found.maps)
     maps = _fitted(context.exam.get(COIL_SENSITIVITIES), data, context, rejected)
     if maps is not None:
+        _log.debug("slice %d takes the coil sensitivities the exam stored", location)
         return torch.tensor(maps)
 
     if not required:

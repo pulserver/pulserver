@@ -10,7 +10,9 @@ from pypulseqpp.sequences.sequence.epi2D_sequence import epi2d
 from pulserver._zoo._evaluation import (
     achieved,
     arguments,
+    bandwidth_note,
     dummies,
+    first_readout,
     packets,
     rf_layout,
 )
@@ -129,6 +131,9 @@ class Epi2D(SequencePlugin):
         return Evaluation(
             protocol.replace(achieved(self, volume) | {UIParam.TR: tr}),
             played * sum(cycles) + groups * sequences.duration(calibration),
+            info=bandwidth_note(
+                system, a["readout_bandwidth_hz"], *first_readout(volume)
+            ),
             rf_layout=rf_layout(volume, scaled=True, copies=max(sizes), period=tr),
             sequence=volume,
         )

@@ -199,3 +199,156 @@ def test_a_volume_is_corrected_as_one_its_phase_encode_first(correction):
     # (partition, phase, readout) goes in as (phase, readout, partition).
     assert correction.calls == [((6, 8, 4), (2.0, 3.0, 5.0), 0)]
     np.testing.assert_allclose(corrected, np.roll(volume, 1, axis=1))
+
+
+def _oversampled_header(columns, oversampling):
+    """A header of one Cartesian space whose readout is sampled ``oversampling`` times over its reconstruction."""
+
+    def fov(x):
+        return SimpleNamespace(x=x, y=1e3 * FOV, z=5.0)
+
+    space = SimpleNamespace(
+        encodedSpace=SimpleNamespace(
+            matrixSize=SimpleNamespace(x=round(oversampling * columns), y=4, z=1),
+            fieldOfView_mm=fov(oversampling * 1e3 * FOV),
+        ),
+        reconSpace=SimpleNamespace(
+            matrixSize=SimpleNamespace(x=columns, y=4, z=1),
+            fieldOfView_mm=fov(1e3 * FOV),
+        ),
+        encodingLimits=SimpleNamespace(
+            kspace_encoding_step_1=SimpleNamespace(minimum=0, maximum=3, center=2)
+        ),
+        trajectory="cartesian",
+    )
+    return SimpleNamespace(
+        encoding=[space],
+        acquisitionSystemInformation=SimpleNamespace(receiverChannels=1),
+    )
+
+
+def test_a_readout_without_a_trajectory_is_cropped_to_the_epi_readout_grid():
+    # A gradient-echo calibration line, uniformly sampled twice over: it has to
+    # land on the grid the ramp-sampled EPI lines are resampled onto, or the
+    # coil sensitivities estimated from it serve none of them.
+    from pulserver.recon import ReconContext
+
+    gadget = RampSampling()
+    gadget.startup(ReconContext.offline(_oversampled_header(COLUMNS, 2.0)))
+    full = 2 * COLUMNS
+    pixel = 3
+    readout = np.exp(-2j * np.pi * (np.arange(full) - full // 2) * pixel / full)
+    acquisition = _acquisition()
+    acquisition.center_sample = full // 2
+    acquisition.discard_pre = acquisition.discard_post = 0
+
+    out = gadget(acquisition, readout[None])
+
+    assert out.shape == (1, COLUMNS)
+    assert acquisition.center_sample == COLUMNS // 2
+    expected = np.exp(
+        -2j * np.pi * (np.arange(COLUMNS) - COLUMNS // 2) * pixel / COLUMNS
+    )
+    np.testing.assert_allclose(out[0] / out[0, COLUMNS // 2], expected, atol=1e-4)
+
+
+def test_without_pyhysco_undistorted_raises_rather_than_passing_the_image_on(
+    monkeypatch,
+):
+    from bartorch import tools
+
+    from pulserver.recon.handlers.epi import undistorted
+
+    def missing(*args, **kwargs):
+        raise ImportError("no PyHySCO")
+
+    monkeypatch.setattr(tools, "correct_susceptibility", missing)
+
+    with pytest.raises(ImportError):
+        undistorted(np.ones((6, 8)), np.ones((6, 8)), (2.0, 3.0))
+
+
+def _epi_recon(monkeypatch, image):
+    """An EpiRecon whose solve returns ``image``, started on an offline stream."""
+    from pulserver.recon import ReconContext
+    from pulserver.recon.handlers import epi
+    from pulserver.recon.handlers.pics import PicsRecon
+
+    monkeypatch.setattr(PicsRecon, "image", lambda self, *args: image)
+    plugin = epi.EpiRecon(gradient_unwarp=False, intensity_correction=False)
+    plugin.startup(ReconContext.offline())
+    return plugin
+
+
+def _unit(set_index):
+    space = SimpleNamespace(recon_fov=(0.2, 0.2), recon_matrix=(6, 8))
+    return SimpleNamespace(
+        counters={"slice": 0, "set": set_index}, data=SimpleNamespace(space=space)
+    )
+
+
+def _image(plugin, set_index):
+    return plugin.image(None, (6, 8), None, _unit(set_index))
+
+
+def test_an_image_without_its_reversed_reference_is_sent_on_with_a_warning(
+    monkeypatch, caplog
+):
+    import logging
+
+    plugin = _epi_recon(monkeypatch, np.ones((6, 8)))
+
+    with caplog.at_level(logging.DEBUG, logger="pulserver.recon"):
+        _image(plugin, 0)
+        _image(plugin, 0)
+
+    skipped = [
+        r
+        for r in caplog.records
+        if "not corrected for susceptibility" in r.getMessage()
+    ]
+    assert [r.levelno for r in skipped] == [logging.WARNING, logging.DEBUG]
+    assert (
+        "no phase-encode-reversed reference (set 1) of slice 0"
+        in skipped[0].getMessage()
+    )
+
+
+def test_an_image_left_uncorrected_for_want_of_pyhysco_says_so(monkeypatch, caplog):
+    import logging
+
+    from bartorch import tools
+
+    def missing(*args, **kwargs):
+        raise ImportError("no PyHySCO")
+
+    monkeypatch.setattr(tools, "correct_susceptibility", missing)
+    plugin = _epi_recon(monkeypatch, np.ones((6, 8)))
+
+    with caplog.at_level(logging.INFO, logger="pulserver.recon"):
+        _image(plugin, 1)
+        out = _image(plugin, 0)
+
+    np.testing.assert_array_equal(out, np.ones((6, 8)))
+    (warning,) = [r for r in caplog.records if r.levelno == logging.WARNING]
+    assert "PyHySCO is not installed" in warning.getMessage()
+
+
+def test_a_corrected_image_is_logged_and_carries_hysco_in_its_history(
+    monkeypatch, caplog, correction
+):
+    import logging
+
+    plugin = _epi_recon(monkeypatch, np.ones((6, 8)))
+
+    with caplog.at_level(logging.INFO, logger="pulserver.recon"):
+        _image(plugin, 1)
+        _image(plugin, 0)
+
+    assert len(correction.calls) == 1
+    assert any(
+        r.levelno == logging.INFO
+        and r.getMessage().startswith("susceptibility distortion of a (6, 8) image")
+        for r in caplog.records
+    )
+    assert plugin.corrections.applied() == ["HYSCO"]

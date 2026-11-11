@@ -1918,3 +1918,35 @@ def test_a_peripheral_tr_shorter_than_the_longest_train_is_refused_by_evaluation
     with pytest.raises(ValueError) as generated:
         plugin.generate(SYSTEM, protocol)
     assert str(refused.value) == str(generated.value)
+
+
+def test_a_bandwidth_the_slew_rate_cannot_reach_is_stated_with_why():
+    from pulserver._zoo._evaluation import bandwidth_note
+
+    system = pp.Opts(max_slew=93.9, slew_unit="T/m/s", adc_raster_time=2e-6)
+
+    note = bandwidth_note(system, 500e3, 256, 4e-6)
+
+    assert note.startswith("bandwidth 250 kHz, not 500 kHz: ")
+    assert "93.9 T/m/s" in note
+    assert "0.512 ms its 256 samples take at 500 kHz" in note
+    assert "2 us ADC raster" in note
+
+
+def test_a_bandwidth_off_the_adc_raster_is_stated_as_rounded_to_it():
+    from pulserver._zoo._evaluation import bandwidth_note
+
+    system = pp.Opts(adc_raster_time=2e-6)
+
+    note = bandwidth_note(system, 400e3, 256, 2e-6)
+
+    assert note == (
+        "bandwidth 500 kHz, not 400 kHz: the sampling interval is a multiple of "
+        "the 2 us ADC raster"
+    )
+
+
+def test_a_bandwidth_met_states_nothing():
+    from pulserver._zoo._evaluation import bandwidth_note
+
+    assert bandwidth_note(pp.Opts(adc_raster_time=2e-6), 250e3, 256, 4e-6) == ""

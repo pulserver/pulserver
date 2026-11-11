@@ -600,3 +600,86 @@ def test_an_estimate_returning_maps_on_another_grid_is_refused(torch):
             calibration_header(COILS, MATRIX),
             readouts(kspace, CALIBRATION, last=LAST),
         )
+
+
+def test_maps_estimated_from_calibration_readouts_are_logged(caplog, torch):
+    import logging
+
+    _, _, kspace = coil_phantom(COILS, MATRIX)
+    plugin = stream_plugin(maps_of(Estimate()))
+
+    with caplog.at_level(logging.INFO, logger="pulserver.recon"):
+        play(
+            plugin,
+            calibration_header(COILS, MATRIX, calibration=MATRIX),
+            readouts(kspace, CALIBRATION, lines=centre_lines(), space=1, last=LAST)
+            + readouts(kspace, space=0, last=LAST),
+        )
+
+    (line,) = [
+        record.getMessage()
+        for record in caplog.records
+        if record.levelno == logging.INFO
+        and "coil sensitivities" in record.getMessage()
+    ]
+    assert line.startswith(
+        f"coil sensitivities of slice 0 estimated by Estimate from {ACS} "
+        "calibration readouts of encoding space 1"
+    )
+
+
+def _pics(**options):
+    from pulserver.recon.handlers.pics import PicsRecon
+
+    return PicsRecon(
+        iterations=2,
+        virtual_coils=None,
+        kspace_filter=False,
+        gradient_unwarp=False,
+        intensity_correction=False,
+        **options,
+    )
+
+
+def test_imaging_its_calibration_does_not_serve_warns_before_fitting_its_own_maps(
+    caplog,
+):
+    import logging
+
+    pytest.importorskip("bartorch")
+    _, _, kspace = coil_phantom(COILS, MATRIX)
+    _, _, coarse = coil_phantom(COILS, MATRIX // 2)
+
+    with caplog.at_level(logging.INFO, logger="pulserver.recon"):
+        play(
+            _pics(),
+            calibration_header(COILS, MATRIX, calibration=MATRIX // 2),
+            readouts(coarse, CALIBRATION, space=1, last=LAST)
+            + readouts(kspace, space=0, last=LAST),
+        )
+
+    (warning,) = [
+        record.getMessage()
+        for record in caplog.records
+        if record.levelno == logging.WARNING and "own k-space" in record.getMessage()
+    ]
+    assert warning.startswith("slice 0, set 0: coil sensitivities fitted to the unit's")
+    assert "this series, slice 0: geometry.matrix differs" in warning
+    assert "\n" not in warning
+
+
+def test_imaging_with_no_calibration_anywhere_fits_its_own_maps_without_a_warning(
+    caplog,
+):
+    import logging
+
+    pytest.importorskip("bartorch")
+    _, _, kspace = coil_phantom(COILS, MATRIX)
+
+    with caplog.at_level(logging.INFO, logger="pulserver.recon"):
+        play(_pics(), calibration_header(COILS, MATRIX), readouts(kspace, last=LAST))
+
+    fitted = [
+        record for record in caplog.records if "own k-space" in record.getMessage()
+    ]
+    assert [record.levelno for record in fitted] == [logging.INFO]

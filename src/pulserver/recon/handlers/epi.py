@@ -4,14 +4,19 @@ from __future__ import annotations
 
 __all__ = ["PLUGIN", "EpiPhaseCorrection", "EpiRecon", "RampSampling"]
 
+import logging
+import time
+
 import numpy as np
 
 from ...mrd._header import EncodingSpace
 from ...mrd._metadata import acquisition_label, has_acquisition_flag
 from .._buffers import ReconData, discards, echo_centre
-from ..gadgets import Prewhiten
+from ..gadgets import AsymmetricEcho, Prewhiten, RemoveReadoutOversampling
 from ..plugin import Gadget, ReconContext
 from .pics import PicsRecon
+
+_log = logging.getLogger("pulserver.recon")
 
 
 class RampSampling(Gadget):
@@ -24,12 +29,20 @@ class RampSampling(Gadget):
     resampled onto the grid in its own direction. The resampled readout is a
     full echo of the matrix's readout: its ``center_sample`` is the grid's
     centre, and it has no discards. A space that states no matrix, such as the
-    navigators', takes the geometry of the first space that does. Readouts
-    without a trajectory pass unchanged.
+    navigators', takes the geometry of the first space that does. A readout
+    without a trajectory, such as a line of the gradient-echo calibration
+    that precedes an accelerated scan, is sampled uniformly: it is completed
+    to a full echo (:class:`~pulserver.recon.AsymmetricEcho`) and its readout
+    oversampling removed (:class:`~pulserver.recon.RemoveReadoutOversampling`),
+    so it lands on the same readout grid as the EPI lines and the coil
+    sensitivities estimated from it serve them.
     """
 
     def startup(self, context):
         super().startup(context)
+        self.uniform = (AsymmetricEcho(), RemoveReadoutOversampling())
+        for gadget in self.uniform:
+            gadget.startup(context)
         encodings = getattr(context.header, "encoding", None) or ()
         spaces = [
             EncodingSpace.from_header(context.header, index)
@@ -53,7 +66,11 @@ class RampSampling(Gadget):
     def __call__(self, acquisition, data):
         traj = getattr(acquisition, "traj", None)
         space = int(acquisition_label(acquisition, "encoding_space_ref", 0) or 0)
-        if traj is None or np.size(traj) == 0 or space >= len(self.geometry):
+        if traj is None or np.size(traj) == 0:
+            for gadget in self.uniform:
+                data = gadget(acquisition, data)
+            return data
+        if space >= len(self.geometry):
             return data
         if self.geometry[space] is None:
             return data
@@ -131,7 +148,13 @@ class EpiRecon(PicsRecon):
     an image of its own, and when PyHySCO is installed (bartorch's ``pyhysco``
     extra, GPL-3.0) each later image of the same slice, or each later volume
     of a 3D scan, is corrected for susceptibility distortion against it
-    (:func:`bartorch.tools.correct_susceptibility`). Each image is Fermi
+    (:func:`bartorch.tools.correct_susceptibility`), history ``HYSCO``. The
+    correction is logged as the other corrections are, and an image left
+    uncorrected, for want of PyHySCO or of its reference, is logged with the
+    reason at ``WARNING``. The gradient-echo calibration readouts of an
+    accelerated scan reach the same readout grid as the EPI lines
+    (:class:`RampSampling`), so the coil sensitivities estimated from them
+    unfold it. Each image is Fermi
     filtered before its magnitude is taken, and corrected for gradient
     nonlinearity and divided by the receive field after the distortion
     correction, the reference set by a field of its own
@@ -168,6 +191,7 @@ class EpiRecon(PicsRecon):
     def startup(self, context):
         super().startup(context)
         self.references = {}
+        self._skips_logged = set()
 
     def image(
         self,
@@ -177,24 +201,58 @@ class EpiRecon(PicsRecon):
         data: ReconData,
     ) -> np.ndarray:
         image = np.abs(super().image(kspace, shape, context, data))
+        location = int(data.counters.get("slice", 0))
         if int(data.counters.get("set", 0)) == 1:
-            self.references[int(data.counters.get("slice", 0))] = image
+            self.references[location] = image
             return image
-        reference = self.references.get(int(data.counters.get("slice", 0)))
-        if (
-            reference is None
-            or image.shape != reference.shape
-            or image.ndim not in (2, 3)
-        ):
-            return image
+        reference = self.references.get(location)
         space = data.data.space
-        if not space.recon_fov:
-            return image
-        voxel = tuple(
-            1e3 * fov / n
-            for fov, n in zip(space.recon_fov, space.recon_matrix, strict=False)
+        if reference is None:
+            reason = (
+                f"no phase-encode-reversed reference (set 1) of slice {location} "
+                "came before it"
+            )
+        elif image.shape != reference.shape:
+            reason = f"its reference is {reference.shape}, the image {image.shape}"
+        elif image.ndim not in (2, 3):
+            reason = f"it has {image.ndim} dimensions, not 2 or 3"
+        elif not space.recon_fov:
+            reason = "the header states no reconstruction field of view"
+        else:
+            voxel = tuple(
+                1e3 * fov / n
+                for fov, n in zip(space.recon_fov, space.recon_matrix, strict=False)
+            )
+            start = time.perf_counter()
+            try:
+                corrected = undistorted(image, reference, voxel[-image.ndim :])
+            except ImportError as error:
+                reason = f"PyHySCO is not installed ({error})"
+            except Exception:
+                _log.exception(
+                    "the susceptibility distortion correction failed; the image is "
+                    "sent uncorrected"
+                )
+                return image
+            else:
+                if self.corrections is not None:
+                    self.corrections.ran(
+                        "HYSCO",
+                        "susceptibility distortion of a %s image corrected against "
+                        "its phase-encode-reversed reference in %.1f s",
+                        image.shape,
+                        time.perf_counter() - start,
+                    )
+                return corrected
+        level = logging.DEBUG if reason in self._skips_logged else logging.WARNING
+        self._skips_logged.add(reason)
+        _log.log(
+            level,
+            "slice %d is not corrected for susceptibility distortion: %s",
+            location,
+            reason,
         )
-        return undistorted(image, reference, voxel[-image.ndim :])
+        return image
 
 
 PLUGIN = EpiRecon()
@@ -207,8 +265,12 @@ def undistorted(image, reverse, voxel_size):
     encode, readout)``, with ``voxel_size`` in mm along the same axes.
     PyHySCO corrects volumes: a volume is corrected as one, its phase encode
     first, and a slice as three identical slices, which its smoothness penalty
-    leaves uncoupled. ``image`` is returned unchanged when PyHySCO is not
-    installed.
+    leaves uncoupled.
+
+    Raises
+    ------
+    ImportError
+        If PyHySCO is not installed.
     """
     import torch
     from bartorch import tools
@@ -224,15 +286,12 @@ def undistorted(image, reverse, voxel_size):
         # (partition, phase, readout) to (phase, readout, partition).
         up, down = image.transpose(1, 2, 0), reverse.transpose(1, 2, 0)
         voxel = (voxel_size[1], voxel_size[2], voxel_size[0])
-    try:
-        corrected = tools.correct_susceptibility(
-            torch.from_numpy(np.ascontiguousarray(up)),
-            torch.from_numpy(np.ascontiguousarray(down * scale)),
-            voxel_size=voxel,
-            phase_encoding_axis=0,
-        )
-    except ImportError:
-        return image
+    corrected = tools.correct_susceptibility(
+        torch.from_numpy(np.ascontiguousarray(up)),
+        torch.from_numpy(np.ascontiguousarray(down * scale)),
+        voxel_size=voxel,
+        phase_encoding_axis=0,
+    )
     result = corrected.blip_up.cpu().numpy()
     result = result[:, :, 1] if image.ndim == 2 else result.transpose(2, 0, 1)
     return np.clip(result, 0.0, None)

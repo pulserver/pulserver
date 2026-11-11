@@ -85,15 +85,53 @@ def repetitions_of(main: pp.Sequence) -> tuple[int, float]:
     return count, total / count
 
 
-def _readout_bandwidth(main: pp.Sequence) -> float:
-    """Return the receiver bandwidth in Hz of the first ADC event outside a navigator: the inverse of its dwell time."""
+def first_readout(main: pp.Sequence) -> tuple[int, float]:
+    """Return the samples and the dwell time in seconds of the first ADC event of ``main`` outside a navigator."""
     tables = main.libraries()
     played = tables.blocks[:, 4]
     adcs = played[played > 0]
     navigator = main.evaluate_labels(evolution="adc").get("NAV")
     if navigator is not None:
         adcs = adcs[np.asarray(navigator) == 0]
-    return 1.0 / float(tables.adc[adcs[0] - 1, 1])
+    row = tables.adc[adcs[0] - 1]
+    return int(row[0]), float(row[1])
+
+
+def _readout_bandwidth(main: pp.Sequence) -> float:
+    """Return the receiver bandwidth in Hz of the first ADC event outside a navigator: the inverse of its dwell time."""
+    return 1.0 / first_readout(main)[1]
+
+
+def bandwidth_note(
+    system: pp.Opts, requested_hz: float, samples: int, dwell: float
+) -> str:
+    """Return why an EPI line samples at ``1 / dwell`` rather than the ``requested_hz`` asked; empty where it samples at it.
+
+    The dwell is a multiple of ``system.adc_raster_time``: the one nearest
+    the request, unless the read gradient cannot sweep a ramp-sampled line in
+    the time ``samples`` take at that dwell under the design's slew rate,
+    which then sets it.
+    """
+    achieved = 1.0 / dwell
+    if abs(achieved - requested_hz) <= 1e-6 * requested_hz:
+        return ""
+    raster = system.adc_raster_time
+    nearest = max(1, round(1.0 / (requested_hz * raster))) * raster
+    if dwell > nearest * (1 + 1e-9):
+        why = (
+            f"at the design's slew rate of {system.max_slew / system.gamma:.1f} "
+            "T/m/s a ramp-sampled line needs longer than the "
+            f"{1e3 * samples * nearest:.3f} ms its {samples} "
+            f"samples take at {1e-3 / nearest:.0f} kHz, and the sampling interval "
+            f"steps by the {1e6 * raster:g} us ADC raster"
+        )
+    else:
+        why = (
+            f"the sampling interval is a multiple of the {1e6 * raster:g} us ADC raster"
+        )
+    return (
+        f"bandwidth {1e-3 * achieved:.0f} kHz, not {1e-3 * requested_hz:.0f} kHz: {why}"
+    )
 
 
 #: The entries that hold the value the design achieved, and where the main

@@ -157,10 +157,14 @@ class SequenceTable:
         Numbered in chain order: each subsequence's primary space, then its
         navigator space when it has ``NAV`` readouts.
     sequence_parameters : dict of str to list of float
-        Over the chain's :class:`~pulserver.mrd.SequenceDefinitions`: the
-        ``TR`` and ``TI`` minima and every distinct ``TE`` in ascending order,
-        in ms, and every distinct ``FlipAngle`` in ascending order, in
-        degrees. Keys no file defines or measures are absent.
+        From the :class:`~pulserver.mrd.SequenceDefinitions` of the main
+        sequence, the last of the chain, so that a prescan, such as the
+        gradient-echo calibration ahead of an accelerated EPI, does not
+        annotate the images: the ``TR`` and ``TI`` minima and every distinct
+        ``TE`` in ascending order, in ms, and every distinct ``FlipAngle`` in
+        ascending order, in degrees. A parameter the main sequence neither
+        defines nor measures is taken over the whole chain; keys no file
+        defines or measures are absent.
     fov_offset_m : tuple of float
         The field-of-view shift the scanner plays the chain at, in m, along
         the axes the design's blocks are rotated onto, as
@@ -269,10 +273,8 @@ class SequenceTable:
         parts: list[dict[str, Any]] = []
         files: list[ReadoutTable] = []
         spaces: list[TableSpace] = []
-        tr: list[float] = []
-        te: list[float] = []
-        ti: list[float] = []
-        flip: list[float] = []
+        # Per file: TR, TE, TI and flip angles, the main sequence last.
+        stated: list[tuple[tuple[float, ...], ...]] = []
         diffusion = None
         recon: dict[str, str] = {}
         for subsequence, (_, seq) in enumerate(read_chain(path)):
@@ -287,10 +289,14 @@ class SequenceTable:
             files.append(readouts._for_k())
             parts.append(part)
             spaces.extend(part_spaces)
-            tr.extend(definitions.tr)
-            te.extend(definitions.te)
-            ti.extend(definitions.ti)
-            flip.extend(definitions.flip_angle)
+            stated.append(
+                (
+                    definitions.tr,
+                    definitions.te,
+                    definitions.ti,
+                    definitions.flip_angle,
+                )
+            )
 
         def joined(name: str, dtype: Any) -> np.ndarray:
             return np.concatenate([part[name] for part in parts], dtype=dtype)
@@ -304,6 +310,13 @@ class SequenceTable:
         np.maximum.at(widest, encoding_space, moving)
         widest[[not (space.trajectory or space.ramp_sampled) for space in spaces]] = 0
 
+        # The main sequence's, where it states them, else the whole chain's.
+        tr, te, ti, flip = (
+            list(stated[-1][k]) or [v for file in stated for v in file[k]]
+            if stated
+            else []
+            for k in range(4)
+        )
         parameters: dict[str, list[float]] = {}
         if tr:
             parameters["TR"] = [1e3 * min(tr)]
