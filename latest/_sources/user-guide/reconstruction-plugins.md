@@ -466,6 +466,10 @@ from pulserver import mrd
 anatomy = int(float(mrd.user_parameter(context.header, "QsmAnatomy", 0)))
 ```
 
+The shipped reconstructions read `QsmAnatomy` (`qsm`) and `KSpaceFilter`,
+`GradientUnwarp`, `IntensityCorrection` and `IntensityCorrectionLevels` (all
+of them; {ref}`shipped-reconstructions`).
+
 ## Diffusion tables
 
 The proxy states the diffusion table a design names in the header's
@@ -535,10 +539,11 @@ the encoded space and the receiver channels:
 
 ```
 
+(shipped-reconstructions)=
 ## Shipped reconstructions
 
 Seven shipped plugins are complete reconstructions, returning the values of their
-transform or solve unscaled. They are searched after every reconstruction
+transform or solve, unscaled but for the corrections below. They are searched after every reconstruction
 plugin directory, so a client can name one, such as `nufft`, without a file of
 its own, and a file of the same name in a `--plugins` directory replaces it.
 Each whitens its readouts with {class}`~pulserver.recon.Prewhiten`, compresses
@@ -546,6 +551,41 @@ more than six receive channels to six virtual channels (`pics` as the readouts
 arrive, {class}`~pulserver.recon.CompressChannels`; the others a unit at a
 time, {class}`~pulserver.recon.CoilCompression`), and sends a volume as one
 image per partition.
+
+Every shipped plugin corrects each image in three steps, in this order
+({class}`~pulserver.recon.Corrections`):
+
+| Step | Correction | History | Recon parameter | Argument |
+| --- | --- | --- | --- | --- |
+| Fermi filter | The k-space of the complex image the solve returns, over its encoded axes, is multiplied by a radial Fermi window, half height at the Nyquist edge and a transition of ten samples of the longest axis ({func}`~pulserver.recon.fermi_filtered`); for a linear reconstruction of fully sampled k-space this is the apodization of the acquired k-space. The window multiplies the solved image's k-space rather than the measured samples because, before a regularised solve, it would reweight the data term against the regularisation and leave the k-space the solve fills in unfiltered beside filtered samples. A stack of non-Cartesian planes, whose planes are solved apart, is filtered along its partitions before they are transformed and in its plane after | `FERMI` | `KSpaceFilter` | `kspace_filter` |
+| Gradient nonlinearity | The image is resampled from where its voxels were acquired to where they belong, from the gradient coil's table the header states as `gradient_coefficients` ({func}`~pulserver.recon.gradient_unwarped`); a 2D slice in its plane. The correction of each slice position and orientation is built once per series | `GRADUNWARP` | `GradientUnwarp` | `gradient_unwarp` |
+| Receive field | The magnitude images are divided by the field N4 estimates from the first magnitude image of each slice and set ({class}`~pulserver.recon.IntensityCorrection`); later contrasts and repetitions take the same field, so echoes and time points keep their intensity ratios. The field is fitted at four levels of N4's B-spline mesh, which removes the centre-bright shading of a head coil at 7 T and compresses the intensity ratios between separate compartments, such as the vials of a phantom, towards one; at two levels (`IntensityCorrectionLevels` 2) it keeps those ratios and leaves that shading, the setting for quantitative phantom work. An image whose object falls apart into separate compartments, its largest connected part less than half of it, such as a few vials in air, is not divided, since N4 cannot tell their contrast from shading; nor is one whose object is under a hundredth of the image. Each slice of a 2D multi-slice series takes a field of its own, normalised to mean 1 inside that slice's object, so intensity ratios between slices are not kept. Real, imaginary and phase images, and the maps `qsm` makes from them, are not divided | `N4` | `IntensityCorrection` | `intensity_correction` |
+
+A recon parameter of 0, `off`, `false` or `no` turns its step off, and any other number, `on`, `true` or `yes` on; without
+one, the plugin's argument decides, and every argument defaults to on.
+`IntensityCorrectionLevels` states the fitting levels of the receive field,
+four where absent: a scan of a vial phantom whose intensity ratios are
+measured states 2, or `IntensityCorrection` 0 to send the magnitude as
+solved:
+
+```python
+from pulserver.design import recon_parameters
+
+recon_parameters(seq, IntensityCorrectionLevels=2)
+```
+
+When a
+series starts, the log states which steps are on and why any is off, such as
+a header that states no gradient coil table, and each step logs a line when it
+corrects the series' first image. A step that cannot run, such as the receive
+field without SimpleITK, sends the image on as it was and logs why. A site
+turns a step off for a plugin with its argument:
+
+```python
+from pulserver.recon.handlers.pics import PicsRecon
+
+PLUGIN = PicsRecon(intensity_correction=False)
+```
 
 | Plugin | Reconstructs |
 | --- | --- |
@@ -555,7 +595,7 @@ image per partition.
 | `nufft_train` | `nufft`'s images from readouts that number their place in a train of excitations (`contrast`, `ECO`), merged so that the readouts of every place fill one image |
 | `epi` | `pics`'s images from EPI readouts, each whitened, resampled off its ramps onto the matrix and corrected for its odd/even phase against the shot's navigator as it arrives (`bart` ramp operator, `estimate_epi_phase`). The phase-encode-reversed reference set is an image of its own; with PyHySCO installed (GPL-3.0, not a dependency; the Docker image carries it), each later image of its slice, or volume of a 3D scan, is corrected for susceptibility distortion against it |
 | `qsm` | `pics`'s images of each echo of a multi-echo 3D gradient echo (magnitude, real and imaginary series), and once the last echo of a volume is in, from the complex echoes with fast-qsm (an optional dependency; without it the echoes alone), each its own series from 3 on: the root sum of squares over echoes and T2* of the whole object; then for the `QsmAnatomy` recon parameter 0 (phantom) QSM by PDF and MEDI+0 referenced to the water, 1 (brain) SWI and its minimum intensity projection, QSM by V-SHARP and iLSQR inside the SynthStrip brain mask (FreeSurfer's weights at `share/fastqsm/synthstrip.1.pt` in the site library or the environment, or the file `FASTQSM_SYNTHSTRIP_WEIGHTS` names) and the DECOMPOSE paramagnetic and diamagnetic component susceptibilities, 2 (body) QSM by mask-free total field inversion. A partial-Fourier axis makes the echoes real, without the field's phase: QSM scans sample all of k-space |
-| `pmc` | `pics_train`'s images, and a pose from each three-plane navigator (`NAV` or `RTFEEDBACK` readouts): planes gridded with Pipe-Menon density compensation on one thread, coils combined by root sum of squares, registered against the first navigator and filtered by an extended Kalman filter. The pose is published to the scan when its design sets `EnablePmc` |
+| `pmc` | `pics_train`'s images, and a pose from each three-plane navigator (`NAV` or `RTFEEDBACK` readouts): planes gridded with Pipe-Menon density compensation on one thread, coils combined by root sum of squares, registered against the first navigator and filtered by an extended Kalman filter. The pose is published to the scan when its design sets `EnablePmc`; the navigators are not corrected |
 
 A plugin file that re-exports one under another name,
 `from pulserver.recon.handlers.pics import PLUGIN`, is the same reconstruction.

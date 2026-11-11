@@ -637,8 +637,17 @@ sensitivity maps, noise prewhitening and coil compression are the subject of
 </tr>
 </thead>
 <tbody>
+<tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.recon.Corrections.html#pulserver.recon.Corrections" title="pulserver.recon.Corrections"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Corrections</span></code></a></p></td>
+<td><p>The corrections the shipped reconstructions make to a stream’s images, in order: Fermi k-space filter, gradient nonlinearity, N4 receive field of the magnitude.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.recon.fermi_filtered.html#pulserver.recon.fermi_filtered" title="pulserver.recon.fermi_filtered"><code class="xref py py-obj docutils literal notranslate"><span class="pre">fermi_filtered</span></code></a></p></td>
+<td><p>Return a complex image with its k-space multiplied by the Fermi window.</p></td>
+</tr>
 <tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.recon.gradient_unwarped.html#pulserver.recon.gradient_unwarped" title="pulserver.recon.gradient_unwarped"><code class="xref py py-obj docutils literal notranslate"><span class="pre">gradient_unwarped</span></code></a></p></td>
 <td><p>Return an image resampled from where its voxels were acquired to where they belong.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.recon.IntensityCorrection.html#pulserver.recon.IntensityCorrection" title="pulserver.recon.IntensityCorrection"><code class="xref py py-obj docutils literal notranslate"><span class="pre">IntensityCorrection</span></code></a></p></td>
+<td><p>Divide the magnitude images of a unit by the receive field N4 estimates from them, one field per slice and set.</p></td>
 </tr>
 </tbody>
 </table>

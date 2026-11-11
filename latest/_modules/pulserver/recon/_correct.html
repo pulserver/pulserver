@@ -424,13 +424,25 @@
                 <article class="bd-article">
                   
   <h1>Source code for pulserver.recon._correct</h1><div class="highlight"><pre>
-<span></span><span class="sd">"""Gradient nonlinearity correction of a reconstructed image."""</span>
+<span></span><span class="sd">"""Corrections of a reconstructed image: Fermi k-space filter, gradient nonlinearity and receive-field intensity."""</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
-<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"gradient_unwarped"</span><span class="p">,</span> <span class="s2">"states_gradient_coefficients"</span><span class="p">]</span>
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s2">"GRADIENT_UNWARP"</span><span class="p">,</span>
+    <span class="s2">"INTENSITY_CORRECTION"</span><span class="p">,</span>
+    <span class="s2">"INTENSITY_CORRECTION_LEVELS"</span><span class="p">,</span>
+    <span class="s2">"KSPACE_FILTER"</span><span class="p">,</span>
+    <span class="s2">"Corrections"</span><span class="p">,</span>
+    <span class="s2">"IntensityCorrection"</span><span class="p">,</span>
+    <span class="s2">"fermi_filtered"</span><span class="p">,</span>
+    <span class="s2">"gradient_unwarped"</span><span class="p">,</span>
+    <span class="s2">"states_gradient_coefficients"</span><span class="p">,</span>
+<span class="p">]</span>
 
+<span class="kn">import</span><span class="w"> </span><span class="nn">dataclasses</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">time</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
@@ -445,24 +457,41 @@
     <span class="s2">"coeff_dat"</span><span class="p">,</span>
 <span class="p">)</span>
 
+<span class="c1">#: Recon parameters turning each of :class:`Corrections` off where 0 and on</span>
+<span class="c1">#: where any other number, whatever the plugin's argument.</span>
+<span class="n">KSPACE_FILTER</span> <span class="o">=</span> <span class="s2">"KSpaceFilter"</span>
+<span class="n">GRADIENT_UNWARP</span> <span class="o">=</span> <span class="s2">"GradientUnwarp"</span>
+<span class="n">INTENSITY_CORRECTION</span> <span class="o">=</span> <span class="s2">"IntensityCorrection"</span>
+
+<span class="c1">#: Recon parameter stating the fitting levels of the N4 field, an integer</span>
+<span class="c1">#: clamped to 1 to :data:`N4_MAX_LEVELS`; :data:`N4_FITTING_LEVELS` where</span>
+<span class="c1">#: absent or not an integer.</span>
+<span class="n">INTENSITY_CORRECTION_LEVELS</span> <span class="o">=</span> <span class="s2">"IntensityCorrectionLevels"</span>
+
 <span class="n">_log</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="s2">"pulserver.recon"</span><span class="p">)</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">states_gradient_coefficients</span><span class="p">(</span><span class="n">header</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Whether an MRD header carries a gradient coil's coefficient table."""</span>
+    <span class="k">return</span> <span class="n">_coefficient_parameter</span><span class="p">(</span><span class="n">header</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_coefficient_parameter</span><span class="p">(</span><span class="n">header</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
     <span class="n">parameters</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span>
         <span class="nb">getattr</span><span class="p">(</span><span class="n">header</span><span class="p">,</span> <span class="s2">"userParameters"</span><span class="p">,</span> <span class="kc">None</span><span class="p">),</span> <span class="s2">"userParameterString"</span><span class="p">,</span> <span class="kc">None</span>
     <span class="p">)</span>
-    <span class="k">return</span> <span class="nb">any</span><span class="p">(</span>
-        <span class="nb">str</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">parameter</span><span class="p">,</span> <span class="s2">"name"</span><span class="p">,</span> <span class="s2">""</span><span class="p">))</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="ow">in</span> <span class="n">COEFFICIENT_PARAMETERS</span>
-        <span class="ow">and</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">parameter</span><span class="p">,</span> <span class="s2">"value"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-        <span class="k">for</span> <span class="n">parameter</span> <span class="ow">in</span> <span class="n">parameters</span> <span class="ow">or</span> <span class="p">()</span>
-    <span class="p">)</span>
+    <span class="k">for</span> <span class="n">parameter</span> <span class="ow">in</span> <span class="n">parameters</span> <span class="ow">or</span> <span class="p">():</span>
+        <span class="n">name</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">parameter</span><span class="p">,</span> <span class="s2">"name"</span><span class="p">,</span> <span class="s2">""</span><span class="p">))</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">name</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="ow">in</span> <span class="n">COEFFICIENT_PARAMETERS</span> <span class="ow">and</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">parameter</span><span class="p">,</span> <span class="s2">"value"</span><span class="p">,</span> <span class="kc">None</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">name</span>
+    <span class="k">return</span> <span class="kc">None</span>
 
 
 <div class="viewcode-block" id="gradient_unwarped">
 <a class="viewcode-back" href="../../../generated/pulserver.recon.gradient_unwarped.html#pulserver.recon.gradient_unwarped">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">gradient_unwarped</span><span class="p">(</span><span class="n">image</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">gradient_unwarped</span><span class="p">(</span>
+    <span class="n">image</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">cache</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Correct an image for gradient nonlinearity.</span>
 
 <span class="sd">    The coil's spherical-harmonic field is evaluated at the scanner position of</span>
@@ -482,14 +511,20 @@
 <span class="sd">        The plugin's :class:`ReconContext`, whose header states the table.</span>
 <span class="sd">    data : ReconData</span>
 <span class="sd">        The plugin's :class:`ReconData`, whose buffer states the geometry.</span>
+<span class="sd">    cache : dict, default=None</span>
+<span class="sd">        Corrections already built for the stream, by the reference</span>
+<span class="sd">        acquisition's encoding space, position and orientation; the one this</span>
+<span class="sd">        unit needs is taken from it or added to it. A stream of several units</span>
+<span class="sd">        of one geometry, the echoes of a multi-echo scan or the volumes of a</span>
+<span class="sd">        time series, so builds its correction once.</span>
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
 <span class="sd">    numpy.ndarray or torch.Tensor</span>
 <span class="sd">        The corrected image, of the type and on the device of ``image``.</span>
 <span class="sd">        ``image`` itself where the header states no table, where the unit has</span>
-<span class="sd">        no reference acquisition, or where the correction fails; the reason is</span>
-<span class="sd">        logged and an uncorrected image is sent on.</span>
+<span class="sd">        no reference acquisition, or where the correction fails; the last two</span>
+<span class="sd">        are logged as warnings and an uncorrected image is sent on.</span>
 <span class="sd">    """</span>
     <span class="n">header</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">context</span><span class="p">,</span> <span class="s2">"header"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">header</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">states_gradient_coefficients</span><span class="p">(</span><span class="n">header</span><span class="p">):</span>
@@ -506,11 +541,8 @@
 
     <span class="k">try</span><span class="p">:</span>
         <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
-        <span class="kn">from</span><span class="w"> </span><span class="nn">bartorch.tools</span><span class="w"> </span><span class="kn">import</span> <span class="n">Gradunwarp</span>
 
-        <span class="n">correction</span> <span class="o">=</span> <span class="n">Gradunwarp</span><span class="o">.</span><span class="n">from_mrd</span><span class="p">(</span><span class="n">header</span><span class="p">,</span> <span class="n">reference</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">correction</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
-            <span class="n">correction</span> <span class="o">=</span> <span class="n">_in_plane</span><span class="p">(</span><span class="n">correction</span><span class="p">,</span> <span class="n">header</span><span class="p">,</span> <span class="n">reference</span><span class="p">)</span>
+        <span class="n">correction</span> <span class="o">=</span> <span class="n">_correction</span><span class="p">(</span><span class="n">header</span><span class="p">,</span> <span class="n">reference</span><span class="p">,</span> <span class="n">cache</span><span class="p">)</span>
         <span class="n">corrected</span> <span class="o">=</span> <span class="n">correction</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">image</span><span class="p">))</span>
     <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
         <span class="n">_log</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">"the image was not corrected for gradient nonlinearity: </span><span class="si">%s</span><span class="s2">"</span><span class="p">,</span> <span class="n">error</span><span class="p">)</span>
@@ -520,6 +552,41 @@
     <span class="c1"># type is asked for rather than duck-typed.</span>
     <span class="k">return</span> <span class="n">corrected</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">image</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">)</span> <span class="k">else</span> <span class="n">corrected</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span></div>
 
+
+
+<span class="c1">#: Voxels the corrections a stream keeps (:func:`gradient_unwarped`'s</span>
+<span class="c1">#: ``cache``) may span together, about two whole-head volumes; the oldest</span>
+<span class="c1">#: are dropped beyond it. A correction holds about 60 bytes a voxel, its</span>
+<span class="c1">#: displacement field and sample positions: some 0.7 GB for a 176 x 256 x 256</span>
+<span class="c1">#: volume, 2 GB at the cap.</span>
+<span class="n">UNWARP_CACHE_VOXELS</span> <span class="o">=</span> <span class="mi">2</span> <span class="o">*</span> <span class="mi">256</span><span class="o">**</span><span class="mi">3</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_correction</span><span class="p">(</span><span class="n">header</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">reference</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">cache</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the gradient nonlinearity correction of ``reference``'s geometry, from ``cache`` where it holds it."""</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">bartorch.tools</span><span class="w"> </span><span class="kn">import</span> <span class="n">Gradunwarp</span>
+
+    <span class="n">key</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="nb">int</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">reference</span><span class="p">,</span> <span class="s2">"encoding_space_ref"</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="ow">or</span> <span class="mi">0</span><span class="p">),</span>
+        <span class="o">*</span><span class="p">(</span>
+            <span class="nb">tuple</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">reference</span><span class="p">,</span> <span class="n">name</span><span class="p">))</span>
+            <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"position"</span><span class="p">,</span> <span class="s2">"read_dir"</span><span class="p">,</span> <span class="s2">"phase_dir"</span><span class="p">,</span> <span class="s2">"slice_dir"</span><span class="p">)</span>
+        <span class="p">),</span>
+    <span class="p">)</span>
+    <span class="k">if</span> <span class="n">cache</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">cache</span><span class="p">:</span>
+        <span class="n">cache</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">cache</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">cache</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
+    <span class="n">correction</span> <span class="o">=</span> <span class="n">Gradunwarp</span><span class="o">.</span><span class="n">from_mrd</span><span class="p">(</span><span class="n">header</span><span class="p">,</span> <span class="n">reference</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">correction</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="n">correction</span> <span class="o">=</span> <span class="n">_in_plane</span><span class="p">(</span><span class="n">correction</span><span class="p">,</span> <span class="n">header</span><span class="p">,</span> <span class="n">reference</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">cache</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">cache</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">correction</span>
+        <span class="k">while</span> <span class="p">(</span>
+            <span class="nb">len</span><span class="p">(</span><span class="n">cache</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span>
+            <span class="ow">and</span> <span class="nb">sum</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">prod</span><span class="p">(</span><span class="n">c</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">cache</span><span class="o">.</span><span class="n">values</span><span class="p">())</span> <span class="o">&gt;</span> <span class="n">UNWARP_CACHE_VOXELS</span>
+        <span class="p">):</span>
+            <span class="n">cache</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">cache</span><span class="p">)))</span>
+    <span class="k">return</span> <span class="n">correction</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_in_plane</span><span class="p">(</span><span class="n">correction</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">header</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">reference</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
@@ -549,6 +616,493 @@
         <span class="n">orientation</span><span class="p">,</span>
         <span class="nb">tuple</span><span class="p">(</span><span class="n">centre</span><span class="p">),</span>
         <span class="n">jacobian</span><span class="o">=</span><span class="n">correction</span><span class="o">.</span><span class="n">jacobian</span><span class="p">,</span>
+    <span class="p">)</span>
+
+
+<div class="viewcode-block" id="fermi_filtered">
+<a class="viewcode-back" href="../../../generated/pulserver.recon.fermi_filtered.html#pulserver.recon.fermi_filtered">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">fermi_filtered</span><span class="p">(</span><span class="n">image</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">axes</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return a complex image with its k-space multiplied by the Fermi window.</span>
+
+<span class="sd">    The k-space is the centred unitary Fourier transform of ``image`` over</span>
+<span class="sd">    ``axes`` (:func:`bartorch.fft`), the zero frequency at index ``n // 2``,</span>
+<span class="sd">    and the window :func:`bartorch.fermi_window` at its defaults over those</span>
+<span class="sd">    axes: radial, half height at the Nyquist edge of each axis, its transition</span>
+<span class="sd">    ten samples of the longest (Bernstein et al., JMRI 2001;14:270). For an</span>
+<span class="sd">    image a linear reconstruction makes from fully sampled k-space this is the</span>
+<span class="sd">    apodization of the acquired k-space.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    image : array_like</span>
+<span class="sd">        Complex image, NumPy array or Torch tensor, on the host.</span>
+<span class="sd">    axes : tuple of int, default=None</span>
+<span class="sd">        Axes Fourier encoded together; every axis of more than one point when</span>
+<span class="sd">        ``None``.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    numpy.ndarray</span>
+<span class="sd">        ``complex64``, shaped like ``image``.</span>
+<span class="sd">    """</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">bartorch</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+
+    <span class="n">values</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">image</span><span class="p">))</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">complex64</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">axes</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">axes</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">axis</span> <span class="k">for</span> <span class="n">axis</span><span class="p">,</span> <span class="n">n</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">values</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="k">if</span> <span class="n">n</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="n">axes</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">axis</span> <span class="o">%</span> <span class="n">values</span><span class="o">.</span><span class="n">ndim</span> <span class="k">for</span> <span class="n">axis</span> <span class="ow">in</span> <span class="n">axes</span><span class="p">)</span>
+    <span class="n">kspace</span> <span class="o">=</span> <span class="n">bartorch</span><span class="o">.</span><span class="n">fft</span><span class="p">(</span><span class="n">values</span><span class="p">,</span> <span class="n">axes</span><span class="p">,</span> <span class="n">unitary</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">values</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+    <span class="n">kspace</span> <span class="o">=</span> <span class="n">bartorch</span><span class="o">.</span><span class="n">apodize</span><span class="p">(</span><span class="n">kspace</span><span class="p">,</span> <span class="n">kind</span><span class="o">=</span><span class="s2">"fermi"</span><span class="p">,</span> <span class="n">axes</span><span class="o">=</span><span class="n">axes</span><span class="p">)</span>
+    <span class="n">filtered</span> <span class="o">=</span> <span class="n">bartorch</span><span class="o">.</span><span class="n">fft</span><span class="p">(</span><span class="n">kspace</span><span class="p">,</span> <span class="n">axes</span><span class="p">,</span> <span class="n">inverse</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">unitary</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">filtered</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">values</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">fermi_profile</span><span class="p">(</span><span class="n">extent</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span> <span class="n">axis</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the Fermi window of :func:`fermi_filtered` over ``extent`` along ``axis``, through the centre of the other axes."""</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">bartorch</span>
+
+    <span class="n">window</span> <span class="o">=</span> <span class="n">bartorch</span><span class="o">.</span><span class="n">fermi_window</span><span class="p">(</span><span class="nb">tuple</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">n</span><span class="p">)</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">extent</span><span class="p">))</span>
+    <span class="n">centre</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">n</span> <span class="o">//</span> <span class="mi">2</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">extent</span><span class="p">]</span>
+    <span class="n">centre</span><span class="p">[</span><span class="n">axis</span><span class="p">]</span> <span class="o">=</span> <span class="nb">slice</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">window</span><span class="p">[</span><span class="nb">tuple</span><span class="p">(</span><span class="n">centre</span><span class="p">)]</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>
+
+
+<span class="c1">#: Words a recon parameter turns its correction on or off with, besides a</span>
+<span class="c1">#: number (0 off, any other on), in any case.</span>
+<span class="n">SWITCH_WORDS</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">"on"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="s2">"true"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="s2">"yes"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="s2">"off"</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="s2">"false"</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="s2">"no"</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+<span class="p">}</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_stated</span><span class="p">(</span><span class="n">header</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">default</span><span class="p">:</span> <span class="nb">bool</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Whether the recon parameter ``name`` of ``header`` turns its correction on; ``default`` where it is absent or neither a number nor one of :data:`SWITCH_WORDS`."""</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">..mrd._metadata</span><span class="w"> </span><span class="kn">import</span> <span class="n">user_parameter</span>
+
+    <span class="n">value</span> <span class="o">=</span> <span class="n">user_parameter</span><span class="p">(</span><span class="n">header</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">default</span>
+    <span class="n">word</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">value</span><span class="p">)</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+    <span class="k">if</span> <span class="n">word</span> <span class="ow">in</span> <span class="n">SWITCH_WORDS</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">SWITCH_WORDS</span><span class="p">[</span><span class="n">word</span><span class="p">]</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">word</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">0</span>
+    <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+        <span class="n">_log</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+            <span class="s2">"recon parameter </span><span class="si">%s</span><span class="s2"> </span><span class="si">%r</span><span class="s2"> is neither a number nor on/off; it is taken as </span><span class="si">%s</span><span class="s2">"</span><span class="p">,</span>
+            <span class="n">name</span><span class="p">,</span>
+            <span class="n">value</span><span class="p">,</span>
+            <span class="s2">"on"</span> <span class="k">if</span> <span class="n">default</span> <span class="k">else</span> <span class="s2">"off"</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">default</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_off</span><span class="p">(</span><span class="n">header</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">argument</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Why a step is off: the header's recon parameter ``name``, else the plugin's ``argument``."""</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">..mrd._metadata</span><span class="w"> </span><span class="kn">import</span> <span class="n">user_parameter</span>
+
+    <span class="n">value</span> <span class="o">=</span> <span class="n">user_parameter</span><span class="p">(</span><span class="n">header</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">"off: the plugin's </span><span class="si">{</span><span class="n">argument</span><span class="si">}</span><span class="s2"> is false"</span>
+    <span class="k">return</span> <span class="sa">f</span><span class="s2">"off: recon parameter </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> is </span><span class="si">{</span><span class="n">value</span><span class="si">}</span><span class="s2">"</span>
+
+
+<div class="viewcode-block" id="Corrections">
+<a class="viewcode-back" href="../../../generated/pulserver.recon.Corrections.html#pulserver.recon.Corrections">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">Corrections</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""The corrections a shipped reconstruction makes to the images of one stream.</span>
+
+<span class="sd">    In order:</span>
+
+<span class="sd">    1. the Fermi filter of the k-space of each complex image the solve returns</span>
+<span class="sd">       (:func:`fermi_filtered`), history ``FERMI``;</span>
+<span class="sd">    2. gradient nonlinearity correction (:func:`gradient_unwarped`), history</span>
+<span class="sd">       ``GRADUNWARP``, where the header states the coil's table;</span>
+<span class="sd">    3. the division of the magnitude images by the receive field</span>
+<span class="sd">       (:class:`IntensityCorrection`), history ``N4``; real, imaginary and</span>
+<span class="sd">       phase images are sent as reconstructed.</span>
+
+<span class="sd">    The header's recon parameter ``KSpaceFilter``, ``GradientUnwarp`` or</span>
+<span class="sd">    ``IntensityCorrection`` turns its step off where it is 0 or one of the</span>
+<span class="sd">    off words of :data:`SWITCH_WORDS`, and on where it is any other number or</span>
+<span class="sd">    an on word; where the header states none, or a value of neither kind, the</span>
+<span class="sd">    argument decides.</span>
+<span class="sd">    Which steps are on, and why any is off, is logged when the stream starts;</span>
+<span class="sd">    each step is logged when it runs, at ``INFO`` for the first image of the</span>
+<span class="sd">    stream and at ``DEBUG`` after. A step that fails leaves the image as it</span>
+<span class="sd">    is, and the log says why. Make one per stream.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    header : ismrmrd.xsd.ismrmrdHeader</span>
+<span class="sd">        The stream's header.</span>
+<span class="sd">    kspace_filter, gradient_unwarp, intensity_correction : bool, default=True</span>
+<span class="sd">        Each step where the header states no recon parameter for it.</span>
+<span class="sd">    """</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">header</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">kspace_filter</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">gradient_unwarp</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">intensity_correction</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">kspace_filter</span> <span class="o">=</span> <span class="n">_stated</span><span class="p">(</span><span class="n">header</span><span class="p">,</span> <span class="n">KSPACE_FILTER</span><span class="p">,</span> <span class="n">kspace_filter</span><span class="p">)</span>
+        <span class="n">table</span> <span class="o">=</span> <span class="n">_coefficient_parameter</span><span class="p">(</span><span class="n">header</span><span class="p">)</span>
+        <span class="n">unwarp</span> <span class="o">=</span> <span class="n">_stated</span><span class="p">(</span><span class="n">header</span><span class="p">,</span> <span class="n">GRADIENT_UNWARP</span><span class="p">,</span> <span class="n">gradient_unwarp</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">gradient_unwarp</span> <span class="o">=</span> <span class="n">unwarp</span> <span class="ow">and</span> <span class="n">table</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">intensity</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">IntensityCorrection</span><span class="p">(</span><span class="n">_levels</span><span class="p">(</span><span class="n">header</span><span class="p">))</span>
+            <span class="k">if</span> <span class="n">_stated</span><span class="p">(</span><span class="n">header</span><span class="p">,</span> <span class="n">INTENSITY_CORRECTION</span><span class="p">,</span> <span class="n">intensity_correction</span><span class="p">)</span>
+            <span class="k">else</span> <span class="kc">None</span>
+        <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_applied</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_logged</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_unwarps</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">unwarp</span><span class="p">:</span>
+            <span class="n">unwarp_state</span> <span class="o">=</span> <span class="n">_off</span><span class="p">(</span><span class="n">header</span><span class="p">,</span> <span class="n">GRADIENT_UNWARP</span><span class="p">,</span> <span class="s2">"gradient_unwarp"</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">table</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">unwarp_state</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="s2">"off: the header states no gradient coil table (user parameter "</span>
+                <span class="o">+</span> <span class="s2">" or "</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">COEFFICIENT_PARAMETERS</span><span class="p">)</span>
+                <span class="o">+</span> <span class="s2">")"</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">unwarp_state</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"on, coil table from user parameter </span><span class="si">{</span><span class="n">table</span><span class="si">}</span><span class="s2">"</span>
+        <span class="n">_log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="s2">"image corrections: Fermi k-space filter </span><span class="si">%s</span><span class="s2">; gradient nonlinearity "</span>
+            <span class="s2">"correction </span><span class="si">%s</span><span class="s2">; N4 intensity correction of the magnitude </span><span class="si">%s</span><span class="s2">"</span><span class="p">,</span>
+            <span class="s2">"on"</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">kspace_filter</span>
+            <span class="k">else</span> <span class="n">_off</span><span class="p">(</span><span class="n">header</span><span class="p">,</span> <span class="n">KSPACE_FILTER</span><span class="p">,</span> <span class="s2">"kspace_filter"</span><span class="p">),</span>
+            <span class="n">unwarp_state</span><span class="p">,</span>
+            <span class="sa">f</span><span class="s2">"on, </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">intensity</span><span class="o">.</span><span class="n">levels</span><span class="si">}</span><span class="s2"> fitting levels"</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">intensity</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="k">else</span> <span class="n">_off</span><span class="p">(</span><span class="n">header</span><span class="p">,</span> <span class="n">INTENSITY_CORRECTION</span><span class="p">,</span> <span class="s2">"intensity_correction"</span><span class="p">),</span>
+        <span class="p">)</span>
+
+<div class="viewcode-block" id="Corrections.filtered">
+<a class="viewcode-back" href="../../../generated/pulserver.recon.Corrections.filtered.html#pulserver.recon.Corrections.filtered">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">filtered</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">image</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">axes</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Return ``image`` Fermi filtered (:func:`fermi_filtered`) where the filter is on; ``image`` itself otherwise or where it fails."""</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">kspace_filter</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">image</span>
+        <span class="n">start</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">filtered</span> <span class="o">=</span> <span class="n">fermi_filtered</span><span class="p">(</span><span class="n">image</span><span class="p">,</span> <span class="n">axes</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+            <span class="n">_log</span><span class="o">.</span><span class="n">exception</span><span class="p">(</span><span class="s2">"the Fermi k-space filter failed; the image is not filtered"</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">image</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_ran</span><span class="p">(</span>
+            <span class="s2">"FERMI"</span><span class="p">,</span>
+            <span class="s2">"Fermi k-space filter of a </span><span class="si">%s</span><span class="s2"> image in </span><span class="si">%.2f</span><span class="s2"> s"</span><span class="p">,</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">shape</span><span class="p">(</span><span class="n">image</span><span class="p">),</span>
+            <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span> <span class="o">-</span> <span class="n">start</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">filtered</span></div>
+
+
+<div class="viewcode-block" id="Corrections.filtered_along">
+<a class="viewcode-back" href="../../../generated/pulserver.recon.Corrections.filtered_along.html#pulserver.recon.Corrections.filtered_along">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">filtered_along</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">kspace</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">axis</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">extent</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span> <span class="n">along</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Return ``kspace``, centred along ``axis``, multiplied by :func:`fermi_profile` of ``extent`` along its axis ``along``, where the filter is on.</span>
+
+<span class="sd">        For an axis Fourier transformed before the solve, such as the</span>
+<span class="sd">        partitions of a stack of non-Cartesian planes, whose planes are solved</span>
+<span class="sd">        apart and filtered in their own plane.</span>
+<span class="sd">        """</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">kspace_filter</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">kspace</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">profile</span> <span class="o">=</span> <span class="n">fermi_profile</span><span class="p">(</span><span class="n">extent</span><span class="p">,</span> <span class="n">along</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+            <span class="n">_log</span><span class="o">.</span><span class="n">exception</span><span class="p">(</span><span class="s2">"the Fermi k-space filter failed; the image is not filtered"</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">kspace</span>
+        <span class="n">shape</span> <span class="o">=</span> <span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">ndim</span><span class="p">(</span><span class="n">kspace</span><span class="p">)</span>
+        <span class="n">shape</span><span class="p">[</span><span class="n">axis</span><span class="p">]</span> <span class="o">=</span> <span class="n">profile</span><span class="o">.</span><span class="n">size</span>
+        <span class="k">return</span> <span class="n">kspace</span> <span class="o">*</span> <span class="n">profile</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">shape</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="Corrections.unwarped">
+<a class="viewcode-back" href="../../../generated/pulserver.recon.Corrections.unwarped.html#pulserver.recon.Corrections.unwarped">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">unwarped</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">image</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Return ``image`` corrected for gradient nonlinearity (:func:`gradient_unwarped`) where the correction is on, each geometry's correction built once for the stream."""</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">gradient_unwarp</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">image</span>
+        <span class="n">start</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span>
+        <span class="n">corrected</span> <span class="o">=</span> <span class="n">gradient_unwarped</span><span class="p">(</span><span class="n">image</span><span class="p">,</span> <span class="n">context</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_unwarps</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">corrected</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">image</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_ran</span><span class="p">(</span>
+                <span class="s2">"GRADUNWARP"</span><span class="p">,</span>
+                <span class="s2">"gradient nonlinearity corrected for a </span><span class="si">%s</span><span class="s2"> image in </span><span class="si">%.2f</span><span class="s2"> s"</span><span class="p">,</span>
+                <span class="n">np</span><span class="o">.</span><span class="n">shape</span><span class="p">(</span><span class="n">image</span><span class="p">),</span>
+                <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span> <span class="o">-</span> <span class="n">start</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="n">corrected</span></div>
+
+
+<div class="viewcode-block" id="Corrections.intensity_corrected">
+<a class="viewcode-back" href="../../../generated/pulserver.recon.Corrections.intensity_corrected.html#pulserver.recon.Corrections.intensity_corrected">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">intensity_corrected</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">results</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Return ``results`` with their magnitude images divided by the receive field (:class:`IntensityCorrection`) where the correction is on."""</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">intensity</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">results</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">intensity</span><span class="p">(</span><span class="n">results</span><span class="p">,</span> <span class="n">data</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="Corrections.applied">
+<a class="viewcode-back" href="../../../generated/pulserver.recon.Corrections.applied.html#pulserver.recon.Corrections.applied">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">applied</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""Return the history tags of the steps applied since the last call, in order, and forget them."""</span>
+        <span class="n">applied</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_applied</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">dict</span><span class="o">.</span><span class="n">fromkeys</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_applied</span><span class="p">)),</span> <span class="p">[]</span>
+        <span class="k">return</span> <span class="n">applied</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_ran</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tag</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">message</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_applied</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">tag</span><span class="p">)</span>
+        <span class="n">level</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">DEBUG</span> <span class="k">if</span> <span class="n">tag</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_logged</span> <span class="k">else</span> <span class="n">logging</span><span class="o">.</span><span class="n">INFO</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_logged</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">tag</span><span class="p">)</span>
+        <span class="n">_log</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">level</span><span class="p">,</span> <span class="n">message</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="IntensityCorrection">
+<a class="viewcode-back" href="../../../generated/pulserver.recon.IntensityCorrection.html#pulserver.recon.IntensityCorrection">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">IntensityCorrection</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Division of the magnitude images of a unit by the receive field N4 estimates from them.</span>
+
+<span class="sd">    The field is :func:`bartorch.tools.bias_field_correct`'s (SimpleITK's</span>
+<span class="sd">    N4) over Otsu's mask of the magnitude image, divided by its mean inside</span>
+<span class="sd">    the mask and clipped to the range it takes there, so the image keeps its</span>
+<span class="sd">    mean over the object and the background is not amplified beyond the</span>
+<span class="sd">    object's worst voxel. Real, imaginary and phase images are not divided,</span>
+<span class="sd">    so the phase of a complex image is sent as reconstructed.</span>
+
+<span class="sd">    One field is estimated for each slice and set, from the first unit that</span>
+<span class="sd">    closes with a magnitude image, and divides every later contrast,</span>
+<span class="sd">    repetition and cardiac phase of it: echoes and time points keep their</span>
+<span class="sd">    intensity ratios, so a T2* fit or a time series is not changed by the</span>
+<span class="sd">    correction. Each slice of a 2D multi-slice series has a field of its own,</span>
+<span class="sd">    of mean 1 inside its own mask, so ratios between slices are not kept.</span>
+<span class="sd">    Make one instance per stream.</span>
+
+<span class="sd">    A magnitude image that is not 2D or 3D once its axes of one point are</span>
+<span class="sd">    dropped, or whose mask holds fewer than 64 pixels or 128 voxels or less</span>
+<span class="sd">    than :data:`N4_MIN_MASK_FRACTION` of the image, or that falls apart into</span>
+<span class="sd">    separate compartments (:data:`N4_MIN_CONNECTED_FRACTION`), is sent</span>
+<span class="sd">    uncorrected, as are all images when SimpleITK is not installed or</span>
+<span class="sd">    the estimate fails; the reason is logged.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    levels : int, default=None</span>
+<span class="sd">        Fitting levels of the field; :data:`N4_FITTING_LEVELS` when ``None``.</span>
+<span class="sd">    """</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">levels</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">levels</span> <span class="o">=</span> <span class="n">N4_FITTING_LEVELS</span> <span class="k">if</span> <span class="n">levels</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="nb">int</span><span class="p">(</span><span class="n">levels</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">fields</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">results</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Return ``results``, a :class:`~pulserver.recon.ReconResult` or a list of them, with their magnitude images divided by the field.</span>
+
+<span class="sd">        Each corrected result is a copy whose ``ImageProcessingHistory``</span>
+<span class="sd">        attribute ends in ``"N4"``. ``data`` is the unit's</span>
+<span class="sd">        :class:`~pulserver.recon.ReconData`, whose ``slice`` and ``set``</span>
+<span class="sd">        counters select the field.</span>
+<span class="sd">        """</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">.plugin</span><span class="w"> </span><span class="kn">import</span> <span class="n">ReconResult</span>
+
+        <span class="n">listed</span> <span class="o">=</span> <span class="n">results</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">results</span><span class="p">,</span> <span class="nb">list</span><span class="p">)</span> <span class="k">else</span> <span class="p">[</span><span class="n">results</span><span class="p">]</span>
+        <span class="n">magnitude</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span>
+            <span class="p">(</span>
+                <span class="n">r</span>
+                <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">listed</span>
+                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="n">ReconResult</span><span class="p">)</span> <span class="ow">and</span> <span class="n">r</span><span class="o">.</span><span class="n">image_type</span> <span class="o">==</span> <span class="s2">"magnitude"</span>
+            <span class="p">),</span>
+            <span class="kc">None</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">magnitude</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">results</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">field</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_field</span><span class="p">(</span><span class="n">_host</span><span class="p">(</span><span class="n">magnitude</span><span class="o">.</span><span class="n">data</span><span class="p">),</span> <span class="n">data</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">field</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">results</span>
+            <span class="n">corrected</span> <span class="o">=</span> <span class="p">[</span>
+                <span class="n">_divided</span><span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="n">field</span><span class="p">)</span>
+                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="n">ReconResult</span><span class="p">)</span>
+                <span class="ow">and</span> <span class="n">r</span><span class="o">.</span><span class="n">image_type</span> <span class="o">==</span> <span class="s2">"magnitude"</span>
+                <span class="ow">and</span> <span class="n">np</span><span class="o">.</span><span class="n">shape</span><span class="p">(</span><span class="n">r</span><span class="o">.</span><span class="n">data</span><span class="p">)</span> <span class="o">==</span> <span class="n">field</span><span class="o">.</span><span class="n">shape</span>
+                <span class="k">else</span> <span class="n">r</span>
+                <span class="k">for</span> <span class="n">r</span> <span class="ow">in</span> <span class="n">listed</span>
+            <span class="p">]</span>
+        <span class="k">except</span> <span class="ne">ImportError</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
+            <span class="n">_log</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">"the images were not intensity corrected: </span><span class="si">%s</span><span class="s2">"</span><span class="p">,</span> <span class="n">error</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">results</span>
+        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+            <span class="n">_log</span><span class="o">.</span><span class="n">exception</span><span class="p">(</span><span class="s2">"the images were not intensity corrected"</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">results</span>
+        <span class="k">return</span> <span class="n">corrected</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">results</span><span class="p">,</span> <span class="nb">list</span><span class="p">)</span> <span class="k">else</span> <span class="n">corrected</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_field</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">magnitude</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Return the field of the slice and set of ``data``, estimating it from ``magnitude`` the first time."""</span>
+        <span class="n">counters</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="s2">"counters"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">or</span> <span class="p">{}</span>
+        <span class="n">key</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="nb">int</span><span class="p">(</span><span class="n">counters</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"slice"</span><span class="p">,</span> <span class="mi">0</span><span class="p">)),</span>
+            <span class="nb">int</span><span class="p">(</span><span class="n">counters</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"set"</span><span class="p">,</span> <span class="mi">0</span><span class="p">)),</span>
+            <span class="n">magnitude</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">fields</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">fields</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
+        <span class="n">squeezed</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">n</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">magnitude</span><span class="o">.</span><span class="n">shape</span> <span class="k">if</span> <span class="n">n</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">squeezed</span><span class="p">)</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">):</span>
+            <span class="n">_log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                <span class="s2">"a </span><span class="si">%s</span><span class="s2"> image is not 2D or 3D; it is not intensity corrected"</span><span class="p">,</span>
+                <span class="n">magnitude</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">fields</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="n">start</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span>
+        <span class="n">field</span> <span class="o">=</span> <span class="n">receive_field</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">magnitude</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">squeezed</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">levels</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">fields</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span> <span class="k">if</span> <span class="n">field</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">field</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">magnitude</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+        <span class="n">_log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="s2">"N4 receive field of slice </span><span class="si">%d</span><span class="s2">, set </span><span class="si">%d</span><span class="s2">, </span><span class="si">%s</span><span class="s2">, estimated in </span><span class="si">%.1f</span><span class="s2"> s</span><span class="si">%s</span><span class="s2">"</span><span class="p">,</span>
+            <span class="n">key</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+            <span class="n">key</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span>
+            <span class="n">squeezed</span><span class="p">,</span>
+            <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span> <span class="o">-</span> <span class="n">start</span><span class="p">,</span>
+            <span class="s2">""</span>
+            <span class="k">if</span> <span class="n">field</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="k">else</span> <span class="s2">"; its mask is too small to tell shading from contrast, so it is not corrected"</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">fields</span><span class="p">[</span><span class="n">key</span><span class="p">]</span></div>
+
+
+
+<span class="c1">#: Fitting levels of the N4 field by default. The B-spline mesh of</span>
+<span class="c1">#: SimpleITK's N4, one element across the image at the first level, doubles</span>
+<span class="c1">#: at each. At four the field removes a head coil's centre-bright shading at</span>
+<span class="c1">#: 7 T, and compresses the intensity ratios between separate compartments,</span>
+<span class="c1">#: such as vials in a bath, towards one; at two it keeps those ratios and</span>
+<span class="c1">#: leaves that shading.</span>
+<span class="n">N4_FITTING_LEVELS</span> <span class="o">=</span> <span class="mi">4</span>
+
+<span class="c1">#: Least fraction of N4's Otsu mask its largest connected part must hold. A</span>
+<span class="c1">#: mask of a few separate compartments, such as vials in air, gives N4 nothing</span>
+<span class="c1">#: to tell shading from their contrast by, and its field scrambles their</span>
+<span class="c1">#: intensities; a head or a phantom in a bath is one part.</span>
+<span class="n">N4_MIN_CONNECTED_FRACTION</span> <span class="o">=</span> <span class="mf">0.5</span>
+
+<span class="c1">#: Least fraction of the image N4's Otsu mask must hold.</span>
+<span class="n">N4_MIN_MASK_FRACTION</span> <span class="o">=</span> <span class="mf">0.01</span>
+
+
+<span class="c1">#: Most fitting levels :data:`INTENSITY_CORRECTION_LEVELS` may state.</span>
+<span class="n">N4_MAX_LEVELS</span> <span class="o">=</span> <span class="mi">4</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_largest_part</span><span class="p">(</span><span class="n">mask</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the voxels of the largest connected part of a boolean mask."""</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">SimpleITK</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">sitk</span>
+
+    <span class="n">parts</span> <span class="o">=</span> <span class="n">sitk</span><span class="o">.</span><span class="n">RelabelComponent</span><span class="p">(</span>
+        <span class="n">sitk</span><span class="o">.</span><span class="n">ConnectedComponent</span><span class="p">(</span><span class="n">sitk</span><span class="o">.</span><span class="n">GetImageFromArray</span><span class="p">(</span><span class="n">mask</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">uint8</span><span class="p">))),</span>
+        <span class="n">sortByObjectSize</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="nb">int</span><span class="p">((</span><span class="n">sitk</span><span class="o">.</span><span class="n">GetArrayViewFromImage</span><span class="p">(</span><span class="n">parts</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">())</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_levels</span><span class="p">(</span><span class="n">header</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the N4 fitting levels the header's :data:`INTENSITY_CORRECTION_LEVELS` states, else :data:`N4_FITTING_LEVELS`."""</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">..mrd._metadata</span><span class="w"> </span><span class="kn">import</span> <span class="n">user_parameter</span>
+
+    <span class="n">value</span> <span class="o">=</span> <span class="n">user_parameter</span><span class="p">(</span><span class="n">header</span><span class="p">,</span> <span class="n">INTENSITY_CORRECTION_LEVELS</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">N4_FITTING_LEVELS</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">number</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">value</span><span class="p">)</span><span class="o">.</span><span class="n">strip</span><span class="p">())</span>
+        <span class="n">levels</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">number</span><span class="p">)</span>
+    <span class="k">except</span> <span class="p">(</span><span class="ne">ValueError</span><span class="p">,</span> <span class="ne">OverflowError</span><span class="p">):</span>
+        <span class="n">number</span> <span class="o">=</span> <span class="n">levels</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="k">if</span> <span class="n">levels</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">levels</span> <span class="o">!=</span> <span class="n">number</span><span class="p">:</span>
+        <span class="n">_log</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+            <span class="s2">"recon parameter </span><span class="si">%s</span><span class="s2"> </span><span class="si">%r</span><span class="s2"> is not an integer; the N4 field is fitted at "</span>
+            <span class="s2">"</span><span class="si">%d</span><span class="s2"> levels"</span><span class="p">,</span>
+            <span class="n">INTENSITY_CORRECTION_LEVELS</span><span class="p">,</span>
+            <span class="n">value</span><span class="p">,</span>
+            <span class="n">N4_FITTING_LEVELS</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">N4_FITTING_LEVELS</span>
+    <span class="n">clamped</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="nb">max</span><span class="p">(</span><span class="n">levels</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">N4_MAX_LEVELS</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">clamped</span> <span class="o">!=</span> <span class="n">levels</span><span class="p">:</span>
+        <span class="n">_log</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+            <span class="s2">"recon parameter </span><span class="si">%s</span><span class="s2"> </span><span class="si">%r</span><span class="s2"> is outside 1 to </span><span class="si">%d</span><span class="s2">; the N4 field is fitted at "</span>
+            <span class="s2">"</span><span class="si">%d</span><span class="s2"> levels"</span><span class="p">,</span>
+            <span class="n">INTENSITY_CORRECTION_LEVELS</span><span class="p">,</span>
+            <span class="n">value</span><span class="p">,</span>
+            <span class="n">N4_MAX_LEVELS</span><span class="p">,</span>
+            <span class="n">clamped</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="n">clamped</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">receive_field</span><span class="p">(</span>
+    <span class="n">magnitude</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">levels</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">N4_FITTING_LEVELS</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the N4 field of a 2D or 3D magnitude image, mean 1 inside its Otsu mask and clipped to its range there.</span>
+
+<span class="sd">    The field is fitted at ``levels`` B-spline levels. ``None`` where the mask</span>
+<span class="sd">    holds fewer than 64 pixels or 128 voxels, or less than</span>
+<span class="sd">    :data:`N4_MIN_MASK_FRACTION` of the image, or whose largest connected part</span>
+<span class="sd">    holds less than :data:`N4_MIN_CONNECTED_FRACTION` of it.</span>
+<span class="sd">    """</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">SimpleITK</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">sitk</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">bartorch.tools</span><span class="w"> </span><span class="kn">import</span> <span class="n">bias_field_correct</span>
+
+    <span class="n">image</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">magnitude</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+    <span class="n">mask</span> <span class="o">=</span> <span class="n">sitk</span><span class="o">.</span><span class="n">GetArrayFromImage</span><span class="p">(</span>
+        <span class="n">sitk</span><span class="o">.</span><span class="n">OtsuThreshold</span><span class="p">(</span><span class="n">sitk</span><span class="o">.</span><span class="n">GetImageFromArray</span><span class="p">(</span><span class="n">image</span><span class="p">),</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">200</span><span class="p">)</span>
+    <span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">bool</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">mask</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span> <span class="o">&lt;</span> <span class="nb">max</span><span class="p">(</span><span class="mi">16</span> <span class="o">*</span> <span class="mi">2</span><span class="o">**</span><span class="n">image</span><span class="o">.</span><span class="n">ndim</span><span class="p">,</span> <span class="n">N4_MIN_MASK_FRACTION</span> <span class="o">*</span> <span class="n">mask</span><span class="o">.</span><span class="n">size</span><span class="p">):</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="k">if</span> <span class="n">_largest_part</span><span class="p">(</span><span class="n">mask</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">N4_MIN_CONNECTED_FRACTION</span> <span class="o">*</span> <span class="n">mask</span><span class="o">.</span><span class="n">sum</span><span class="p">():</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="n">_</span><span class="p">,</span> <span class="n">field</span> <span class="o">=</span> <span class="n">bias_field_correct</span><span class="p">(</span>
+        <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">image</span><span class="p">),</span>
+        <span class="n">mask</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">mask</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">uint8</span><span class="p">)),</span>
+        <span class="n">iterations</span><span class="o">=</span><span class="p">(</span><span class="mi">50</span><span class="p">,)</span> <span class="o">*</span> <span class="nb">int</span><span class="p">(</span><span class="n">levels</span><span class="p">),</span>
+        <span class="n">return_field</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">field</span> <span class="o">=</span> <span class="n">field</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+    <span class="n">inside</span> <span class="o">=</span> <span class="n">field</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span>
+    <span class="k">return</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="n">field</span><span class="p">,</span> <span class="n">inside</span><span class="o">.</span><span class="n">min</span><span class="p">(),</span> <span class="n">inside</span><span class="o">.</span><span class="n">max</span><span class="p">())</span> <span class="o">/</span> <span class="n">inside</span><span class="o">.</span><span class="n">mean</span><span class="p">())</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">float32</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_host</span><span class="p">(</span><span class="n">array</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+    <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">array</span><span class="p">,</span> <span class="s2">"detach"</span><span class="p">):</span>
+        <span class="n">array</span> <span class="o">=</span> <span class="n">array</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>
+    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">array</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_divided</span><span class="p">(</span><span class="n">result</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">field</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+    <span class="n">values</span> <span class="o">=</span> <span class="n">_host</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">data</span><span class="p">)</span>
+    <span class="n">attributes</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">attributes</span><span class="p">)</span>
+    <span class="n">history</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">attributes</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"ImageProcessingHistory"</span><span class="p">,</span> <span class="p">()))</span>
+    <span class="n">attributes</span><span class="p">[</span><span class="s2">"ImageProcessingHistory"</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="o">*</span><span class="n">history</span><span class="p">,</span> <span class="s2">"N4"</span><span class="p">]</span>
+    <span class="k">return</span> <span class="n">dataclasses</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span>
+        <span class="n">result</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="p">(</span><span class="n">values</span> <span class="o">/</span> <span class="n">field</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">values</span><span class="o">.</span><span class="n">dtype</span><span class="p">),</span> <span class="n">attributes</span><span class="o">=</span><span class="n">attributes</span>
     <span class="p">)</span>
 </pre></div>
 

@@ -224,7 +224,10 @@ from.
    CoilSensitivities
    MissingCalibration
    CoilCompression
+   Corrections
+   fermi_filtered
    gradient_unwarped
+   IntensityCorrection
    ReconData
    ReconBuffer
    ReconResult

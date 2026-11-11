@@ -992,19 +992,28 @@ from.</p>
 <tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.recon.CoilCompression.html#pulserver.recon.CoilCompression" title="pulserver.recon.CoilCompression"><code class="xref py py-obj docutils literal notranslate"><span class="pre">CoilCompression</span></code></a></p></td>
 <td><p>Reduce the receive channels of a unit's k-space to virtual channels.</p></td>
 </tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.recon.Corrections.html#pulserver.recon.Corrections" title="pulserver.recon.Corrections"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Corrections</span></code></a></p></td>
+<td><p>The corrections a shipped reconstruction makes to the images of one stream.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.recon.fermi_filtered.html#pulserver.recon.fermi_filtered" title="pulserver.recon.fermi_filtered"><code class="xref py py-obj docutils literal notranslate"><span class="pre">fermi_filtered</span></code></a></p></td>
+<td><p>Return a complex image with its k-space multiplied by the Fermi window.</p></td>
+</tr>
 <tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.recon.gradient_unwarped.html#pulserver.recon.gradient_unwarped" title="pulserver.recon.gradient_unwarped"><code class="xref py py-obj docutils literal notranslate"><span class="pre">gradient_unwarped</span></code></a></p></td>
 <td><p>Correct an image for gradient nonlinearity.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.recon.ReconData.html#pulserver.recon.ReconData" title="pulserver.recon.ReconData"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ReconData</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.recon.IntensityCorrection.html#pulserver.recon.IntensityCorrection" title="pulserver.recon.IntensityCorrection"><code class="xref py py-obj docutils literal notranslate"><span class="pre">IntensityCorrection</span></code></a></p></td>
+<td><p>Division of the magnitude images of a unit by the receive field N4 estimates from them.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.recon.ReconData.html#pulserver.recon.ReconData" title="pulserver.recon.ReconData"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ReconData</span></code></a></p></td>
 <td><p>The readouts of one reconstruction unit, as <a class="reference internal" href="generated/pulserver.recon.ReconPlugin.recon.html#pulserver.recon.ReconPlugin.recon" title="pulserver.recon.ReconPlugin.recon"><code class="xref py py-meth docutils literal notranslate"><span class="pre">ReconPlugin.recon()</span></code></a> receives them.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.recon.ReconBuffer.html#pulserver.recon.ReconBuffer" title="pulserver.recon.ReconBuffer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ReconBuffer</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.recon.ReconBuffer.html#pulserver.recon.ReconBuffer" title="pulserver.recon.ReconBuffer"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ReconBuffer</span></code></a></p></td>
 <td><p>K-space of one encoding space, filled one acquisition at a time.</p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.recon.ReconResult.html#pulserver.recon.ReconResult" title="pulserver.recon.ReconResult"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ReconResult</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.recon.ReconResult.html#pulserver.recon.ReconResult" title="pulserver.recon.ReconResult"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ReconResult</span></code></a></p></td>
 <td><p>A reconstructed image array, packaged by the runtime as an MRD image or DICOM.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="generated/pulserver.recon.figure_rgb.html#pulserver.recon.figure_rgb" title="pulserver.recon.figure_rgb"><code class="xref py py-obj docutils literal notranslate"><span class="pre">figure_rgb</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="generated/pulserver.recon.figure_rgb.html#pulserver.recon.figure_rgb" title="pulserver.recon.figure_rgb"><code class="xref py py-obj docutils literal notranslate"><span class="pre">figure_rgb</span></code></a></p></td>
 <td><p>Return a matplotlib figure drawn to a <code class="docutils literal notranslate"><span class="pre">(y,</span> <span class="pre">x,</span> <span class="pre">3)</span></code> <code class="docutils literal notranslate"><span class="pre">uint8</span></code> array.</p></td>
 </tr>
 </tbody>

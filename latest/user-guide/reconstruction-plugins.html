@@ -986,6 +986,9 @@ name, which the reconstruction reads:</p>
 <span class="n">anatomy</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">mrd</span><span class="o">.</span><span class="n">user_parameter</span><span class="p">(</span><span class="n">context</span><span class="o">.</span><span class="n">header</span><span class="p">,</span> <span class="s2">"QsmAnatomy"</span><span class="p">,</span> <span class="mi">0</span><span class="p">)))</span>
 </pre></div>
 </div>
+<p>The shipped reconstructions read <code class="docutils literal notranslate"><span class="pre">QsmAnatomy</span></code> (<code class="docutils literal notranslate"><span class="pre">qsm</span></code>) and <code class="docutils literal notranslate"><span class="pre">KSpaceFilter</span></code>,
+<code class="docutils literal notranslate"><span class="pre">GradientUnwarp</span></code>, <code class="docutils literal notranslate"><span class="pre">IntensityCorrection</span></code> and <code class="docutils literal notranslate"><span class="pre">IntensityCorrectionLevels</span></code> (all
+of them; <a class="reference internal" href="#shipped-reconstructions"><span class="std std-ref">Shipped reconstructions</span></a>).</p>
 </section>
 <section id="diffusion-tables">
 <h2>Diffusion tables<a class="headerlink" href="#diffusion-tables" title="Link to this heading">#</a></h2>
@@ -1050,9 +1053,9 @@ the encoded space and the receiver channels:</p>
 </div>
 </section>
 <section id="shipped-reconstructions">
-<h2>Shipped reconstructions<a class="headerlink" href="#shipped-reconstructions" title="Link to this heading">#</a></h2>
+<span id="id3"></span><h2>Shipped reconstructions<a class="headerlink" href="#shipped-reconstructions" title="Link to this heading">#</a></h2>
 <p>Seven shipped plugins are complete reconstructions, returning the values of their
-transform or solve unscaled. They are searched after every reconstruction
+transform or solve, unscaled but for the corrections below. They are searched after every reconstruction
 plugin directory, so a client can name one, such as <code class="docutils literal notranslate"><span class="pre">nufft</span></code>, without a file of
 its own, and a file of the same name in a <code class="docutils literal notranslate"><span class="pre">--plugins</span></code> directory replaces it.
 Each whitens its readouts with <a class="reference internal" href="../generated/pulserver.recon.Prewhiten.html#pulserver.recon.Prewhiten" title="pulserver.recon.Prewhiten"><code class="xref py py-class docutils literal notranslate"><span class="pre">Prewhiten</span></code></a>, compresses
@@ -1060,6 +1063,61 @@ more than six receive channels to six virtual channels (<code class="docutils li
 arrive, <a class="reference internal" href="../generated/pulserver.recon.CompressChannels.html#pulserver.recon.CompressChannels" title="pulserver.recon.CompressChannels"><code class="xref py py-class docutils literal notranslate"><span class="pre">CompressChannels</span></code></a>; the others a unit at a
 time, <a class="reference internal" href="../generated/pulserver.recon.CoilCompression.html#pulserver.recon.CoilCompression" title="pulserver.recon.CoilCompression"><code class="xref py py-class docutils literal notranslate"><span class="pre">CoilCompression</span></code></a>), and sends a volume as one
 image per partition.</p>
+<p>Every shipped plugin corrects each image in three steps, in this order
+(<a class="reference internal" href="../generated/pulserver.recon.Corrections.html#pulserver.recon.Corrections" title="pulserver.recon.Corrections"><code class="xref py py-class docutils literal notranslate"><span class="pre">Corrections</span></code></a>):</p>
+<div class="pst-scrollable-table-container"><table class="table">
+<thead>
+<tr class="row-odd"><th class="head"><p>Step</p></th>
+<th class="head"><p>Correction</p></th>
+<th class="head"><p>History</p></th>
+<th class="head"><p>Recon parameter</p></th>
+<th class="head"><p>Argument</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Fermi filter</p></td>
+<td><p>The k-space of the complex image the solve returns, over its encoded axes, is multiplied by a radial Fermi window, half height at the Nyquist edge and a transition of ten samples of the longest axis (<a class="reference internal" href="../generated/pulserver.recon.fermi_filtered.html#pulserver.recon.fermi_filtered" title="pulserver.recon.fermi_filtered"><code class="xref py py-func docutils literal notranslate"><span class="pre">fermi_filtered()</span></code></a>); for a linear reconstruction of fully sampled k-space this is the apodization of the acquired k-space. The window multiplies the solved image’s k-space rather than the measured samples because, before a regularised solve, it would reweight the data term against the regularisation and leave the k-space the solve fills in unfiltered beside filtered samples. A stack of non-Cartesian planes, whose planes are solved apart, is filtered along its partitions before they are transformed and in its plane after</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">FERMI</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">KSpaceFilter</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">kspace_filter</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>Gradient nonlinearity</p></td>
+<td><p>The image is resampled from where its voxels were acquired to where they belong, from the gradient coil’s table the header states as <code class="docutils literal notranslate"><span class="pre">gradient_coefficients</span></code> (<a class="reference internal" href="../generated/pulserver.recon.gradient_unwarped.html#pulserver.recon.gradient_unwarped" title="pulserver.recon.gradient_unwarped"><code class="xref py py-func docutils literal notranslate"><span class="pre">gradient_unwarped()</span></code></a>); a 2D slice in its plane. The correction of each slice position and orientation is built once per series</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">GRADUNWARP</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">GradientUnwarp</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">gradient_unwarp</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>Receive field</p></td>
+<td><p>The magnitude images are divided by the field N4 estimates from the first magnitude image of each slice and set (<a class="reference internal" href="../generated/pulserver.recon.IntensityCorrection.html#pulserver.recon.IntensityCorrection" title="pulserver.recon.IntensityCorrection"><code class="xref py py-class docutils literal notranslate"><span class="pre">IntensityCorrection</span></code></a>); later contrasts and repetitions take the same field, so echoes and time points keep their intensity ratios. The field is fitted at four levels of N4’s B-spline mesh, which removes the centre-bright shading of a head coil at 7 T and compresses the intensity ratios between separate compartments, such as the vials of a phantom, towards one; at two levels (<code class="docutils literal notranslate"><span class="pre">IntensityCorrectionLevels</span></code> 2) it keeps those ratios and leaves that shading, the setting for quantitative phantom work. An image whose object falls apart into separate compartments, its largest connected part less than half of it, such as a few vials in air, is not divided, since N4 cannot tell their contrast from shading; nor is one whose object is under a hundredth of the image. Each slice of a 2D multi-slice series takes a field of its own, normalised to mean 1 inside that slice’s object, so intensity ratios between slices are not kept. Real, imaginary and phase images, and the maps <code class="docutils literal notranslate"><span class="pre">qsm</span></code> makes from them, are not divided</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">N4</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">IntensityCorrection</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">intensity_correction</span></code></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>A recon parameter of 0, <code class="docutils literal notranslate"><span class="pre">off</span></code>, <code class="docutils literal notranslate"><span class="pre">false</span></code> or <code class="docutils literal notranslate"><span class="pre">no</span></code> turns its step off, and any other number, <code class="docutils literal notranslate"><span class="pre">on</span></code>, <code class="docutils literal notranslate"><span class="pre">true</span></code> or <code class="docutils literal notranslate"><span class="pre">yes</span></code> on; without
+one, the plugin’s argument decides, and every argument defaults to on.
+<code class="docutils literal notranslate"><span class="pre">IntensityCorrectionLevels</span></code> states the fitting levels of the receive field,
+four where absent: a scan of a vial phantom whose intensity ratios are
+measured states 2, or <code class="docutils literal notranslate"><span class="pre">IntensityCorrection</span></code> 0 to send the magnitude as
+solved:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pulserver.design</span><span class="w"> </span><span class="kn">import</span> <span class="n">recon_parameters</span>
+
+<span class="n">recon_parameters</span><span class="p">(</span><span class="n">seq</span><span class="p">,</span> <span class="n">IntensityCorrectionLevels</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>When a
+series starts, the log states which steps are on and why any is off, such as
+a header that states no gradient coil table, and each step logs a line when it
+corrects the series’ first image. A step that cannot run, such as the receive
+field without SimpleITK, sends the image on as it was and logs why. A site
+turns a step off for a plugin with its argument:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pulserver.recon.handlers.pics</span><span class="w"> </span><span class="kn">import</span> <span class="n">PicsRecon</span>
+
+<span class="n">PLUGIN</span> <span class="o">=</span> <span class="n">PicsRecon</span><span class="p">(</span><span class="n">intensity_correction</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+</pre></div>
+</div>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
 <tr class="row-odd"><th class="head"><p>Plugin</p></th>
@@ -1086,7 +1144,7 @@ image per partition.</p>
 <td><p><code class="docutils literal notranslate"><span class="pre">pics</span></code>’s images of each echo of a multi-echo 3D gradient echo (magnitude, real and imaginary series), and once the last echo of a volume is in, from the complex echoes with fast-qsm (an optional dependency; without it the echoes alone), each its own series from 3 on: the root sum of squares over echoes and T2* of the whole object; then for the <code class="docutils literal notranslate"><span class="pre">QsmAnatomy</span></code> recon parameter 0 (phantom) QSM by PDF and MEDI+0 referenced to the water, 1 (brain) SWI and its minimum intensity projection, QSM by V-SHARP and iLSQR inside the SynthStrip brain mask (FreeSurfer’s weights at <code class="docutils literal notranslate"><span class="pre">share/fastqsm/synthstrip.1.pt</span></code> in the site library or the environment, or the file <code class="docutils literal notranslate"><span class="pre">FASTQSM_SYNTHSTRIP_WEIGHTS</span></code> names) and the DECOMPOSE paramagnetic and diamagnetic component susceptibilities, 2 (body) QSM by mask-free total field inversion. A partial-Fourier axis makes the echoes real, without the field’s phase: QSM scans sample all of k-space</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">pmc</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">pics_train</span></code>’s images, and a pose from each three-plane navigator (<code class="docutils literal notranslate"><span class="pre">NAV</span></code> or <code class="docutils literal notranslate"><span class="pre">RTFEEDBACK</span></code> readouts): planes gridded with Pipe-Menon density compensation on one thread, coils combined by root sum of squares, registered against the first navigator and filtered by an extended Kalman filter. The pose is published to the scan when its design sets <code class="docutils literal notranslate"><span class="pre">EnablePmc</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">pics_train</span></code>’s images, and a pose from each three-plane navigator (<code class="docutils literal notranslate"><span class="pre">NAV</span></code> or <code class="docutils literal notranslate"><span class="pre">RTFEEDBACK</span></code> readouts): planes gridded with Pipe-Menon density compensation on one thread, coils combined by root sum of squares, registered against the first navigator and filtered by an extended Kalman filter. The pose is published to the scan when its design sets <code class="docutils literal notranslate"><span class="pre">EnablePmc</span></code>; the navigators are not corrected</p></td>
 </tr>
 </tbody>
 </table>
