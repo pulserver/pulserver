@@ -489,7 +489,7 @@
             </div>
             <nav aria-label="Page">
                 <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#played-waveforms">Played waveforms</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#vs-played-waveforms">Played waveforms</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#played-trajectory">Played trajectory</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#signal-model">Signal model</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#tissue">Tissue</a></li>
@@ -511,7 +511,7 @@
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#external-simulators">External simulators</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#test-coverage">Test coverage</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coils-from-field-maps">Coils from field maps</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#vs-coils-from-field-maps">Coils from field maps</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#scan-clock-and-sound">Scan clock and sound</a></li>
 </ul>
             </nav>
@@ -530,8 +530,8 @@
 (<a class="reference internal" href="../../explanations/virtual-scanner.html"><span class="doc">Virtual scanner</span></a>): the virtual interpreter, the
 Fourier engine and its signal model, the coils, export to external Bloch
 simulators, the scan clock, and the properties the test suite holds.</p>
-<section id="played-waveforms">
-<span id="vs-played-waveforms"></span><h2>Played waveforms<a class="headerlink" href="#played-waveforms" title="Link to this heading">#</a></h2>
+<section id="vs-played-waveforms">
+<span id="played-waveforms"></span><h2>Played waveforms<a class="headerlink" href="#vs-played-waveforms" title="Link to this heading">#</a></h2>
 <p><a class="reference internal" href="../../generated/pulserver.ir.playout.html#pulserver.ir.playout" title="pulserver.ir.playout"><code class="xref py py-func docutils literal notranslate"><span class="pre">playout()</span></code></a> plays the cache through the two stages of a
 playout: the first prepares the events of each segment position, and the
 scan loop sets the registers of each block of each segment instance
@@ -591,9 +591,7 @@ water, resolved at the magnet’s field <span class="math notranslate nohighligh
 <span class="math notranslate nohighlight">\(\gamma\)</span>, in Hz/T, plus the precession in the field <span class="math notranslate nohighlight">\(\Delta B_j\)</span>, in T, the
 subject adds and an off-resonance <span class="math notranslate nohighlight">\(\Delta f\)</span> common to every cube,</p>
 <div class="math notranslate nohighlight">
-\[
-f_j = 10^{-6}\sigma_j\gamma B_0 + \gamma\,\Delta B_j + \Delta f .
-\]</div>
+\[f_j = 10^{-6}\sigma_j\gamma B_0 + \gamma\,\Delta B_j + \Delta f .\]</div>
 <p>Cubes of the same <span class="math notranslate nohighlight">\(T_1\)</span>, <span class="math notranslate nohighlight">\(T_2\)</span> and <span class="math notranslate nohighlight">\(T'_2\)</span> form a class of tissue.</p>
 </section>
 <section id="rf-pulses">
@@ -608,9 +606,7 @@ simulation tips magnetization at rest through at a detuning <span class="math no
 pulse’s frequency, over the angle on resonance. A pulse played under a
 gradient <span class="math notranslate nohighlight">\(\mathbf{g}\)</span>, in Hz/m, held during it turns cube <span class="math notranslate nohighlight">\(j\)</span> through</p>
 <div class="math notranslate nohighlight">
-\[
-\alpha_j = \alpha\,|b^+(\mathbf{r}_j)|\,P(\mathbf{g}\cdot\mathbf{r}_j + f_j - f_\mathrm{rf}),
-\]</div>
+\[\alpha_j = \alpha\,|b^+(\mathbf{r}_j)|\,P(\mathbf{g}\cdot\mathbf{r}_j + f_j - f_\mathrm{rf}),\]</div>
 <p>with <span class="math notranslate nohighlight">\(b^+\)</span> relative to the pulse’s nominal amplitude, about its axis turned as
 a pulse phase of <span class="math notranslate nohighlight">\(-\arg b^+\)</span> turns it (<a class="reference internal" href="../../user-guide/scanner-sequences.html#transmit-phase-convention"><span class="std std-ref">RF phase convention</span></a>). A
 pulse played under a gradient that changes along one direction <span class="math notranslate nohighlight">\(\hat{\mathbf{n}}\)</span>, as a spectral-spatial pulse’s
@@ -666,10 +662,8 @@ combinations of the pairs, the terms <span class="math notranslate nohighlight">
 <span class="math notranslate nohighlight">\(m_t(\mathbf{r})\)</span>, the cubes’ weights in it times their density, so that coil
 <span class="math notranslate nohighlight">\(c\)</span>, of receive sensitivity <span class="math notranslate nohighlight">\(s_c(\mathbf{r})\)</span>, receives at sample <span class="math notranslate nohighlight">\(n\)</span></p>
 <div class="math notranslate nohighlight">
-\[
-S_c(n) = e^{i\psi_n} \sum_t w_t(n) \int s_c(\mathbf{r})\, m_t(\mathbf{r})\,
-e^{-2\pi i\,\mathbf{k}(n)\cdot\mathbf{r}}\, d\mathbf{r},
-\]</div>
+\[S_c(n) = e^{i\psi_n} \sum_t w_t(n) \int s_c(\mathbf{r})\, m_t(\mathbf{r})\,
+e^{-2\pi i\,\mathbf{k}(n)\cdot\mathbf{r}}\, d\mathbf{r},\]</div>
 <p>with <span class="math notranslate nohighlight">\(w_t(n)\)</span> the term’s temporal and readout factor at the sample and
 <span class="math notranslate nohighlight">\(\psi_n\)</span> the phase the pulses left, which the receiver phase demodulates. The
 images lie on a grid along the logical axes the trajectory encodes, at the
@@ -984,8 +978,8 @@ axial, an oblique and a reflected prescription, and holds each RF pulse with
 the samples, offsets, centre and use of the design’s.</p></li>
 </ul>
 </section>
-<section id="coils-from-field-maps">
-<span id="vs-coils-from-field-maps"></span><h2>Coils from field maps<a class="headerlink" href="#coils-from-field-maps" title="Link to this heading">#</a></h2>
+<section id="vs-coils-from-field-maps">
+<span id="coils-from-field-maps"></span><h2>Coils from field maps<a class="headerlink" href="#vs-coils-from-field-maps" title="Link to this heading">#</a></h2>
 <p>A console given field maps takes the same coils from electromagnetic
 simulations of BrainWeb’s head instead. mariepy, a port of MARIE 3.0, solves
 the head in a quadrature birdcage, whose two linear modes are the body coil’s
@@ -1108,7 +1102,7 @@ under the same prescription, to the single precision of the cache.</p>
   </div>
   <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="pst-show_toc_level nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#played-waveforms">Played waveforms</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#vs-played-waveforms">Played waveforms</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#played-trajectory">Played trajectory</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#signal-model">Signal model</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#tissue">Tissue</a></li>
@@ -1130,7 +1124,7 @@ under the same prescription, to the single precision of the cache.</p>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#external-simulators">External simulators</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#test-coverage">Test coverage</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coils-from-field-maps">Coils from field maps</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#vs-coils-from-field-maps">Coils from field maps</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#scan-clock-and-sound">Scan clock and sound</a></li>
 </ul>
   </nav></div>

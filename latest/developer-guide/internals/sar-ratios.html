@@ -509,12 +509,10 @@ each transmit channel and <span class="math notranslate nohighlight">\(Q_v\)</sp
 it is the same integral with that model’s head SAR matrix <span class="math notranslate nohighlight">\(G_b\)</span>. For each
 repetition <span class="math notranslate nohighlight">\(w\)</span> of a subsequence, <a class="reference internal" href="../../generated/pulserver.ir.sar_ratios.html#pulserver.ir.sar_ratios" title="pulserver.ir.sar_ratios"><code class="xref py py-func docutils literal notranslate"><span class="pre">sar_ratios()</span></code></a> computes</p>
 <div class="math notranslate nohighlight">
-\[
-r_{\mathrm{local}} = \frac{L_{\mathrm{head}}}{L_{\mathrm{local}}} \max_w
+\[r_{\mathrm{local}} = \frac{L_{\mathrm{head}}}{L_{\mathrm{local}}} \max_w
 \frac{M \max_v E_{v,w}}{N_w \min_b E^{\mathrm{ref}}_{G_b}},
 \qquad
-r_{\mathrm{head}} = \max_w \max_b \frac{E_{G_b,w}}{N_w\, E^{\mathrm{ref}}_{G_b}},
-\]</div>
+r_{\mathrm{head}} = \max_w \max_b \frac{E_{G_b,w}}{N_w\, E^{\mathrm{ref}}_{G_b}},\]</div>
 <p>with <span class="math notranslate nohighlight">\(E_{v,w}\)</span> and <span class="math notranslate nohighlight">\(E_{G_b,w}\)</span> the energy of the repetition at VOP <span class="math notranslate nohighlight">\(v\)</span> and in
 the head of body model <span class="math notranslate nohighlight">\(b\)</span>, <span class="math notranslate nohighlight">\(N_w\)</span> the number of pulses it plays,
 <span class="math notranslate nohighlight">\(E^{\mathrm{ref}}_{G_b}\)</span> the head energy of one reference pulse, <span class="math notranslate nohighlight">\(M\)</span> the VOP

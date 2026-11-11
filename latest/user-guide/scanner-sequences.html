@@ -492,14 +492,14 @@
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#protocol-entries">Protocol entries</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#sequence-functions">Sequence functions</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#protocol-resolution">Protocol resolution</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#protocol-evaluation">Protocol evaluation</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#evaluating-a-protocol">Protocol evaluation</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#exam-cache">Exam cache</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#rf-layout">RF layout</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#rf-phase-convention">RF phase convention</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#stating-the-rf-layout">RF layout</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#transmit-phase-convention">RF phase convention</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#shipped-sequences">Shipped sequences</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#shared-user-entries">Shared user entries</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#console-controls">Console controls</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#options">Options</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#plugin-options">Options</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#diffusion-tables">Diffusion tables</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#protocol-conventions">Protocol conventions</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#shipped-evaluation">Shipped evaluation</a></li>
@@ -753,8 +753,8 @@ first file is <code class="docutils literal notranslate"><span class="pre">seque
 <code class="docutils literal notranslate"><span class="pre">NextSequence</span></code> definition. The <code class="docutils literal notranslate"><span class="pre">generate</span></code> design call then converts the design
 to the IR cache and stores it (<a class="reference internal" href="../explanations/architecture.html"><span class="doc">Architecture</span></a>).</p>
 </section>
-<section id="protocol-evaluation">
-<span id="evaluating-a-protocol"></span><h2>Protocol evaluation<a class="headerlink" href="#protocol-evaluation" title="Link to this heading">#</a></h2>
+<section id="evaluating-a-protocol">
+<span id="protocol-evaluation"></span><h2>Protocol evaluation<a class="headerlink" href="#evaluating-a-protocol" title="Link to this heading">#</a></h2>
 <p>A plugin overrides <a class="reference internal" href="../generated/pulserver.design.SequencePlugin.evaluate.html#pulserver.design.SequencePlugin.evaluate" title="pulserver.design.SequencePlugin.evaluate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">evaluate()</span></code></a> to check a
 protocol and to state what the console shows with it. The hook takes the
 scanner limits and the requested <a class="reference internal" href="../generated/pulserver.design.Protocol.html#pulserver.design.Protocol" title="pulserver.design.Protocol"><code class="xref py py-class docutils literal notranslate"><span class="pre">Protocol</span></code></a>, in the
@@ -784,6 +784,14 @@ function cannot realize is found only when the sequence is generated, as an
 error of that call, and not while the operator edits the protocol. An
 <code class="docutils literal notranslate"><span class="pre">evaluate</span></code> that builds or checks the design rejects such a protocol when it is
 evaluated.</p>
+<p>The console waits for every evaluation, so <code class="docutils literal notranslate"><span class="pre">evaluate</span></code> is a simplified design
+and not the design: it states the scan time exactly, an upper bound of the RF
+and one repetition whose gradients stand for the scan’s, and leaves to
+<code class="docutils literal notranslate"><span class="pre">generate</span></code> whatever takes a solve, an optimization or the whole scan. Where
+the angles of a train are solved for, the train at their largest angle lasts
+as long and bounds its RF; <code class="docutils literal notranslate"><span class="pre">fse3d</span></code> and <code class="docutils literal notranslate"><span class="pre">fse_pd3d</span></code> design that train, and ask
+the solve only for the effective TE and for whether a train exists, once per
+train under a warm design server.</p>
 <p><code class="docutils literal notranslate"><span class="pre">ValueError</span></code> and <code class="docutils literal notranslate"><span class="pre">AssertionError</span></code>, which pypulseqpp and PyPulseq raise for an
 event or a timing they cannot realize, reject the protocol with the message of
 the error as <code class="docutils literal notranslate"><span class="pre">info</span></code>, and are logged as a warning. Any other exception also
@@ -833,8 +841,8 @@ series that measured them, on their own grid. For such a plugin the files of
 the exam’s cache are part of the design’s identity, so a new map yields a new
 design.</p>
 </section>
-<section id="rf-layout">
-<span id="stating-the-rf-layout"></span><h2>RF layout<a class="headerlink" href="#rf-layout" title="Link to this heading">#</a></h2>
+<section id="stating-the-rf-layout">
+<span id="rf-layout"></span><h2>RF layout<a class="headerlink" href="#stating-the-rf-layout" title="Link to this heading">#</a></h2>
 <p>An evaluation may state the RF its protocol plays, from which a scanner
 estimates the RF of a prescription before the design is generated. The layout
 is one TR: the RF instances that TR plays, with the TR as its <code class="docutils literal notranslate"><span class="pre">period</span></code>.
@@ -872,8 +880,8 @@ value in the evaluated protocol, is invalid. What the scanner checks before the
 scan is the stored design, not the layout. The blocks that carry the layout are
 described in <a class="reference internal" href="../explanations/protocol.html"><span class="doc">Protocol resolution</span></a>.</p>
 </section>
-<section id="rf-phase-convention">
-<span id="transmit-phase-convention"></span><h2>RF phase convention<a class="headerlink" href="#rf-phase-convention" title="Link to this heading">#</a></h2>
+<section id="transmit-phase-convention">
+<span id="rf-phase-convention"></span><h2>RF phase convention<a class="headerlink" href="#transmit-phase-convention" title="Link to this heading">#</a></h2>
 <p>Phases and frequencies keep Pulseq’s units: an RF phase shape holds cycles, RF
 and ADC phase offsets and RF shim phases are in radians, and frequency offsets
 are in hertz. The ppm offsets are resolved to hertz and radians at the
@@ -884,9 +892,7 @@ precess clockwise about the static field, and the part of the field that turns
 them is the conjugate of the drive times the channel’s transmit sensitivity
 <span class="math notranslate nohighlight">\(s^+_c\)</span>, the rotating field of a unit drive:</p>
 <div class="math notranslate nohighlight">
-\[
-b^+(\mathbf{r}, t) = \sum_c \overline{w_c\, b_c(t)}\; s^+_c(\mathbf{r}).
-\]</div>
+\[b^+(\mathbf{r}, t) = \sum_c \overline{w_c\, b_c(t)}\; s^+_c(\mathbf{r}).\]</div>
 <p>A drive of phase <span class="math notranslate nohighlight">\(+\phi\)</span>, on one channel through its shim weight or its
 waveform, or on every channel through the pulse’s phase offset, turns the
 excited magnetization and the reconstructed image by <span class="math notranslate nohighlight">\(-\phi\)</span>; an ADC phase
@@ -1026,8 +1032,8 @@ give each band’s normal along the physical axes, the distance of its centre
 from the isocentre along that normal, and its thickness, in mm. The
 field-of-view offset and rotation leave a band where it was placed.</p>
 </section>
-<section id="options">
-<span id="plugin-options"></span><h3>Options<a class="headerlink" href="#options" title="Link to this heading">#</a></h3>
+<section id="plugin-options">
+<span id="options"></span><h3>Options<a class="headerlink" href="#plugin-options" title="Link to this heading">#</a></h3>
 <p>Choices that set what a sequence is, rather than a value an operator tunes from
 scan to scan, are options: module constants a plugin declares with
 <a class="reference internal" href="../generated/pulserver.design.option.html#pulserver.design.option" title="pulserver.design.option"><code class="xref py py-func docutils literal notranslate"><span class="pre">option()</span></code></a> at module level, before its class, so that
@@ -1185,8 +1191,9 @@ and optimized modes its refocusing pulse is 180°. A TR or peripheral TR
 shorter than the longest train is refused at evaluation as at generation.
 The console’s RF estimate is the train of the largest RF power, each train
 playing its own number of refocusing pulses in its own TR, the first as
-designed and the rest at the train’s peak angle; the designed sequence is
-costed at predownload. <code class="docutils literal notranslate"><span class="pre">fse3d</span></code> and <code class="docutils literal notranslate"><span class="pre">fse_pd3d</span></code> ask to be costed under the SAR
+designed and the rest at the train’s peak angle, which for a Busse or PD
+train is the maximum angle prescribed, every pulse of the estimate playing
+it; the designed sequence is costed at predownload. <code class="docutils literal notranslate"><span class="pre">fse3d</span></code> and <code class="docutils literal notranslate"><span class="pre">fse_pd3d</span></code> ask to be costed under the SAR
 burst limits.</p>
 <p>Busse modes play startup pulses without acquisition and use the same RF widths
 and echo spacing in every shot. All shots retain the longest train layout,
@@ -1305,7 +1312,8 @@ the message of its error.</p></li>
 <li><p><strong>Representative sequence.</strong> The repetition, on which the design service
 checks nerve stimulation and slew rate before the scan is designed. That of
 <code class="docutils literal notranslate"><span class="pre">fse3d</span></code> and <code class="docutils literal notranslate"><span class="pre">fse_pd3d</span></code> is the packed echo train their evaluation designs,
-as long as the longest train; <code class="docutils literal notranslate"><span class="pre">epi3d</span></code> states none.</p></li>
+as long as the longest train, startup echoes included, at a constant
+refocusing angle: the largest of a Busse or PD train; <code class="docutils literal notranslate"><span class="pre">epi3d</span></code> states none.</p></li>
 <li><p><strong>RF layout.</strong> The first TR of the repetition, its shot repeated once per
 slice of the largest packet, with the TR as its period; for the balanced
 steady state, the TR after the half-angle pulse. The TR of a fast spin echo
@@ -1386,14 +1394,14 @@ design writes and the services read.</p></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#protocol-entries">Protocol entries</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#sequence-functions">Sequence functions</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#protocol-resolution">Protocol resolution</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#protocol-evaluation">Protocol evaluation</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#evaluating-a-protocol">Protocol evaluation</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#exam-cache">Exam cache</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#rf-layout">RF layout</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#rf-phase-convention">RF phase convention</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#stating-the-rf-layout">RF layout</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#transmit-phase-convention">RF phase convention</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#shipped-sequences">Shipped sequences</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#shared-user-entries">Shared user entries</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#console-controls">Console controls</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#options">Options</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#plugin-options">Options</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#diffusion-tables">Diffusion tables</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#protocol-conventions">Protocol conventions</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#shipped-evaluation">Shipped evaluation</a></li>

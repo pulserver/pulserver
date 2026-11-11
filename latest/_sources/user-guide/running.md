@@ -161,7 +161,11 @@ response it measured, at most three times, lowering it further where the
 plugin cannot lay the design out at that rate, and checks every problem again
 on each new design; `validate` does the same on the representative sequence a
 plugin's evaluation states ({ref}`evaluating-a-protocol`), so the console
-shows what `generate` designs. A design past a gradient amplitude limit is
+shows what `generate` designs. The slew rate a request ends at is remembered:
+`generate` starts there, the same request validated again is evaluated there
+once, and the plugin's next request under the same limits is tried there
+first. A request no `validate` searched is searched by `generate` the same
+way before it designs the scan. A design past a gradient amplitude limit is
 refused, since no slew rate brings it down. Each file of a design records the
 slew rate it was designed under, per logical axis, in its `DesignMaxSlew`
 definition, and the manifest records it as `design_max_slew_t_per_m_per_s`,
@@ -299,10 +303,31 @@ sequence of its own, imports blochsim and PyTorch without designing a
 refocusing train with them, since a forked child cannot differentiate after its
 parent has, and imports every plugin of its `--plugins` directories.
 It answers each call forwarded to its socket in a child process forked from
-it, so nothing a call does outlives the call, and a plugin that ends its
-process fails only its own call, with
+it, so a plugin that ends its process fails only its own call, with
 `ERROR the design call ended with exit status N`. Calls run concurrently, one
 child each.
+
+A child ends with its call, and what it worked out in memory with it. The
+server therefore keeps, in a directory it makes under the system's temporary
+directory when it starts serving and removes when it stops, what the calls
+after it would work out again:
+
+- the reply of each `list` and `validate` call, replied again to the same
+  call while the plugin file and the files the limits name are unchanged. A
+  `validate` reply is also dropped when a `generate` lowers the slew rate of
+  its request further, and, for a plugin whose hooks take `exam`, when the
+  files of the exam's cache change;
+- the RF definitions a plugin lists under given limits, which `validate`
+  states its `[RfLayout]` amplitudes over, so the plugin's default protocol
+  is evaluated once and not on every call;
+- the slew rate each request was lowered to, so the `generate` of a request
+  starts where its `validate` ended;
+- the effective TE of each Busse or PD echo train `fse3d` and `fse_pd3d`
+  evaluated, or why no train realizes it, so the inverse solve that finds it
+  runs once per train and limits.
+
+Nothing kept outlives the server, which is restarted to take up a changed
+package in any case. A call answered in its own process keeps nothing.
 
 `list`, `validate`, `generate` and `import` are forwarded when `--socket`, or
 the `PULSERVER_DESIGN_SOCKET` environment variable, names the socket of a
@@ -313,7 +338,7 @@ socket is neither authenticated nor encrypted: its file permissions decide who
 may call.
 
 The server logs one line per call to standard error, naming the call, its
-plugin, its exit status and its duration. A request sent to the socket whose
+plugin, its exit status, its duration and the processor time it took. A request sent to the socket whose
 JSON carries `log`, a file path, has its child append everything else it logs
 and prints to that file, so an interpreter can keep the design calls of one
 scan beside the rest of that scan's log.

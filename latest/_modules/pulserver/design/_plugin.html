@@ -790,6 +790,12 @@
 <span class="sd">        The default accepts the protocol unchanged with no scan time estimate,</span>
 <span class="sd">        and does not call the sequence function.</span>
 
+<span class="sd">        A console waits for each evaluation, so an override is a simplified</span>
+<span class="sd">        design: it states the scan time exactly, an upper bound of the RF</span>
+<span class="sd">        and a repetition whose gradients stand for the scan's, and leaves to</span>
+<span class="sd">        :meth:`generate` what takes a solve, an optimization or the whole</span>
+<span class="sd">        scan.</span>
+
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        system : pypulseqpp.Opts</span>

@@ -604,10 +604,8 @@ blochsim’s extended phase graphs over the pulses and gradient moments the cach
 plays; the images those signals weight are encoded along the trajectory by
 bartorch’s NUFFT, one per coil:</p>
 <div class="math notranslate nohighlight">
-\[
-S_c(n) = e^{i\psi_n} \sum_t w_t(n) \int s_c(\mathbf{r})\, m_t(\mathbf{r})\,
-e^{-2\pi i\,\mathbf{k}(n)\cdot\mathbf{r}}\, d\mathbf{r}.
-\]</div>
+\[S_c(n) = e^{i\psi_n} \sum_t w_t(n) \int s_c(\mathbf{r})\, m_t(\mathbf{r})\,
+e^{-2\pi i\,\mathbf{k}(n)\cdot\mathbf{r}}\, d\mathbf{r}.\]</div>
 <p>A few terms <span class="math notranslate nohighlight">\(t\)</span> span the signals of every class and cube, so the number of
 transforms is set by the terms, not by the tissue. The playout then demodulates by the
 ADC offsets, as the scanner does. The full model is in

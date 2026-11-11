@@ -509,6 +509,11 @@ console shows with it. Returning <code class="docutils literal notranslate"><spa
 <a class="reference internal" href="pulserver.design.SequencePlugin.validate.html#pulserver.design.SequencePlugin.validate" title="pulserver.design.SequencePlugin.validate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">validate()</span></code></a> describes.</p>
 <p>The default accepts the protocol unchanged with no scan time estimate,
 and does not call the sequence function.</p>
+<p>A console waits for each evaluation, so an override is a simplified
+design: it states the scan time exactly, an upper bound of the RF
+and a repetition whose gradients stand for the scan’s, and leaves to
+<a class="reference internal" href="pulserver.design.SequencePlugin.generate.html#pulserver.design.SequencePlugin.generate" title="pulserver.design.SequencePlugin.generate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">generate()</span></code></a> what takes a solve, an optimization or the whole
+scan.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">

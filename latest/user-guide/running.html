@@ -708,7 +708,11 @@ response it measured, at most three times, lowering it further where the
 plugin cannot lay the design out at that rate, and checks every problem again
 on each new design; <code class="docutils literal notranslate"><span class="pre">validate</span></code> does the same on the representative sequence a
 plugin’s evaluation states (<a class="reference internal" href="scanner-sequences.html#evaluating-a-protocol"><span class="std std-ref">Protocol evaluation</span></a>), so the console
-shows what <code class="docutils literal notranslate"><span class="pre">generate</span></code> designs. A design past a gradient amplitude limit is
+shows what <code class="docutils literal notranslate"><span class="pre">generate</span></code> designs. The slew rate a request ends at is remembered:
+<code class="docutils literal notranslate"><span class="pre">generate</span></code> starts there, the same request validated again is evaluated there
+once, and the plugin’s next request under the same limits is tried there
+first. A request no <code class="docutils literal notranslate"><span class="pre">validate</span></code> searched is searched by <code class="docutils literal notranslate"><span class="pre">generate</span></code> the same
+way before it designs the scan. A design past a gradient amplitude limit is
 refused, since no slew rate brings it down. Each file of a design records the
 slew rate it was designed under, per logical axis, in its <code class="docutils literal notranslate"><span class="pre">DesignMaxSlew</span></code>
 definition, and the manifest records it as <code class="docutils literal notranslate"><span class="pre">design_max_slew_t_per_m_per_s</span></code>,
@@ -892,10 +896,30 @@ sequence of its own, imports blochsim and PyTorch without designing a
 refocusing train with them, since a forked child cannot differentiate after its
 parent has, and imports every plugin of its <code class="docutils literal notranslate"><span class="pre">--plugins</span></code> directories.
 It answers each call forwarded to its socket in a child process forked from
-it, so nothing a call does outlives the call, and a plugin that ends its
-process fails only its own call, with
+it, so a plugin that ends its process fails only its own call, with
 <code class="docutils literal notranslate"><span class="pre">ERROR</span> <span class="pre">the</span> <span class="pre">design</span> <span class="pre">call</span> <span class="pre">ended</span> <span class="pre">with</span> <span class="pre">exit</span> <span class="pre">status</span> <span class="pre">N</span></code>. Calls run concurrently, one
 child each.</p>
+<p>A child ends with its call, and what it worked out in memory with it. The
+server therefore keeps, in a directory it makes under the system’s temporary
+directory when it starts serving and removes when it stops, what the calls
+after it would work out again:</p>
+<ul class="simple">
+<li><p>the reply of each <code class="docutils literal notranslate"><span class="pre">list</span></code> and <code class="docutils literal notranslate"><span class="pre">validate</span></code> call, replied again to the same
+call while the plugin file and the files the limits name are unchanged. A
+<code class="docutils literal notranslate"><span class="pre">validate</span></code> reply is also dropped when a <code class="docutils literal notranslate"><span class="pre">generate</span></code> lowers the slew rate of
+its request further, and, for a plugin whose hooks take <code class="docutils literal notranslate"><span class="pre">exam</span></code>, when the
+files of the exam’s cache change;</p></li>
+<li><p>the RF definitions a plugin lists under given limits, which <code class="docutils literal notranslate"><span class="pre">validate</span></code>
+states its <code class="docutils literal notranslate"><span class="pre">[RfLayout]</span></code> amplitudes over, so the plugin’s default protocol
+is evaluated once and not on every call;</p></li>
+<li><p>the slew rate each request was lowered to, so the <code class="docutils literal notranslate"><span class="pre">generate</span></code> of a request
+starts where its <code class="docutils literal notranslate"><span class="pre">validate</span></code> ended;</p></li>
+<li><p>the effective TE of each Busse or PD echo train <code class="docutils literal notranslate"><span class="pre">fse3d</span></code> and <code class="docutils literal notranslate"><span class="pre">fse_pd3d</span></code>
+evaluated, or why no train realizes it, so the inverse solve that finds it
+runs once per train and limits.</p></li>
+</ul>
+<p>Nothing kept outlives the server, which is restarted to take up a changed
+package in any case. A call answered in its own process keeps nothing.</p>
 <p><code class="docutils literal notranslate"><span class="pre">list</span></code>, <code class="docutils literal notranslate"><span class="pre">validate</span></code>, <code class="docutils literal notranslate"><span class="pre">generate</span></code> and <code class="docutils literal notranslate"><span class="pre">import</span></code> are forwarded when <code class="docutils literal notranslate"><span class="pre">--socket</span></code>, or
 the <code class="docutils literal notranslate"><span class="pre">PULSERVER_DESIGN_SOCKET</span></code> environment variable, names the socket of a
 running server, and are answered in their own process otherwise; the reply is
@@ -904,7 +928,7 @@ The server stops on <code class="docutils literal notranslate"><span class="pre"
 socket is neither authenticated nor encrypted: its file permissions decide who
 may call.</p>
 <p>The server logs one line per call to standard error, naming the call, its
-plugin, its exit status and its duration. A request sent to the socket whose
+plugin, its exit status, its duration and the processor time it took. A request sent to the socket whose
 JSON carries <code class="docutils literal notranslate"><span class="pre">log</span></code>, a file path, has its child append everything else it logs
 and prints to that file, so an interpreter can keep the design calls of one
 scan beside the rest of that scan’s log.</p>

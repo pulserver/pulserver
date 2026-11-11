@@ -493,7 +493,7 @@
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#readout-placement">Readout placement</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#non-cartesian-data">Non-Cartesian data</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coil-sensitivities-noise-and-compression">Coil sensitivities, noise and compression</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#dicom-output">DICOM output</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#dicom-pixel-values">DICOM output</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#recon-parameters">Recon parameters</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#diffusion-tables">Diffusion tables</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#logging">Logging</a></li>
@@ -906,8 +906,8 @@ first field that differs with both values, and the failure text the client
 receives carries the message. <code class="docutils literal notranslate"><span class="pre">required=False</span></code> returns <code class="docutils literal notranslate"><span class="pre">None</span></code> instead of
 raising.</p>
 </section>
-<section id="dicom-output">
-<span id="dicom-pixel-values"></span><h2>DICOM output<a class="headerlink" href="#dicom-output" title="Link to this heading">#</a></h2>
+<section id="dicom-pixel-values">
+<span id="dicom-output"></span><h2>DICOM output<a class="headerlink" href="#dicom-pixel-values" title="Link to this heading">#</a></h2>
 <p>A DICOM dataset stores integer pixels, made when a result with <code class="docutils literal notranslate"><span class="pre">dicom=True</span></code> is
 converted from the image the plugin returned. The dataset’s rescale maps them
 to the values of the image, <code class="docutils literal notranslate"><span class="pre">value</span> <span class="pre">=</span> <span class="pre">stored</span> <span class="pre">×</span> <span class="pre">RescaleSlope</span> <span class="pre">+</span> <span class="pre">RescaleIntercept</span></code>,
@@ -1158,7 +1158,7 @@ image per partition.</p>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#readout-placement">Readout placement</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#non-cartesian-data">Non-Cartesian data</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#coil-sensitivities-noise-and-compression">Coil sensitivities, noise and compression</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#dicom-output">DICOM output</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#dicom-pixel-values">DICOM output</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#recon-parameters">Recon parameters</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#diffusion-tables">Diffusion tables</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#logging">Logging</a></li>
