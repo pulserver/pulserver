@@ -17,6 +17,7 @@ from test_pics import (
 )
 
 from pulserver.recon.handlers import qsm
+from pulserver.recon.handlers.pics import MAGNITUDE_SERIES
 from pulserver.recon.handlers.qsm import QsmRecon
 
 pytest.importorskip("bartorch")
@@ -117,6 +118,23 @@ def test_the_magnitude_series_is_intensity_corrected_and_the_echoes_the_maps_tak
     )
 
 
+def test_the_echoes_are_sent_as_their_magnitude_alone_and_the_maps_take_them_complex(
+    device,
+):
+    _, acquisitions, header = multi_echo([3.0, 8.0])
+    plugin = Maps()
+
+    reconstruct(acquisitions, header, device=device, plugin=plugin)
+
+    assert len(plugin.results) == 2
+    for result in plugin.results:
+        assert result.series_index == MAGNITUDE_SERIES
+        assert result.image_type == "magnitude"
+    ((echoes, _),) = plugin.calls
+    assert np.iscomplexobj(echoes)
+    assert np.abs(np.angle(echoes)).max() > 0.1
+
+
 def test_a_single_echo_scan_makes_no_maps(device):
     _, acquisitions, header = multi_echo([3.0])
     plugin = Maps()
@@ -185,11 +203,8 @@ def _vial_echoes(n=40, te=(4e-3, 8e-3, 12e-3), b0=7.0):
     return np.transpose(xyz, (0, 3, 2, 1)).astype(np.complex64), plus, minus, list(te)
 
 
-def test_the_phantom_maps_are_rss_t2star_and_a_medi_qsm_with_positive_paramagnetic_vials():
-    pytest.importorskip("fastqsm")
-    pytest.importorskip("scipy")
-    echoes, plus, minus, te = _vial_echoes()
-    n = echoes.shape[-1]
+def _maps_inputs(n, anatomy):
+    """The context and data ``QsmRecon.maps`` takes for an ``n``-cube of 2 mm voxels at 7 T, B0 along the slices."""
     header = SimpleNamespace(
         experimentalConditions=SimpleNamespace(
             H1resonanceFrequency_Hz=7.0 * qsm.GAMMA_HZ_T
@@ -205,7 +220,11 @@ def test_the_phantom_maps_are_rss_t2star_and_a_medi_qsm_with_positive_paramagnet
         userParameters=SimpleNamespace(
             userParameterLong=[],
             userParameterDouble=[],
-            userParameterString=[SimpleNamespace(name="QsmAnatomy", value="0")],
+            userParameterString=[
+                SimpleNamespace(
+                    name="QsmAnatomy", value=str(qsm.ANATOMIES.index(anatomy))
+                )
+            ],
         ),
     )
     reference = SimpleNamespace(
@@ -213,11 +232,68 @@ def test_the_phantom_maps_are_rss_t2star_and_a_medi_qsm_with_positive_paramagnet
     )
     context = SimpleNamespace(header=header, device="cpu")
     data = SimpleNamespace(data=SimpleNamespace(reference=reference))
+    return context, data
+
+
+#: The maps of each anatomy, in the order they are returned.
+MAPS = {
+    "phantom": ["rss", "t2star", "qsm", "swi", "swi_mip"],
+    "brain": ["rss", "t2star", "qsm", "swi", "swi_mip", "pcs", "dcs"],
+    "body": ["rss", "t2star", "qsm", "swi", "swi_mip"],
+}
+
+
+@pytest.mark.parametrize("anatomy", qsm.ANATOMIES)
+def test_every_anatomy_makes_swi_and_only_the_brain_decompose_in_series_order(
+    anatomy, monkeypatch
+):
+    pytest.importorskip("fastqsm")
+    from fastqsm import pipeline
+
+    calls = []
+
+    def run(magnitude, phase, te, voxel, **kwargs):
+        calls.append(kwargs)
+        volume = np.ones(magnitude.shape[1:], np.float32)
+        names = ("chi", "chi_masked", "pcs", "dcs")
+        return SimpleNamespace(maps=dict.fromkeys(names, volume), info={})
+
+    monkeypatch.setattr(pipeline, "run", run)
+    monkeypatch.setattr(qsm, "_t2star_ms", lambda m, p, te: np.zeros(m.shape[1:]))
+    echoes, _, _, te = _vial_echoes(n=16)
+    context, data = _maps_inputs(16, anatomy)
+
+    results = QsmRecon().maps(context, data, echoes, te)
+
+    assert [result.series_index for result in results] == [
+        qsm.SERIES[name] for name in MAPS[anatomy]
+    ]
+    (kwargs,) = calls
+    assert kwargs["anatomy"] == {"phantom": "phantom", "brain": "head"}.get(
+        anatomy, anatomy
+    )
+    assert (kwargs.get("phantom_inversion") == "medi") is (anatomy == "phantom")
+    swi = {r.series_index: r for r in results}[qsm.SERIES["swi"]]
+    assert swi.data.shape == echoes.shape[1:]
+    assert swi.attributes["SeriesDescriptionAdditional"] == "_SWI"
+
+
+def test_the_phantom_maps_are_rss_t2star_swi_and_a_medi_qsm_with_positive_paramagnetic_vials():
+    pytest.importorskip("fastqsm")
+    pytest.importorskip("scipy")
+    echoes, plus, minus, te = _vial_echoes()
+    context, data = _maps_inputs(echoes.shape[-1], "phantom")
 
     results = QsmRecon().maps(context, data, echoes, te)
 
     series = {result.series_index: result for result in results}
-    assert set(series) == {qsm.SERIES["rss"], qsm.SERIES["t2star"], qsm.SERIES["qsm"]}
+    assert set(series) == {qsm.SERIES[name] for name in MAPS["phantom"]}
+    # SWI covers the whole object, masked by no brain or object mask.
+    water = np.abs(echoes[0]).T > 0
+    swi = np.transpose(series[qsm.SERIES["swi"]].data, (2, 1, 0))
+    mip = np.transpose(series[qsm.SERIES["swi_mip"]].data, (2, 1, 0))
+    assert (swi[water] > 0).all()
+    assert (mip <= swi + 1e-6 * swi.max()).all()
     t2 = np.transpose(series[qsm.SERIES["t2star"]].data, (2, 1, 0))
     assert np.median(t2[plus]) == pytest.approx(30.0, rel=0.05)
     chi = np.transpose(series[qsm.SERIES["qsm"]].data, (2, 1, 0))

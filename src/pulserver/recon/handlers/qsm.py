@@ -1,4 +1,4 @@
-"""Multi-echo 3D gradient echo: the ``pics`` image of each echo, then T2*, QSM and SWI with fast-qsm once every echo is in."""
+"""Multi-echo 3D gradient echo: the ``pics`` magnitude of each echo, then T2*, SWI and QSM with fast-qsm once every echo is in."""
 
 from __future__ import annotations
 
@@ -23,8 +23,9 @@ _log = logging.getLogger(__name__)
 #: The anatomies of the ``QsmAnatomy`` recon parameter, by its value.
 ANATOMIES = ("phantom", "brain", "body")
 
-#: The series of each derived map, after the echoes' magnitude, real and
-#: imaginary series of ``pics``.
+#: The series of each derived map, after the echoes' magnitude series
+#: (:data:`~pulserver.recon.handlers.pics.MAGNITUDE_SERIES`). The real and
+#: imaginary series of ``pics``, 1 and 2, are not sent.
 SERIES = {
     "rss": 3,
     "t2star": 4,
@@ -52,23 +53,28 @@ SWI_TE_3T = 20e-3
 
 
 class QsmRecon(PicsRecon):
-    """Each echo as ``pics`` makes it, and once the last echo of a volume is in, the maps of the anatomy the sequence states.
+    """The magnitude of each echo as ``pics`` makes it, and once the last echo of a volume is in, the maps of the anatomy the sequence states.
 
     The anatomy is the ``QsmAnatomy`` recon parameter of the header (0
     phantom, 1 brain, 2 body), as ``gre_multiecho3d`` states it. The complex
-    image of each echo, the real and imaginary series ``pics`` sends, is kept
-    until the last echo of its slice and loop position closes; then, each its
+    image of each echo, the real and imaginary parts ``pics`` makes, is kept
+    until the last echo of its slice and loop position closes and is not
+    sent: the echoes are sent as their magnitude series alone. Then, each its
     own series (:data:`SERIES`):
 
     - every anatomy: the root sum of squares of the echo magnitudes and T2*
-      (ms) of the whole object, from the field fit of fast-qsm;
+      (ms) of the whole object, from the field fit of fast-qsm, and SWI and
+      its minimum intensity projection over the whole image, from the echo
+      nearest :data:`SWI_TE_3T` scaled to B0;
     - phantom: QSM by PDF and MEDI+0 referenced to the water
       (``fastqsm.pipeline.run(anatomy="phantom", phantom_inversion="medi")``);
-    - brain: SWI and its minimum intensity projection from the echo nearest
-      :data:`SWI_TE_3T` scaled to B0, QSM by V-SHARP and iLSQR inside the
-      SynthStrip brain mask, and the DECOMPOSE paramagnetic and diamagnetic
-      component susceptibilities;
+    - brain: QSM by V-SHARP and iLSQR inside the SynthStrip brain mask, and
+      the DECOMPOSE paramagnetic and diamagnetic component susceptibilities;
     - body: QSM by mask-free TFI (``anatomy="body"``).
+
+    The maps are returned in the order of their series index, the same for
+    every anatomy, so a DICOM builder that numbers series by arrival numbers
+    each map alike whatever the anatomy.
 
     The B0 direction in the image axes is that of the unit's reference
     acquisition, B0 is the header's resonance frequency over gamma, the echo
@@ -104,11 +110,14 @@ class QsmRecon(PicsRecon):
         self, context: ReconContext, branch: str, data: ReconData
     ) -> list[ReconResult] | ReconResult | None:
         result = super().recon(context, branch, data)
-        te = _echo_times(context.header)
-        if not isinstance(result, list) or len(te) < 2:
+        if not isinstance(result, list):
             return result
         parts = {r.series_index: r.data for r in result}
-        if REAL_SERIES not in parts or IMAGINARY_SERIES not in parts:
+        result = [
+            r for r in result if r.series_index not in (REAL_SERIES, IMAGINARY_SERIES)
+        ]
+        te = _echo_times(context.header)
+        if len(te) < 2 or REAL_SERIES not in parts or IMAGINARY_SERIES not in parts:
             return result
         image = np.asarray(parts[REAL_SERIES]) + 1j * np.asarray(
             parts[IMAGINARY_SERIES]
@@ -176,6 +185,11 @@ class QsmRecon(PicsRecon):
         rss = np.sqrt((magnitude.astype(np.float64) ** 2).sum(0)).astype(np.float32)
         out = [result("rss", rss, "RSS")]
         out.append(result("t2star", _t2star_ms(magnitude, phase, te), "T2STAR"))
+        target = SWI_TE_3T * 3.0 / b0
+        nearest = int(np.argmin([abs(t - target) for t in te]))
+        sw = swi(xyz[nearest] if PHASE_SIGN == 1 else np.conj(xyz[nearest]), voxel)
+        out.append(result("swi", sw.swi, "SWI"))
+        out.append(result("swi_mip", sw.mip, "SWI_MIP"))
         common = {"b0": b0, "b0_dir": b0_dir, "device": device}
         if anatomy == "phantom":
             run = pipeline.run(
@@ -192,11 +206,6 @@ class QsmRecon(PicsRecon):
             run = pipeline.run(magnitude, phase, te, voxel, anatomy="body", **common)
             out.append(result("qsm", run.maps["chi"], "QSM"))
         else:
-            target = SWI_TE_3T * 3.0 / b0
-            nearest = int(np.argmin([abs(t - target) for t in te]))
-            sw = swi(xyz[nearest] if PHASE_SIGN == 1 else np.conj(xyz[nearest]), voxel)
-            out.append(result("swi", sw.swi, "SWI"))
-            out.append(result("swi_mip", sw.mip, "SWI_MIP"))
             run = pipeline.run(
                 magnitude,
                 phase,
@@ -210,9 +219,14 @@ class QsmRecon(PicsRecon):
             out.append(result("pcs", run.maps["pcs"], "PCS"))
             out.append(result("dcs", run.maps["dcs"], "DCS"))
         _log.info(
-            "qsm: %s maps in %s s on %s", anatomy, run.info.get("total_s"), device
+            "qsm: %s maps in %s s on %s, SWI from echo %d (TE %.1f ms)",
+            anatomy,
+            run.info.get("total_s"),
+            device,
+            nearest,
+            1e3 * te[nearest],
         )
-        return out
+        return sorted(out, key=lambda map_: map_.series_index)
 
 
 def synthstrip_weights() -> str | None:
