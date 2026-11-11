@@ -342,10 +342,13 @@ after it would work out again:
   saturation is designed by the first call that plays it and read by the
   calls after it.
 
-What is kept for a plugin is kept under what its file holds as well as its
-path and modification time: another plugin staged at the same slot, or a slot
-linked to another plugin file, starts from nothing the first one left, even
-where the installer gave both files the same modification time.
+The replies, the listed RF and the slew rates kept for a plugin are kept
+under what its file holds as well as its path, the replies and listed RF also
+under its modification time: another plugin staged at the same slot, or a slot
+linked to another plugin file, starts from none of these, even where the
+installer gave both files the same modification time, and a file replaced by
+an identical copy keeps its slew rate. The solved trains and pulses are keyed
+on their own arguments and shared by every plugin that asks for them.
 
 Nothing kept outlives the server, which is restarted to take up a changed
 package in any case. A call answered in its own process keeps nothing.
