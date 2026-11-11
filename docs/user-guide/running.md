@@ -168,7 +168,8 @@ limit is mostly evaluated twice. It holds a reading to 97 % of its limit:
 the representative sequence bounds the nerve response of the scan, but on an
 oblique prescription the scan can read up to about 11 % more slew rate on a
 physical axis, which the check of the generated design then finds, and
-`generate` lowers the slew rate again. The slew rate a request ends at is remembered:
+`generate` lowers the slew rate again. A request still past 97 % of a limit
+after the last pass is refused. The slew rate a request ends at is remembered:
 `generate` starts there, the same request validated again is evaluated there
 once, and the plugin's next request under the same limits is tried first
 where the readings of this one reach their target, kept where its own
