@@ -37,8 +37,9 @@ KSPACE_FILTER = "KSpaceFilter"
 GRADIENT_UNWARP = "GradientUnwarp"
 INTENSITY_CORRECTION = "IntensityCorrection"
 
-#: Recon parameter stating the fitting levels of the N4 field, an integer of
-#: at least 1; :data:`N4_FITTING_LEVELS` where absent or not one.
+#: Recon parameter stating the fitting levels of the N4 field, an integer
+#: clamped to 1 to :data:`N4_MAX_LEVELS`; :data:`N4_FITTING_LEVELS` where
+#: absent or not an integer.
 INTENSITY_CORRECTION_LEVELS = "IntensityCorrectionLevels"
 
 _log = logging.getLogger("pulserver.recon")
@@ -126,7 +127,9 @@ def gradient_unwarped(
 
 #: Voxels the corrections a stream keeps (:func:`gradient_unwarped`'s
 #: ``cache``) may span together, about two whole-head volumes; the oldest
-#: are dropped beyond it.
+#: are dropped beyond it. A correction holds about 60 bytes a voxel, its
+#: displacement field and sample positions: some 0.7 GB for a 176 x 256 x 256
+#: volume, 2 GB at the cap.
 UNWARP_CACHE_VOXELS = 2 * 256**3
 
 
@@ -442,7 +445,8 @@ class IntensityCorrection:
 
     A magnitude image that is not 2D or 3D once its axes of one point are
     dropped, or whose mask holds fewer than 64 pixels or 128 voxels or less
-    than :data:`N4_MIN_MASK_FRACTION` of the image, is sent
+    than :data:`N4_MIN_MASK_FRACTION` of the image, or that falls apart into
+    separate compartments (:data:`N4_MIN_CONNECTED_FRACTION`), is sent
     uncorrected, as are all images when SimpleITK is not installed or
     the estimate fails; the reason is logged.
 
@@ -539,10 +543,29 @@ class IntensityCorrection:
 #: leaves that shading.
 N4_FITTING_LEVELS = 4
 
-#: Least fraction of the image N4's Otsu mask must hold. A mask of a few
-#: small compartments, such as vials in air, gives N4 nothing to tell
-#: shading from their contrast by, and its field scrambles their intensities.
-N4_MIN_MASK_FRACTION = 0.05
+#: Least fraction of N4's Otsu mask its largest connected part must hold. A
+#: mask of a few separate compartments, such as vials in air, gives N4 nothing
+#: to tell shading from their contrast by, and its field scrambles their
+#: intensities; a head or a phantom in a bath is one part.
+N4_MIN_CONNECTED_FRACTION = 0.5
+
+#: Least fraction of the image N4's Otsu mask must hold.
+N4_MIN_MASK_FRACTION = 0.01
+
+
+#: Most fitting levels :data:`INTENSITY_CORRECTION_LEVELS` may state.
+N4_MAX_LEVELS = 4
+
+
+def _largest_part(mask: np.ndarray) -> int:
+    """Return the voxels of the largest connected part of a boolean mask."""
+    import SimpleITK as sitk
+
+    parts = sitk.RelabelComponent(
+        sitk.ConnectedComponent(sitk.GetImageFromArray(mask.astype(np.uint8))),
+        sortByObjectSize=True,
+    )
+    return int((sitk.GetArrayViewFromImage(parts) == 1).sum())
 
 
 def _levels(header: Any) -> int:
@@ -553,19 +576,30 @@ def _levels(header: Any) -> int:
     if value is None:
         return N4_FITTING_LEVELS
     try:
-        levels = int(float(str(value).strip()))
-    except ValueError:
-        levels = 0
-    if levels < 1:
+        number = float(str(value).strip())
+        levels = int(number)
+    except (ValueError, OverflowError):
+        number = levels = None
+    if levels is None or levels != number:
         _log.warning(
-            "recon parameter %s %r is not a positive integer; the N4 field is "
-            "fitted at %d levels",
+            "recon parameter %s %r is not an integer; the N4 field is fitted at "
+            "%d levels",
             INTENSITY_CORRECTION_LEVELS,
             value,
             N4_FITTING_LEVELS,
         )
         return N4_FITTING_LEVELS
-    return levels
+    clamped = min(max(levels, 1), N4_MAX_LEVELS)
+    if clamped != levels:
+        _log.warning(
+            "recon parameter %s %r is outside 1 to %d; the N4 field is fitted at "
+            "%d levels",
+            INTENSITY_CORRECTION_LEVELS,
+            value,
+            N4_MAX_LEVELS,
+            clamped,
+        )
+    return clamped
 
 
 def receive_field(
@@ -575,7 +609,8 @@ def receive_field(
 
     The field is fitted at ``levels`` B-spline levels. ``None`` where the mask
     holds fewer than 64 pixels or 128 voxels, or less than
-    :data:`N4_MIN_MASK_FRACTION` of the image.
+    :data:`N4_MIN_MASK_FRACTION` of the image, or whose largest connected part
+    holds less than :data:`N4_MIN_CONNECTED_FRACTION` of it.
     """
     import SimpleITK as sitk
     import torch
@@ -586,6 +621,8 @@ def receive_field(
         sitk.OtsuThreshold(sitk.GetImageFromArray(image), 0, 1, 200)
     ).astype(bool)
     if mask.sum() < max(16 * 2**image.ndim, N4_MIN_MASK_FRACTION * mask.size):
+        return None
+    if _largest_part(mask) < N4_MIN_CONNECTED_FRACTION * mask.sum():
         return None
     _, field = bias_field_correct(
         torch.from_numpy(image),

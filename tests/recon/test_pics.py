@@ -598,6 +598,11 @@ def unwarp(monkeypatch):
     return correction
 
 
+def one_object():
+    """The centred k-space of :func:`coil_phantom`'s smooth object: one connected part, which N4 corrects, unlike the separate vials of :func:`vials`."""
+    return coil_phantom(COILS, MATRIX)[2]
+
+
 @pytest.mark.parametrize(
     ("parameter", "argument", "tag"),
     [
@@ -620,7 +625,7 @@ def test_each_correction_is_made_unless_the_header_turns_it_off(
         values[parameter] = stated
     header = with_user_strings(calibration_header(COILS, MATRIX), **values)
 
-    reconstruct(stream(vials(), range(MATRIX)), header, plugin=plugin)
+    reconstruct(stream(one_object(), range(MATRIX)), header, plugin=plugin)
 
     (image,) = results(plugin)
     assert (tag in image.attributes["ImageProcessingHistory"]) is applied
@@ -636,7 +641,7 @@ def test_the_corrections_run_in_order_fermi_then_unwarp_then_n4_and_each_says_so
     )
 
     with caplog.at_level("INFO", logger="pulserver.recon"):
-        reconstruct(stream(vials(), range(MATRIX)), header, plugin=plugin)
+        reconstruct(stream(one_object(), range(MATRIX)), header, plugin=plugin)
 
     (image,) = results(plugin)
     assert image.attributes["ImageProcessingHistory"] == [

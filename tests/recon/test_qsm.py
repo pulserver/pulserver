@@ -57,8 +57,11 @@ def magnitudes(results):
     ]
 
 
-def multi_echo(te_ms):
-    echoes = [vials(), coil_phantom(COILS, MATRIX)[2]][: len(te_ms)]
+def multi_echo(te_ms, echoes=None):
+    """Echoes ``vials`` then ``coil_phantom`` unless ``echoes`` gives the k-space of each."""
+    if echoes is None:
+        echoes = [vials(), coil_phantom(COILS, MATRIX)[2]]
+    echoes = list(echoes)[: len(te_ms)]
     acquisitions = []
     for echo, kspace in enumerate(echoes):
         for acquisition in stream(kspace, range(MATRIX)):
@@ -95,7 +98,8 @@ def test_each_echo_is_the_pics_image_and_the_maps_follow_the_last_echo_once(devi
 
 def test_the_magnitude_series_is_intensity_corrected_and_the_echoes_the_maps_take_are_not():
     pytest.importorskip("SimpleITK")
-    _, acquisitions, header = multi_echo([3.0, 8.0])
+    kspace = coil_phantom(COILS, MATRIX)[2]
+    _, acquisitions, header = multi_echo([3.0, 8.0], echoes=[kspace, 0.5 * kspace])
     corrected = Maps(kspace_filter=True, intensity_correction=True)
     filtered = Maps(kspace_filter=True)
 

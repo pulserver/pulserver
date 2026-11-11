@@ -205,7 +205,18 @@ def test_the_recon_parameter_overrides_the_plugins_default(value, default, state
 
 
 @pytest.mark.parametrize(
-    ("value", "levels"), [(None, 4), ("2", 2), ("3.0", 3), ("0", 4), ("many", 4)]
+    ("value", "levels"),
+    [
+        (None, 4),
+        ("2", 2),
+        ("3.0", 3),
+        ("0", 1),
+        ("7", 4),
+        ("2.7", 4),
+        ("inf", 4),
+        ("1e400", 4),
+        ("many", 4),
+    ],
 )
 def test_the_fitting_levels_are_those_the_header_states_else_four(value, levels):
     from types import SimpleNamespace
@@ -224,3 +235,39 @@ def test_the_fitting_levels_are_those_the_header_states_else_four(value, levels)
     )
 
     assert Corrections(head).intensity.levels == levels
+
+
+def vials_in_air(n=64):
+    """Seven small vials of different intensity in air, ``(n, n, n)``."""
+    z, y, x = np.meshgrid(*(np.linspace(-1, 1, n),) * 3, indexing="ij")
+    image = np.zeros((n, n, n), np.float32)
+    for index, angle in enumerate(2 * np.pi * np.arange(7) / 7):
+        vial = (x - 0.5 * np.cos(angle)) ** 2 + (y - 0.5 * np.sin(angle)) ** 2 < 0.01
+        image[vial & (np.abs(z) < 0.5)] = 0.3 + 0.1 * index
+    return image
+
+
+def shaded_object(n=96, fov_mm=320.0):
+    """A centre-bright ellipsoid of 120 x 120 x 100 mm in a ``fov_mm`` field of view, ``(n, n, n)``: a few per cent of the image."""
+    axis = (np.arange(n) - n / 2) * fov_mm / n
+    z, y, x = np.meshgrid(axis, axis, axis, indexing="ij")
+    inside = (x / 60) ** 2 + (y / 60) ** 2 + (z / 50) ** 2 < 1
+    shading = np.exp(-((x / 45) ** 2 + (y / 45) ** 2 + (z / 45) ** 2))
+    return (inside * (0.3 + shading)).astype(np.float32), inside
+
+
+def test_vials_in_air_are_sent_uncorrected():
+    image = vials_in_air()
+    result = ReconResult(image)
+
+    assert IntensityCorrection()(result, unit()) is result
+
+
+def test_a_shaded_object_a_few_per_cent_of_a_wide_field_of_view_is_corrected():
+    image, inside = shaded_object()
+    assert 0.01 < inside.mean() < 0.05
+
+    corrected = IntensityCorrection()(ReconResult(image), unit())
+
+    assert corrected.attributes["ImageProcessingHistory"][-1] == "N4"
+    assert spread(corrected.data, inside) < 0.5 * spread(image, inside)
