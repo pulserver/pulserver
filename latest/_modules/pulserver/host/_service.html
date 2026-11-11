@@ -1265,11 +1265,23 @@
 <span class="sd">    With ``lower``, a plugin that is not strict and whose evaluation states a</span>
 <span class="sd">    representative sequence is evaluated again at a lower slew rate while</span>
 <span class="sd">    that sequence, rotated to the prescription, exceeds the nerve-stimulation</span>
-<span class="sd">    or slew-rate limit, starting from the slew rate the request was last</span>
-<span class="sd">    lowered to; the slew rate a valid request ends at is remembered for</span>
-<span class="sd">    :func:`generate`, and for the plugin's next request under these limits,</span>
-<span class="sd">    which is evaluated there first. A request searched before is evaluated at</span>
-<span class="sd">    the slew rate it ended at. A request still exceeding them after</span>
+<span class="sd">    or slew-rate limit. Each slew rate is modelled on the readings taken so</span>
+<span class="sd">    far (:func:`pulserver.host._slew.lowered`): the first on one reading,</span>
+<span class="sd">    with the nerve response the plugin's last search found or else that of</span>
+<span class="sd">    one ramp under the nerve model, so a request is mostly evaluated twice,</span>
+<span class="sd">    at the design limits and at the slew rate it keeps.</span>
+
+<span class="sd">    A request searched before is evaluated at the slew rate it ended at. One</span>
+<span class="sd">    that was not is evaluated first at the slew rate the plugin's last</span>
+<span class="sd">    request under these limits ended at, and keeps it where every reading is</span>
+<span class="sd">    within its limit and one reaches :data:`_NEAR` of it; where none does,</span>
+<span class="sd">    the slew rate is raised once, as modelled. A reading is held to</span>
+<span class="sd">    :data:`_HELD` of its limit, not to the limit: the representative sequence</span>
+<span class="sd">    bounds the nerve response of the scan, not its slew rate on every</span>
+<span class="sd">    oblique prescription. The slew rate a valid request</span>
+<span class="sd">    ends at is remembered for :func:`generate`, and for the plugin's next</span>
+<span class="sd">    request, which starts where the readings of this one, fitted, reach</span>
+<span class="sd">    their target. A request still past :data:`_HELD` of a limit after</span>
 <span class="sd">    ``_slew.PASSES`` passes is invalid.</span>
 <span class="sd">    """</span>
     <span class="n">scanner</span> <span class="o">=</span> <span class="n">_plugin</span><span class="p">(</span><span class="n">variant</span><span class="p">)</span>
@@ -1280,26 +1292,24 @@
     <span class="n">remembered</span> <span class="o">=</span> <span class="n">_slew</span><span class="o">.</span><span class="n">key</span><span class="p">(</span><span class="n">variant</span><span class="p">,</span> <span class="n">limits</span><span class="p">,</span> <span class="n">request</span><span class="p">)</span>
     <span class="n">family</span> <span class="o">=</span> <span class="n">_slew</span><span class="o">.</span><span class="n">key</span><span class="p">(</span><span class="n">variant</span><span class="p">,</span> <span class="n">limits</span><span class="p">,</span> <span class="p">{})</span>
     <span class="n">system</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">checked</span> <span class="o">=</span> <span class="n">split_limits</span><span class="p">(</span><span class="n">limits</span><span class="p">)</span>
+    <span class="n">limit</span> <span class="o">=</span> <span class="n">design_system</span><span class="p">(</span><span class="n">limits</span><span class="p">,</span> <span class="n">any_rotation</span><span class="o">=</span><span class="n">any_rotation</span><span class="p">)</span><span class="o">.</span><span class="n">max_slew</span>
+    <span class="n">nerve</span> <span class="o">=</span> <span class="n">_nerve</span><span class="p">(</span><span class="n">checked</span><span class="p">,</span> <span class="n">system</span><span class="p">)</span>
+    <span class="n">response</span> <span class="o">=</span> <span class="n">_RESPONSES</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">family</span><span class="p">)</span>
     <span class="n">found</span><span class="p">,</span> <span class="n">ceiling</span> <span class="o">=</span> <span class="n">_LOWERED</span><span class="o">.</span><span class="n">entry</span><span class="p">(</span><span class="n">remembered</span><span class="p">)</span>
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">found</span><span class="p">:</span>
-        <span class="n">guessed</span> <span class="o">=</span> <span class="n">_guessed</span><span class="p">(</span>
-            <span class="n">scanner</span><span class="p">,</span>
-            <span class="n">limits</span><span class="p">,</span>
-            <span class="n">request</span><span class="p">,</span>
-            <span class="n">exam</span><span class="p">,</span>
-            <span class="n">family</span><span class="p">,</span>
-            <span class="n">system</span><span class="p">,</span>
-            <span class="n">checked</span><span class="p">,</span>
-            <span class="n">any_rotation</span><span class="p">,</span>
-        <span class="p">)</span>
-        <span class="k">if</span> <span class="n">guessed</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">_LOWERED</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">remembered</span><span class="p">,</span> <span class="n">guessed</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
-            <span class="k">return</span> <span class="n">guessed</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+    <span class="c1"># A slew rate tried because the plugin's last request ended there.</span>
+    <span class="n">guessed</span> <span class="o">=</span> <span class="ow">not</span> <span class="n">found</span> <span class="ow">and</span> <span class="n">_LOWERED</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">family</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+    <span class="k">if</span> <span class="n">guessed</span><span class="p">:</span>
+        <span class="n">ceiling</span> <span class="o">=</span> <span class="n">_LOWERED</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">family</span><span class="p">)</span>
     <span class="n">tried</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]]</span> <span class="o">=</span> <span class="p">[]</span>
     <span class="n">stepped</span> <span class="o">=</span> <span class="mi">0</span>
     <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
         <span class="n">design</span> <span class="o">=</span> <span class="n">design_system</span><span class="p">(</span><span class="n">limits</span><span class="p">,</span> <span class="n">any_rotation</span><span class="o">=</span><span class="n">any_rotation</span><span class="p">,</span> <span class="n">max_slew</span><span class="o">=</span><span class="n">ceiling</span><span class="p">)</span>
         <span class="n">validation</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">sequence</span> <span class="o">=</span> <span class="n">scanner</span><span class="o">.</span><span class="n">_evaluated</span><span class="p">(</span><span class="n">design</span><span class="p">,</span> <span class="n">request</span><span class="p">,</span> <span class="n">exam</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">validation</span><span class="o">.</span><span class="n">valid</span> <span class="ow">and</span> <span class="n">guessed</span><span class="p">:</span>
+            <span class="c1"># Not a slew rate this request is laid out at: it is searched</span>
+            <span class="c1"># from the design limits.</span>
+            <span class="n">guessed</span><span class="p">,</span> <span class="n">ceiling</span><span class="p">,</span> <span class="n">tried</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="p">[]</span>
+            <span class="k">continue</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">validation</span><span class="o">.</span><span class="n">valid</span> <span class="ow">and</span> <span class="n">ceiling</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">stepped</span> <span class="o">&lt;</span> <span class="n">_slew</span><span class="o">.</span><span class="n">PASSES</span><span class="p">:</span>
             <span class="c1"># A layout the plugin cannot make at the lowered slew rate.</span>
             <span class="n">stepped</span> <span class="o">+=</span> <span class="mi">1</span>
@@ -1318,57 +1328,100 @@
             <span class="n">prescribed_rotation</span><span class="p">(</span><span class="n">validation</span><span class="o">.</span><span class="n">values</span><span class="p">),</span>
             <span class="n">any_rotation</span><span class="p">,</span>
         <span class="p">)</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="n">_slew</span><span class="o">.</span><span class="n">exceeds</span><span class="p">(</span><span class="n">readings</span><span class="p">):</span>
-            <span class="k">break</span>
-        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">tried</span><span class="p">)</span> <span class="o">==</span> <span class="n">_slew</span><span class="o">.</span><span class="n">PASSES</span><span class="p">:</span>
+        <span class="n">tried</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">design</span><span class="o">.</span><span class="n">max_slew</span><span class="p">,</span> <span class="n">readings</span><span class="p">))</span>
+        <span class="k">if</span> <span class="n">_slew</span><span class="o">.</span><span class="n">exceeds</span><span class="p">(</span><span class="n">readings</span><span class="p">,</span> <span class="n">_HELD</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">tried</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">_slew</span><span class="o">.</span><span class="n">PASSES</span><span class="p">:</span>
             <span class="k">return</span> <span class="n">Validation</span><span class="p">(</span>
                 <span class="kc">False</span><span class="p">,</span>
                 <span class="kc">None</span><span class="p">,</span>
-                <span class="sa">f</span><span class="s2">"no slew rate tried keeps the design within its limits: "</span>
+                <span class="sa">f</span><span class="s2">"no slew rate tried keeps the design within </span><span class="si">{</span><span class="n">_HELD</span><span class="si">:</span><span class="s2">.0%</span><span class="si">}</span><span class="s2"> of its limits: "</span>
                 <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">_readings_text</span><span class="p">(</span><span class="n">readings</span><span class="p">)</span><span class="si">}</span><span class="s2"> at </span><span class="si">{</span><span class="n">design</span><span class="o">.</span><span class="n">max_slew</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="n">design</span><span class="o">.</span><span class="n">gamma</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> T/m/s"</span><span class="p">,</span>
                 <span class="n">validation</span><span class="o">.</span><span class="n">values</span><span class="p">,</span>
             <span class="p">)</span>
-        <span class="n">tried</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">design</span><span class="o">.</span><span class="n">max_slew</span><span class="p">,</span> <span class="n">readings</span><span class="p">))</span>
-        <span class="n">ceiling</span> <span class="o">=</span> <span class="n">_slew</span><span class="o">.</span><span class="n">lowered</span><span class="p">(</span><span class="n">tried</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">_slew</span><span class="o">.</span><span class="n">exceeds</span><span class="p">(</span><span class="n">readings</span><span class="p">,</span> <span class="n">_HELD</span><span class="p">):</span>
+            <span class="n">ceiling</span> <span class="o">=</span> <span class="n">_slew</span><span class="o">.</span><span class="n">fitted</span><span class="p">(</span>
+                <span class="n">tried</span><span class="p">,</span> <span class="n">design</span><span class="o">.</span><span class="n">max_slew</span> <span class="o">*</span> <span class="n">_slew</span><span class="o">.</span><span class="n">TARGET</span><span class="p">,</span> <span class="n">nerve</span><span class="p">,</span> <span class="n">response</span>
+            <span class="p">)</span>
+        <span class="k">elif</span> <span class="n">guessed</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">tried</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span> <span class="ow">and</span> <span class="n">_eased</span><span class="p">(</span><span class="n">readings</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">_NEAR</span><span class="p">:</span>
+            <span class="c1"># The plugin's last request asked for less than this one may</span>
+            <span class="c1"># play: its slew rate is raised to where the readings allow.</span>
+            <span class="n">raised</span> <span class="o">=</span> <span class="n">_slew</span><span class="o">.</span><span class="n">fitted</span><span class="p">(</span><span class="n">tried</span><span class="p">,</span> <span class="n">limit</span><span class="p">,</span> <span class="n">nerve</span><span class="p">,</span> <span class="n">response</span><span class="p">)</span>
+            <span class="n">ceiling</span> <span class="o">=</span> <span class="kc">None</span> <span class="k">if</span> <span class="n">raised</span> <span class="o">&gt;=</span> <span class="n">limit</span> <span class="k">else</span> <span class="n">raised</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">break</span>
         <span class="n">_log</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
             <span class="s2">"evaluated at </span><span class="si">%.1f</span><span class="s2"> T/m/s, </span><span class="si">%s</span><span class="s2">; evaluating again at </span><span class="si">%.1f</span><span class="s2"> T/m/s"</span><span class="p">,</span>
             <span class="n">design</span><span class="o">.</span><span class="n">max_slew</span> <span class="o">/</span> <span class="n">design</span><span class="o">.</span><span class="n">gamma</span><span class="p">,</span>
             <span class="n">_readings_text</span><span class="p">(</span><span class="n">readings</span><span class="p">),</span>
-            <span class="n">ceiling</span> <span class="o">/</span> <span class="n">design</span><span class="o">.</span><span class="n">gamma</span><span class="p">,</span>
+            <span class="p">(</span><span class="n">limit</span> <span class="k">if</span> <span class="n">ceiling</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">ceiling</span><span class="p">)</span> <span class="o">/</span> <span class="n">design</span><span class="o">.</span><span class="n">gamma</span><span class="p">,</span>
         <span class="p">)</span>
     <span class="k">if</span> <span class="n">validation</span><span class="o">.</span><span class="n">valid</span><span class="p">:</span>
         <span class="n">_LOWERED</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">remembered</span><span class="p">,</span> <span class="n">ceiling</span><span class="p">)</span>
-        <span class="n">_LOWERED</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">family</span><span class="p">,</span> <span class="n">ceiling</span><span class="p">)</span>
+        <span class="n">_LOWERED</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">family</span><span class="p">,</span> <span class="n">_next</span><span class="p">(</span><span class="n">family</span><span class="p">,</span> <span class="n">tried</span><span class="p">,</span> <span class="n">ceiling</span><span class="p">,</span> <span class="n">limit</span><span class="p">))</span>
     <span class="k">return</span> <span class="n">validation</span>
 
 
-<span class="c1">#: A slew rate a plugin's last request was lowered to is kept for the next</span>
-<span class="c1">#: request only when its readings reach this fraction of their limits: below</span>
-<span class="c1">#: it the gradients would be slower than the limits ask.</span>
+<span class="c1">#: The slew rate of a plugin's last request is kept for the next request</span>
+<span class="c1">#: only when its readings reach this fraction of their limits: below it the</span>
+<span class="c1">#: gradients would be slower than the limits ask.</span>
 <span class="n">_NEAR</span> <span class="o">=</span> <span class="mf">0.85</span>
 
+<span class="c1">#: The fraction of its limit a reading of the representative sequence is</span>
+<span class="c1">#: held to, by every pass of the search and by what it accepts at the end.</span>
+<span class="c1">#: The representative bounds the nerve response of the scan, and its slew</span>
+<span class="c1">#: rate and amplitude on an axis-aligned prescription. On an oblique one,</span>
+<span class="c1">#: where a physical axis sums the logical ones, the scan plays the edge of</span>
+<span class="c1">#: k-space the representative does not: over random rotations it read up to</span>
+<span class="c1">#: 11 % more slew rate on a physical axis. The margin takes up the first</span>
+<span class="c1">#: 3 % of that; past it the check of the generated design finds the excess</span>
+<span class="c1">#: and :func:`generate` lowers the slew rate again.</span>
+<span class="n">_HELD</span> <span class="o">=</span> <span class="mf">0.97</span>
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_guessed</span><span class="p">(</span><span class="n">scanner</span><span class="p">,</span> <span class="n">limits</span><span class="p">,</span> <span class="n">request</span><span class="p">,</span> <span class="n">exam</span><span class="p">,</span> <span class="n">family</span><span class="p">,</span> <span class="n">system</span><span class="p">,</span> <span class="n">checked</span><span class="p">,</span> <span class="n">any_rotation</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">"""Return the slew rate and validation of a request evaluated at the slew rate the plugin's last request under these limits was lowered to.</span>
+<span class="c1">#: The ``x`` of the nerve response ``A S / (S + x)`` the last search of each</span>
+<span class="c1">#: plugin under given limits found, which the next search models its first</span>
+<span class="c1">#: step on.</span>
+<span class="n">_RESPONSES</span> <span class="o">=</span> <span class="n">_slew</span><span class="o">.</span><span class="n">Remembered</span><span class="p">(</span><span class="n">kind</span><span class="o">=</span><span class="s2">"nerve"</span><span class="p">)</span>
 
-<span class="sd">    ``None`` where none was, or where at that slew rate the request is</span>
-<span class="sd">    invalid, exceeds a limit, or keeps every reading below :data:`_NEAR` of</span>
-<span class="sd">    its limit: the request is then searched for from the design limits.</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_eased</span><span class="p">(</span><span class="n">readings</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the largest of the readings a lower slew rate eases."""</span>
+    <span class="k">return</span> <span class="nb">max</span><span class="p">(</span><span class="n">readings</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">_slew</span><span class="o">.</span><span class="n">READINGS</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_nerve</span><span class="p">(</span><span class="n">checked</span><span class="p">:</span> <span class="n">ir</span><span class="o">.</span><span class="n">CheckLimits</span><span class="p">,</span> <span class="n">system</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Opts</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the rheobase of a chronaxie nerve model, in the unit of the system's slew rate, and the largest response allowed; ``None`` for another model or none.</span>
+
+<span class="sd">    The rheobase is that of the axis that responds most.</span>
 <span class="sd">    """</span>
-    <span class="n">ceiling</span> <span class="o">=</span> <span class="n">_LOWERED</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">family</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">ceiling</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="n">model</span> <span class="o">=</span> <span class="n">checked</span><span class="o">.</span><span class="n">pns</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">safety</span><span class="o">.</span><span class="n">ChronaxieModel</span><span class="p">):</span>
         <span class="k">return</span> <span class="kc">None</span>
-    <span class="n">design</span> <span class="o">=</span> <span class="n">design_system</span><span class="p">(</span><span class="n">limits</span><span class="p">,</span> <span class="n">any_rotation</span><span class="o">=</span><span class="n">any_rotation</span><span class="p">,</span> <span class="n">max_slew</span><span class="o">=</span><span class="n">ceiling</span><span class="p">)</span>
-    <span class="n">validation</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">sequence</span> <span class="o">=</span> <span class="n">scanner</span><span class="o">.</span><span class="n">_evaluated</span><span class="p">(</span><span class="n">design</span><span class="p">,</span> <span class="n">request</span><span class="p">,</span> <span class="n">exam</span><span class="p">)</span>
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">validation</span><span class="o">.</span><span class="n">valid</span> <span class="ow">or</span> <span class="n">sequence</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="k">return</span> <span class="kc">None</span>
-    <span class="n">readings</span> <span class="o">=</span> <span class="n">_representative_readings</span><span class="p">(</span>
-        <span class="n">sequence</span><span class="p">,</span> <span class="n">system</span><span class="p">,</span> <span class="n">checked</span><span class="p">,</span> <span class="n">prescribed_rotation</span><span class="p">(</span><span class="n">validation</span><span class="o">.</span><span class="n">values</span><span class="p">),</span> <span class="n">any_rotation</span>
-    <span class="p">)</span>
-    <span class="n">eased</span> <span class="o">=</span> <span class="p">[</span><span class="n">readings</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">_slew</span><span class="o">.</span><span class="n">READINGS</span><span class="p">]</span>
-    <span class="k">if</span> <span class="n">_slew</span><span class="o">.</span><span class="n">exceeds</span><span class="p">(</span><span class="n">readings</span><span class="p">)</span> <span class="ow">or</span> <span class="nb">max</span><span class="p">(</span><span class="n">eased</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">_NEAR</span><span class="p">:</span>
-        <span class="k">return</span> <span class="kc">None</span>
-    <span class="k">return</span> <span class="n">ceiling</span><span class="p">,</span> <span class="n">validation</span>
+    <span class="n">rheobase</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">atleast_1d</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">rheobase</span><span class="p">)</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">atleast_1d</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">alpha</span><span class="p">)</span>
+    <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">rheobase</span><span class="o">.</span><span class="n">min</span><span class="p">())</span> <span class="o">*</span> <span class="n">system</span><span class="o">.</span><span class="n">gamma</span><span class="p">,</span> <span class="nb">float</span><span class="p">(</span><span class="n">checked</span><span class="o">.</span><span class="n">pns_limit</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_next</span><span class="p">(</span>
+    <span class="n">family</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">tried</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]],</span>
+    <span class="n">ceiling</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">limit</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the slew rate the plugin's next request is evaluated at first, from the search of this one.</span>
+
+<span class="sd">    The slew rate this request ended at; or, where its search read the nerve</span>
+<span class="sd">    response at two slew rates and that response is what holds the slew rate</span>
+<span class="sd">    down, the slew rate at which the response through them reaches its</span>
+<span class="sd">    target, which the next request reads before it keeps it. The response is</span>
+<span class="sd">    remembered for the plugin's next search.</span>
+<span class="sd">    """</span>
+    <span class="n">found</span> <span class="o">=</span> <span class="n">_slew</span><span class="o">.</span><span class="n">response_of</span><span class="p">(</span><span class="n">tried</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">found</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">ceiling</span>
+    <span class="n">_RESPONSES</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">family</span><span class="p">,</span> <span class="n">found</span><span class="p">)</span>
+    <span class="n">readings</span> <span class="o">=</span> <span class="n">tried</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">][</span><span class="mi">1</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">readings</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"pns"</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">_eased</span><span class="p">(</span><span class="n">readings</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">ceiling</span>
+    <span class="n">fitted</span> <span class="o">=</span> <span class="n">_slew</span><span class="o">.</span><span class="n">fitted</span><span class="p">(</span><span class="n">tried</span><span class="p">,</span> <span class="n">limit</span><span class="p">)</span>
+    <span class="k">return</span> <span class="kc">None</span> <span class="k">if</span> <span class="n">fitted</span> <span class="o">&gt;=</span> <span class="n">limit</span> <span class="k">else</span> <span class="n">fitted</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_representative_readings</span><span class="p">(</span>

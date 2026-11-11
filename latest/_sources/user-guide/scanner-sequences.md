@@ -273,8 +273,10 @@ makes the protocol invalid, but the reply names only its type, as in
 traceback. A request that names an entry the protocol does not declare, or an
 option a choice does not offer, is invalid in the same way.
 
-An evaluation that designs the sequence, or one repetition of it, states that
-design as its representative `sequence`. The design service checks peripheral
+An evaluation that designs the sequence, or a few repetitions of it, states that
+design as its representative `sequence`: the repetitions whose gradients are
+the largest of the scan, such as the views at the edges of k-space, so that
+what is read on them bounds what the scan plays. The design service checks peripheral
 nerve stimulation and slew rate on it, rotated to the prescription, and
 evaluates the protocol again at a lower slew rate while it exceeds them, as
 `generate` does with the whole design ({ref}`scanner-limits`); without one,
@@ -630,10 +632,11 @@ the prescription.
 
 ### Shipped evaluation
 
-Each shipped plugin evaluates a protocol from one repetition of the scan: one
-line, partition, spoke, interleaf, blade line, echo train or inversion shot of
-one slice, without dummy repetitions. Most call the sequence function with the
-arguments that reduce it to that repetition; `epi3d` and `zte3d` build the
+Each shipped plugin evaluates a protocol from a few repetitions of the scan:
+the lines or partitions at the centre and edge of k-space, eight spokes,
+interleaves or blade lines, an echo train or an inversion shot of one slice,
+without dummy repetitions. Most call the sequence function with the
+arguments that reduce it to those repetitions; `epi3d` and `zte3d` build one
 repetition from the modules their function is built from.
 
 - **Scan time.** The duration of the repetition times the number of
@@ -649,8 +652,24 @@ repetition from the modules their function is built from.
   holds the first.
 - **Invalid protocols.** A prescription the design refuses is invalid, with
   the message of its error.
-- **Representative sequence.** The repetition, on which the design service
-  checks nerve stimulation and slew rate before the scan is designed. That of
+- **Representative sequence.** The repetitions on which the design service
+  checks nerve stimulation and slew rate before the scan is designed. A
+  Cartesian sequence designs the views at the centre and at the edge of each
+  phase-encoding axis, a lattice at half the matrix with no calibration
+  region, partial Fourier or CAIPI shift: the largest phase encode of each
+  axis, at one edge of k-space. `mprage3d` designs them as short shots beside
+  the shot its scan time and RF are read from. A sequence that turns one
+  readout about the slice axis, a spoke, a blade or an interleaf, designs
+  eight of them, evenly spread in angle. The nerve response read on these is
+  the scan's largest under a nerve model that is the same on every axis, and
+  so are the slew rate and the amplitude on an axis-aligned prescription.
+  The slew rate on a physical axis of an oblique prescription is not
+  bounded: the scan plays the other edge of k-space too, and over random
+  rotations it read up to 11 % more than these views (`gre3d`, `se3d`,
+  `mprage3d`; `fse3d` 8 %), the nerve response never more. The design
+  service holds their readings to 97 % of the limits, which takes up the
+  first 3 %; past that the check of the generated design finds the excess
+  and `generate` lowers the slew rate again. That of
   `fse3d` and `fse_pd3d` is the packed echo train their evaluation designs,
   as long as the longest train, startup echoes included, at a constant
   refocusing angle: the largest of a Busse or PD train; `epi3d` states none.

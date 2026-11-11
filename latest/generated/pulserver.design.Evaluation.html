@@ -518,8 +518,11 @@ RF of a protocol before it is designed. <code class="docutils literal notranslat
 states no estimate and is not invalid. Every control of the layout must
 be an entry of <a class="reference internal" href="pulserver.design.SequencePlugin.protocol.html#pulserver.design.SequencePlugin.protocol" title="pulserver.design.SequencePlugin.protocol"><code class="xref py py-attr docutils literal notranslate"><span class="pre">SequencePlugin.protocol</span></code></a> whose value in
 <code class="docutils literal notranslate"><span class="pre">protocol</span></code> is positive, or the protocol is invalid.</p></li>
-<li><p><strong>sequence</strong> (<em>pypulseqpp._sequence.Sequence | None</em>) – A representative design of the protocol, such as the one repetition
-or echo train the evaluation designed, in the logical frame. The
+<li><p><strong>sequence</strong> (<em>pypulseqpp._sequence.Sequence | None</em>) – A representative design of the protocol, such as the repetitions or
+the echo train the evaluation designed, in the logical frame: the
+ones whose gradients are the largest of the scan, such as the views
+at the edges of k-space, so that what is read on it bounds what the
+scan plays. The
 design service checks nerve stimulation and slew rate on it before
 the scan is designed, and lowers the slew rate the protocol is
 designed under where they exceed their limits, so that the console

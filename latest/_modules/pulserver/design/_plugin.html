@@ -506,8 +506,11 @@
 <span class="sd">        be an entry of :attr:`SequencePlugin.protocol` whose value in</span>
 <span class="sd">        ``protocol`` is positive, or the protocol is invalid.</span>
 <span class="sd">    sequence</span>
-<span class="sd">        A representative design of the protocol, such as the one repetition</span>
-<span class="sd">        or echo train the evaluation designed, in the logical frame. The</span>
+<span class="sd">        A representative design of the protocol, such as the repetitions or</span>
+<span class="sd">        the echo train the evaluation designed, in the logical frame: the</span>
+<span class="sd">        ones whose gradients are the largest of the scan, such as the views</span>
+<span class="sd">        at the edges of k-space, so that what is read on it bounds what the</span>
+<span class="sd">        scan plays. The</span>
 <span class="sd">        design service checks nerve stimulation and slew rate on it before</span>
 <span class="sd">        the scan is designed, and lowers the slew rate the protocol is</span>
 <span class="sd">        designed under where they exceed their limits, so that the console</span>

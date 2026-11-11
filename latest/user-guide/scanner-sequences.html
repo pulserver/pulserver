@@ -799,8 +799,10 @@ makes the protocol invalid, but the reply names only its type, as in
 <code class="docutils literal notranslate"><span class="pre">TypeError</span> <span class="pre">in</span> <span class="pre">Timed.evaluate</span></code>, and the exception is logged as an error with its
 traceback. A request that names an entry the protocol does not declare, or an
 option a choice does not offer, is invalid in the same way.</p>
-<p>An evaluation that designs the sequence, or one repetition of it, states that
-design as its representative <code class="docutils literal notranslate"><span class="pre">sequence</span></code>. The design service checks peripheral
+<p>An evaluation that designs the sequence, or a few repetitions of it, states that
+design as its representative <code class="docutils literal notranslate"><span class="pre">sequence</span></code>: the repetitions whose gradients are
+the largest of the scan, such as the views at the edges of k-space, so that
+what is read on them bounds what the scan plays. The design service checks peripheral
 nerve stimulation and slew rate on it, rotated to the prescription, and
 evaluates the protocol again at a lower slew rate while it exceeds them, as
 <code class="docutils literal notranslate"><span class="pre">generate</span></code> does with the whole design (<a class="reference internal" href="running.html#scanner-limits"><span class="std std-ref">Scanner limits</span></a>); without one,
@@ -1290,10 +1292,11 @@ of <code class="docutils literal notranslate"><span class="pre">zte3d</span></co
 </section>
 <section id="shipped-evaluation">
 <h3>Shipped evaluation<a class="headerlink" href="#shipped-evaluation" title="Link to this heading">#</a></h3>
-<p>Each shipped plugin evaluates a protocol from one repetition of the scan: one
-line, partition, spoke, interleaf, blade line, echo train or inversion shot of
-one slice, without dummy repetitions. Most call the sequence function with the
-arguments that reduce it to that repetition; <code class="docutils literal notranslate"><span class="pre">epi3d</span></code> and <code class="docutils literal notranslate"><span class="pre">zte3d</span></code> build the
+<p>Each shipped plugin evaluates a protocol from a few repetitions of the scan:
+the lines or partitions at the centre and edge of k-space, eight spokes,
+interleaves or blade lines, an echo train or an inversion shot of one slice,
+without dummy repetitions. Most call the sequence function with the
+arguments that reduce it to those repetitions; <code class="docutils literal notranslate"><span class="pre">epi3d</span></code> and <code class="docutils literal notranslate"><span class="pre">zte3d</span></code> build one
 repetition from the modules their function is built from.</p>
 <ul class="simple">
 <li><p><strong>Scan time.</strong> The duration of the repetition times the number of
@@ -1309,8 +1312,24 @@ definition. A multi-echo sequence lists every echo time, and the <code class="do
 holds the first.</p></li>
 <li><p><strong>Invalid protocols.</strong> A prescription the design refuses is invalid, with
 the message of its error.</p></li>
-<li><p><strong>Representative sequence.</strong> The repetition, on which the design service
-checks nerve stimulation and slew rate before the scan is designed. That of
+<li><p><strong>Representative sequence.</strong> The repetitions on which the design service
+checks nerve stimulation and slew rate before the scan is designed. A
+Cartesian sequence designs the views at the centre and at the edge of each
+phase-encoding axis, a lattice at half the matrix with no calibration
+region, partial Fourier or CAIPI shift: the largest phase encode of each
+axis, at one edge of k-space. <code class="docutils literal notranslate"><span class="pre">mprage3d</span></code> designs them as short shots beside
+the shot its scan time and RF are read from. A sequence that turns one
+readout about the slice axis, a spoke, a blade or an interleaf, designs
+eight of them, evenly spread in angle. The nerve response read on these is
+the scan’s largest under a nerve model that is the same on every axis, and
+so are the slew rate and the amplitude on an axis-aligned prescription.
+The slew rate on a physical axis of an oblique prescription is not
+bounded: the scan plays the other edge of k-space too, and over random
+rotations it read up to 11 % more than these views (<code class="docutils literal notranslate"><span class="pre">gre3d</span></code>, <code class="docutils literal notranslate"><span class="pre">se3d</span></code>,
+<code class="docutils literal notranslate"><span class="pre">mprage3d</span></code>; <code class="docutils literal notranslate"><span class="pre">fse3d</span></code> 8 %), the nerve response never more. The design
+service holds their readings to 97 % of the limits, which takes up the
+first 3 %; past that the check of the generated design finds the excess
+and <code class="docutils literal notranslate"><span class="pre">generate</span></code> lowers the slew rate again. That of
 <code class="docutils literal notranslate"><span class="pre">fse3d</span></code> and <code class="docutils literal notranslate"><span class="pre">fse_pd3d</span></code> is the packed echo train their evaluation designs,
 as long as the longest train, startup echoes included, at a constant
 refocusing angle: the largest of a Busse or PD train; <code class="docutils literal notranslate"><span class="pre">epi3d</span></code> states none.</p></li>

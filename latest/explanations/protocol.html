@@ -513,7 +513,7 @@
 <p class="admonition-title">TL;DR</p>
 <ul class="simple">
 <li><p>Every edit is answered by your plugin’s <code class="docutils literal notranslate"><span class="pre">evaluate</span></code>; the scanner shows the value the design achieves.</p></li>
-<li><p>The shipped plugins design one repetition and extrapolate the scan time, so a reply takes tens of milliseconds.</p></li>
+<li><p>The shipped plugins design a few repetitions and extrapolate the scan time, so a reply takes tens of milliseconds.</p></li>
 <li><p>A resolved protocol sent back resolves to itself, and so to the same design.</p></li>
 </ul>
 </div>
@@ -553,8 +553,8 @@ writes such a plugin.</p>
 <li><p><strong>Replies, when asked, with the RF layout of one TR.</strong></p>
 <p>Code: <a class="reference internal" href="../generated/pulserver.design.RfLayout.html#pulserver.design.RfLayout" title="pulserver.design.RfLayout"><code class="xref py py-class docutils literal notranslate"><span class="pre">RfLayout</span></code></a>. Tests: <em>a gre layout is one excitation and lists one definition whatever the matrix</em>; <em>a validated amplitude times the listed peak is the peak the instance plays</em>; <em>the rf layout is sent only when asked</em> (<code class="docutils literal notranslate"><span class="pre">test_rf_layout.py</span></code>).</p>
 </li>
-<li><p><strong>Ships evaluations that design at most two TRs, however large the prescription.</strong></p>
-<p>Code: the shipped plugins, <code class="docutils literal notranslate"><span class="pre">src/pulserver/_zoo/sequences/</span></code>. Tests: <em>a zoo evaluation designs two trs at most however large the prescription</em>; <em>an evaluation states the values and the scan time of the design</em> (<code class="docutils literal notranslate"><span class="pre">test_zoo_evaluation.py</span></code>).</p>
+<li><p><strong>Ships evaluations that design a few TRs, however large the prescription.</strong></p>
+<p>Code: the shipped plugins, <code class="docutils literal notranslate"><span class="pre">src/pulserver/_zoo/sequences/</span></code>. Tests: <em>a zoo evaluation designs a few trs however large the prescription</em>; <em>an evaluation states the values and the scan time of the design</em> (<code class="docutils literal notranslate"><span class="pre">test_zoo_evaluation.py</span></code>).</p>
 </li>
 </ul>
 </div>

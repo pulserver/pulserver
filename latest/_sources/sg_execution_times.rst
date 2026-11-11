@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:50.616** total execution time for 9 files **from all galleries**:
+**00:50.292** total execution time for 9 files **from all galleries**:
 
 .. container::
 
@@ -33,29 +33,29 @@ Computation times
      - Time
      - Mem (MB)
    * - :ref:`sphx_glr_generated_gallery_01-course_06_testing_on_the_virtual_scanner.py` (``../gallery/01-course/06_testing_on_the_virtual_scanner.py``)
-     - 00:41.063
+     - 00:40.711
      - 0.0
    * - :ref:`sphx_glr_generated_gallery_02-tours_01_protocol_resolution.py` (``../gallery/02-tours/01_protocol_resolution.py``)
-     - 00:04.127
+     - 00:04.064
      - 0.0
    * - :ref:`sphx_glr_generated_gallery_01-course_02_sequence_plugin.py` (``../gallery/01-course/02_sequence_plugin.py``)
      - 00:01.416
      - 0.0
    * - :ref:`sphx_glr_generated_gallery_01-course_05_recon_plugin.py` (``../gallery/01-course/05_recon_plugin.py``)
-     - 00:01.176
+     - 00:01.246
      - 0.0
    * - :ref:`sphx_glr_generated_gallery_01-course_04_reconstruction_plugin.py` (``../gallery/01-course/04_reconstruction_plugin.py``)
-     - 00:00.768
+     - 00:00.846
      - 0.0
    * - :ref:`sphx_glr_generated_gallery_01-course_01_protocol_to_image.py` (``../gallery/01-course/01_protocol_to_image.py``)
-     - 00:00.583
+     - 00:00.568
      - 0.0
    * - :ref:`sphx_glr_generated_gallery_01-course_03_scanner_representation.py` (``../gallery/01-course/03_scanner_representation.py``)
-     - 00:00.525
+     - 00:00.516
      - 0.0
    * - :ref:`sphx_glr_generated_gallery_02-tours_03_fov_offset_enrichment.py` (``../gallery/02-tours/03_fov_offset_enrichment.py``)
-     - 00:00.501
+     - 00:00.475
      - 0.0
    * - :ref:`sphx_glr_generated_gallery_02-tours_02_segmentation.py` (``../gallery/02-tours/02_segmentation.py``)
-     - 00:00.457
+     - 00:00.450
      - 0.0
