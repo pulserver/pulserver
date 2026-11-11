@@ -5,6 +5,7 @@ from __future__ import annotations
 __all__ = [
     "GRADIENT_UNWARP",
     "INTENSITY_CORRECTION",
+    "INTENSITY_CORRECTION_LEVELS",
     "KSPACE_FILTER",
     "Corrections",
     "IntensityCorrection",
@@ -35,6 +36,10 @@ COEFFICIENT_PARAMETERS = (
 KSPACE_FILTER = "KSpaceFilter"
 GRADIENT_UNWARP = "GradientUnwarp"
 INTENSITY_CORRECTION = "IntensityCorrection"
+
+#: Recon parameter stating the fitting levels of the N4 field, an integer of
+#: at least 1; :data:`N4_FITTING_LEVELS` where absent or not one.
+INTENSITY_CORRECTION_LEVELS = "IntensityCorrectionLevels"
 
 _log = logging.getLogger("pulserver.recon")
 
@@ -317,7 +322,7 @@ class Corrections:
         unwarp = _stated(header, GRADIENT_UNWARP, gradient_unwarp)
         self.gradient_unwarp = unwarp and table is not None
         self.intensity = (
-            IntensityCorrection()
+            IntensityCorrection(_levels(header))
             if _stated(header, INTENSITY_CORRECTION, intensity_correction)
             else None
         )
@@ -341,7 +346,7 @@ class Corrections:
             if self.kspace_filter
             else _off(header, KSPACE_FILTER, "kspace_filter"),
             unwarp_state,
-            "on"
+            f"on, {self.intensity.levels} fitting levels"
             if self.intensity is not None
             else _off(header, INTENSITY_CORRECTION, "intensity_correction"),
         )
@@ -440,9 +445,15 @@ class IntensityCorrection:
     than :data:`N4_MIN_MASK_FRACTION` of the image, is sent
     uncorrected, as are all images when SimpleITK is not installed or
     the estimate fails; the reason is logged.
+
+    Parameters
+    ----------
+    levels : int, default=None
+        Fitting levels of the field; :data:`N4_FITTING_LEVELS` when ``None``.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, levels: int | None = None) -> None:
+        self.levels = N4_FITTING_LEVELS if levels is None else int(levels)
         self.fields: dict[tuple[Any, ...], np.ndarray | None] = {}
 
     def __call__(self, results: Any, data: Any) -> Any:
@@ -505,7 +516,7 @@ class IntensityCorrection:
             self.fields[key] = None
             return None
         start = time.perf_counter()
-        field = receive_field(np.abs(magnitude).reshape(squeezed))
+        field = receive_field(np.abs(magnitude).reshape(squeezed), self.levels)
         self.fields[key] = None if field is None else field.reshape(magnitude.shape)
         _log.info(
             "N4 receive field of slice %d, set %d, %s, estimated in %.1f s%s",
@@ -520,13 +531,13 @@ class IntensityCorrection:
         return self.fields[key]
 
 
-#: Fitting levels of the N4 field. The B-spline mesh of SimpleITK's N4,
-#: one element across the image at the first level, doubles at each. At two
-#: the field varies over half the field of view and keeps the contrast
-#: between compartments a few centimetres across, such as vials in a bath;
-#: at four it also removes a head coil's centre-bright shading at 7 T, and
-#: flattens that contrast towards the bath's.
-N4_FITTING_LEVELS = 2
+#: Fitting levels of the N4 field by default. The B-spline mesh of
+#: SimpleITK's N4, one element across the image at the first level, doubles
+#: at each. At four the field removes a head coil's centre-bright shading at
+#: 7 T, and compresses the intensity ratios between separate compartments,
+#: such as vials in a bath, towards one; at two it keeps those ratios and
+#: leaves that shading.
+N4_FITTING_LEVELS = 4
 
 #: Least fraction of the image N4's Otsu mask must hold. A mask of a few
 #: small compartments, such as vials in air, gives N4 nothing to tell
@@ -534,10 +545,35 @@ N4_FITTING_LEVELS = 2
 N4_MIN_MASK_FRACTION = 0.05
 
 
-def receive_field(magnitude: np.ndarray) -> np.ndarray | None:
+def _levels(header: Any) -> int:
+    """Return the N4 fitting levels the header's :data:`INTENSITY_CORRECTION_LEVELS` states, else :data:`N4_FITTING_LEVELS`."""
+    from ..mrd._metadata import user_parameter
+
+    value = user_parameter(header, INTENSITY_CORRECTION_LEVELS, None)
+    if value is None:
+        return N4_FITTING_LEVELS
+    try:
+        levels = int(float(str(value).strip()))
+    except ValueError:
+        levels = 0
+    if levels < 1:
+        _log.warning(
+            "recon parameter %s %r is not a positive integer; the N4 field is "
+            "fitted at %d levels",
+            INTENSITY_CORRECTION_LEVELS,
+            value,
+            N4_FITTING_LEVELS,
+        )
+        return N4_FITTING_LEVELS
+    return levels
+
+
+def receive_field(
+    magnitude: np.ndarray, levels: int = N4_FITTING_LEVELS
+) -> np.ndarray | None:
     """Return the N4 field of a 2D or 3D magnitude image, mean 1 inside its Otsu mask and clipped to its range there.
 
-    The field is fitted at :data:`N4_FITTING_LEVELS`. ``None`` where the mask
+    The field is fitted at ``levels`` B-spline levels. ``None`` where the mask
     holds fewer than 64 pixels or 128 voxels, or less than
     :data:`N4_MIN_MASK_FRACTION` of the image.
     """
@@ -554,7 +590,7 @@ def receive_field(magnitude: np.ndarray) -> np.ndarray | None:
     _, field = bias_field_correct(
         torch.from_numpy(image),
         mask=torch.from_numpy(mask.astype(np.uint8)),
-        iterations=(50,) * N4_FITTING_LEVELS,
+        iterations=(50,) * int(levels),
         return_field=True,
     )
     field = field.numpy().astype(np.float64)

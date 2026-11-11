@@ -64,7 +64,7 @@ def test_a_shaded_uniform_object_is_flattened_and_keeps_its_mean():
         ReconResult(image.astype(np.float32)), unit()
     ).data
 
-    assert spread(corrected, inside) < 0.5 * spread(image, inside)
+    assert spread(corrected, inside) < 0.25 * spread(image, inside)
     assert np.mean(corrected[inside]) == pytest.approx(np.mean(image[inside]), rel=0.1)
 
 
@@ -93,10 +93,10 @@ def vials_in_a_bath(n=96, depth=48):
     return np.abs(image + noise).astype(np.float32), cores, rest
 
 
-def test_separate_compartments_keep_their_intensity_ratios():
+def test_separate_compartments_keep_their_intensity_ratios_at_two_fitting_levels():
     image, cores, bath = vials_in_a_bath()
 
-    corrected = IntensityCorrection()(ReconResult(image), unit()).data
+    corrected = IntensityCorrection(levels=2)(ReconResult(image), unit()).data
 
     for core in cores:
         before = image[core].mean() / image[bath].mean()
@@ -116,7 +116,7 @@ def test_the_magnitude_is_divided_and_the_real_and_imaginary_images_are_sent_as_
 
     out = IntensityCorrection()(results, unit())
 
-    assert spread(out[0].data, inside) < 0.5 * spread(np.abs(image), inside)
+    assert spread(out[0].data, inside) < 0.25 * spread(np.abs(image), inside)
     assert out[0].attributes["ImageProcessingHistory"][-1] == "N4"
     assert out[1] is results[1] and out[2] is results[2]
 
@@ -173,7 +173,7 @@ def test_without_simpleitk_the_images_are_sent_uncorrected_and_the_log_says_why(
 def test_a_failing_estimate_sends_the_images_uncorrected_and_the_log_says_why(
     monkeypatch, caplog
 ):
-    def failing(magnitude):
+    def failing(magnitude, levels):
         raise RuntimeError("N4 diverged")
 
     monkeypatch.setattr(_correct, "receive_field", failing)
@@ -202,3 +202,25 @@ def test_a_failing_estimate_sends_the_images_uncorrected_and_the_log_says_why(
 )
 def test_the_recon_parameter_overrides_the_plugins_default(value, default, stated):
     assert _stated(header(value), INTENSITY_CORRECTION, default) is stated
+
+
+@pytest.mark.parametrize(
+    ("value", "levels"), [(None, 4), ("2", 2), ("3.0", 3), ("0", 4), ("many", 4)]
+)
+def test_the_fitting_levels_are_those_the_header_states_else_four(value, levels):
+    from types import SimpleNamespace
+
+    from pulserver.recon import Corrections
+
+    strings = (
+        []
+        if value is None
+        else [SimpleNamespace(name="IntensityCorrectionLevels", value=value)]
+    )
+    head = SimpleNamespace(
+        userParameters=SimpleNamespace(
+            userParameterLong=[], userParameterDouble=[], userParameterString=strings
+        )
+    )
+
+    assert Corrections(head).intensity.levels == levels

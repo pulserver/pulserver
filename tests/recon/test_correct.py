@@ -278,3 +278,4 @@ def test_every_shipped_reconstruction_makes_the_three_corrections_by_default(nam
     assert stream.corrections.kspace_filter
     assert stream.corrections.gradient_unwarp
     assert stream.corrections.intensity is not None
+    assert stream.corrections.intensity.levels == 4
