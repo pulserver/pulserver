@@ -354,6 +354,12 @@ class SequencePlugin:
         The default accepts the protocol unchanged with no scan time estimate,
         and does not call the sequence function.
 
+        A console waits for each evaluation, so an override is a simplified
+        design: it states the scan time exactly, an upper bound of the RF
+        and a repetition whose gradients stand for the scan's, and leaves to
+        :meth:`generate` what takes a solve, an optimization or the whole
+        scan.
+
         Parameters
         ----------
         system : pypulseqpp.Opts

@@ -21,6 +21,9 @@ both on the virtual scanner.
 - **Answers the interpreter's design calls, one command per call or through a warm server.**
 
   Code: `pulserver design`, {mod}`pulserver.host`. Tests: *a forwarded call replies as the call answered in its own process*; *a crashing plugin fails only its call*; *a call is answered while another runs* (`test_design_server.py`).
+- **Keeps, under a warm server, what a call worked out for the calls after it: replies, the RF a plugin lists, the slew rate of a request.**
+
+  Code: `pulserver.host._memo`. Tests: *a kept validation is replied without evaluating again*; *the RF a plugin lists is evaluated once for every call*; *generate starts at the slew rate another call validated*; *a design lowered further drops the kept validation*; *the children of a warm server share what they keep* (`test_design_memo.py`).
 - **Identifies a design by the SHA-256 of its plugin, sources, package versions, limits, VOP file and resolved protocol.**
 
   Code: {func}`~pulserver.host.design_identity`. Tests: *one resolved protocol is one design*; *an edited plugin is another design of the same protocol*; *a design is one of the VOP file contents its SAR ratios came from* (`test_design_service.py`).

@@ -1,13 +1,15 @@
 """Fast spin echo on the scanner: SAR burst limits, and the RF layout of trains that differ in length and TR."""
 
 import functools
-from collections.abc import Callable, Sequence
+import json
+from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
 import numpy as np
 import pypulseqpp as pp
 
 from pulserver.design import RfLayout
+from pulserver.host import _memo
 
 from ._evaluation import rf_layout
 
@@ -29,6 +31,76 @@ def sar_burst(app: Callable[..., Any]) -> Callable[..., Any]:
         return designed
 
     return design
+
+
+def bounding_train(a: Mapping[str, Any], peak_deg: float) -> dict[str, Any]:
+    """Return the arguments that design the constant train bounding a train whose angles a prescribed signal fixes.
+
+    A Busse or PD train plays its startup echoes and then its acquired ones
+    at angles an inverse extended-phase-graph solve finds, none above
+    ``peak_deg``. The train of as many pulses at ``peak_deg`` lasts as long,
+    its pulses and gradients being the same but for the angles, and plays at
+    least the RF power: an evaluation designs it for its scan time, its RF
+    and its gradients, and asks the solve only for the effective TE
+    (:func:`effective_te`). ``a`` holds the arguments of the full design.
+    """
+    startup = a["busse_startup_echoes"]
+    periphery = a["etl_periphery"]
+    return {
+        "flip_modulation": "constant",
+        "refocusing_angle_deg": peak_deg,
+        "etl": a["etl"] + startup,
+        "etl_periphery": None if periphery is None else periphery + startup,
+        "busse_centre_echo": None,
+        "busse_effective_te": None,
+        "busse_optimize": False,
+        "pd_effective_te": None,
+        "pd_optimize": False,
+    }
+
+
+def effective_te(
+    app: Callable[..., Any], system: pp.Opts, designed: Mapping[str, Any]
+) -> float:
+    """Return the effective TE the train of a Busse or PD prescription reaches, in seconds, as its design finds it.
+
+    ``designed`` are the arguments of one train of the prescription, its
+    angles as the inverse solve of pypulseqpp gives them without fitting:
+    the centre echo nearest the TE asked for, or the midpoint, and the
+    contrast-equivalent TE there, the ``EffectiveEchoTime`` of the design. A
+    prescription no train realizes is refused as the design refuses it.
+
+    Under a warm design server the answer is kept for the calls after this
+    one (:mod:`pulserver.host._memo`), under the arguments and the limits, so
+    a train is solved for once however often its protocol is evaluated.
+
+    Raises
+    ------
+    ValueError
+        With the message of the design, where it refuses the prescription.
+    """
+    key = json.dumps(
+        [
+            sorted((name, repr(value)) for name, value in designed.items()),
+            sorted((name, repr(value)) for name, value in vars(system).items()),
+        ]
+    )
+    found, kept = _memo.read(_TRAINS, key)
+    if not found:
+        try:
+            train = app(system, **designed)
+        except (ValueError, AssertionError) as error:
+            kept = {"refused": str(error) or type(error).__name__}
+        else:
+            kept = {"te": float(train.definitions["EffectiveEchoTime"][0])}
+        _memo.write(_TRAINS, key, kept)
+    if "refused" in kept:
+        raise ValueError(kept["refused"])
+    return kept["te"]
+
+
+# The entries of :mod:`pulserver.host._memo` the solved trains are.
+_TRAINS = "fse-train"
 
 
 def echo_train_layout(

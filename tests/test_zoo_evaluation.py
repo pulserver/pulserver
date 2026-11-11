@@ -16,6 +16,8 @@ from _host import LIMITS, value_block
 from pulserver import _plugins
 from pulserver._zoo import ZOO_PAIRS
 from pulserver._zoo._evaluation import achieved, rf_layout
+from pulserver._zoo._evaluation import arguments as app_arguments
+from pulserver._zoo._fse import bounding_train
 from pulserver._zoo._saturation import explicit_bands
 from pulserver._zoo._slab import slab
 from pulserver._zoo._user import LINE_SPACING, SHARED
@@ -107,6 +109,11 @@ OPTIMIZED = ("fse3d+OPTIMIZED", "fse3d+DUAL_REGION")
 WITH_BLOCHSIM = pytest.mark.skipif(
     importlib.util.find_spec("blochsim") is None, reason="needs blochsim"
 )
+#: The shipped sequences whose refocusing angles a prescribed signal fixes,
+#: with the argument that holds the largest. Their evaluation designs as
+#: many pulses at that angle, which last as long and bound the RF, and asks
+#: the solve only for the effective TE.
+PRESCRIBED = {"fse_pd3d": "pd_maximum_angle_deg"}
 
 # The defaults, and prescriptions that change what the repetitions of a scan
 # are counted from: slices in packets of unequal size at a requested TR or in
@@ -475,6 +482,13 @@ def _main(plugin, protocol):
     return _chain(plugin.generate(SYSTEM, protocol))[-1]
 
 
+def _bounding(plugin, protocol, peak):
+    """The main sequence of the scan whose trains play every pulse of ``protocol``'s at its angle ``peak``."""
+    a = app_arguments(plugin, protocol)
+    constant = protocol.arguments | bounding_train(a, a[peak])
+    return _chain(plugin.app(SYSTEM, **constant))[-1]
+
+
 def _excitations(sequence):
     """The number of excitation pulses ``sequence`` plays."""
     instances = sequence.rf_instances()
@@ -635,6 +649,9 @@ def test_an_evaluation_states_as_its_layout_a_regular_tr_of_the_design(
         main = _chain(
             plugin.app(SYSTEM, **(protocol.arguments | {"flip_modulation": "constant"}))
         )[-1]
+    elif name in PRESCRIBED:
+        # The layout plays the train at its largest angle.
+        main = _bounding(plugin, protocol, PRESCRIBED[name])
     else:
         main = _main(plugin, protocol)
     # The first TR holds the largest packet of slices; a balanced steady state
@@ -647,7 +664,7 @@ def test_an_evaluation_states_as_its_layout_a_regular_tr_of_the_design(
     banded = UIParam.EXSAT_MASK in plugin.protocol
     expected = rf_layout(main, scaled, start=start, banded=banded)
     amplitude = expected.instances.amplitude.copy()
-    if name in OPTIMIZED:
+    if name in OPTIMIZED or name in PRESCRIBED:
         # The layout is the train of the largest RF power, its pulses past its
         # own length, at zero amplitude, left out.
         expected, amplitude = _strongest_train(main)
@@ -767,15 +784,16 @@ def test_a_zoo_evaluation_designs_two_trs_at_most_however_large_the_prescription
     monkeypatch.setattr(pp.Sequence, "__init__", recording_init)
     plugin.evaluate(SYSTEM, protocol)
 
-    # An evaluation designs through the app once, two TRs at most, or builds
-    # the modules of a repetition itself, two excitations at most.
-    assert len(designed) <= 1
-    if designed:
-        main = _chain(designed[0])[-1]
+    # An evaluation designs through the app once, two TRs at most, and once
+    # more for a train whose angles are solved for; or builds the modules of
+    # a repetition itself, two excitations at most.
+    assert len(designed) <= 2
+    for chain in designed:
+        main = _chain(chain)[-1]
         tr = main.definitions["TR"][0]
         rounding = SYSTEM.block_duration_raster * _excitations(main)
         assert main.duration()[0] <= 2 * tr + rounding
-    else:
+    if not designed:
         assert built
         assert max(map(_excitations, built)) <= 2
 
@@ -806,10 +824,14 @@ def test_each_zoo_layout_plays_the_rf_power_of_the_last_tr_of_the_design(zoo, na
 
     layout = plugin.evaluate(SYSTEM, protocol).rf_layout
 
-    assert _layout_power(layout) == pytest.approx(
-        _last_tr_power(_main(plugin, protocol), LAST_TR_BLOCKS.get(name)),
-        rel=POWER_RTOL,
-    )
+    designed = _last_tr_power(_main(plugin, protocol), LAST_TR_BLOCKS.get(name))
+    if name in PRESCRIBED:
+        # The train at its largest angle plays at least the power of the
+        # train the design solves for.
+        assert _layout_power(layout) >= designed
+        bound = _bounding(plugin, protocol, PRESCRIBED[name])
+        designed = _last_tr_power(bound, LAST_TR_BLOCKS.get(name))
+    assert _layout_power(layout) == pytest.approx(designed, rel=POWER_RTOL)
 
 
 @pytest.mark.parametrize("name", SHIPPED)
@@ -994,10 +1016,13 @@ def test_the_listed_definitions_and_the_validated_layout_play_the_rf_power_of_th
 
     assert set(layout.definition) <= {record.index for record in listed}
     plugin = zoo[name]
-    main = _main(plugin, _protocol(plugin, changes))
-    assert _wire_power(listed, layout) == pytest.approx(
-        _last_tr_power(main, LAST_TR_BLOCKS.get(name)), rel=POWER_RTOL
-    )
+    protocol = _protocol(plugin, changes)
+    designed = _last_tr_power(_main(plugin, protocol), LAST_TR_BLOCKS.get(name))
+    if name in PRESCRIBED:
+        assert _wire_power(listed, layout) >= designed
+        bound = _bounding(plugin, protocol, PRESCRIBED[name])
+        designed = _last_tr_power(bound, LAST_TR_BLOCKS.get(name))
+    assert _wire_power(listed, layout) == pytest.approx(designed, rel=POWER_RTOL)
 
 
 @pytest.mark.parametrize("name", ["fse3d+NAVIGATOR", "mprage3d+NAVIGATOR"])
@@ -1529,6 +1554,127 @@ def test_busse_effective_te_selects_an_echo_and_explicit_echo_takes_precedence()
         explicit.protocol.arguments["busse_effective_te"]
         < later.protocol.arguments["busse_effective_te"]
     )
+
+
+@pytest.mark.parametrize(
+    ("name", "options", "changes", "refused"),
+    [
+        (
+            "fse3d",
+            {"refocusing": "busse"},
+            {
+                "user14_value": 40.0,
+                "user15_value": 50.0,
+                "flip": 179.0,
+                "user16_value": 0,
+            },
+            "do not give a feasible refocusing train",
+        ),
+        ("fse3d", {"refocusing": "busse"}, {"user15_value": 20.0}, "minimum < centre"),
+        (
+            "fse_pd3d",
+            {},
+            {
+                "flip": 120.0,
+                "user14_value": 90.0,
+                "user15_value": 80.0,
+                "user22_value": 0.3,
+            },
+            "do not give a feasible signal envelope",
+        ),
+    ],
+)
+def test_a_prescription_no_train_realizes_is_refused_by_the_evaluation_as_by_the_design(
+    name, options, changes, refused
+):
+    """The evaluation bounds the train at its largest angle, and still asks the solve whether a train exists."""
+    plugin = load_plugin(_plugins.SEQUENCES / f"{name}.py", options)
+    request = {"nx": 64, "ny": 32, "nslices": 8, "etl": 20, "TR": 1800000} | changes
+
+    reply = plugin.validate(SYSTEM, request)
+
+    assert not reply.valid
+    assert refused in reply.info
+    with pytest.raises(ValueError, match=refused):
+        plugin.generate(SYSTEM, _protocol(plugin, request))
+
+
+@pytest.mark.parametrize(
+    ("name", "options"), [("fse3d", {"refocusing": "busse"}), ("fse_pd3d", {})]
+)
+def test_the_shortest_te_of_a_prescribed_signal_train_is_replied_as_a_time(
+    name, options
+):
+    """A console that asks for the Minimum preset shows the TE the reply resolves it to."""
+    plugin = load_plugin(_plugins.SEQUENCES / f"{name}.py", options)
+    request = {"nx": 64, "ny": 32, "nslices": 8, "etl": 20, "TR": 1800000}
+
+    reply = plugin.validate(SYSTEM, request | {"TE": TEPreset.MINIMUM})
+
+    assert reply.valid, reply.info
+    assert reply.values["TE"] > 0
+    main = _main(plugin, _protocol(plugin, reply.values))
+    assert reply.values["TE"] == pytest.approx(
+        1e6 * main.definitions["EffectiveEchoTime"][0], abs=101
+    )
+
+
+@WITH_BLOCHSIM
+@pytest.mark.parametrize("mode", ["busse", "busse_dual_region"])
+def test_a_busse_layout_plays_at_least_the_rf_power_of_every_train_of_the_design(mode):
+    plugin = load_plugin(_plugins.SEQUENCES / "fse3d.py", {"refocusing": mode})
+    request = {"nx": 64, "ny": 32, "nslices": 8, "etl": 20, "TR": 1800000}
+    if mode == "busse_dual_region":
+        request |= {"user12_value": 900.0, "user13_value": 28}
+    protocol = _protocol(plugin, request)
+    evaluation = plugin.evaluate(SYSTEM, protocol)
+    main = _main(plugin, protocol)
+    instances = main.rf_instances()
+    pulses = np.flatnonzero(main.libraries().blocks[:, 0])
+    starts = [
+        int(block)
+        for block, definition in zip(pulses, instances.definition, strict=True)
+        if instances.definitions[definition].use == "excitation"
+    ]
+    ends = np.cumsum(main.libraries().block_durations)
+    bound = _layout_power(evaluation.rf_layout)
+    for first, last in zip(starts, [*starts[1:], ends.size], strict=True):
+        duration = ends[last - 1] - (ends[first - 1] if first else 0.0)
+        assert bound >= main.calc_rf_power(block_range=(first + 1, last))[3] / duration
+
+
+def test_the_effective_te_of_a_train_is_solved_for_once_under_a_warm_server():
+    from pulserver._zoo._fse import effective_te
+    from pulserver.host import _memo
+
+    solved = []
+
+    def train(system, etl=8):
+        solved.append(etl)
+        if etl > 100:
+            raise ValueError("no train this long")
+        return SimpleNamespace(definitions={"EffectiveEchoTime": [1e-3 * etl]})
+
+    # A call answered in its own process keeps nothing.
+    assert effective_te(train, SYSTEM, {"etl": 8}) == pytest.approx(8e-3)
+    assert effective_te(train, SYSTEM, {"etl": 8}) == pytest.approx(8e-3)
+    assert solved == [8, 8]
+    _memo.start()
+    try:
+        del solved[:]
+        assert effective_te(train, SYSTEM, {"etl": 8}) == pytest.approx(8e-3)
+        assert effective_te(train, SYSTEM, {"etl": 8}) == pytest.approx(8e-3)
+        assert effective_te(train, SYSTEM, {"etl": 16}) == pytest.approx(16e-3)
+        for _ in range(2):
+            with pytest.raises(ValueError, match="no train this long"):
+                effective_te(train, SYSTEM, {"etl": 200})
+        assert solved == [8, 16, 200]
+        # Other limits are another train.
+        slower = design_system({**LIMITS, "max_slew": 100.0})
+        assert effective_te(train, slower, {"etl": 8}) == pytest.approx(8e-3)
+        assert solved == [8, 16, 200, 8]
+    finally:
+        _memo.stop()
 
 
 @WITH_BLOCHSIM

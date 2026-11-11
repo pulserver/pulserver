@@ -2,7 +2,11 @@
 
 A call returns the reply the interpreter parses: the text blocks of
 :mod:`pulserver.protocol` and one status line. Nothing outlives a call but
-the designs it adds to a :class:`~pulserver.host.DesignStore`.
+the designs it adds to a :class:`~pulserver.host.DesignStore` and, under a
+warm server, what the server keeps for the calls after it
+(:mod:`pulserver.host._memo`): the replies of ``list`` and ``validate``, the
+RF a plugin lists, the slew rate each request was lowered to and what a
+plugin keeps of its own, such as the effective TE of a solved echo train.
 """
 
 from __future__ import annotations
@@ -32,7 +36,6 @@ from .._plugins import PluginPath
 from ..design import (
     OptionError,
     OptionParam,
-    RfLayout,
     SequencePlugin,
     load_plugin,
 )
@@ -54,7 +57,7 @@ from ..protocol import (
     prescribed_offset,
     prescribed_rotation,
 )
-from . import _slew
+from . import _memo, _slew
 from ._blocks import import_averages, parse_import
 from ._limits import design_system, follows_poses, split_limits
 from ._push import push as push_design
@@ -141,26 +144,35 @@ def list_protocol(
     listing again. No block follows where the evaluation states no RF layout.
     Where it is invalid, a warning is logged and the listing is replied
     without the block. ``limits`` is not read unless the definitions are asked for.
+    Under a warm server the reply is kept, and replied again to the same call
+    while the plugin file and the files the limits name are unchanged.
 
     Raises
     ------
     CallError
         If ``rf_definitions`` is asked without ``limits``.
     """
-    variant = _variant(plugins, plugin, block)
-    reply = "PROTOCOL\n" + format_listing(_listing(variant))
-    if not rf_definitions:
-        return reply
-    if limits is None:
+    if rf_definitions and limits is None:
         raise CallError(
             "the RF definitions are evaluated under scanner limits, and the call "
             "carries none"
         )
-    layout = _default_rf_layout(
-        variant, _read(limits), f"the RF definitions of {plugin} are not listed"
-    )
-    if layout is not None:
-        reply += format_rf_definitions(layout.instances)
+    limits = _read(limits) if rf_definitions else None
+    key = _call_key("list", plugins, plugin, limits, block, rf_definitions)
+    found, kept = _memo.read(_REPLIES, key)
+    if found:
+        if kept["warning"]:
+            _log.warning("%s", kept["warning"])
+        return kept["reply"]
+    variant = _variant(plugins, plugin, block)
+    reply = "PROTOCOL\n" + format_listing(_listing(variant))
+    warning = None
+    if rf_definitions:
+        listed = _listed_rf(variant, limits)
+        warning = _unlisted(listed, f"the RF definitions of {plugin} are not listed")
+        if listed.block is not None:
+            reply += listed.block
+    _memo.write(_REPLIES, key, {"reply": reply, "warning": warning})
     return reply
 
 
@@ -188,26 +200,34 @@ def validate(
     the request is evaluated again at a lower slew rate while that sequence
     exceeds the nerve-stimulation or slew-rate limit, as :func:`generate`
     designs it, and the slew rate it ends at is where :func:`generate` starts.
+
+    Under a warm server the reply is kept, and replied again to the same call
+    while the plugin file and the files the limits name are unchanged, the
+    request is still remembered at the slew rate the reply was evaluated
+    under, which a :func:`generate` that lowers it further changes, and, for
+    a plugin whose hooks take ``exam``, the files of the exam's cache are.
     """
+    limits = _read(limits)
+    key = _call_key("validate", plugins, plugin, limits, block, rf_layout)
+    kept = _kept_validation(key, exam)
+    if kept is not None:
+        return kept
     variant = _variant(plugins, plugin, block)
     listing = _listing(variant)
     request = _request(block, listing)
-    limits = _read(limits)
     validation = _validated(variant, limits, request, exam, lower=True)
     listed: list[float] = []
     if rf_layout and validation.valid and validation.rf_layout is not None:
-        default = _default_rf_layout(
-            variant,
-            limits,
-            f"the RF layout of {plugin} is not stated over the listed peaks",
+        default = _listed_rf(variant, limits)
+        _unlisted(
+            default, f"the RF layout of {plugin} is not stated over the listed peaks"
         )
-        if default is not None:
-            listed = [
-                definition.peak_hz for definition in default.instances.definitions
-            ]
-    return format_validation(
+        listed = default.peaks
+    reply = format_validation(
         validation, listing, rf_layout=rf_layout, listed_peak_hz=listed
     )
+    _keep_validation(key, reply, variant, limits, request, exam)
+    return reply
 
 
 def generate(
@@ -244,8 +264,12 @@ def generate(
     A design whose only problems a lower slew rate eases -- nerve stimulation,
     slew rate on a physical axis or, for a scan following poses, summed over
     the axes -- is made again at a lower slew rate, at most
-    ``_slew.PASSES`` times, starting where :func:`validate` left the request;
-    its other problems are checked again on each new design. Each file then
+    ``_slew.PASSES`` times, starting where :func:`validate` left the request,
+    in this process or, under a warm server, in the call that validated it; a
+    request no validation searched is searched here first as :func:`validate`
+    searches it, on the representative sequence of its evaluation, so the
+    scan is designed once wherever that sequence bounds it. Its other
+    problems are checked again on each new design. Each file then
     sets ``DesignMaxSlew``, the slew rate per logical axis it was designed
     under in T/m/s, and the manifest records it and the passes. A strict
     plugin (:attr:`~pulserver.design.SequencePlugin.strict_limits`), whose
@@ -267,7 +291,7 @@ def generate(
         exam = None
     strict = _declares_strict(scanner)
     remembered = _slew.key(variant, limits, request)
-    ceiling = None if strict else _LOWERED.get(remembered)
+    ceiling = None if strict else _searched(variant, limits, request, exam)
     tried: list[tuple[float, dict[str, float]]] = []
     stepped = 0
     while True:
@@ -310,11 +334,38 @@ def generate(
             continue
         if not strict:
             _LOWERED.put(remembered, ceiling)
+            if ceiling is not None and (tried or stepped):
+                # The scan asked for less than its evaluation did: the
+                # plugin's next request is tried there first.
+                _LOWERED.put(_slew.key(variant, limits, {}), ceiling)
         return reply
 
 
 #: The slew rate each request was last lowered to.
 _LOWERED = _slew.Remembered()
+
+
+def _searched(
+    variant: _Variant,
+    limits: Mapping[str, Any],
+    request: Mapping[ProtocolKey, Any],
+    exam: str | None,
+) -> float | None:
+    """Return the slew rate the design of a request starts at: where its validation left it, searched here where none did.
+
+    ``None`` is the design limits. A search that fails leaves the request
+    there, and the design then meets what it failed on.
+    """
+    remembered = _slew.key(variant, limits, request)
+    found, ceiling = _LOWERED.entry(remembered)
+    if found:
+        return ceiling
+    try:
+        _validated(variant, limits, request, exam, lower=True)
+    except Exception as error:
+        _log.info("the slew rate is not searched before the design: %s", error)
+        return None
+    return _LOWERED.get(remembered)
 
 
 class _Infeasible(CallError):
@@ -625,6 +676,10 @@ def import_chain(
     return f"IMPORTED {_pushed(store, design, push)}\n"
 
 
+#: The limits that name a file.
+_LIMIT_FILES = ("vop_file", "ir_vendor_file", "acoustic_file")
+
+
 def identified_limits(limits: Mapping[str, Any]) -> dict[str, Any]:
     """Return limits with the digest of each file they name: the VOP, vendor and acoustic files.
 
@@ -637,7 +692,7 @@ def identified_limits(limits: Mapping[str, Any]) -> dict[str, Any]:
         If a named file cannot be read.
     """
     identified = dict(limits)
-    for key in ("vop_file", "ir_vendor_file", "acoustic_file"):
+    for key in _LIMIT_FILES:
         if key not in limits:
             continue
         try:
@@ -781,8 +836,11 @@ def _validated(
     representative sequence is evaluated again at a lower slew rate while
     that sequence, rotated to the prescription, exceeds the nerve-stimulation
     or slew-rate limit, starting from the slew rate the request was last
-    lowered to; the slew rate it ends at is remembered for :func:`generate`.
-    A request still exceeding them after ``_slew.PASSES`` passes is invalid.
+    lowered to; the slew rate a valid request ends at is remembered for
+    :func:`generate`, and for the plugin's next request under these limits,
+    which is evaluated there first. A request searched before is evaluated at
+    the slew rate it ended at. A request still exceeding them after
+    ``_slew.PASSES`` passes is invalid.
     """
     scanner = _plugin(variant)
     any_rotation = _any_rotation(limits, scanner)
@@ -792,8 +850,8 @@ def _validated(
     remembered = _slew.key(variant, limits, request)
     family = _slew.key(variant, limits, {})
     system, _, checked = split_limits(limits)
-    ceiling = _LOWERED.get(remembered)
-    if ceiling is None:
+    found, ceiling = _LOWERED.entry(remembered)
+    if not found:
         guessed = _guessed(
             scanner,
             limits,
@@ -848,8 +906,9 @@ def _validated(
             _readings_text(readings),
             ceiling / design.gamma,
         )
-    _LOWERED.put(remembered, ceiling)
-    _LOWERED.put(family, ceiling)
+    if validation.valid:
+        _LOWERED.put(remembered, ceiling)
+        _LOWERED.put(family, ceiling)
     return validation
 
 
@@ -944,26 +1003,140 @@ def _exam_digest(exam: str) -> str:
     return digest.hexdigest()
 
 
-def _default_rf_layout(
-    variant: _Variant, limits: Mapping[str, Any], unavailable: str
-) -> RfLayout | None:
-    """Return the RF layout of the plugin's evaluation at its default protocol, the RF the listing states.
+class _ListedRf(NamedTuple):
+    """The RF the listing of a plugin states: the ``[RfDefinitions]`` block, ``None`` where its default protocol states no RF layout, the peak of each definition in Hz, and why its default protocol is invalid, ``None`` where it is valid."""
+
+    block: str | None
+    peaks: list[float]
+    problem: str | None
+
+
+def _listed_rf(variant: _Variant, limits: Mapping[str, Any]) -> _ListedRf:
+    """Return the RF of the plugin's evaluation at its default protocol, the RF the listing states.
 
     Every explicit saturation band the plugin offers is placed: which bands
     play is the console's choice, made without listing again, so the pulse
-    they play must be listed whichever it places. ``None`` where the
-    evaluation states none. Where it is invalid, a warning that begins with
-    ``unavailable`` is logged and the result is ``None``. The evaluation is
-    made once per variant, as last modified, and limits.
+    they play must be listed whichever it places. The evaluation is made
+    once per variant, as last modified, and limits: in this process and,
+    under a warm server, by the first call that asks.
     """
+    key = json.dumps(
+        [variant.path, repr(variant.options), _mtimes(variant), _limits_key(limits)]
+    )
+    found, kept = _memo.read(_LISTED_RF, key)
+    if found:
+        return _ListedRf(*kept)
     evaluated = _default_validation(
         variant, _mtimes(variant), tuple(sorted(limits.items()))
     )
-    if not evaluated.valid:
-        _log.warning(
-            "%s: its default protocol is invalid: %s", unavailable, evaluated.info
-        )
-    return evaluated.rf_layout
+    layout = evaluated.rf_layout
+    listed = _ListedRf(
+        None if layout is None else format_rf_definitions(layout.instances),
+        []
+        if layout is None
+        else [float(definition.peak_hz) for definition in layout.instances.definitions],
+        None if evaluated.valid else evaluated.info,
+    )
+    _memo.write(_LISTED_RF, key, list(listed))
+    return listed
+
+
+def _unlisted(listed: _ListedRf, unavailable: str) -> str | None:
+    """Log and return a warning that begins with ``unavailable`` where the default protocol of a plugin is invalid; ``None`` where it is valid."""
+    if listed.problem is None:
+        return None
+    warning = f"{unavailable}: its default protocol is invalid: {listed.problem}"
+    _log.warning("%s", warning)
+    return warning
+
+
+# The kinds of entries a warm server keeps (:mod:`pulserver.host._memo`).
+_REPLIES = "reply"
+_LISTED_RF = "listed-rf"
+
+
+def _limits_key(limits: Mapping[str, Any]) -> list[Any]:
+    """Return limits as a kept entry is keyed on them: their values, and when each file they name was last modified."""
+    named = []
+    for key in _LIMIT_FILES:
+        if key in limits:
+            try:
+                stat = Path(str(limits[key])).stat()
+            except OSError:
+                named.append([key, None, None])
+            else:
+                named.append([key, stat.st_mtime_ns, stat.st_size])
+    return [sorted((str(k), str(v)) for k, v in limits.items()), named]
+
+
+def _call_key(
+    name: str,
+    plugins: PluginPath,
+    plugin: str,
+    limits: Mapping[str, Any] | None,
+    block: str,
+    flag: bool,
+) -> str:
+    """Return the key the reply of a ``list`` or ``validate`` call is kept under: the plugin file as last modified, the limits, the block and whether the RF is asked for.
+
+    The block holds the options the plugin is loaded with, so the key covers
+    them; the packages are those the server imported before it kept anything.
+    """
+    if not _memo.kept():
+        return ""
+    path = plugin_path(plugins, plugin)
+    return json.dumps(
+        [
+            name,
+            str(path),
+            path.stat().st_mtime_ns,
+            None if limits is None else _limits_key(limits),
+            block,
+            bool(flag),
+        ]
+    )
+
+
+def _kept_validation(key: str, exam: str | None) -> str | None:
+    """Return the reply kept for a ``validate`` call, ``None`` where none is or it no longer holds.
+
+    It holds while the request is remembered at the slew rate the reply was
+    evaluated under and, for a plugin that reads the exam's cache, the files
+    of the cache are unchanged.
+    """
+    found, kept = _memo.read(_REPLIES, key)
+    if not found:
+        return None
+    if list(_LOWERED.entry(kept["request"])) != kept["slew"]:
+        return None
+    if kept["exam"] is not False and kept["exam"] != _exam_state(exam):
+        return None
+    return kept["reply"]
+
+
+def _keep_validation(
+    key: str,
+    reply: str,
+    variant: _Variant,
+    limits: Mapping[str, Any],
+    request: Mapping[ProtocolKey, Any],
+    exam: str | None,
+) -> None:
+    """Keep the reply of a ``validate`` call with what it holds under; see :func:`_kept_validation`."""
+    if not _memo.kept():
+        return
+    remembered = _slew.key(variant, limits, request)
+    kept = {
+        "reply": reply,
+        "request": remembered,
+        "slew": list(_LOWERED.entry(remembered)),
+        "exam": _exam_state(exam) if _plugin(variant).reads_exam else False,
+    }
+    _memo.write(_REPLIES, key, kept)
+
+
+def _exam_state(exam: str | None) -> str | None:
+    return None if exam is None else _exam_digest(exam)
 
 
 @lru_cache(maxsize=32)
