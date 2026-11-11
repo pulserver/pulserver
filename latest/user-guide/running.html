@@ -916,7 +916,11 @@ is evaluated once and not on every call;</p></li>
 starts where its <code class="docutils literal notranslate"><span class="pre">validate</span></code> ended;</p></li>
 <li><p>the effective TE of each Busse or PD echo train <code class="docutils literal notranslate"><span class="pre">fse3d</span></code> and <code class="docutils literal notranslate"><span class="pre">fse_pd3d</span></code>
 evaluated, or why no train realizes it, so the inverse solve that finds it
-runs once per train and limits.</p></li>
+runs once per train and limits;</p></li>
+<li><p>the SLR pulses pypulseqpp designs, which it caches only in the process
+that designed them: a selective spin echo, a saturation band or a fat
+saturation is designed by the first call that plays it and read by the
+calls after it.</p></li>
 </ul>
 <p>Nothing kept outlives the server, which is restarted to take up a changed
 package in any case. A call answered in its own process keeps nothing.</p>
