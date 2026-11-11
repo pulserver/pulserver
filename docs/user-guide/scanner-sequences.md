@@ -698,7 +698,17 @@ repetition from the modules their function is built from.
   a volume. The flip angle is the control of every excitation of the plugins
   with a `flip` entry, which an MPRAGE's inversion is not. The spin-echo
   plugins, `fse3d` among them, have none, and the amplitude of their
-  excitation and refocusing pulses is that of the design.
+  excitation and refocusing pulses is that of the design. The gradient-echo
+  calibration of `epi2d` and `epi3d` repeats at its own shortest TR, which the
+  console's TR does not set, and a scanner costs each sequence of the chain
+  over its own repetition. Where the calibration plays more RF power than a
+  TR, which a slice a long TR apart or a few long 3D shots allow, the layout is
+  its pulses, as many as it plays in a TR, over the TR, with no control: the
+  console then refuses a protocol whose calibration exceeds the RF limits,
+  whatever its TR. The calibration plays the excitation's waveform at
+  `CALIBRATION_FLIP_DEG` of the sequence function, 10 degrees, and the fat
+  saturation of `epi2d` is numbered after the excitation, so the excitation
+  keeps the number the listing gives it with the fat saturation on or off.
 
 ## Logging
 

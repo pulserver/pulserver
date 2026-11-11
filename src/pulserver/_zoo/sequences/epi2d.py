@@ -11,6 +11,7 @@ from pulserver._zoo._evaluation import (
     achieved,
     arguments,
     bandwidth_note,
+    densest,
     dummies,
     first_readout,
     packets,
@@ -22,6 +23,7 @@ from pulserver.design import (
     Evaluation,
     FloatParam,
     IntParam,
+    RfLayout,
     SequencePlugin,
     StatedParam,
     TimeParam,
@@ -93,7 +95,9 @@ class Epi2D(SequencePlugin):
     def evaluate(self, system, protocol):
         # A cycle plays one shot of every slice group of a packet, and a TR
         # the shots of a volume. The design of one group at the shortest TR
-        # plays one cycle of that group per shot, after its calibration.
+        # plays one cycle of that group per shot, after its calibration. The
+        # calibration repeats at its own TR, which the console's does not set:
+        # where it plays more RF power than a TR, the layout states its power.
         a = arguments(self, protocol)
         multiband = a["multiband"]
         if a["n_slices"] % multiband:
@@ -128,13 +132,20 @@ class Epi2D(SequencePlugin):
         dummy_cycles = n_dummy * (n_shots if n_frames > 1 else 1)
         played = 2 * dummy_cycles + (1 + n_frames) * n_shots
         tr = n_shots * max(cycles)
+        # The fat saturation is numbered after the excitation, so the
+        # excitation keeps the number the listing, made with it on, gives it.
+        layout = rf_layout(
+            volume, scaled=True, copies=max(sizes), period=tr, banded=True
+        )
         return Evaluation(
             protocol.replace(achieved(self, volume) | {UIParam.TR: tr}),
             played * sum(cycles) + groups * sequences.duration(calibration),
             info=bandwidth_note(
                 system, a["readout_bandwidth_hz"], *first_readout(volume)
             ),
-            rf_layout=rf_layout(volume, scaled=True, copies=max(sizes), period=tr),
+            rf_layout=densest(
+                layout, *(RfLayout.of(prescan, None) for prescan in calibration)
+            ),
             sequence=volume,
         )
 

@@ -208,10 +208,10 @@ def rf_layout(
     ``main`` from ``start``, ``copies`` times over, in play order, and its
     period is that definition unless ``period`` is given. The definitions are
     those the TR plays, numbered by first play in it; when ``banded``, those
-    of the saturation bands after the others, so a band placed or removed
-    leaves the numbers of the others as the listing, made with every band
-    placed, states them. The flip angle scales each excitation when
-    ``scaled``, and no instance has a control otherwise.
+    of the saturation pulses after the others, so a saturation band or a fat
+    saturation placed or removed leaves the numbers of the others as the
+    listing, made with every one placed, states them. The flip angle scales
+    each excitation when ``scaled``, and no instance has a control otherwise.
     """
     tr = main.definitions["TR"][0]
     tables = main.libraries()
@@ -247,6 +247,91 @@ def rf_layout(
         for number in instances.definition
     )
     return RfLayout(instances, control, tr if period is None else period)
+
+
+def rf_power(layout: RfLayout) -> float:
+    """Return the mean RF power of a layout over its period, in Hz².
+
+    Each instance plays its peak, ``amplitude * peak_hz``, squared, times the
+    integral of the squared magnitude of its definition's unit-peak waveform
+    over its channels, by the trapezoidal rule over the sample times.
+    """
+    instances = layout.instances
+    energy = np.array(
+        [
+            definition.peak_hz**2
+            * sum(
+                np.trapezoid(np.abs(channel) ** 2, definition.time)
+                for channel in definition.waveform
+            )
+            for definition in instances.definitions
+        ]
+    )
+    played = instances.amplitude**2 * energy[instances.definition]
+    return float(np.sum(played) / layout.period)
+
+
+def _same_pulse(a: pp.RfDefinition, b: pp.RfDefinition) -> bool:
+    """Whether two definitions play one pulse: one use, sample times and unit-peak waveform."""
+    return (
+        a.use == b.use
+        and a.time.shape == b.time.shape
+        and a.waveform.shape == b.waveform.shape
+        and np.allclose(a.time, b.time, rtol=0.0, atol=1e-9)
+        and np.allclose(a.waveform, b.waveform, rtol=0.0, atol=1e-6)
+    )
+
+
+def densest(layout: RfLayout, *prescans: RfLayout) -> RfLayout:
+    """Return ``layout``, or the RF of a prescan of the chain where it plays more RF power, over the layout's period.
+
+    A scanner costs each sequence of a chain over its own repetition, and a
+    layout is one TR of the main sequence. A prescan that does not repeat at
+    the TR, such as a calibration at its own shortest TR, can play more RF
+    power than the TR does, and a protocol whose TR meets the limits is then
+    refused before the scan. Each of ``prescans`` states the prescan's
+    instances over its duration (:meth:`RfLayout.of`). The one of the most RF
+    power (:func:`rf_power`), where it is more than the layout's, is returned
+    as its instances in play order, repeated, as many as it plays in
+    ``layout.period``, rounded up, over that period: the period stays the TR
+    the console sets, and the power is at least the prescan's at every TR, so
+    a scanner that lengthens the TR to meet its limits cannot meet them for a
+    prescan that exceeds them.
+
+    The prescan's definitions take the numbers of the layout's, which the
+    listing names: the definition that plays the same pulse, else the first
+    of its use, and the amplitudes are over that definition's peak, so the
+    peak each instance plays is its own. A definition of a use the layout
+    plays no pulse of is numbered after the layout's. The instances follow no
+    control: a prescan's flip angle is its own.
+    """
+    strongest = max(prescans, key=rf_power, default=None)
+    if strongest is None or rf_power(strongest) <= rf_power(layout):
+        return layout
+    own = layout.instances.definitions
+    definitions = list(own)
+    numbers = []
+    for pulse in strongest.instances.definitions:
+        number = next((i for i, d in enumerate(own) if _same_pulse(d, pulse)), None)
+        if number is None:
+            number = next((i for i, d in enumerate(own) if d.use == pulse.use), None)
+        if number is None:
+            number = len(definitions)
+            definitions.append(pulse)
+        numbers.append(number)
+    peak = np.array([d.peak_hz for d in strongest.instances.definitions])
+    over = np.array([definitions[n].peak_hz for n in numbers])
+    scale = np.divide(peak, over, out=np.ones_like(peak), where=over > 0)
+    played = len(strongest.instances.definition)
+    count = math.ceil(layout.period * played / strongest.period - 1e-9)
+    picks = np.arange(count) % played
+    which = strongest.instances.definition[picks]
+    instances = pp.RfInstances(
+        tuple(definitions),
+        np.asarray(numbers)[which],
+        strongest.instances.amplitude[picks] * scale[which],
+    )
+    return RfLayout(instances, (None,) * count, layout.period)
 
 
 def packets(

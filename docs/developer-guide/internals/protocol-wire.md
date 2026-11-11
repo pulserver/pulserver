@@ -46,10 +46,15 @@ the definitions of the evaluation at the default protocol, and a layout names
 the pulses of the listing only where the protocol does not change which pulses
 are played first: the length of a train, a flip angle schedule and the matrix do
 not, and a protocol that adds a preparation pulse does. Explicit saturation
-bands are the exception a console needs, since it places them without listing
-again: the listing's evaluation places every band the plugin offers, and the
-shipped plugins number the band pulse after the others, so a band placed or
-removed changes no other number.
+bands and a fat saturation are the exception a console needs, since it places
+them without listing again: the listing's evaluation places every band the
+plugin offers and its fat saturation, and the shipped plugins number the
+saturation pulses after the others, so one placed or removed changes no other
+number. A prescan of the chain that repeats at its own TR, such as the
+calibration of the EPI plugins, is costed by a scanner over its own
+repetition; where it plays more RF power than a TR, the layout is its pulses
+over the TR, each numbered as the pulse of the listing it plays, or else the
+first of its use.
 
 The layout is an estimate for the prescription. An evaluation that states none
 states no estimate and is valid, and what the scanner checks before the scan is

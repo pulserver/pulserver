@@ -15,7 +15,7 @@ from _host import LIMITS, value_block
 
 from pulserver import _plugins
 from pulserver._zoo import ZOO_PAIRS
-from pulserver._zoo._evaluation import achieved, rf_layout
+from pulserver._zoo._evaluation import achieved, densest, rf_layout
 from pulserver._zoo._evaluation import arguments as app_arguments
 from pulserver._zoo._fse import bounding_train
 from pulserver._zoo._saturation import explicit_bands
@@ -483,6 +483,16 @@ def _main(plugin, protocol):
     return _chain(plugin.generate(SYSTEM, protocol))[-1]
 
 
+def _prescans(plugin, protocol, name="calibration"):
+    """The prescans named ``<scan>_<name>`` of the chain ``plugin`` designs for ``protocol``."""
+    chain = _chain(plugin.generate(SYSTEM, protocol))
+    return [
+        sequence
+        for sequence in chain[:-1]
+        if str(sequence.definitions.get("Name", "")).endswith(f"_{name}")
+    ]
+
+
 def _bounding(plugin, protocol, peak):
     """The main sequence of the scan whose trains play every pulse of ``protocol``'s at its angle ``peak``."""
     a = app_arguments(plugin, protocol)
@@ -662,8 +672,13 @@ def test_an_evaluation_states_as_its_layout_a_regular_tr_of_the_design(
     # An optimized refocusing train is designed around its flip angle rather
     # than scaled by it.
     scaled = UIParam.FLIP in plugin.protocol and not name.startswith("fse")
-    banded = UIParam.EXSAT_MASK in plugin.protocol
+    banded = UIParam.EXSAT_MASK in plugin.protocol or UIParam.FAT_SAT in plugin.protocol
     expected = rf_layout(main, scaled, start=start, banded=banded)
+    # A calibration that plays more RF power than a TR is stated in its place.
+    expected = densest(
+        expected,
+        *(RfLayout.of(prescan, None) for prescan in _prescans(plugin, protocol)),
+    )
     amplitude = expected.instances.amplitude.copy()
     if name in OPTIMIZED or name in PRESCRIBED:
         # The layout is the train of the largest RF power, its pulses past its
@@ -1174,6 +1189,68 @@ def test_the_3d_epi_excites_water_alone(zoo):
     main = _main(plugin, _protocol(plugin, {"nx": 64, "ny": 64, "nslices": 16}))
 
     assert main.definitions["Excitation"] == "spsp"
+
+
+#: EPI protocols whose gradient-echo calibration plays more RF power than a
+#: TR (a slice a long TR apart, a 3D TR of a few long shots), by name.
+CALIBRATED = [
+    pytest.param("epi2d", {"Ry": 3, "nslices": 1, "TR": 3000000}, id="epi2d"),
+    pytest.param(
+        "epi2d",
+        {"multiband": 2, "nslices": 2, "TR": 3000000, "FatSat": False},
+        id="epi2d-multiband",
+    ),
+    pytest.param(
+        "epi3d", {"Ry": 2, "Rz": 2, "nx": 64, "ny": 64, "nslices": 16}, id="epi3d"
+    ),
+]
+
+
+def _wire_block(changes):
+    """The value block of the wire values ``changes``, a bool as the wire writes it."""
+    return value_block(
+        {k: str(v).lower() if isinstance(v, bool) else v for k, v in changes.items()}
+    )
+
+
+@pytest.mark.parametrize(("name", "changes"), CALIBRATED)
+def test_an_epi_layout_plays_the_rf_power_of_its_calibration(zoo, name, changes):
+    listed = parse_rf_definitions(_reply("list", name, rf_definitions=True))
+    validated = _reply("validate", name, block=_wire_block(changes), rf_layout=True)
+    assert validated.startswith("VALID"), validated
+    layout = parse_rf_layout(validated)
+    plugin = zoo[name]
+    protocol = _protocol(plugin, changes)
+    (calibration,) = _prescans(plugin, protocol)
+    rate = len(calibration.rf_instances().definition) / calibration.duration()[0]
+    own = calibration.calc_rf_power()[3] / calibration.duration()[0]
+
+    # The calibration's pulses over the period, rounded up to a whole pulse.
+    count = len(layout.definition)
+    assert own > _last_tr_power(_main(plugin, protocol))
+    assert count == np.ceil(layout.period * rate)
+    assert _wire_power(listed, layout) == pytest.approx(
+        own * count / (layout.period * rate), rel=POWER_RTOL
+    )
+    assert set(layout.control) == {None}
+    assert {listed[number].use for number in layout.definition} == {"excitation"}
+
+
+@pytest.mark.parametrize("fat_saturation", [True, False])
+def test_the_2d_epi_states_its_excitation_by_the_number_the_listing_gives_it(
+    fat_saturation,
+):
+    listed = parse_rf_definitions(_reply("list", "epi2d", rf_definitions=True))
+    validated = _reply(
+        "validate",
+        "epi2d",
+        block=_wire_block({"FatSat": fat_saturation, "nx": 64, "ny": 64}),
+        rf_layout=True,
+    )
+    layout = parse_rf_layout(validated)
+
+    uses = [listed[number].use for number in layout.definition]
+    assert uses == ["saturation", "excitation"] if fat_saturation else ["excitation"]
 
 
 def test_the_2d_epi_saturates_fat_and_plays_no_band(zoo):

@@ -6,6 +6,7 @@ import numpy as np
 import pypulseqpp as pp
 from pypulseqpp import sequences
 from pypulseqpp.sequences.sequence.epi3D_sequence import (
+    CALIBRATION_FLIP_DEG,
     FAT_SHIFT_PPM,
     HARD_PULSE_DURATION,
     MAX_GRAD,
@@ -20,7 +21,13 @@ from pypulseqpp.sequences.sequence.epi3D_sequence import (
     train_lines,
 )
 
-from pulserver._zoo._evaluation import arguments, bandwidth_note, dummies, rf_layout
+from pulserver._zoo._evaluation import (
+    arguments,
+    bandwidth_note,
+    densest,
+    dummies,
+    rf_layout,
+)
 from pulserver._zoo._slab import slab
 from pulserver._zoo._user import user_entries
 from pulserver.design import (
@@ -28,6 +35,7 @@ from pulserver.design import (
     Evaluation,
     FloatParam,
     IntParam,
+    RfLayout,
     SequencePlugin,
     StatedParam,
     TimeParam,
@@ -168,8 +176,16 @@ class Epi3D(SequencePlugin):
             n_dummy = -(-excitations // volume) if a["n_frames"] > 1 else excitations
         dummy_shots = n_dummy * (volume if a["n_frames"] > 1 else 1)
         duration = (2 * dummy_shots + (1 + a["n_frames"]) * volume) * shot
+        excitation = pp.Sequence(system)
+        excitation.add_block(exc.rf, *gz)
+        excitation.set_definition(key="TR", value=tr)
+        prescans = []
         # An undersampled scan is preceded by a gradient echo at every view
-        # of the central rectangle of the phase and partition encodes.
+        # of the central rectangle of the phase and partition encodes. Its
+        # pulse is the excitation's waveform at CALIBRATION_FLIP_DEG, so it
+        # times as the excitation does, and it repeats at the calibration's
+        # own TR, which the console's does not set: where it plays more RF
+        # power than a TR, the layout states its power.
         if ry > 1 or rz > 1 or a["partial_fourier_y"] < 1 or a["partial_fourier_z"] < 1:
             views = _centre(n_y, a["n_acs_y"]) * _centre(n_z, a["n_acs_z"])
             if views:
@@ -185,14 +201,24 @@ class Epi3D(SequencePlugin):
                     labels=("LIN", "PAR"),
                 )
                 duration += views * gre.duration
+                pulse = RfLayout.of(excitation, None, period=gre.duration)
+                weak = CALIBRATION_FLIP_DEG / a["flip_angle_deg"]
+                prescans.append(
+                    RfLayout(
+                        pp.RfInstances(
+                            pulse.instances.definitions,
+                            pulse.instances.definition,
+                            pulse.instances.amplitude * weak,
+                        ),
+                        pulse.control,
+                        pulse.period,
+                    )
+                )
         values = {
             UIParam.TE: epi.echo_time,
             UIParam.TR: tr,
             UIParam.BANDWIDTH: 1.0 / epi.adc.dwell,
         }
-        excitation = pp.Sequence(system)
-        excitation.add_block(exc.rf, *gz)
-        excitation.set_definition(key="TR", value=tr)
         return Evaluation(
             protocol.replace(values),
             duration,
@@ -202,7 +228,9 @@ class Epi3D(SequencePlugin):
                 int(epi.adc.num_samples),
                 float(epi.adc.dwell),
             ),
-            rf_layout=rf_layout(excitation, scaled=True, copies=volume),
+            rf_layout=densest(
+                rf_layout(excitation, scaled=True, copies=volume), *prescans
+            ),
         )
 
 

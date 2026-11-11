@@ -44,7 +44,7 @@ writes such a plugin.
   Code: {class}`~pulserver.design.SequencePlugin`. Tests: *every plugin offers its averages unless it declares them*; *the averages repeat the main sequence and not its prescans*; *the scan time counts every average* (`test_sequence_plugin.py`).
 - **Replies, when asked, with the RF layout of one TR.**
 
-  Code: {class}`~pulserver.design.RfLayout`. Tests: *a gre layout is one excitation and lists one definition whatever the matrix*; *a validated amplitude times the listed peak is the peak the instance plays*; *the rf layout is sent only when asked* (`test_rf_layout.py`).
+  Code: {class}`~pulserver.design.RfLayout`. Tests: *a gre layout is one excitation and lists one definition whatever the matrix*; *a validated amplitude times the listed peak is the peak the instance plays*; *the rf layout is sent only when asked* (`test_rf_layout.py`); *an epi layout plays the rf power of its calibration*; *the 2d epi states its excitation by the number the listing gives it* (`test_zoo_evaluation.py`).
 - **Ships evaluations that design a few TRs, however large the prescription.**
 
   Code: the shipped plugins, `src/pulserver/_zoo/sequences/`. Tests: *a zoo evaluation designs a few trs however large the prescription*; *an evaluation states the values and the scan time of the design* (`test_zoo_evaluation.py`).
