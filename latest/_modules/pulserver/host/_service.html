@@ -515,10 +515,26 @@
 
 
 <span class="k">class</span><span class="w"> </span><span class="nc">_Variant</span><span class="p">(</span><span class="n">NamedTuple</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">"""A plugin file and the options it is loaded with, by name."""</span>
+<span class="w">    </span><span class="sd">"""A plugin file, the options it is loaded with, by name, and a digest of what the file holds (:func:`_content`).</span>
+
+<span class="sd">    The digest makes a variant, and everything kept under it, the plugin the</span>
+<span class="sd">    file holds when the call reads it: another plugin staged at the same</span>
+<span class="sd">    path, or a link moved to another file, is another variant whatever</span>
+<span class="sd">    modification time the file shows.</span>
+<span class="sd">    """</span>
 
     <span class="n">path</span><span class="p">:</span> <span class="nb">str</span>
     <span class="n">options</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="p">()</span>
+    <span class="n">content</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">""</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_content</span><span class="p">(</span><span class="n">path</span><span class="p">:</span> <span class="n">Path</span> <span class="o">|</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return a digest of what the plugin file at ``path`` holds, a link followed.</span>
+
+<span class="sd">    Its modification time does not tell plugins apart: an installer gives</span>
+<span class="sd">    every file it extracts the same one, and a copy can keep it.</span>
+<span class="sd">    """</span>
+    <span class="k">return</span> <span class="n">hashlib</span><span class="o">.</span><span class="n">sha256</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="n">path</span><span class="p">)</span><span class="o">.</span><span class="n">read_bytes</span><span class="p">())</span><span class="o">.</span><span class="n">hexdigest</span><span class="p">()</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_variant</span><span class="p">(</span><span class="n">plugins</span><span class="p">:</span> <span class="n">PluginPath</span><span class="p">,</span> <span class="n">plugin</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">block</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">""</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">_Variant</span><span class="p">:</span>
@@ -533,9 +549,10 @@
 <span class="sd">        If an option entry does not hold the index of one of its choices.</span>
 <span class="sd">    """</span>
     <span class="n">path</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">plugin_path</span><span class="p">(</span><span class="n">plugins</span><span class="p">,</span> <span class="n">plugin</span><span class="p">))</span>
+    <span class="n">content</span> <span class="o">=</span> <span class="n">_content</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="n">block</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">_Variant</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
-    <span class="n">default</span> <span class="o">=</span> <span class="n">_plugin</span><span class="p">(</span><span class="n">_Variant</span><span class="p">(</span><span class="n">path</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">_Variant</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="p">(),</span> <span class="n">content</span><span class="p">)</span>
+    <span class="n">default</span> <span class="o">=</span> <span class="n">_plugin</span><span class="p">(</span><span class="n">_Variant</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="p">(),</span> <span class="n">content</span><span class="p">))</span>
     <span class="n">entries</span> <span class="o">=</span> <span class="p">{</span>
         <span class="n">key</span><span class="p">:</span> <span class="n">parameter</span>
         <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">parameter</span> <span class="ow">in</span> <span class="n">default</span><span class="o">.</span><span class="n">listing</span><span class="p">()</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
@@ -547,7 +564,7 @@
     <span class="k">except</span> <span class="ne">ValueError</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
         <span class="k">raise</span> <span class="n">CallError</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">error</span><span class="p">))</span> <span class="kn">from</span><span class="w"> </span><span class="kc">None</span>
     <span class="n">changed</span> <span class="o">=</span> <span class="p">{</span><span class="n">n</span><span class="p">:</span> <span class="n">v</span> <span class="k">for</span> <span class="n">n</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">options</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">v</span> <span class="o">!=</span> <span class="n">default</span><span class="o">.</span><span class="n">options</span><span class="p">[</span><span class="n">n</span><span class="p">]}</span>
-    <span class="k">return</span> <span class="n">_Variant</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">changed</span><span class="o">.</span><span class="n">items</span><span class="p">())))</span>
+    <span class="k">return</span> <span class="n">_Variant</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">changed</span><span class="o">.</span><span class="n">items</span><span class="p">())),</span> <span class="n">content</span><span class="p">)</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">list_protocol</span><span class="p">(</span>
@@ -572,7 +589,8 @@
 <span class="sd">    Where it is invalid, a warning is logged and the listing is replied</span>
 <span class="sd">    without the block. ``limits`` is not read unless the definitions are asked for.</span>
 <span class="sd">    Under a warm server the reply is kept, and replied again to the same call</span>
-<span class="sd">    while the plugin file and the files the limits name are unchanged.</span>
+<span class="sd">    while the plugin file, what it holds and the files the limits name are</span>
+<span class="sd">    unchanged.</span>
 
 <span class="sd">    Raises</span>
 <span class="sd">    ------</span>
@@ -629,10 +647,11 @@
 <span class="sd">    designs it, and the slew rate it ends at is where :func:`generate` starts.</span>
 
 <span class="sd">    Under a warm server the reply is kept, and replied again to the same call</span>
-<span class="sd">    while the plugin file and the files the limits name are unchanged, the</span>
-<span class="sd">    request is still remembered at the slew rate the reply was evaluated</span>
-<span class="sd">    under, which a :func:`generate` that lowers it further changes, and, for</span>
-<span class="sd">    a plugin whose hooks take ``exam``, the files of the exam's cache are.</span>
+<span class="sd">    while the plugin file, what it holds and the files the limits name are</span>
+<span class="sd">    unchanged, the request is still remembered at the slew rate the reply was</span>
+<span class="sd">    evaluated under, which a :func:`generate` that lowers it further changes,</span>
+<span class="sd">    and, for a plugin whose hooks take ``exam``, the files of the exam's</span>
+<span class="sd">    cache are.</span>
 <span class="sd">    """</span>
     <span class="n">limits</span> <span class="o">=</span> <span class="n">_read</span><span class="p">(</span><span class="n">limits</span><span class="p">)</span>
     <span class="n">key</span> <span class="o">=</span> <span class="n">_call_key</span><span class="p">(</span><span class="s2">"validate"</span><span class="p">,</span> <span class="n">plugins</span><span class="p">,</span> <span class="n">plugin</span><span class="p">,</span> <span class="n">limits</span><span class="p">,</span> <span class="n">block</span><span class="p">,</span> <span class="n">rf_layout</span><span class="p">)</span>
@@ -1204,7 +1223,7 @@
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_plugin</span><span class="p">(</span><span class="n">variant</span><span class="p">:</span> <span class="n">_Variant</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SequencePlugin</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Return the plugin of a variant, imported again when its file changed.</span>
+<span class="w">    </span><span class="sd">"""Return the plugin of a variant, imported again when its file was modified or holds another plugin.</span>
 
 <span class="sd">    Raises</span>
 <span class="sd">    ------</span>
@@ -1503,9 +1522,7 @@
 <span class="sd">    once per variant, as last modified, and limits: in this process and,</span>
 <span class="sd">    under a warm server, by the first call that asks.</span>
 <span class="sd">    """</span>
-    <span class="n">key</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span>
-        <span class="p">[</span><span class="n">variant</span><span class="o">.</span><span class="n">path</span><span class="p">,</span> <span class="nb">repr</span><span class="p">(</span><span class="n">variant</span><span class="o">.</span><span class="n">options</span><span class="p">),</span> <span class="n">_mtimes</span><span class="p">(</span><span class="n">variant</span><span class="p">),</span> <span class="n">_limits_key</span><span class="p">(</span><span class="n">limits</span><span class="p">)]</span>
-    <span class="p">)</span>
+    <span class="n">key</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">([</span><span class="nb">repr</span><span class="p">(</span><span class="n">variant</span><span class="p">),</span> <span class="n">_mtimes</span><span class="p">(</span><span class="n">variant</span><span class="p">),</span> <span class="n">_limits_key</span><span class="p">(</span><span class="n">limits</span><span class="p">)])</span>
     <span class="n">found</span><span class="p">,</span> <span class="n">kept</span> <span class="o">=</span> <span class="n">_memo</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">_LISTED_RF</span><span class="p">,</span> <span class="n">key</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">found</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">_ListedRf</span><span class="p">(</span><span class="o">*</span><span class="n">kept</span><span class="p">)</span>
@@ -1560,7 +1577,7 @@
     <span class="n">block</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
     <span class="n">flag</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Return the key the reply of a ``list`` or ``validate`` call is kept under: the plugin file as last modified, the limits, the block and whether the RF is asked for.</span>
+<span class="w">    </span><span class="sd">"""Return the key the reply of a ``list`` or ``validate`` call is kept under: the plugin file as last modified and what it holds, the limits, the block and whether the RF is asked for.</span>
 
 <span class="sd">    The block holds the options the plugin is loaded with, so the key covers</span>
 <span class="sd">    them; the packages are those the server imported before it kept anything.</span>
@@ -1573,6 +1590,7 @@
             <span class="n">name</span><span class="p">,</span>
             <span class="nb">str</span><span class="p">(</span><span class="n">path</span><span class="p">),</span>
             <span class="n">path</span><span class="o">.</span><span class="n">stat</span><span class="p">()</span><span class="o">.</span><span class="n">st_mtime_ns</span><span class="p">,</span>
+            <span class="n">_content</span><span class="p">(</span><span class="n">path</span><span class="p">),</span>
             <span class="kc">None</span> <span class="k">if</span> <span class="n">limits</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">_limits_key</span><span class="p">(</span><span class="n">limits</span><span class="p">),</span>
             <span class="n">block</span><span class="p">,</span>
             <span class="nb">bool</span><span class="p">(</span><span class="n">flag</span><span class="p">),</span>

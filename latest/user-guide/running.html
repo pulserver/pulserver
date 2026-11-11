@@ -864,7 +864,8 @@ which exercises a plugin without a scanner:</p>
                      <span class="n">store</span><span class="o">=</span><span class="n">DesignStore</span><span class="p">(</span><span class="s2">"designs"</span><span class="p">,</span> <span class="s2">"scan"</span><span class="p">))</span>
 </pre></div>
 </div>
-<p>A plugin file is imported again when its modification time changes.</p>
+<p>A plugin file is imported again when its modification time changes or it
+holds another plugin, whatever modification time it shows.</p>
 </section>
 <section id="design-store">
 <h3>Design store<a class="headerlink" href="#design-store" title="Link to this heading">#</a></h3>
@@ -915,15 +916,16 @@ directory when it starts serving and removes when it stops, what the calls
 after it would work out again:</p>
 <ul class="simple">
 <li><p>the reply of each <code class="docutils literal notranslate"><span class="pre">list</span></code> and <code class="docutils literal notranslate"><span class="pre">validate</span></code> call, replied again to the same
-call while the plugin file and the files the limits name are unchanged. A
-<code class="docutils literal notranslate"><span class="pre">validate</span></code> reply is also dropped when a <code class="docutils literal notranslate"><span class="pre">generate</span></code> lowers the slew rate of
-its request further, and, for a plugin whose hooks take <code class="docutils literal notranslate"><span class="pre">exam</span></code>, when the
-files of the exam’s cache change;</p></li>
+call while the plugin file, what it holds and the files the limits name
+are unchanged. A <code class="docutils literal notranslate"><span class="pre">validate</span></code> reply is also dropped when a <code class="docutils literal notranslate"><span class="pre">generate</span></code> lowers the
+slew rate of its request further, and, for a plugin whose hooks take
+<code class="docutils literal notranslate"><span class="pre">exam</span></code>, when the files of the exam’s cache change;</p></li>
 <li><p>the RF definitions a plugin lists under given limits, which <code class="docutils literal notranslate"><span class="pre">validate</span></code>
 states its <code class="docutils literal notranslate"><span class="pre">[RfLayout]</span></code> amplitudes over, so the plugin’s default protocol
 is evaluated once and not on every call;</p></li>
 <li><p>the slew rate each request was lowered to, so the <code class="docutils literal notranslate"><span class="pre">generate</span></code> of a request
-starts where its <code class="docutils literal notranslate"><span class="pre">validate</span></code> ended;</p></li>
+starts where its <code class="docutils literal notranslate"><span class="pre">validate</span></code> ended, and the one the plugin’s last request
+ended at, where its next request is evaluated first;</p></li>
 <li><p>the effective TE of each Busse or PD echo train <code class="docutils literal notranslate"><span class="pre">fse3d</span></code> and <code class="docutils literal notranslate"><span class="pre">fse_pd3d</span></code>
 evaluated, or why no train realizes it, so the inverse solve that finds it
 runs once per train and limits;</p></li>
@@ -932,6 +934,13 @@ that designed them: a selective spin echo, a saturation band or a fat
 saturation is designed by the first call that plays it and read by the
 calls after it.</p></li>
 </ul>
+<p>The replies, the listed RF and the slew rates kept for a plugin are kept
+under what its file holds as well as its path, the replies and listed RF also
+under its modification time: another plugin staged at the same slot, or a slot
+linked to another plugin file, starts from none of these, even where the
+installer gave both files the same modification time, and a file replaced by
+an identical copy keeps its slew rate. The solved trains and pulses are keyed
+on their own arguments and shared by every plugin that asks for them.</p>
 <p>Nothing kept outlives the server, which is restarted to take up a changed
 package in any case. A call answered in its own process keeps nothing.</p>
 <p><code class="docutils literal notranslate"><span class="pre">list</span></code>, <code class="docutils literal notranslate"><span class="pre">validate</span></code>, <code class="docutils literal notranslate"><span class="pre">generate</span></code> and <code class="docutils literal notranslate"><span class="pre">import</span></code> are forwarded when <code class="docutils literal notranslate"><span class="pre">--socket</span></code>, or
