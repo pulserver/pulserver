@@ -59,6 +59,29 @@ def bounding_train(a: Mapping[str, Any], peak_deg: float) -> dict[str, Any]:
     }
 
 
+def one_train(
+    app: Callable[..., Any],
+    system: pp.Opts,
+    designed: Mapping[str, Any],
+    a: Mapping[str, Any],
+) -> tuple[pp.Sequence, pp.Sequence]:
+    """Return one echo train of an FSE scan, and the representative sequence of its evaluation.
+
+    ``designed`` are the arguments of the centre and edge views
+    (:func:`~pulserver._zoo._evaluation.extremes`), which one train holds
+    where it has the echoes for them: that train is both. Where they take
+    more than one train -- few echoes, or trains that differ from the centre
+    of k-space to its periphery -- the trains are the representative
+    sequence, and the centre view alone, designed again, is the one train.
+    ``a`` holds the arguments of the full design.
+    """
+    trains = app(system, **designed)
+    if round(trains.duration()[0] / trains.definitions["TR"][0]) == 1:
+        return trains, trains
+    centre = dict(designed) | {"ry": a["n_y"], "rz": a["n_z"]}
+    return app(system, **centre), trains
+
+
 def effective_te(
     app: Callable[..., Any], system: pp.Opts, designed: Mapping[str, Any]
 ) -> float:

@@ -3,7 +3,13 @@
 import pypulseqpp as pp
 from pypulseqpp.sequences.sequence.bssfp3D_sequence import bssfp3d
 
-from pulserver._zoo._evaluation import achieved, arguments, rf_layout
+from pulserver._zoo._evaluation import (
+    achieved,
+    arguments,
+    extremes,
+    repetitions_of,
+    rf_layout,
+)
 from pulserver._zoo._slab import slab
 from pulserver._zoo._user import OWN, user_entries
 from pulserver.design import (
@@ -63,16 +69,12 @@ class Bssfp3D(SequencePlugin):
     def evaluate(self, system, protocol):
         # Each phase cycle is a catalyst, which plays the half flip, and one
         # repetition per view of the ky-kz ellipse. The design of the centre
-        # view plays one catalyst and one repetition.
+        # and edge views plays one catalyst and a repetition for each, whose
+        # phase encodes are the largest of the scan.
         a = arguments(self, protocol)
-        one = {
-            "ry": a["n_y"],
-            "rz": a["n_z"],
-            "n_acs_y": 0,
-            "n_acs_z": 0,
-            "n_phase_cycles": 1,
-        }
-        catalyst, view = self.app(system, **(protocol.arguments | one))
+        one = {"n_phase_cycles": 1} | extremes(a, "y", "z")
+        catalyst, views = self.app(system, **(protocol.arguments | one))
+        _, repetition = repetitions_of(views)
         calibrating, imaging = pp.count_cartesian_plane_sampling(
             (a["n_y"], a["n_z"]),
             (a["ry"], a["rz"]),
@@ -82,10 +84,10 @@ class Bssfp3D(SequencePlugin):
             elliptical=True,
             elliptical_acs=a["elliptical_acs"],
         )
-        cycle = catalyst.duration()[0] + (calibrating + imaging) * view.duration()[0]
+        cycle = catalyst.duration()[0] + (calibrating + imaging) * repetition
         return Evaluation(
-            protocol.replace(achieved(self, view)),
+            protocol.replace(achieved(self, views)),
             a["n_phase_cycles"] * cycle,
-            rf_layout=rf_layout(view, scaled=True),
-            sequence=view,
+            rf_layout=rf_layout(views, scaled=True),
+            sequence=views,
         )

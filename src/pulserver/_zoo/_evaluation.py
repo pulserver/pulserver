@@ -1,4 +1,4 @@
-"""The evaluation of a shipped scanner sequence from the design of one repetition, extrapolated to the scan."""
+"""The evaluation of a shipped scanner sequence from the design of a few repetitions, extrapolated to the scan."""
 
 from __future__ import annotations
 
@@ -14,9 +14,75 @@ from pypulseqpp import sequences
 from ..design import Evaluation, Protocol, RfLayout, SequencePlugin, StatedParam
 from ..protocol import ImagingMode, ProtocolKey, UIParam
 
-#: Arguments that design one repetition of the scan, and the number of
-#: repetitions the scan plays, from the arguments of the full design.
+#: Arguments that design the repetitions an evaluation reads, and the number
+#: of repetitions the scan plays, from the arguments of the full design.
 Repetition = Callable[[dict[str, Any]], tuple[dict[str, Any], int]]
+
+
+def edge(n: int) -> int:
+    """Return the undersampling at which a lattice of ``n`` lines plays its centre line and its first.
+
+    The first line is the edge of k-space, where the phase encode is
+    largest. A lattice is laid from the centre line, so at an undersampling
+    of ``n // 2`` it holds lines ``0`` and ``n // 2``, and the last where
+    ``n`` is odd.
+    """
+    return max(1, n // 2)
+
+
+def extremes(a: dict[str, Any], *axes: str) -> dict[str, Any]:
+    """Return the arguments that play, on each phase-encoding axis of ``axes``, the centre line and the edge of k-space.
+
+    The views a sequence function then designs are few, and hold the
+    largest phase encode of each axis, at one edge of k-space: the first
+    line. The nerve response read on them is the scan's largest where the
+    nerve model is the same on every axis, since no sign of an encode
+    changes it. The other edge plays the same encodes reversed: on an oblique
+    prescription, where a physical axis sums the logical ones, the scan can
+    read more slew rate there, up to 11 % over random rotations, and at a
+    given rotation up to about 19 % more amplitude on one axis (never more
+    than the largest amplitude the representative reads at any rotation);
+    the check of the generated design finds either; under
+    elliptical sampling the views between the two axes are likewise not
+    designed. The
+    lattice is whole: no calibration region, partial Fourier or CAIPI shift
+    drops or moves a line of it.
+    """
+    one: dict[str, Any] = {}
+    for axis in axes:
+        one |= {
+            f"r{axis}": edge(a[f"n_{axis}"]),
+            f"n_acs_{axis}": 0,
+            f"partial_fourier_{axis}": 1.0,
+        }
+    if "caipi_shift" in a:
+        one["caipi_shift"] = 0
+    if "sampling" in a:
+        one["sampling"] = "lattice"
+    return one
+
+
+#: The directions a readout turned about the slice axis is designed in: the
+#: physical axis an oblique prescription puts most of a readout on reads, of
+#: the nearest of them, the cosine of half their spacing, within 2 %.
+DIRECTIONS = 8
+
+
+def turned(count: int) -> int:
+    """Return the undersampling at which ``count`` readouts spread evenly in angle leave :data:`DIRECTIONS` of them, or all where they are fewer."""
+    return max(1, count // DIRECTIONS)
+
+
+def repetitions_of(main: pp.Sequence) -> tuple[int, float]:
+    """Return how many repetitions ``main`` plays and how long each lasts, in seconds.
+
+    ``main`` plays whole repetitions of its ``TR`` definition and nothing
+    else; the delay closing each is rounded to the block raster, so one lasts
+    the definition or a raster more.
+    """
+    total = main.duration()[0]
+    count = max(1, round(total / main.definitions["TR"][0]))
+    return count, total / count
 
 
 def _readout_bandwidth(main: pp.Sequence) -> float:
@@ -168,14 +234,15 @@ def packets(
 def evaluation(
     plugin: SequencePlugin, system: pp.Opts, protocol: Protocol, repetition: Repetition
 ) -> Evaluation:
-    """Return the evaluation of a protocol from the design of one repetition.
+    """Return the evaluation of a protocol from the design of a few repetitions.
 
-    ``repetition`` gives the arguments that design one repetition, its view
-    the first of the scan and no dummy before it, and the number of
-    repetitions the scan acquires; the dummies are played before them
-    (:func:`dummies`). The entries the design achieves are read from it, the
-    RF layout is its first TR, and it is the evaluation's representative
-    sequence.
+    ``repetition`` gives the arguments that design them, with no dummy
+    before them, and the number of repetitions the scan acquires; the dummies
+    are played before them (:func:`dummies`). The entries the design achieves
+    are read from it, the RF layout is its first TR, and it is the
+    evaluation's representative sequence: a Cartesian sequence plays the
+    views of :func:`extremes`, and one that turns a readout about the slice
+    axis plays it in :data:`DIRECTIONS` directions (:func:`turned`).
 
     A sequence with slices is designed for one slice at the shortest TR,
     which is one shot, and the TR and the scan time follow from the packets
@@ -193,7 +260,7 @@ def evaluation(
     banded = UIParam.EXSAT_MASK in plugin.protocol
     if "n_slices" not in a:
         main = plugin.app(system, **(protocol.arguments | one))
-        duration = main.duration()[0]
+        _, duration = repetitions_of(main)
         return Evaluation(
             protocol.replace(achieved(plugin, main)),
             (dummies(a, duration) + repetitions) * duration,
@@ -251,18 +318,17 @@ def _views(n: int, acceleration: int, n_acs: int, partial_fourier: float) -> int
 
 
 def cartesian_2d(a: dict[str, Any]) -> tuple[dict[str, Any], int]:
-    """One line of a 2D Cartesian scan, and its lines."""
+    """Centre and edge lines of a 2D Cartesian scan, and its lines."""
     lines = _views(a["n_y"], a["ry"], a["n_acs_y"], a["partial_fourier_y"])
-    return {"n_dummy": 0, "ry": a["n_y"], "n_acs_y": 0}, lines
+    return {"n_dummy": 0} | extremes(a, "y"), lines
 
 
 def cartesian_3d(a: dict[str, Any]) -> tuple[dict[str, Any], int]:
-    """One view of a 3D Cartesian scan, and its views.
+    """Centre and edge views of a 3D Cartesian scan, and its views.
 
     Under the wave the views include the wave-free calibration region. The
     views are counted with the app's ``sampling``, a lattice where it takes
-    none; the one view is a lattice's, a Poisson-disc draw at full
-    undersampling holding several.
+    none; the views designed are a lattice's (:func:`extremes`).
     """
     calibrating, imaging = pp.count_cartesian_plane_sampling(
         (a["n_y"], a["n_z"]),
@@ -274,10 +340,8 @@ def cartesian_3d(a: dict[str, Any]) -> tuple[dict[str, Any], int]:
         elliptical_acs=a["elliptical_acs"],
         sampling=a.get("sampling", "lattice"),
     )
-    one = {"n_dummy": 0, "ry": a["n_y"], "rz": a["n_z"], "n_acs_y": 0, "n_acs_z": 0}
-    if "sampling" in a:
-        one["sampling"] = "lattice"
     references = calibrating if waved(a) else 0
+    one = {"n_dummy": 0} | extremes(a, "y", "z")
     return one, references + calibrating + imaging
 
 
@@ -295,7 +359,7 @@ def propeller_2d(a: dict[str, Any]) -> tuple[dict[str, Any], int]:
     """
     blades = math.ceil(math.pi * a["n"] / (2 * a["blade_width"]))
     lines = len(range(0, blades, a["ry"])) * a["blade_width"]
-    one = {"n_dummy": 0, "blade_width": 1, "ry": _nyquist_spokes(a["n"])}
+    one = {"n_dummy": 0, "blade_width": 1, "ry": turned(_nyquist_spokes(a["n"]))}
     return one, lines
 
 
@@ -303,26 +367,26 @@ def radial_2d(a: dict[str, Any]) -> tuple[dict[str, Any], int]:
     """One spoke of a 2D radial scan, and its spokes."""
     nyquist = _nyquist_spokes(a["n"])
     spokes = len(range(0, nyquist, a["ry"]))
-    return {"n_dummy": 0, "ry": nyquist}, spokes
+    return {"n_dummy": 0, "ry": turned(nyquist)}, spokes
 
 
 def spiral_2d(a: dict[str, Any]) -> tuple[dict[str, Any], int]:
     """One interleaf of a 2D spiral scan, and its interleaves."""
     interleaves = len(range(0, a["n_shots"], a["ry"]))
-    return {"n_dummy": 0, "ry": a["n_shots"]}, interleaves
+    return {"n_dummy": 0, "ry": turned(a["n_shots"])}, interleaves
 
 
 def stack_of_stars(a: dict[str, Any]) -> tuple[dict[str, Any], int]:
-    """One spoke at one partition of a stack of stars, and its views."""
+    """One spoke at the centre and edge partitions of a stack of stars, and its views."""
     nyquist = _nyquist_spokes(a["n"])
     spokes = len(range(0, nyquist, a["ry"]))
     partitions = _views(a["n_z"], a["rz"], a["n_acs_z"], a["partial_fourier_z"])
-    one = {"n_dummy": 0, "ry": nyquist, "rz": a["n_z"], "n_acs_z": 0}
+    one = {"n_dummy": 0} | extremes(a, "z") | {"ry": turned(nyquist)}
     return one, spokes * partitions
 
 
 def stack_of_blades(a: dict[str, Any]) -> tuple[dict[str, Any], int]:
-    """One line of one blade at one partition of a stack of blades, and its views.
+    """One line of one blade at the centre and edge partitions of a stack of blades, and its views.
 
     The scan plays every ``ry``-th blade of the Nyquist set of ``ceil(pi n /
     (2 blade_width))``, each of its ``blade_width`` lines at every acquired
@@ -332,19 +396,17 @@ def stack_of_blades(a: dict[str, Any]) -> tuple[dict[str, Any], int]:
     width = a["blade_width"]
     blades = len(range(0, math.ceil(math.pi * a["n"] / (2 * width)), a["ry"]))
     partitions = _views(a["n_z"], a["rz"], a["n_acs_z"], a["partial_fourier_z"])
-    one = {
-        "n_dummy": 0,
-        "ry": _nyquist_spokes(a["n"]),
-        "rz": a["n_z"],
-        "n_acs_z": 0,
-        "blade_width": 1,
-    }
+    one = (
+        {"n_dummy": 0}
+        | extremes(a, "z")
+        | {"ry": turned(_nyquist_spokes(a["n"])), "blade_width": 1}
+    )
     return one, blades * width * partitions
 
 
 def stack_of_spirals(a: dict[str, Any]) -> tuple[dict[str, Any], int]:
-    """One interleaf at one partition of a stack of spirals, and its views."""
+    """One interleaf at the centre and edge partitions of a stack of spirals, and its views."""
     interleaves = len(range(0, a["n_shots"], a["ry"]))
     partitions = _views(a["n_z"], a["rz"], a["n_acs_z"], a["partial_fourier_z"])
-    one = {"n_dummy": 0, "ry": a["n_shots"], "rz": a["n_z"], "n_acs_z": 0}
+    one = {"n_dummy": 0} | extremes(a, "z") | {"ry": turned(a["n_shots"])}
     return one, interleaves * partitions

@@ -78,8 +78,11 @@ class Evaluation:
         be an entry of :attr:`SequencePlugin.protocol` whose value in
         ``protocol`` is positive, or the protocol is invalid.
     sequence
-        A representative design of the protocol, such as the one repetition
-        or echo train the evaluation designed, in the logical frame. The
+        A representative design of the protocol, such as the repetitions or
+        the echo train the evaluation designed, in the logical frame: the
+        ones whose gradients are the largest of the scan, such as the views
+        at the edges of k-space, so that what is read on it bounds what the
+        scan plays. The
         design service checks nerve stimulation and slew rate on it before
         the scan is designed, and lowers the slew rate the protocol is
         designed under where they exceed their limits, so that the console

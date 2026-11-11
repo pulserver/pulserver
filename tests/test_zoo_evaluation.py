@@ -760,7 +760,7 @@ def test_a_stack_of_blades_evaluation_plays_every_repetition_of_the_design(
 
 
 @pytest.mark.parametrize("name", SHIPPED)
-def test_a_zoo_evaluation_designs_two_trs_at_most_however_large_the_prescription(
+def test_a_zoo_evaluation_designs_a_few_trs_however_large_the_prescription(
     zoo, name, monkeypatch
 ):
     plugin = zoo[name]
@@ -784,15 +784,17 @@ def test_a_zoo_evaluation_designs_two_trs_at_most_however_large_the_prescription
     monkeypatch.setattr(pp.Sequence, "__init__", recording_init)
     plugin.evaluate(SYSTEM, protocol)
 
-    # An evaluation designs through the app once, two TRs at most, and once
-    # more for a train whose angles are solved for; or builds the modules of
-    # a repetition itself, two excitations at most.
+    # An evaluation designs through the app twice at most, each time the
+    # centre and edge views at most, three lines by three, or builds the
+    # modules of a repetition itself, two excitations at most.
     assert len(designed) <= 2
     for chain in designed:
         main = _chain(chain)[-1]
         tr = main.definitions["TR"][0]
         rounding = SYSTEM.block_duration_raster * _excitations(main)
-        assert main.duration()[0] <= 2 * tr + rounding
+        # ... or a readout in eight directions, up to fifteen where their
+        # count does not divide by eight, at three partitions.
+        assert main.duration()[0] <= 45 * tr + rounding
     if not designed:
         assert built
         assert max(map(_excitations, built)) <= 2

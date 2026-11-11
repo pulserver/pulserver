@@ -80,8 +80,10 @@ def plugins(tmp_path):
 @pytest.fixture(autouse=True)
 def _forget():
     service._LOWERED = _slew.Remembered()
+    service._RESPONSES = _slew.Remembered(kind="nerve")
     yield
     service._LOWERED = _slew.Remembered()
+    service._RESPONSES = _slew.Remembered(kind="nerve")
 
 
 def _generate(tmp_path, plugins, plugin):
@@ -233,9 +235,10 @@ SEVEN_T = {
 }
 
 
-def test_a_shipped_fse_at_the_hardware_slew_rate_is_designed_within_the_nerve_limit(
+def test_a_shipped_fse_at_the_hardware_slew_rate_is_designed_once_within_the_nerve_limit(
     tmp_path,
 ):
+    """No validation searched the request: generate searches its echo train, then designs."""
     from pulserver import _plugins
 
     block = (
@@ -258,17 +261,17 @@ def test_a_shipped_fse_at_the_hardware_slew_rate_is_designed_within_the_nerve_li
     sequence = pp.Sequence()
     sequence.read(str(directory / "sequence.seq"))
     model = pp.safety.ChronaxieModel(SEVEN_T["pns_chronaxie"], SEVEN_T["pns_rheobase"])
-    assert manifest["slew_passes"] >= 1
+    assert manifest["slew_passes"] == 0
     assert manifest["design_max_slew_t_per_m_per_s"] < 0.9 * SEVEN_T["max_slew"]
     assert pp.safety.check_pns(sequence, model)[1].peak.value <= SEVEN_T["pns_limit"]
 
 
 @pytest.mark.parametrize("plugin", ["fse3d", "fse_pd3d"])
 def test_a_shipped_fse_is_lowered_at_validation_from_its_echo_train(tmp_path, plugin):
-    """The evaluation's echo train is checked, and generate starts where it left off.
+    """The evaluation's echo train is checked, and generate designs once where it left off.
 
-    The train acquires fewer peripheral views than the scan, so the scan's
-    partition encodes may lower the slew rate once more at generation.
+    The train plays the views at the edges of k-space, whose phase encodes
+    are the largest of the scan.
     """
     from pulserver import _plugins
 
@@ -280,8 +283,11 @@ def test_a_shipped_fse_is_lowered_at_validation_from_its_echo_train(tmp_path, pl
     common = {"plugins": (_plugins.SEQUENCES,), "plugin": plugin, "limits": SEVEN_T}
     status, text = service.call("validate", block=block, **common)
     assert status == 0, text
-    lowered = list(service._LOWERED._slews.values())
-    assert lowered and max(lowered) < 0.9 * SEVEN_T["max_slew"] * 42.576e6
+    variant = service._variant(common["plugins"], plugin, block)
+    request = service._request(block, service._listing(variant))
+    validated = service._LOWERED.get(_slew.key(variant, SEVEN_T, request))
+    assert validated is not None
+    assert validated < 0.9 * SEVEN_T["max_slew"] * 42.576e6
     store = DesignStore(tmp_path / "designs", "scan")
     status, text = service.call("generate", block=block, store=store, **common)
     assert status == 0, text
@@ -290,6 +296,144 @@ def test_a_shipped_fse_is_lowered_at_validation_from_its_echo_train(tmp_path, pl
     sequence = pp.Sequence()
     sequence.read(str(directory / "sequence.seq"))
     model = pp.safety.ChronaxieModel(SEVEN_T["pns_chronaxie"], SEVEN_T["pns_rheobase"])
-    assert manifest["slew_passes"] <= 1
-    assert manifest["design_max_slew_t_per_m_per_s"] * 42.576e6 <= max(lowered)
+    assert manifest["slew_passes"] == 0
+    # The manifest states the slew rate to four decimals.
+    assert manifest["design_max_slew_t_per_m_per_s"] == pytest.approx(
+        validated / 42.576e6, abs=1e-4
+    )
+    # The nerve response the search modelled its steps on leaves little unused.
+    peak = pp.safety.check_pns(sequence, model)[1].peak.value
+    assert peak >= 0.85 * SEVEN_T["pns_limit"]
     assert pp.safety.check_pns(sequence, model)[1].peak.value <= SEVEN_T["pns_limit"]
+
+
+def _ramp(step, rheobase=70.0, chronaxie=360e-6, limit=0.98):
+    """The nerve response of one ramp of ``step`` (T/m) over its limit, by slew rate (T/m/s)."""
+    return lambda slew: step / (rheobase * (chronaxie + step / slew)) / limit
+
+
+def test_one_design_fixes_the_nerve_response_of_one_ramp_under_the_nerve_model():
+    # One ramp responds as A S / (S + x) with x = A times the rheobase and
+    # the limit: the model lands on the target from a single reading.
+    response = _ramp(80e-3)
+    first = 180.0
+    assert response(first) > 1.0
+    one = [(first, {"pns": response(first)})]
+    second = _slew.fitted(one, first * _slew.TARGET, nerve=(70.0, 0.98))
+    assert second < first
+    assert response(second) == pytest.approx(_slew.TARGET, rel=1e-9)
+    # Without the nerve model the step is proportional, and falls short.
+    assert response(_slew.lowered([(first, {"pns": response(first)})])) > 1.0
+
+
+def test_one_design_fixes_the_nerve_response_where_an_earlier_search_found_it():
+    def response(slew):
+        return 2.0 * slew / (slew + 100.0)
+
+    searched = [(200.0, {"pns": response(200.0)}), (150.0, {"pns": response(150.0)})]
+    found = _slew.response_of(searched)
+    assert found == pytest.approx(100.0)
+    assert _slew.response_of(searched[:1]) is None
+    # A later design is lowered, or raised, onto the target at once.
+    lower = _slew.fitted([(180.0, {"pns": response(180.0)})], 171.0, response=found)
+    assert response(lower) == pytest.approx(_slew.TARGET)
+    raised = _slew.fitted([(50.0, {"pns": response(50.0)})], 180.0, response=found)
+    assert 50.0 < raised < 180.0
+    assert response(raised) == pytest.approx(_slew.TARGET)
+    # A response that never reaches the target leaves the slew rate at its limit.
+    assert _slew.fitted([(50.0, {"pns": 0.2})], 180.0, response=10.0) == 180.0
+
+
+def test_a_request_past_the_nerve_limit_is_evaluated_twice(tmp_path, plugins):
+    """At the design limits, then at the slew rate the nerve model gives for its reading."""
+    asked = []
+    real = service.design_system
+
+    def recording(limits, **kwargs):
+        system = real(limits, **kwargs)
+        asked.append(round(system.max_slew / system.gamma, 3))
+        return system
+
+    plugin = service._plugin(service._variant(plugins, "evaluated"))
+    evaluated = []
+    hook = type(plugin).evaluate
+
+    def counted(self, system, protocol):
+        evaluated.append(round(system.max_slew / system.gamma, 3))
+        return hook(self, system, protocol)
+
+    type(plugin).evaluate = counted
+    try:
+        status, text = service.call(
+            "validate", plugins=plugins, plugin="evaluated", limits=SITE, block=BLOCK
+        )
+    finally:
+        type(plugin).evaluate = hook
+    assert status == 0, text
+    assert text.startswith("VALID")
+    assert len(evaluated) == 2
+    assert evaluated[1] < evaluated[0]
+    sequence = plugin.app(service.design_system(SITE, max_slew=evaluated[1] * 42.576e6))
+    assert 0.85 <= _pns(sequence) <= SITE["pns_limit"]
+
+
+@pytest.mark.parametrize(
+    ("plugin", "values"),
+    [
+        ("gre2d", {"nx": 64, "ny": 64}),
+        ("gre3d", {"nx": 64, "ny": 64, "nslices": 16}),
+        ("gre_multiecho3d", {"nx": 64, "ny": 64, "nslices": 16}),
+        ("se3d", {"nx": 64, "ny": 64, "nslices": 16}),
+        ("mprage3d", {"nx": 64, "ny": 64, "nslices": 32}),
+        ("fse3d", {"nx": 64, "ny": 64, "nslices": 32, "etl": 32}),
+        ("gre_stack_of_stars3d", {"nx": 64, "nslices": 16}),
+        ("gre_radial2d", {"nx": 64}),
+        ("se_propeller2d", {"nx": 64}),
+        ("gre_spiral2d", {"nx": 64}),
+    ],
+)
+def test_the_representative_sequence_of_a_shipped_plugin_bounds_the_nerve_response_of_its_scan(
+    plugin, values
+):
+    """The views at the edges of k-space play the largest phase encodes of the scan."""
+    from pulserver import _plugins
+    from pulserver.design import load_plugin
+    from pulserver.host._limits import split_limits
+
+    system, _, checked = split_limits(SEVEN_T)
+    design = service.design_system(SEVEN_T, max_slew=100.0 * system.gamma)
+    scanner = load_plugin(_plugins.SEQUENCES / f"{plugin}.py")
+    validation, protocol, representative = scanner._evaluated(design, values)
+    assert validation.valid, validation.info
+    built = scanner.generate(design, protocol)
+    scan = built if isinstance(built, pp.Sequence) else built[-1]
+
+    def read(sequence, rotation=None):
+        return service._representative_readings(
+            sequence, system, checked, rotation, False
+        )
+
+    assert read(representative)["pns"] >= 0.99 * read(scan)["pns"]
+    # Oblique, either way round: the nerve response of the scan stays that
+    # of the representative sequence. Its slew rate and amplitude on a
+    # physical axis are not bounded there: the scan plays the edge of
+    # k-space the representative does not, up to 11 % more slew rate over
+    # random rotations, which the check of the generated design finds.
+    for angles in ((35.0, -40.0, 25.0), (-35.0, 40.0, -25.0)):
+        rotation = _rotation(*angles)
+        bound, played = read(representative, rotation), read(scan, rotation)
+        assert played["pns"] <= bound["pns"] * 1.01
+        assert played["slew"] <= bound["slew"] * 1.12
+        # Amplitude on one axis at a given rotation can read up to ~19 % more.
+        assert played["grad"] <= bound["grad"] * 1.2
+
+
+def _rotation(about_x, about_y, about_z):
+    """The rotation by the three angles, in degrees, about x, then y, then z."""
+    import numpy as np
+
+    a, b, c = np.radians([about_x, about_y, about_z])
+    turn_x = [[1, 0, 0], [0, np.cos(a), -np.sin(a)], [0, np.sin(a), np.cos(a)]]
+    turn_y = [[np.cos(b), 0, np.sin(b)], [0, 1, 0], [-np.sin(b), 0, np.cos(b)]]
+    turn_z = [[np.cos(c), -np.sin(c), 0], [np.sin(c), np.cos(c), 0], [0, 0, 1]]
+    return np.array(turn_z) @ np.array(turn_y) @ np.array(turn_x)

@@ -98,6 +98,7 @@ def _evaluations(plugins):
 def _child():
     """Forget what a call holds in memory, as the child of the next call has."""
     service._LOWERED = _slew.Remembered()
+    service._RESPONSES = _slew.Remembered(kind="nerve")
     service._default_validation.cache_clear()
     service._cached.cache_clear()
 
@@ -194,10 +195,13 @@ def test_a_kept_validation_is_replied_without_evaluating_again(plugins, serving)
 
     assert _call("validate", plugins, block=block(), rf_layout=True) == first
     assert _evaluations(plugins) == made
-    # Another request is evaluated, once, where the last one ended.
+    # Another request is evaluated once, where the search of the last one
+    # puts its readings on target: at or above the slew rate it ended at.
     other = _call("validate", plugins, block=block(10), rf_layout=True)
     assert other.startswith("VALID")
-    assert _evaluations(plugins)[len(made) :] == [(10, made[-1][1])]
+    ((size, slew),) = _evaluations(plugins)[len(made) :]
+    assert size == 10
+    assert made[-1][1] <= slew < made[listed][1]
     # The reply without the RF layout is another reply.
     plain = _call("validate", plugins, block=block())
     assert "[RfLayout]" not in plain

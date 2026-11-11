@@ -5,7 +5,13 @@ import functools
 import pypulseqpp as pp
 from pypulseqpp.sequences.sequence.mprage3D_sequence import ORDERINGS, mprage3d
 
-from pulserver._zoo._evaluation import achieved, arguments, rf_layout, waved
+from pulserver._zoo._evaluation import (
+    achieved,
+    arguments,
+    extremes,
+    rf_layout,
+    waved,
+)
 from pulserver._zoo._pmc import navigated
 from pulserver._zoo._slab import slab
 from pulserver._zoo._user import (
@@ -127,9 +133,14 @@ class Mprage3D(SequencePlugin):
             "caipi_shift": 0,
         }
         shot = self.app(system, **(protocol.arguments | one))
+        # The shot plays every line of the centre partition. Its gradients
+        # are bounded by shots of the centre and edge lines at the centre and
+        # edge partitions, which are short: they are the representative
+        # sequence, and take less to check than the shot.
+        edges = self.app(system, **(protocol.arguments | one | extremes(a, "y", "z")))
         return Evaluation(
             protocol.replace(achieved(self, shot)),
             (a["n_dummy"] + references + trains) * shot.duration()[0],
             rf_layout=rf_layout(shot, scaled=True),
-            sequence=shot,
+            sequence=edges,
         )

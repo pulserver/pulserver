@@ -9,7 +9,13 @@ from pypulseqpp.sequences.sequence.bssfp2D_sequence import (
     bssfp2d,
 )
 
-from pulserver._zoo._evaluation import achieved, arguments, cartesian_2d, rf_layout
+from pulserver._zoo._evaluation import (
+    achieved,
+    arguments,
+    cartesian_2d,
+    edge,
+    rf_layout,
+)
 from pulserver._zoo._user import OPTIONS, user_entries
 from pulserver.design import (
     ChoiceParam,
@@ -87,12 +93,13 @@ class Bssfp2D(SequencePlugin):
 
     def evaluate(self, system, protocol):
         # Each slice plays its own train: the half-angle pulse, then one TR per
-        # repetition. The design of one line plays one repetition of one slice.
+        # repetition. The design of the centre and edge lines plays those
+        # repetitions of one slice; ``once`` is the train of one line.
         a = arguments(self, protocol)
         one, lines = cartesian_2d(a)
         line = self.app(system, **(_ungated(protocol) | one | {"n_slices": 1}))
         tr = line.definitions["TR"][0]
-        once = line.duration()[0]
+        once = line.duration()[0] - (len(_designed_lines(a)) - 1) * tr
         gating = _gating(protocol)
         n_dummy = _dummies(a, tr, gating)
         train = once + (n_dummy + lines - 1) * tr
@@ -112,6 +119,14 @@ class Bssfp2D(SequencePlugin):
             rf_layout=rf_layout(line, scaled=True, start=once - tr),
             sequence=line,
         )
+
+
+def _designed_lines(a) -> list[int]:
+    """Return the lines the evaluation designs: the centre and edge lines of :func:`~pulserver._zoo._evaluation.extremes`."""
+    calibrating, imaging = pp.make_cartesian_axis_sampling(
+        a["n_y"], edge(a["n_y"]), 0, partial_fourier=1.0
+    )
+    return [*calibrating, *imaging]
 
 
 def _gating(protocol) -> str:
