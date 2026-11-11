@@ -423,7 +423,7 @@ scanner's reconstruction client names one in its config
 Each shipped plugin offers every one of these controls that its sequence
 function takes, at the same user entry in every plugin, each as a
 `user<n>_name` label and a `user<n>_value`; a plugin's own user entries start at
-`user12`:
+`user12`, and `user35` lies above all of them:
 
 | User entry | Control |
 | --- | --- |
@@ -436,6 +436,7 @@ function takes, at the same user entry in every plugin, each as a
 | `user8` | Refocusing flip angle, in degrees |
 | `user9` | CAIPIRINHA shift, in partitions per acquired line |
 | `user10`, `user11` | Wave-encoding amplitude, in mT/m, and cycles per readout, shown while the `wave` option is on |
+| `user35` | TTL output per volume: 0, the default, off; 1 plays a digital output on trigger channel `ext1`, 1 ms or the excitation if shorter, at the first excitation of every volume of the time series, dummy volumes included, and none in the reference volume or the calibration (`epi2d`, `epi3d`) |
 
 `bssfp3d` takes its number of phase cycles, each a train with its own RF phase
 increment, as `user12`.

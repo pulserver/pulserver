@@ -85,6 +85,16 @@ SHARED: tuple[tuple[tuple[str, ...], str, Callable[[str], Entry]], ...] = (
     ),
 )
 
+#: Shared controls at a user CV of their own, by user CV, each as an entry of
+#: :data:`SHARED`: above every plugin's own controls and below the options.
+PLACED: dict[int, tuple[tuple[str, ...], str, Callable[[str], Entry]]] = {
+    35: (
+        ("volume_output",),
+        "TTL output per volume: 0 off, 1 on",
+        lambda argument: IntParam(argument, range_min=0, range_max=1, default=0),
+    ),
+}
+
 #: The user CV of the wave-encoding amplitude, followed by that of its
 #: cycles, which a plugin shows while its ``wave`` option is on.
 WAVE = 10
@@ -146,12 +156,13 @@ def user_entries(
 ) -> dict[ProtocolKey, Entry]:
     """Return the shared controls of the arguments ``app`` takes and ``protocol`` does not bind, each named, at its user CV.
 
-    ``names`` renames the control of an argument, by argument.
+    The controls are those of :data:`SHARED`, at their place there, and of
+    :data:`PLACED`. ``names`` renames the control of an argument, by argument.
     """
     taken = inspect.signature(app).parameters
     bound = {getattr(entry, "argument", None) for entry in protocol.values()}
     entries: dict[ProtocolKey, Entry] = {}
-    for index, (arguments, name, entry) in enumerate(SHARED):
+    for index, (arguments, name, entry) in [*enumerate(SHARED), *PLACED.items()]:
         for argument in arguments:
             if argument in taken and argument not in bound:
                 made = entry(argument)

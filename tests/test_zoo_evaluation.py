@@ -20,7 +20,7 @@ from pulserver._zoo._evaluation import arguments as app_arguments
 from pulserver._zoo._fse import bounding_train
 from pulserver._zoo._saturation import explicit_bands
 from pulserver._zoo._slab import slab
-from pulserver._zoo._user import LINE_SPACING, SHARED
+from pulserver._zoo._user import LINE_SPACING, PLACED, SHARED
 from pulserver.design import Protocol, RfLayout, StatedParam, load_plugin
 from pulserver.host import call
 from pulserver.host._limits import design_system
@@ -1185,6 +1185,48 @@ def test_the_2d_epi_saturates_fat_and_plays_no_band(zoo):
     assert all(rf.freq_ppm != 0.0 for rf in _saturations(main))
 
 
+@pytest.mark.parametrize(
+    ("name", "changes", "volumes"),
+    [
+        ("epi2d", {"nx": 32, "ny": 32, "nslices": 2, "user0_value": 2}, 2 + 3),
+        ("epi3d", {"nx": 32, "ny": 32, "nslices": 8, "user0_value": 1}, 1 + 3),
+    ],
+)
+def test_the_ttl_control_marks_every_volume_with_a_digital_output(
+    name, changes, volumes, zoo
+):
+    """user35 at 1 plays one output at the start of every volume of the time series, dummy volumes included; at 0, the default, none."""
+    plugin = zoo[name]
+    changes |= {"num_frames": 3}
+
+    def outputs(on):
+        protocol = _protocol(plugin, changes | {"user35_value": on})
+        assert protocol.arguments["volume_output"] == on
+        *prescans, main = _chain(plugin.generate(SYSTEM, protocol))
+        assert not any(_output_starts(seq) for seq in prescans)
+        return main, _output_starts(main)
+
+    _, off = outputs(0)
+    main, on = outputs(1)
+
+    assert plugin.listing()[UIParam.user_value(35)].value == 0
+    assert off == []
+    assert len(on) == volumes
+    assert on[0] < main.definitions["TR"][0]
+    assert np.diff(on) == pytest.approx(main.definitions["TR"][0])
+
+
+def _output_starts(seq):
+    """The start times of the blocks of ``seq`` that play a digital output."""
+    starts, time = [], 0.0
+    for n in range(1, seq.num_blocks + 1):
+        events = getattr(seq.get_block(n), "trig", [])
+        if any(event.type == "output" for event in events):
+            starts.append(time)
+        time += seq.block_durations[n]
+    return starts
+
+
 def test_a_cine_is_gated_at_the_heart_rate_asked_for(zoo):
     plugin = zoo["bssfp2d"]
 
@@ -1324,7 +1366,7 @@ def test_every_shared_control_a_sequence_takes_is_named_at_its_own_user_cv(name,
         if not key.startswith("user")
     }
 
-    for index, (arguments, label, factory) in enumerate(SHARED):
+    for index, (arguments, label, factory) in [*enumerate(SHARED), *PLACED.items()]:
         free = [a for a in arguments if a in taken and a not in bound]
         listed = UIParam.user_value(index) in plugin.protocol
         assert listed == bool(free), arguments
