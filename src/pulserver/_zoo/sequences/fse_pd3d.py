@@ -238,7 +238,8 @@ class FsePd3D(SequencePlugin):
             "ordering": "radial",
         }
         solved = protocol.arguments | one | {"flip_modulation": "pd"}
-        solved |= {"pd_optimize": False, "busse_optimize": False}
+        # The effective TE depends on no TR: one solve serves every TR asked for.
+        solved |= {"pd_optimize": False, "busse_optimize": False, "tr": None}
         one |= bounding_train(a, a["pd_maximum_angle_deg"])
         train = self.app(system, **(protocol.arguments | one))
         tr = train.duration()[0]

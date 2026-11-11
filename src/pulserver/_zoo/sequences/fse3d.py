@@ -268,7 +268,8 @@ class Fse3D(SequencePlugin):
             "ordering": "radial",
         }
         solved = protocol.arguments | one | {"flip_modulation": "busse"}
-        solved["busse_optimize"] = False
+        # The angles depend on no TR: one solve serves every TR asked for.
+        solved |= {"busse_optimize": False, "tr": None}
         if BUSSE:
             one |= bounding_train(a, a["busse_maximum_angle_deg"])
         train = self.app(system, **(protocol.arguments | one))
