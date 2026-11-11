@@ -261,7 +261,9 @@ and not the design: it states the scan time exactly, an upper bound of the RF
 and one repetition whose gradients stand for the scan's, and leaves to
 `generate` whatever takes a solve, an optimization or the whole scan. Where
 the angles of a train are solved for, the train at their largest angle lasts
-as long and bounds its RF.
+as long and bounds its RF; `fse3d` and `fse_pd3d` design that train, and ask
+the solve only for the effective TE and for whether a train exists, once per
+train under a warm design server.
 
 `ValueError` and `AssertionError`, which pypulseqpp and PyPulseq raise for an
 event or a timing they cannot realize, reject the protocol with the message of
@@ -542,10 +544,8 @@ TE**, using relaxed and relaxation-free CPMG EPG with reference T1/T2 of
 its prescribed centre angle. The default uses the midpoint; an explicit
 `user17` echo index takes precedence. The optimizer preserves the selected
 reference effective TE within 0.1 ms. The achieved value is recorded in
-`EffectiveEchoTime` and reported to the MRD header; `TE` remains the
-physical excitation-to-centre-echo time. The console keeps the TE
-prescribed, or its Minimum preset: the angles that fix the achieved value are
-solved for when the scan is designed, not while the protocol is edited. This reference contrast annotation
+`EffectiveEchoTime` and reported to the UI and MRD header; `TE` remains the
+physical excitation-to-centre-echo time. This reference contrast annotation
 does not model all tissues, B1 variation or inter-shot steady state. The selected echo must precede the last acquired echo in every
 train. `busse_radial` requires centre echo 0 and identical trains. `pclo`
 uses Rydén's pivot-centre, linear-outer ring permutation for an arbitrary
@@ -653,8 +653,7 @@ repetition from the modules their function is built from.
   checks nerve stimulation and slew rate before the scan is designed. That of
   `fse3d` and `fse_pd3d` is the packed echo train their evaluation designs,
   as long as the longest train, startup echoes included, at a constant
-  refocusing angle: the largest of a Busse or PD train, whose angles only
-  `generate` solves for; `epi3d` states none.
+  refocusing angle: the largest of a Busse or PD train; `epi3d` states none.
 - **RF layout.** The first TR of the repetition, its shot repeated once per
   slice of the largest packet, with the TR as its period; for the balanced
   steady state, the TR after the half-angle pulse. The TR of a fast spin echo

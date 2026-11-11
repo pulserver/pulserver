@@ -3,7 +3,7 @@
 A design call is a function of its inputs, and the server answers each in a
 child that ends with it, so nothing a call works out in memory reaches the
 next. What is worth keeping -- a reply, the RF a plugin lists, the slew rate a
-request was lowered to -- is written here, in a directory the server makes
+request was lowered to, the effective TE of a solved echo train -- is written here, in a directory the server makes
 when it starts serving and removes when it stops: every child reads what the
 children before it wrote, and nothing outlives the server, which is restarted
 to take up a changed package anyway. A process no server forked keeps
@@ -18,6 +18,7 @@ import json
 import os
 import shutil
 import tempfile
+import time
 from pathlib import Path
 from typing import Any
 
@@ -100,3 +101,9 @@ def _trim(directory: Path) -> None:
     for _, entry in entries[: max(0, len(entries) - SIZE)]:
         with contextlib.suppress(OSError):
             entry.unlink()
+    # What a call that ended while writing left behind.
+    stale = time.time() - 60.0
+    for scratch in directory.glob("*.tmp"):
+        with contextlib.suppress(OSError):
+            if scratch.stat().st_mtime < stale:
+                scratch.unlink()

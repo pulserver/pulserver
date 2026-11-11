@@ -17,8 +17,8 @@ from pulserver._zoo._evaluation import (
 )
 from pulserver._zoo._fse import (
     bounding_train,
-    check_pd,
     echo_train_layout,
+    effective_te,
     sar_burst,
 )
 from pulserver._zoo._pmc import navigated
@@ -225,10 +225,10 @@ class FsePd3D(SequencePlugin):
         # train of the full length, startup echoes included, at a constant
         # refocusing angle: the maximum of the PD train, which no pulse of it
         # exceeds, so the train bounds its RF and lasts as long. The angles
-        # are solved for when the scan is designed, not here. The RF of a
-        # train does not depend on the view order.
+        # are solved for only to state the effective TE, and to refuse a
+        # prescription no train realizes, once per train under a warm
+        # server. The RF of a train does not depend on the view order.
         a = arguments(self, protocol)
-        check_pd(a)
         one = {
             "n_dummy": 0,
             "ry": a["n_y"],
@@ -236,7 +236,10 @@ class FsePd3D(SequencePlugin):
             "n_acs_y": 0,
             "n_acs_z": 0,
             "ordering": "radial",
-        } | bounding_train(a, a["pd_maximum_angle_deg"])
+        }
+        solved = protocol.arguments | one | {"flip_modulation": "pd"}
+        solved |= {"pd_optimize": False, "busse_optimize": False}
+        one |= bounding_train(a, a["pd_maximum_angle_deg"])
         train = self.app(system, **(protocol.arguments | one))
         tr = train.duration()[0]
         tr_periphery = tr if a["tr_periphery"] is None else a["tr_periphery"]
@@ -270,11 +273,9 @@ class FsePd3D(SequencePlugin):
         times = [pp.round_to_raster(time, raster) for time in times]
         references = -(-calibrating // lengths[0]) if waved(a) else 0
         leading = dummies(a, times[0]) + references
-        # The effective TE a train reaches follows from its angles: the
-        # protocol keeps the one prescribed, and the design records the one
-        # of the nearest echo as its EffectiveEchoTime.
+        # The effective TE a train reaches follows from its angles.
         values = achieved(self, train)
-        del values[UIParam.TE]
+        values[UIParam.TE] = effective_te(self.app, system, solved)
         return Evaluation(
             protocol.replace(values),
             leading * times[0] + sum(times),

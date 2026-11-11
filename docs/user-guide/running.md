@@ -321,7 +321,10 @@ after it would work out again:
   states its `[RfLayout]` amplitudes over, so the plugin's default protocol
   is evaluated once and not on every call;
 - the slew rate each request was lowered to, so the `generate` of a request
-  starts where its `validate` ended.
+  starts where its `validate` ended;
+- the effective TE of each Busse or PD echo train `fse3d` and `fse_pd3d`
+  evaluated, or why no train realizes it, so the inverse solve that finds it
+  runs once per train and limits.
 
 Nothing kept outlives the server, which is restarted to take up a changed
 package in any case. A call answered in its own process keeps nothing.

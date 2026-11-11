@@ -17,8 +17,8 @@ from pulserver._zoo._evaluation import (
 )
 from pulserver._zoo._fse import (
     bounding_train,
-    check_busse,
     echo_train_layout,
+    effective_te,
     sar_burst,
 )
 from pulserver._zoo._pmc import navigated
@@ -254,8 +254,9 @@ class Fse3D(SequencePlugin):
         # train of the full length at a constant refocusing angle, which is
         # the peak of an optimized train and so bounds its RF. The RF of a
         # train does not depend on the view order. A Busse train is bounded
-        # the same way, by as many pulses at its maximum angle: its angles
-        # are solved for when the scan is designed, not here.
+        # the same way, by as many pulses at its maximum angle; its angles
+        # are solved for only to state its effective TE, and to refuse a
+        # prescription no train realizes, once per train under a warm server.
         a = arguments(self, protocol)
         one = {
             "n_dummy": 0,
@@ -266,8 +267,9 @@ class Fse3D(SequencePlugin):
             "flip_modulation": "constant",
             "ordering": "radial",
         }
+        solved = protocol.arguments | one | {"flip_modulation": "busse"}
+        solved["busse_optimize"] = False
         if BUSSE:
-            check_busse(a)
             one |= bounding_train(a, a["busse_maximum_angle_deg"])
         train = self.app(system, **(protocol.arguments | one))
         tr = train.duration()[0]
@@ -300,10 +302,8 @@ class Fse3D(SequencePlugin):
         leading = dummies(a, times[0]) + references
         values = achieved(self, train)
         if BUSSE:
-            # The effective TE a train reaches follows from its angles: the
-            # protocol keeps the one prescribed, and the design records the
-            # one of the nearest echo as its EffectiveEchoTime.
-            del values[UIParam.TE]
+            # The effective TE a train reaches follows from its angles.
+            values[UIParam.TE] = effective_te(self.app, system, solved)
         return Evaluation(
             protocol.replace(values),
             leading * times[0] + sum(times),
