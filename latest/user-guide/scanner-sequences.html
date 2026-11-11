@@ -1213,7 +1213,11 @@ physical excitation-to-centre-echo time. This reference contrast annotation
 does not model all tissues, B1 variation or inter-shot steady state. The selected echo must precede the last acquired echo in every
 train. <code class="docutils literal notranslate"><span class="pre">busse_radial</span></code> requires centre echo 0 and identical trains. <code class="docutils literal notranslate"><span class="pre">pclo</span></code>
 uses Rydén’s pivot-centre, linear-outer ring permutation for an arbitrary
-centre echo in identical trains. <code class="docutils literal notranslate"><span class="pre">radial</span></code> selects PCLO for identical trains
+centre echo in identical trains, except that a centre echo in the second half
+of the train is not mirrored: the echoes after it take the outer rings in
+order, so a train whose signal is flat up to the centre echo and decays
+after it, as a Busse train’s is, weights k-space flat and then decreasing
+outwards. <code class="docutils literal notranslate"><span class="pre">radial</span></code> selects PCLO for identical trains
 or Buonincontri joint shot/echo assignment for a centre/periphery parameter
 transition. The menu retains the same choice indices across refocusing modes.
 Sampling acceleration and the CAIPI shift are independent of this ordering
