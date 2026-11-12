@@ -1196,13 +1196,14 @@ def test_the_3d_epi_excites_water_alone(zoo):
     assert main.definitions["Excitation"] == "spsp"
 
 
-#: EPI protocols whose gradient-echo calibration plays more RF power than a
-#: TR (a slice a long TR apart, a 3D TR of a few long shots), by name.
+#: EPI protocols whose FLEET calibration plays more RF power than a TR (a
+#: slice a long TR apart, a 3D TR of a few long shots), by name. A multiband
+#: pulse plays several bands' power, so its TR is the longer.
 CALIBRATED = [
     pytest.param("epi2d", {"Ry": 3, "nslices": 1, "TR": 3000000}, id="epi2d"),
     pytest.param(
         "epi2d",
-        {"multiband": 2, "nslices": 2, "TR": 3000000, "FatSat": False},
+        {"multiband": 2, "nslices": 2, "TR": 9000000, "FatSat": False},
         id="epi2d-multiband",
     ),
     pytest.param(

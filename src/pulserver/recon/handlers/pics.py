@@ -417,7 +417,10 @@ def pics_image(
 
     The solve of :func:`bartorch.apps.pics` on a grid: ``sampled``, the
     ``(z, y, x)`` lines placed, as its pattern, the scaling estimated from the
-    fully sampled centre, and FISTA over the wavelet term of weight
+    fully sampled centre, or from the adjoint image where k-space has none,
+    such as an accelerated EPI whose calibration is a unit of its own
+    (:func:`bartorch.optim.data_scaling`), and FISTA over the wavelet term of
+    weight
     ``wavelet`` along the axes of at least ``WAVELET_MIN_POINTS`` points. A
     volume of one partition is solved as a plane. The k-space, the maps and
     the iteration's vectors stay on the host, and the encoding computes on
@@ -430,13 +433,14 @@ def pics_image(
     grid = tuple(kspace.shape[2:] if kspace.shape[1] == 1 else kspace.shape[1:])
     pattern = sampled.reshape(grid).to(torch.complex64)
     measured = kspace * sampled
-    scaling = optim.data_scaling(
-        bartorch.fftmod(measured, axes=(-1, -2, -3), inverse=True)
-    )
-    scaling = scaling or 1.0
+    shifted = bartorch.fftmod(measured, axes=(-1, -2, -3), inverse=True)
     encoding = linop.CartesianSense(
         maps.reshape(maps.shape[0], *grid), grid, pattern=pattern, device=device
     )
+    scaling = optim.data_scaling(shifted) or optim.data_scaling(
+        shifted.reshape(kspace.shape[0], *grid), A=encoding
+    )
+    scaling = scaling or 1.0
     axes = wavelet_axes(grid, tuple(range(-1, -len(grid) - 1, -1)))
     solve = optim.FISTA(priors.Wavelet(axes, wavelet), maxiter=iterations)
     data = (measured * (1.0 / scaling)).reshape(kspace.shape[0], *grid)

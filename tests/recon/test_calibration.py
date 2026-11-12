@@ -243,6 +243,59 @@ def test_a_unit_with_calibration_readouts_replaces_the_maps_stored_for_its_slice
     np.testing.assert_array_equal(second.cpu().numpy(), context.coil_maps[0].maps)
 
 
+def test_each_set_is_given_the_maps_its_own_calibration_readouts_gave(device, torch):
+    """A FLEET calibration reads each phase-encode polarity, set 0 and set 1, distorted as that set's images are."""
+    image, maps, kspace = coil_phantom(COILS, MATRIX)
+    moved = centred_kspace(maps * np.roll(image, 5, axis=0))
+    estimate = Estimate()
+    plugin = stream_plugin(maps_of(estimate))
+    lines = range(MATRIX // 2 - ACS // 2, MATRIX // 2 + ACS // 2)
+
+    def of_set(acquisitions, index):
+        for acquisition in acquisitions:
+            acquisition.idx.set = index
+        return acquisitions
+
+    play(
+        plugin,
+        calibration_header(COILS, MATRIX),
+        of_set(readouts(kspace, CALIBRATION, lines=lines, last=LAST), 0)
+        + of_set(readouts(moved, CALIBRATION, lines=lines, last=LAST), 1)
+        + of_set(readouts(kspace, last=LAST, repetition=1), 0)
+        + of_set(readouts(moved, last=LAST, repetition=1), 1),
+        device=device,
+    )
+
+    forward, reversed_, imaged_forward, imaged_reversed = plugin.results
+    assert len(estimate.calls) == 2
+    assert not torch.equal(forward, reversed_)
+    assert torch.equal(imaged_forward, forward)
+    assert torch.equal(imaged_reversed, reversed_)
+
+
+def test_a_later_set_without_maps_of_its_own_is_given_the_maps_of_its_slice(
+    device, torch
+):
+    """A gradient-echo calibration, of set 0 alone, serves every set."""
+    _, _, kspace = coil_phantom(COILS, MATRIX)
+    estimate = Estimate()
+    plugin = stream_plugin(maps_of(estimate))
+    reversed_ = readouts(kspace, last=LAST, repetition=1)
+    for acquisition in reversed_:
+        acquisition.idx.set = 1
+
+    play(
+        plugin,
+        calibration_header(COILS, MATRIX),
+        acs_readouts(kspace, repetition=0) + reversed_,
+        device=device,
+    )
+
+    first, later = plugin.results
+    assert len(estimate.calls) == 1
+    assert torch.equal(later, first)
+
+
 def test_maps_handed_out_are_copies_of_the_stored_maps(device, torch):
     _, _, kspace = coil_phantom(COILS, MATRIX)
 
@@ -656,7 +709,7 @@ def test_maps_estimated_from_calibration_readouts_are_logged(caplog, torch):
         and "coil sensitivities" in record.getMessage()
     ]
     assert line.startswith(
-        f"coil sensitivities of slice 0 estimated by Estimate from {ACS} "
+        f"coil sensitivities of slice 0, set 0, estimated by Estimate from {ACS} "
         "calibration readouts of encoding space 1"
     )
 

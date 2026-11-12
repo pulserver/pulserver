@@ -533,6 +533,7 @@ GE scanner:
 | `gre_multiecho3d` | `qsm_anatomy` | `user13` | `"phantom"` (0, the default), `"brain"` (1) or `"body"` (2): the maps the `qsm` reconstruction makes, stated to it as the `QsmAnatomy` recon parameter | None |
 | `gre_multiecho3d` | `sampling` | `user12` | `"lattice"`, the CAIPIRINHA lattice, the default; or `"poisson"`: a variable-density Poisson-disc draw at the undersampling `ry * rz`, for the compressed-sensing `pics` solve | None |
 | `zte3d` | `scheme` | `user43` | Spokes ordered `"spiral"`, at a constant step across many rings; `"meridian"`; or `"quiet"`, the default: the spiral's directions in steps about a ring gap long, every other shell played backwards | None |
+| `epi2d`, `epi3d` | `calibration` | `user12` | `"fleet"` (0, the default): the central `n_acs_y` lines read by `n_shots * ry` interleaved EPI shots with the imaging train's read lobe, blip, echo spacing and echo time, a slice's (`epi3d`: a partition's) shots in rapid succession at 10 degrees, once in each phase-encode polarity, so each polarity of the EPI is unfolded by coil sensitivities distorted as its image is (Polimeni et al., Magn Reson Med 2016); `"gre"` (1): a gradient echo per line, undistorted | None |
 | `bssfp2d` | `retrospective` | `user44` | ECG gating: off, prospective, each slice triggered once and every heartbeat of the heart rate entered acquired once per cardiac phase; on, retrospective, each segment cycled over a heartbeat and binned into cardiac phases by the reconstruction | None |
 | `gre_spiral2d`, `se_spiral2d`, `gre_stack_of_spirals3d`, `se_stack_of_spirals3d`, `mprage_stack_of_spirals3d` | `variable_density` | `user42` | Variable-density spirals | `user12`: periphery undersampling |
 
@@ -706,8 +707,8 @@ repetition from the modules their function is built from.
   a volume. The flip angle is the control of every excitation of the plugins
   with a `flip` entry, which an MPRAGE's inversion is not. The spin-echo
   plugins, `fse3d` among them, have none, and the amplitude of their
-  excitation and refocusing pulses is that of the design. The gradient-echo
-  calibration of `epi2d` and `epi3d` repeats at its own shortest TR, which the
+  excitation and refocusing pulses is that of the design. The calibration of
+  `epi2d` and `epi3d`, FLEET or gradient echo, repeats at its own shortest TR, which the
   console's TR does not set, and a scanner costs each sequence of the chain
   over its own repetition. Where the calibration plays more RF power than a
   TR, which a slice a long TR apart or a few long 3D shots allow, the layout is

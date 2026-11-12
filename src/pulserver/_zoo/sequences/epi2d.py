@@ -5,7 +5,7 @@ from typing import Any
 
 import pypulseqpp as pp
 from pypulseqpp import sequences
-from pypulseqpp.sequences.sequence.epi2D_sequence import epi2d
+from pypulseqpp.sequences.sequence.epi2D_sequence import CALIBRATIONS, epi2d
 
 from pulserver._zoo._evaluation import (
     achieved,
@@ -18,7 +18,7 @@ from pulserver._zoo._evaluation import (
     pixel_bandwidth,
     rf_layout,
 )
-from pulserver._zoo._user import user_entries
+from pulserver._zoo._user import OWN, user_entries
 from pulserver.design import (
     BoolParam,
     Evaluation,
@@ -28,6 +28,7 @@ from pulserver.design import (
     SequencePlugin,
     StatedParam,
     TimeParam,
+    option,
 )
 from pulserver.protocol import (
     ImagingMode,
@@ -36,11 +37,20 @@ from pulserver.protocol import (
     UIParam,
 )
 
+#: The calibration of an undersampled or multiband scan: ``"fleet"``, the
+#: default, segmented EPI with the imaging train's echo spacing, its shots of
+#: a slice in rapid succession, in each phase-encode polarity, so the coil
+#: sensitivities are distorted as the images are; or ``"gre"``, a gradient
+#: echo per line, undistorted. This plugin's own, at its first own user entry.
+CALIBRATION = option(
+    "calibration", "fleet", choices=CALIBRATIONS, user=OWN, label="Calibration"
+)
+
 
 class Epi2D(SequencePlugin):
     # Twofold readout oversampling keeps the ramp-sampled flat top within the
     # spacing of the readout field of view, so it can be resampled onto a grid.
-    app = functools.partial(epi2d, readout_oversampling=2.0)
+    app = functools.partial(epi2d, readout_oversampling=2.0, calibration=CALIBRATION)
     protocol = {
         UIParam.IMAGING_MODE: StatedParam(ImagingMode.TWO_D),
         # On by default: with the fat shifted many pixels along the phase

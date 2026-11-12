@@ -435,8 +435,9 @@ def test_the_solve_on_host_k_space_is_bartorchs_pics_with_the_image_on_the_host(
     device, partitions
 ):
     """The encoding computes on the context's device; the k-space, the maps and the image stay on the host."""
+    import bartorch
     import torch
-    from bartorch import apps, priors
+    from bartorch import apps, linop, optim, priors
 
     from pulserver.recon.handlers.pics import nlinv_estimate, pics_image, wavelet_axes
 
@@ -449,7 +450,20 @@ def test_the_solve_on_host_k_space_is_bartorchs_pics_with_the_image_on_the_host(
     maps = nlinv_estimate(kspace)
     sampled = kspace.abs().sum(dim=0) > 0
     terms = priors.Wavelet(wavelet_axes(kspace.shape[1:], (-1, -2, -3)), 0.005)
-    expected = apps.pics(kspace, maps, regularizers=terms, maxiter=30)
+    # Every other line is missing, so k-space has no fully sampled centre to
+    # estimate the scaling from, and it is estimated from the adjoint image.
+    grid = tuple(kspace.shape[2:] if partitions == 1 else kspace.shape[1:])
+    shifted = bartorch.fftmod(kspace, axes=(-1, -2, -3), inverse=True)
+    assert optim.data_scaling(shifted) == 0
+    scaling = optim.data_scaling(
+        shifted.reshape(kspace.shape[0], *grid),
+        A=linop.CartesianSense(
+            maps.reshape(maps.shape[0], *grid),
+            grid,
+            pattern=sampled.reshape(grid).to(torch.complex64),
+        ),
+    )
+    expected = apps.pics(kspace, maps, regularizers=terms, maxiter=30, scaling=scaling)
 
     image = pics_image(kspace, maps, sampled, 0.005, 30, device)
 
@@ -458,6 +472,25 @@ def test_the_solve_on_host_k_space_is_bartorchs_pics_with_the_image_on_the_host(
     assert (
         relative_difference(image.numpy(), expected.reshape(image.shape).numpy()) < 1e-5
     )
+
+
+def test_a_weak_signal_without_a_fully_sampled_centre_is_not_thresholded_away():
+    """An accelerated EPI's calibration is a unit of its own, so its k-space has no fully sampled centre."""
+    import torch
+
+    from pulserver.recon.handlers.pics import nlinv_estimate, pics_image
+
+    kspace = 1e-4 * vials()[:, None]
+    kspace = np.fft.fftshift(
+        np.fft.fft(np.fft.ifftshift(kspace, axes=1), axis=1, norm="ortho"), axes=1
+    )
+    kspace[:, :, 1::2] = 0
+    kspace = torch.from_numpy(np.ascontiguousarray(kspace, dtype=np.complex64))
+    sampled = kspace.abs().sum(dim=0) > 0
+
+    image = pics_image(kspace, nlinv_estimate(kspace), sampled, 0.005, 30, None)
+
+    assert float(image.abs().max()) > 0.1 * float(np.abs(1e-4 * vials()).max())
 
 
 def contrasts_led_by_their_calibration(echoes, lines):

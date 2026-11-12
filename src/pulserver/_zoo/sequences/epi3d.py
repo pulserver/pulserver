@@ -7,7 +7,9 @@ import pypulseqpp as pp
 from pypulseqpp import sequences
 from pypulseqpp.sequences.sequence.epi3D_sequence import (
     CALIBRATION_FLIP_DEG,
+    CALIBRATIONS,
     FAT_SHIFT_PPM,
+    FLEET_DUMMY_SHOTS,
     HARD_PULSE_DURATION,
     MAX_GRAD,
     MAX_SLEW,
@@ -17,6 +19,8 @@ from pypulseqpp.sequences.sequence.epi3D_sequence import (
     TIME_BW_PRODUCT,
     caipi_shift,
     epi3d,
+    fleet_lines,
+    fleet_train,
     shell_bases,
     train_lines,
 )
@@ -30,7 +34,7 @@ from pulserver._zoo._evaluation import (
     rf_layout,
 )
 from pulserver._zoo._slab import slab
-from pulserver._zoo._user import user_entries
+from pulserver._zoo._user import OWN, user_entries
 from pulserver.design import (
     ChoiceParam,
     Evaluation,
@@ -40,14 +44,26 @@ from pulserver.design import (
     SequencePlugin,
     StatedParam,
     TimeParam,
+    option,
 )
 from pulserver.protocol import Excitation, ImagingMode, TEPreset, TRPreset, UIParam
+
+#: The calibration of an undersampled scan: ``"fleet"``, the default,
+#: segmented EPI with the imaging train's echo spacing, a partition's shots in
+#: rapid succession, in each phase-encode polarity, so the coil sensitivities
+#: are distorted as the images are; or ``"gre"``, a gradient echo per view,
+#: undistorted. This plugin's own, at its first own user entry.
+CALIBRATION = option(
+    "calibration", "fleet", choices=CALIBRATIONS, user=OWN, label="Calibration"
+)
 
 
 class Epi3D(SequencePlugin):
     # Twofold readout oversampling keeps the ramp-sampled flat top within the
     # spacing of the readout field of view, so it can be resampled onto a grid.
-    app = slab(functools.partial(epi3d, readout_oversampling=2.0))
+    app = slab(
+        functools.partial(epi3d, readout_oversampling=2.0, calibration=CALIBRATION)
+    )
     protocol = {
         UIParam.IMAGING_MODE: StatedParam(ImagingMode.THREE_D),
         # Water alone by default: fat, shifted many pixels along the phase
@@ -181,15 +197,38 @@ class Epi3D(SequencePlugin):
         excitation.add_block(exc.rf, *gz)
         excitation.set_definition(key="TR", value=tr)
         prescans = []
-        # An undersampled scan is preceded by a gradient echo at every view
-        # of the central rectangle of the phase and partition encodes. Its
-        # pulse is the excitation's waveform at CALIBRATION_FLIP_DEG, so it
-        # times as the excitation does, and it repeats at the calibration's
-        # own TR, which the console's does not set: where it plays more RF
-        # power than a TR, the layout states its power.
+        # An undersampled scan is preceded by its calibration over the central
+        # rectangle of the phase and partition encodes: a gradient echo per
+        # view, or FLEET's interleaved EPI shots per partition, each partition
+        # once in each phase-encode polarity. Its pulse is the excitation's
+        # waveform at CALIBRATION_FLIP_DEG, so it times as the excitation
+        # does, and it repeats at the calibration's own TR, which the
+        # console's does not set: where it plays more RF power than a TR, the
+        # layout states its power.
         if ry > 1 or rz > 1 or a["partial_fourier_y"] < 1 or a["partial_fourier_z"] < 1:
-            views = _centre(n_y, a["n_acs_y"]) * _centre(n_z, a["n_acs_z"])
-            if views:
+            partitions = _centre(n_z, a["n_acs_z"])
+            if CALIBRATION == "fleet":
+                acs_shots = n_shots * ry
+                lines_y = fleet_lines(n_y, a["n_acs_y"], acs_shots)
+                acs = fleet_train(
+                    system,
+                    exc.rf,
+                    *(gz or [None]),
+                    epi,
+                    lines_y,
+                    acs_shots,
+                    navigator_lines=NAVIGATOR_LINES,
+                    fov=fov,
+                    matrix=matrix,
+                    oversampling=a["readout_oversampling"],
+                    readout_bandwidth_hz=a["readout_bandwidth_hz"],
+                    spoiling_cycles=SPOILING_CYCLES,
+                    labels=("LIN", "PAR"),
+                )
+                period = acs.duration + raster
+                repeats = FLEET_DUMMY_SHOTS + 2 * acs_shots * partitions
+                repeats *= bool(lines_y) and bool(partitions)
+            else:
                 gre = sequences.LineReadout3D(
                     system,
                     exc.rf,
@@ -201,8 +240,11 @@ class Epi3D(SequencePlugin):
                     spoiling_cycles=SPOILING_CYCLES,
                     labels=("LIN", "PAR"),
                 )
-                duration += views * gre.duration
-                pulse = RfLayout.of(excitation, None, period=gre.duration)
+                period = gre.duration
+                repeats = _centre(n_y, a["n_acs_y"]) * partitions
+            if repeats:
+                duration += repeats * period
+                pulse = RfLayout.of(excitation, None, period=period)
                 weak = CALIBRATION_FLIP_DEG / a["flip_angle_deg"]
                 prescans.append(
                     RfLayout(

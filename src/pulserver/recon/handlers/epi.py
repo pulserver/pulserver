@@ -151,10 +151,13 @@ class EpiRecon(PicsRecon):
     (:func:`bartorch.tools.correct_susceptibility`), history ``HYSCO``. The
     correction is logged as the other corrections are, and an image left
     uncorrected, for want of PyHySCO or of its reference, is logged with the
-    reason at ``WARNING``. The gradient-echo calibration readouts of an
-    accelerated scan reach the same readout grid as the EPI lines
-    (:class:`RampSampling`), so the coil sensitivities estimated from them
-    unfold it. Each image is Fermi
+    reason at ``WARNING``. The calibration readouts of an accelerated scan
+    reach the same readout grid as the EPI lines (:class:`RampSampling`), so
+    the coil sensitivities estimated from them unfold it. A FLEET
+    calibration's readouts are EPI lines, ramp-resampled and phase-corrected
+    against their own shot's navigator, read once in each phase-encode
+    polarity: each set is unfolded by the maps of its own polarity, distorted
+    as its image is (:func:`~pulserver.recon.coil_maps`). Each image is Fermi
     filtered before its magnitude is taken, and corrected for gradient
     nonlinearity and divided by the receive field after the distortion
     correction, the reference set by a field of its own

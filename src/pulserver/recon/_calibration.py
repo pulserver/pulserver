@@ -179,8 +179,12 @@ def coil_maps(
 
     1. The unit's calibration k-space, ``data.ref``: the maps are estimated
        from it and stored in ``context.coil_maps`` under the unit's slice
-       counter, replacing the maps stored there.
-    2. ``context.coil_maps`` for the unit's slice.
+       counter, or under ``(slice, set)`` where its set counter is not 0,
+       replacing the maps stored there.
+    2. ``context.coil_maps`` for the unit's slice and set, then for its slice.
+       A FLEET calibration reads its lines in each phase-encode polarity, set
+       0 forward and set 1 reversed, as the EPI it calibrates reads its
+       images, so each polarity is unfolded by maps distorted as it is.
     3. The exam's ``COIL_SENSITIVITIES``, as a calibration series stored them.
 
     Maps of the stream serve only where
@@ -233,18 +237,29 @@ def coil_maps(
     import torch
 
     location = int(data.counters.get("slice", 0))
+    polarity = int(data.counters.get("set", 0))
+    own = (location, polarity) if polarity else location
     found: CoilSensitivities | None = None
     rejected: list[str] = []
 
     if data.ref is None:
         rejected.append("this unit: it holds no calibration readouts")
-        found = _usable(
-            context.coil_maps.get(location),
-            f"this series, slice {location}",
-            data,
-            context,
-            rejected,
-        )
+        if polarity and own in context.coil_maps:
+            found = _usable(
+                context.coil_maps[own],
+                f"this series, slice {location}, set {polarity}",
+                data,
+                context,
+                rejected,
+            )
+        if found is None:
+            found = _usable(
+                context.coil_maps.get(location),
+                f"this series, slice {location}",
+                data,
+                context,
+                rejected,
+            )
         if found is not None:
             _log.debug(
                 "slice %d takes the coil sensitivities its calibration stored (%s)",
@@ -254,11 +269,12 @@ def coil_maps(
     else:
         start = time.perf_counter()
         found = _estimated(context, data.ref, estimate)
-        context.coil_maps[location] = found
+        context.coil_maps[own] = found
         _log.info(
-            "coil sensitivities of slice %d estimated by %s from %d calibration "
-            "readouts of encoding space %d, maps %s, in %.1f s",
+            "coil sensitivities of slice %d, set %d, estimated by %s from %d "
+            "calibration readouts of encoding space %d, maps %s, in %.1f s",
             location,
+            polarity,
             found.method,
             int(data.ref.mask.any(axis=-1).sum()),
             data.ref.space.index,
