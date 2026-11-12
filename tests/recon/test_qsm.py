@@ -1,4 +1,4 @@
-"""The qsm reconstruction: each echo as pics makes it, then the maps of the stated anatomy once the last echo is in."""
+"""The qsm reconstruction: the maps of the stated anatomy once the last echo is in, from each echo as pics makes it."""
 
 from types import SimpleNamespace
 
@@ -41,8 +41,8 @@ class Maps(QsmRecon):
         self.results.extend(result if isinstance(result, list) else [result])
         return result
 
-    def maps(self, context, data, echoes, te):
-        self.calls.append((echoes, te))
+    def maps(self, context, data, echoes, te, magnitudes=None):
+        self.calls.append((echoes, te, magnitudes))
         return []
 
 
@@ -73,7 +73,9 @@ def multi_echo(te_ms, echoes=None):
     return echoes, acquisitions, header
 
 
-def test_each_echo_is_the_pics_image_and_the_maps_follow_the_last_echo_once(device):
+def test_the_maps_follow_the_last_echo_once_and_take_each_echo_as_pics_makes_it(
+    device,
+):
     _, acquisitions, header = multi_echo([3.0, 8.0])
     plugin = Maps()
 
@@ -81,14 +83,14 @@ def test_each_echo_is_the_pics_image_and_the_maps_follow_the_last_echo_once(devi
     pics = Images()
     reconstruct(acquisitions, header, device=device, plugin=pics)
 
-    images = magnitudes(plugin.results)
     expected = magnitudes(pics.results)
-    assert len(images) == len(expected) == 2
-    for image, reference in zip(images, expected, strict=True):
+    assert len(expected) == 2
+    ((echoes, te, corrected),) = plugin.calls
+    for result, reference in zip(corrected, expected, strict=True):
+        assert result.series_index == MAGNITUDE_SERIES
         np.testing.assert_allclose(
-            image, reference, rtol=1e-5, atol=1e-6 * reference.max()
+            result.data, reference, rtol=1e-5, atol=1e-6 * reference.max()
         )
-    ((echoes, te),) = plugin.calls
     assert echoes.shape == (2, MATRIX, MATRIX)
     assert np.iscomplexobj(echoes)
     np.testing.assert_allclose(
@@ -97,7 +99,7 @@ def test_each_echo_is_the_pics_image_and_the_maps_follow_the_last_echo_once(devi
     assert te == pytest.approx([3e-3, 8e-3])
 
 
-def test_the_magnitude_series_is_intensity_corrected_and_the_echoes_the_maps_take_are_not():
+def test_the_magnitudes_the_rss_takes_are_intensity_corrected_and_the_complex_echoes_are_not():
     pytest.importorskip("SimpleITK")
     kspace = coil_phantom(COILS, MATRIX)[2]
     _, acquisitions, header = multi_echo([3.0, 8.0], echoes=[kspace, 0.5 * kspace])
@@ -107,18 +109,18 @@ def test_the_magnitude_series_is_intensity_corrected_and_the_echoes_the_maps_tak
     reconstruct(acquisitions, header, plugin=corrected)
     reconstruct(acquisitions, header, plugin=filtered)
 
-    for result in corrected.results:
+    ((echoes, _, magnitudes_),) = corrected.calls
+    ((reference, _, _),) = filtered.calls
+    for result in magnitudes_:
         history = result.attributes["ImageProcessingHistory"]
         assert "FERMI" in history
-        assert ("N4" in history) is (result.image_type == "magnitude")
-    ((echoes, _),) = corrected.calls
-    ((reference, _),) = filtered.calls
+        assert "N4" in history
     np.testing.assert_allclose(
         echoes, reference, rtol=1e-5, atol=1e-6 * np.abs(reference).max()
     )
 
 
-def test_the_echoes_are_sent_as_their_magnitude_alone_and_the_maps_take_them_complex(
+def test_a_multi_echo_scan_sends_no_echo_and_the_maps_take_the_echoes_complex(
     device,
 ):
     _, acquisitions, header = multi_echo([3.0, 8.0])
@@ -126,11 +128,8 @@ def test_the_echoes_are_sent_as_their_magnitude_alone_and_the_maps_take_them_com
 
     reconstruct(acquisitions, header, device=device, plugin=plugin)
 
-    assert len(plugin.results) == 2
-    for result in plugin.results:
-        assert result.series_index == MAGNITUDE_SERIES
-        assert result.image_type == "magnitude"
-    ((echoes, _),) = plugin.calls
+    assert [r for r in plugin.results if r is not None] == []
+    ((echoes, _, _),) = plugin.calls
     assert np.iscomplexobj(echoes)
     assert np.abs(np.angle(echoes)).max() > 0.1
 
@@ -237,14 +236,14 @@ def _maps_inputs(n, anatomy):
 
 #: The maps of each anatomy, in the order they are returned.
 MAPS = {
-    "phantom": ["rss", "t2star", "qsm", "swi", "swi_mip"],
-    "brain": ["rss", "t2star", "qsm", "swi", "swi_mip", "pcs", "dcs"],
-    "body": ["rss", "t2star", "qsm", "swi", "swi_mip"],
+    "phantom": ["rss", "t2star", "qsm"],
+    "brain": ["rss", "t2star", "qsm", "swi", "pcs", "dcs"],
+    "body": ["rss", "t2star", "qsm", "swi"],
 }
 
 
 @pytest.mark.parametrize("anatomy", qsm.ANATOMIES)
-def test_every_anatomy_makes_swi_and_only_the_brain_decompose_in_series_order(
+def test_swi_is_made_outside_a_phantom_and_decompose_for_the_brain_alone_in_series_order(
     anatomy, monkeypatch
 ):
     pytest.importorskip("fastqsm")
@@ -273,12 +272,13 @@ def test_every_anatomy_makes_swi_and_only_the_brain_decompose_in_series_order(
         anatomy, anatomy
     )
     assert (kwargs.get("phantom_inversion") == "medi") is (anatomy == "phantom")
-    swi = {r.series_index: r for r in results}[qsm.SERIES["swi"]]
-    assert swi.data.shape == echoes.shape[1:]
-    assert swi.attributes["SeriesDescriptionAdditional"] == "_SWI"
+    if anatomy != "phantom":
+        swi = {r.series_index: r for r in results}[qsm.SERIES["swi"]]
+        assert swi.data.shape == echoes.shape[1:]
+        assert swi.attributes["SeriesDescriptionAdditional"] == "_SWI_MINIP"
 
 
-def test_the_phantom_maps_are_rss_t2star_swi_and_a_medi_qsm_with_positive_paramagnetic_vials():
+def test_the_phantom_maps_are_rss_t2star_and_a_medi_qsm_with_positive_paramagnetic_vials():
     pytest.importorskip("fastqsm")
     pytest.importorskip("scipy")
     echoes, plus, minus, te = _vial_echoes()
@@ -288,12 +288,6 @@ def test_the_phantom_maps_are_rss_t2star_swi_and_a_medi_qsm_with_positive_parama
 
     series = {result.series_index: result for result in results}
     assert set(series) == {qsm.SERIES[name] for name in MAPS["phantom"]}
-    # SWI covers the whole object, masked by no brain or object mask.
-    water = np.abs(echoes[0]).T > 0
-    swi = np.transpose(series[qsm.SERIES["swi"]].data, (2, 1, 0))
-    mip = np.transpose(series[qsm.SERIES["swi_mip"]].data, (2, 1, 0))
-    assert (swi[water] > 0).all()
-    assert (mip <= swi + 1e-6 * swi.max()).all()
     t2 = np.transpose(series[qsm.SERIES["t2star"]].data, (2, 1, 0))
     assert np.median(t2[plus]) == pytest.approx(30.0, rel=0.05)
     chi = np.transpose(series[qsm.SERIES["qsm"]].data, (2, 1, 0))
@@ -332,3 +326,21 @@ def test_synthstrip_weights_are_the_named_file_else_the_shipped_one(
     shipped.parent.mkdir(parents=True)
     shipped.write_bytes(b"")
     assert qsm.synthstrip_weights() == str(shipped)
+
+
+def test_the_rss_is_that_of_the_corrected_magnitudes_with_their_attributes():
+    echoes = np.ones((2, 3, 4, 5), np.complex64)
+    corrected = [
+        qsm.ReconResult(
+            np.full((3, 4, 5), value, np.float32),
+            attributes={"ImageProcessingHistory": ["PULSERVER", "N4"]},
+        )
+        for value in (3.0, 4.0)
+    ]
+
+    rss = qsm._rss(echoes, corrected)
+
+    assert rss.series_index == qsm.SERIES["rss"]
+    np.testing.assert_allclose(rss.data, 5.0)
+    assert rss.attributes["ImageProcessingHistory"] == ["PULSERVER", "N4"]
+    assert rss.attributes["SeriesDescriptionAdditional"] == "_RSS"

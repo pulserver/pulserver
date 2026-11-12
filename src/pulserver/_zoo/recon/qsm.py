@@ -1,3 +1,3 @@
-"""``pics`` magnitude of each echo of a multi-echo 3D gradient echo, then RSS, T2*, SWI, QSM and, for the brain, DECOMPOSE with fast-qsm, each its own series."""
+"""Multi-echo 3D gradient echo with fast-qsm: RSS, T2* and QSM, SWI outside a phantom and DECOMPOSE for the brain, each its own series; the echoes are not sent."""
 
 from pulserver.recon.handlers.qsm import PLUGIN  # noqa: F401
