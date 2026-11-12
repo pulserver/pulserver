@@ -93,13 +93,23 @@ static int segs_delay_flex_equal(
     const pulseg_sequence_descriptor *desc,
     const int *scan_block_idx,
     const pulseg_virtual_segment *sa,
-    const pulseg_virtual_segment *sb)
+    const pulseg_virtual_segment *sb,
+    int exact_trailing_delay)
 {
-    int k;
+    int k, last;
     if (sa->num_blocks != sb->num_blocks)
         return 0;
+    last = sa->num_blocks - 1;
     for (k = 0; k < sa->num_blocks; ++k)
     {
+        /* A wait a segment ends on is its quiet tail where the grouping joins
+         * trailing waits, and the playout ends a segment early by its tail:
+         * the wait has to last the same in every instance. */
+        if (exact_trailing_delay && k == last && last > 0 &&
+            is_adjustable_delay_at(desc, scan_block_idx, sa->start_block + k) &&
+            desc->block_table[scan_block_idx[sa->start_block + k]].duration_us !=
+                desc->block_table[scan_block_idx[sb->start_block + k]].duration_us)
+            return 0;
         if (sa->unique_block_indices[k] == sb->unique_block_indices[k])
             continue;
         if (is_adjustable_delay_at(desc, scan_block_idx, sa->start_block + k) &&
@@ -2247,7 +2257,8 @@ static int strip_pure_delays_scan(
     pulseg_virtual_segment *out,
     int max_out,
     const pulseg_block_table_element *bt,
-    const int *scan_block_idx)
+    const int *scan_block_idx,
+    int join_trailing_delay_us)
 {
     int num_out = 0;
     int s, i, n_blk, bt_idx;
@@ -2279,6 +2290,12 @@ static int strip_pure_delays_scan(
             else
                 break;
         }
+        /* A single wait the segment ends on, too short for a wait of its own
+         * (the playout's gap and least wait), stays in it as its quiet tail. */
+        if (trailing == 1 && n_blk - trailing > leading && join_trailing_delay_us > 0 &&
+            bt[scan_block_idx[raw_segs[s].start_block + n_blk - 1]].duration_us <
+                join_trailing_delay_us)
+            trailing = 0;
         core_start = leading;
         core_end = n_blk - trailing;
 
@@ -2366,7 +2383,8 @@ static int grouped_segments(
 {
     if (opts && !opts->grouping.split_edge_delays)
         return keep_segments_whole(raw_segs, num_raw, out, max_out);
-    return strip_pure_delays_scan(raw_segs, num_raw, out, max_out, bt, scan_block_idx);
+    return strip_pure_delays_scan(raw_segs, num_raw, out, max_out, bt, scan_block_idx,
+                                  opts ? opts->grouping.join_trailing_delay_us : 0);
 }
 
 /* ================================================================== */
@@ -2832,7 +2850,8 @@ int pulseg__get_exec_stream_segments(
                         desc,
                         desc->exec_stream_block_idx,
                         &exp_segs[n],
-                        &uniq_segs[i]))
+                        &uniq_segs[i],
+                        opts->grouping.join_trailing_delay_us > 0))
                 {
                     found = i;
                     break;

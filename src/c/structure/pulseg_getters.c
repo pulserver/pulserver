@@ -388,12 +388,123 @@ int pulseg_delay_wait_us(const pulseg_sequencer_timing *timing, int delay_us, in
     return (int)wait;
 }
 
+int pulseg_segment_early_end_us(const pulseg_sequencer_timing *timing, int quiet_tail_us)
+{
+    const int raster = (timing && timing->raster_us > 0) ? timing->raster_us : 1;
+    long early;
+
+    if (!timing || timing->quiet_margin_us < 0)
+        return 0;
+    early = round_down_to((long)quiet_tail_us - timing->quiet_margin_us, raster);
+    if (early > (long)timing->gap_us + timing->tail_us)
+        early = round_down_to((long)timing->gap_us + timing->tail_us, raster);
+    return (early > 0) ? (int)early : 0;
+}
+
+/* The time a gradient on @p axis of a block stays away from zero, from its
+ * block's start: to the end of its last piece that is not zero at both ends. */
+static long grad_active_end_us(const pulseg_collection *coll, const pulseg_block_info *bi,
+                               int seg_idx, int blk_idx, int axis)
+{
+    int num_shots = 0, num_samples = 0, s, k, last = -1;
+    float **wave;
+    float *times;
+    long end = 0;
+
+    if (!bi->has_grad[axis])
+        return 0;
+    wave = pulseg_get_grad_amplitude(coll, &num_shots, &num_samples, seg_idx, blk_idx, axis);
+    times = pulseg_get_grad_time_us(coll, seg_idx, blk_idx, axis);
+    if (wave && times && num_samples > 0)
+    {
+        for (s = 0; s < num_shots; ++s)
+            for (k = num_samples - 1; k > last; --k)
+                if (wave[s][k] != 0.0f)
+                {
+                    last = k;
+                    break;
+                }
+        if (last >= 0)
+        {
+            /* A piece runs to the next corner; a raster sample to its edge. */
+            k = (last + 1 < num_samples) ? last + 1 : last;
+            end = (long)bi->grad_delay_us[axis] + (long)ceil(times[k]);
+            if (k == last && num_samples >= 2)
+                end += (long)ceil(times[num_samples - 1] - times[num_samples - 2]);
+        }
+    }
+    if (wave)
+    {
+        for (s = 0; s < num_shots; ++s)
+            PULSEG_FREE(wave[s]);
+        PULSEG_FREE(wave);
+    }
+    if (times)
+        PULSEG_FREE(times);
+    return end;
+}
+
+int pulseg_get_segment_quiet_tail_us(const pulseg_collection *coll,
+                                     const pulseg_sequencer_timing *timing, int seg_idx)
+{
+    pulseg_segment_info si = PULSEG_SEGMENT_INFO_INIT;
+    long last = 0, end, block_end;
+    int blk, axis;
+
+    if (!coll || !timing || PULSEG_FAILED(pulseg_get_segment_info(coll, &si, seg_idx)))
+        return 0;
+    if (si.pure_delay || si.num_blocks <= 0)
+        return 0;
+    /* From the last block back: no event outlasts its own block, so the walk
+     * stops at a block that ends before the latest event found. */
+    for (blk = si.num_blocks - 1; blk >= 0; --blk)
+    {
+        pulseg_block_info bi = PULSEG_BLOCK_INFO_INIT;
+        if (PULSEG_FAILED(pulseg_get_block_info(coll, &bi, seg_idx, blk)))
+            return 0;
+        block_end = (long)bi.start_time_us + bi.duration_us;
+        if (block_end <= last)
+            break;
+        for (axis = 0; axis < 3; ++axis)
+        {
+            end = grad_active_end_us(coll, &bi, seg_idx, blk, axis);
+            if (end > 0 && bi.start_time_us + end > last)
+                last = bi.start_time_us + end;
+        }
+        if (bi.has_rf)
+        {
+            end = (long)bi.start_time_us + bi.rf_delay_us + bi.rf_duration_us + timing->rf_tail_us;
+            if (end > last)
+                last = end;
+        }
+        if (bi.has_adc)
+        {
+            pulseg_adc_def def = PULSEG_ADC_DEF_INIT;
+            if (PULSEG_FAILED(pulseg_get_adc_def(coll, &def, bi.adc_def_id)))
+                return 0;
+            end = (long)bi.start_time_us + bi.adc_delay_us
+                + ((long)def.num_samples * def.dwell_ns + 999) / 1000 + timing->adc_tail_us;
+            if (end > last)
+                last = end;
+        }
+        if (bi.has_digitalout)
+        {
+            end = (long)bi.start_time_us + bi.digitalout_delay_us + bi.digitalout_duration_us;
+            if (end > last)
+                last = end;
+        }
+    }
+    end = (long)si.duration_us - last;
+    return (end > 0) ? (int)end : 0;
+}
+
 int pulseg_get_played_time(const pulseg_collection *coll, const pulseg_sequencer_timing *timing,
                            pulseg_played_time *info)
 {
     pulseg_scan_time_info blocks = PULSEG_SCAN_TIME_INFO_INIT;
     int i, n, bt_idx, seg_id, delay_us, rc, tid, waits;
     int after_active = 0;
+    int *early;
     long lag = 0;
     const pulseg_sequence_descriptor *desc;
     const pulseg_block_table_element *bte;
@@ -405,6 +516,16 @@ int pulseg_get_played_time(const pulseg_collection *coll, const pulseg_sequencer
         return rc;
 
     info->segment_instances = 0;
+    /* How early each segment ends, worked out once per segment. */
+    early = NULL;
+    if (timing->quiet_margin_us >= 0 && coll->total_unique_segments > 0)
+    {
+        early = (int *)PULSEG_ALLOC((size_t)coll->total_unique_segments * sizeof(int));
+        if (!early)
+            return PULSEG_ERR_ALLOC_FAILED;
+        for (n = 0; n < coll->total_unique_segments; ++n)
+            early[n] = -1;
+    }
     for (i = 0; i < coll->num_subsequences; ++i)
     {
         desc = &coll->descriptors[i];
@@ -433,11 +554,24 @@ int pulseg_get_played_time(const pulseg_collection *coll, const pulseg_sequencer
             else
             {
                 lag += timing->tail_us + timing->gap_us;
+                if (early)
+                {
+                    const int g = pulseg__global_segment(coll, i, seg_id);
+                    if (g >= 0 && g < coll->total_unique_segments)
+                    {
+                        if (early[g] < 0)
+                            early[g] = pulseg_segment_early_end_us(
+                                timing, pulseg_get_segment_quiet_tail_us(coll, timing, g));
+                        lag -= early[g];
+                    }
+                }
                 info->segment_instances += 1;
                 after_active = 1;
             }
         }
     }
+    if (early)
+        PULSEG_FREE(early);
     info->blocks_us = (double)blocks.total_duration_us;
     info->played_us = info->blocks_us + (double)lag;
     return PULSEG_SUCCESS;

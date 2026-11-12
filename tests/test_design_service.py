@@ -26,6 +26,7 @@ from pulserver.protocol import (
     PROTOCOL_BEGIN,
     PROTOCOL_END,
     TEPreset,
+    Validation,
     parse_listing,
     parse_validation,
 )
@@ -1098,3 +1099,44 @@ def test_an_exam_is_part_of_a_design_only_for_a_plugin_reading_it(
 
     ignored = designed(function_plugins, "chained", {"nx": 4}, None)
     assert designed(function_plugins, "chained", {"nx": 4}, str(exam)) == ignored
+
+
+def _segment_trs(quiet):
+    """Five repetitions, each a readout block ``quiet`` s longer than it: a segment per TR."""
+    system = pp.Opts(**{k: v for k, v in LIMITS.items() if k != "B0"}, B0=3.0)
+    adc = pp.make_adc(num_samples=64, duration=3.2e-3, system=system)
+    seq = pp.Sequence(system)
+    for _ in range(5):
+        seq.add_block(adc, pp.make_delay(3.2e-3 + quiet))
+    seq.set_definition("TR", 3.2e-3 + quiet)
+    return seq
+
+
+TIMED = {
+    **LIMITS,
+    "segment_gap_us": 250,
+    "segment_tail_us": 4,
+    "segment_min_wait_us": 500,
+    "segment_raster_us": 4,
+}
+
+
+def test_a_valid_validation_states_the_tr_the_sequencer_plays():
+    valid = Validation(True, 1.0, "", {})
+    noted = service._with_played_note(valid, _segment_trs(1e-4), TIMED)
+
+    assert noted.info == (
+        "TR 3.300 ms designed, 3.554 ms played: 254 us sequencer gap per segment, "
+        "no room in the design"
+    )
+
+
+def test_a_segment_ending_on_enough_quiet_states_no_gap():
+    early = {**TIMED, "segment_adc_tail_us": 20, "segment_quiet_margin_us": 4}
+    valid = Validation(True, 1.0, "", {})
+
+    assert service._with_played_note(valid, _segment_trs(4e-4), TIMED).info
+    assert service._with_played_note(valid, _segment_trs(4e-4), early).info == (
+        "TR 3.600 ms designed, 3.602 ms played: 2 us sequencer gap per segment, "
+        "the rest absorbed by the quiet tail the segment ends on"
+    )

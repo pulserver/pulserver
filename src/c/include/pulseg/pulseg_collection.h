@@ -220,6 +220,32 @@ extern "C"
                              int waits_trigger, long *lag_us);
 
     /**
+     * @brief Return a segment's quiet tail: the time from its last event to its end.
+     *
+     * An event is a gradient until its last non-zero corner, an RF pulse until
+     * it ends plus @c rf_tail_us, a readout until its last sample ends plus
+     * @c adc_tail_us, and a digital output until it ends. A trailing block that
+     * plays nothing is all quiet tail.
+     *
+     * @param[in] coll    Loaded collection.
+     * @param[in] timing  The sequencer's segment timing.
+     * @param[in] seg_idx Global segment index.
+     * @return The quiet tail (us); 0 for a pure delay or an invalid index.
+     */
+    int pulseg_get_segment_quiet_tail_us(const pulseg_collection *coll,
+                                         const pulseg_sequencer_timing *timing, int seg_idx);
+
+    /**
+     * @brief Return how much earlier than its blocks plus @c tail_us an instance ends.
+     *
+     * The quiet tail less @c quiet_margin_us, rounded down to @c raster_us, at
+     * most @c gap_us plus @c tail_us and at least 0; 0 when
+     * @c quiet_margin_us is negative. An instance that ends this early plays
+     * its blocks plus @c tail_us plus @c gap_us less this.
+     */
+    int pulseg_segment_early_end_us(const pulseg_sequencer_timing *timing, int quiet_tail_us);
+
+    /**
      * @brief Return the time a scan plays under a sequencer's segment timing.
      *
      * Walks the scan table as the scan plays it, prescan-only subsequences

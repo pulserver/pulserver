@@ -222,13 +222,16 @@ typedef struct pulseg_grouping
     int split_navigators;             /**< a navigator readout is its own unit */
     int split_edge_delays;            /**< a wait at a unit's edge is its own
                                        *   unit                             */
+    int join_trailing_delay_us;       /**< a wait at a unit's trailing edge
+                                       *   shorter than this stays in the unit
+                                       *   as its quiet tail (us); 0 never  */
 } pulseg_grouping;
 
 /* What a machine that begins a unit by setting its gradients wants: a boundary
  * only where they rest, a unit per distinct pulse and readout, a navigator of
  * its own, and an edge delay of its own. */
 /* clang-format off */
-#define PULSEG_GROUPING_INIT {100.0f, 1, 1, 1, 1}
+#define PULSEG_GROUPING_INIT {100.0f, 1, 1, 1, 1, 0}
 /* clang-format on */
 
 /**
@@ -687,18 +690,27 @@ typedef struct pulseg_segment_plays
  * an instance that is not a pure delay @c tail_us past its blocks. A pure
  * delay that waits for no trigger gives that time back: it plays a shorter
  * wait, never under @c min_wait_us, so that the scan keeps the time its file
- * states. Used by pulseg_delay_wait_us() and pulseg_get_played_time().
+ * states. With @c quiet_margin_us at 0 or more, the sequencer also ends an
+ * instance that is not a pure delay early, inside its quiet tail
+ * (pulseg_get_segment_quiet_tail_us()): by that tail less @c quiet_margin_us,
+ * on the raster, at most @c gap_us plus @c tail_us
+ * (pulseg_segment_early_end_us()). Used by pulseg_delay_wait_us() and
+ * pulseg_get_played_time().
  */
 typedef struct pulseg_sequencer_timing
 {
-    int gap_us;      /**< time between two instances, in no block (us) */
-    int tail_us;     /**< time an instance that is not a pure delay plays past its blocks (us) */
-    int min_wait_us; /**< shortest wait a pure delay plays (us) */
-    int raster_us;   /**< raster a wait is played on (us), at least 1 */
+    int gap_us;          /**< time between two instances, in no block (us) */
+    int tail_us;         /**< time an instance that is not a pure delay plays past its blocks (us) */
+    int min_wait_us;     /**< shortest wait a pure delay plays (us) */
+    int raster_us;       /**< raster a wait is played on (us), at least 1 */
+    int rf_tail_us;      /**< time the playout keeps busy after an RF pulse ends (us) */
+    int adc_tail_us;     /**< time the playout keeps busy after a readout ends (us) */
+    int quiet_margin_us; /**< quiet tail an instance keeps when it ends early (us);
+                              negative: instances are not ended early */
 } pulseg_sequencer_timing;
 
 /* clang-format off */
-#define PULSEG_SEQUENCER_TIMING_INIT {0, 0, 0, 1}
+#define PULSEG_SEQUENCER_TIMING_INIT {0, 0, 0, 1, 0, 0, -1}
 /* clang-format on */
 
 /**
