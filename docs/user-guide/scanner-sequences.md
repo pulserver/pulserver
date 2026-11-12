@@ -449,14 +449,16 @@ slice's k-space is acquired that many times back to back, a free-running series
 that keeps its steady state from one frame to the next and is reconstructed as
 one image per frame; under prospective ECG gating they are the cardiac phases of
 each heartbeat, and retrospective gating sets its own from the heart rate.
-Ungated, each slice is two files of the chain: its half flip and dummies,
-then its frames, the slice gradient brought to rest between frames at an
-unchanged repetition time. A frame is the repetition of its file, so the
-scanner prepares one segment for the dummies and one for a frame, played once
-per frame, whatever the number of frames; it adds its segment start time to
-the repetition before each frame. Under prospective gating each slice's half
-flip waits for one trigger, and the slice then runs free at the heart rate
-entered: every gated slice is one train with no rest in it, and repetitions
+Each slice opens with a catalyst, its first dummies ramping the flip angle
+linearly up to the one prescribed, and its default dummies bring the steady
+state within 5 %. Ungated, each slice is two files of the chain, its catalyst
+and dummies and then its frames, and every repetition rests at its ends: the
+scanner plays one repetition per segment, the same segment for every line of
+every frame, and adds its segment start time to every repetition time alike,
+so the played TR, which validation reports, is longer than the designed one
+but the same throughout and the steady state is undisturbed. Under prospective
+gating each slice's first excitation waits for one trigger, and the slice then
+runs free at the heart rate entered: every gated slice is one train with no rest in it, and repetitions
 that do not acquire fill the trigger delay and each heartbeat after its
 cardiac phases. The train waits for its trigger itself, so the scanner sets
 the whole slice up before the trigger arrives rather than in the time between

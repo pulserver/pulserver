@@ -6,6 +6,7 @@ import pypulseqpp as pp
 from pypulseqpp import sequences
 from pypulseqpp.sequences.sequence.bssfp2D_sequence import (
     PROSPECTIVE_DUMMIES,
+    STEADY_STATE_TOLERANCE,
     bssfp2d,
     prospective_starts,
 )
@@ -32,7 +33,7 @@ from pulserver.protocol import ImagingMode, TriggerType, TRPreset, UIParam
 
 #: ECG gating is retrospective: each segment cycled over a heartbeat, binned
 #: into cardiac phases by the reconstruction. Prospective otherwise: each
-#: slice triggered once, on its half flip, then every nominal heartbeat
+#: slice triggered once, on its first excitation, then every nominal heartbeat
 #: acquired once per cardiac phase, the slice one train with no rest in it.
 RETROSPECTIVE = option("retrospective", False, **OPTIONS["retrospective"])
 
@@ -94,8 +95,8 @@ class Bssfp2D(SequencePlugin):
         return self.app(system, **_gated(self, system, protocol))
 
     def evaluate(self, system, protocol):
-        # Each slice plays its own train: the half-angle pulse, then one TR per
-        # repetition, ungated its lines once per frame. The design of the
+        # Each slice plays its own train, one TR per repetition, the first
+        # ramping the flip angle up, ungated its lines once per frame. The design of the
         # centre and edge lines of one frame plays those repetitions of one
         # slice; ``once`` is the train of one line.
         a = arguments(self, protocol)
@@ -116,7 +117,7 @@ class Bssfp2D(SequencePlugin):
             segments = _segments(a, g["views_per_segment"])
             rr = 60.0 / a["heart_rate_bpm"]
             if gating == "prospective":
-                # One trigger, on the half flip, opens the slice; the trigger
+                # One trigger, on the first excitation, opens the slice; the trigger
                 # delay and the heartbeats after the first are repetitions
                 # that do not acquire.
                 starts = prospective_starts(
@@ -173,7 +174,10 @@ def _dummies(a, tr: float, gating: str) -> int:
     if gating == "prospective":
         return PROSPECTIVE_DUMMIES
     n = sequences.steady_state_dummies(
-        tr, a["flip_angle_deg"], t2_s=sequences.STEADY_STATE_T2_S
+        tr,
+        a["flip_angle_deg"],
+        t2_s=sequences.STEADY_STATE_T2_S,
+        tolerance=STEADY_STATE_TOLERANCE,
     )
     if gating == "retrospective":
         n = min(n, max(1, round(60.0 / a["heart_rate_bpm"] / tr)))
@@ -195,7 +199,7 @@ def _segmented(a, tr: float, protocol) -> dict:
     """
     rr = 60.0 / a["heart_rate_bpm"]
     gating = _gating(protocol)
-    leading = (0.5 + _dummies(a, tr, gating)) * tr if gating == "prospective" else 0.0
+    leading = _dummies(a, tr, gating) * tr if gating == "prospective" else 0.0
     free = rr - a["trigger_delay"] - leading
     views = math.floor(free / (a["n_phases"] * tr) + 1e-9)
     if views < 1:
