@@ -1,5 +1,6 @@
 """The shipped scanner sequences' evaluations: their scan time, the values they read back and the RF they state."""
 
+import dataclasses
 import functools
 import importlib.util
 import inspect
@@ -15,12 +16,12 @@ from _host import LIMITS, value_block
 
 from pulserver import _plugins
 from pulserver._zoo import ZOO_PAIRS
-from pulserver._zoo._evaluation import achieved, rf_layout
+from pulserver._zoo._evaluation import achieved, cartesian_2d, densest, rf_layout
 from pulserver._zoo._evaluation import arguments as app_arguments
 from pulserver._zoo._fse import bounding_train
 from pulserver._zoo._saturation import explicit_bands
 from pulserver._zoo._slab import slab
-from pulserver._zoo._user import LINE_SPACING, SHARED
+from pulserver._zoo._user import LINE_SPACING, PLACED, SHARED
 from pulserver.design import Protocol, RfLayout, StatedParam, load_plugin
 from pulserver.host import call
 from pulserver.host._limits import design_system
@@ -128,6 +129,7 @@ SCANS = [pytest.param(name, {}, id=name) for name in SHIPPED] + [
     )
     for name, label, changes in (
         ("bssfp2d", "slices", {"nslices": 3, "TR": 6000, "ny": 64}),
+        ("bssfp2d", "frames", {"nslices": 2, "num_frames": 3, "ny": 32}),
         ("bssfp3d", "longer-tr", {"TR": 9000, "nslices": 8, "ny": 32}),
         ("bssfp3d", "undersampled", {"nslices": 12, "ny": 48, "Ry": 2, "Rz": 2}),
         ("epi2d", "undersampled", {"Ry": 2}),
@@ -337,9 +339,9 @@ SCANS = [pytest.param(name, {}, id=name) for name in SHIPPED] + [
 # and an EPI time series whose volume one TR cannot hold.
 REJECTED = [
     pytest.param("bssfp3d", {"TR": 4000, "nslices": 8, "ny": 32}, id="bssfp3d-short"),
-    pytest.param("epi2d", {"nslices": 5, "TR": 300000}, id="epi2d-short"),
+    pytest.param("epi2d", {"nslices": 5, "TR": 10000}, id="epi2d-short"),
     pytest.param(
-        "epi2d", {"nslices": 12, "TR": 2000000, "num_frames": 5}, id="epi2d-frames"
+        "epi2d", {"nslices": 12, "TR": 10000, "num_frames": 5}, id="epi2d-frames"
     ),
     pytest.param(
         "epi3d", {"nx": 64, "ny": 32, "nslices": 8, "TR": 100000}, id="epi3d-short"
@@ -480,6 +482,16 @@ def _chain(designed):
 def _main(plugin, protocol):
     """The main sequence of the chain ``plugin`` designs for ``protocol``."""
     return _chain(plugin.generate(SYSTEM, protocol))[-1]
+
+
+def _prescans(plugin, protocol, name="calibration"):
+    """The prescans named ``<scan>_<name>`` of the chain ``plugin`` designs for ``protocol``."""
+    chain = _chain(plugin.generate(SYSTEM, protocol))
+    return [
+        sequence
+        for sequence in chain[:-1]
+        if str(sequence.definitions.get("Name", "")).endswith(f"_{name}")
+    ]
 
 
 def _bounding(plugin, protocol, peak):
@@ -661,8 +673,13 @@ def test_an_evaluation_states_as_its_layout_a_regular_tr_of_the_design(
     # An optimized refocusing train is designed around its flip angle rather
     # than scaled by it.
     scaled = UIParam.FLIP in plugin.protocol and not name.startswith("fse")
-    banded = UIParam.EXSAT_MASK in plugin.protocol
+    banded = UIParam.EXSAT_MASK in plugin.protocol or UIParam.FAT_SAT in plugin.protocol
     expected = rf_layout(main, scaled, start=start, banded=banded)
+    # A calibration that plays more RF power than a TR is stated in its place.
+    expected = densest(
+        expected,
+        *(RfLayout.of(prescan, None) for prescan in _prescans(plugin, protocol)),
+    )
     amplitude = expected.instances.amplitude.copy()
     if name in OPTIMIZED or name in PRESCRIBED:
         # The layout is the train of the largest RF power, its pulses past its
@@ -816,7 +833,11 @@ def test_resolving_a_resolved_zoo_protocol_changes_nothing(zoo, name):
     first = plugin.validate(SYSTEM, shortest)
 
     assert first.valid, first.info
-    assert plugin.validate(SYSTEM, first.values) == first
+    # The note may say why a value asked for was not reached, which the
+    # resolved protocol no longer asks for.
+    assert dataclasses.replace(
+        plugin.validate(SYSTEM, first.values), info=""
+    ) == dataclasses.replace(first, info="")
 
 
 @pytest.mark.parametrize("name", SHIPPED)
@@ -1175,6 +1196,71 @@ def test_the_3d_epi_excites_water_alone(zoo):
     assert main.definitions["Excitation"] == "spsp"
 
 
+#: EPI protocols whose FLEET calibration plays more RF power than a TR (a
+#: slice a long TR apart, a 3D TR of a few long shots), by name. A multiband
+#: pulse plays several bands' power, so its TR is the longer.
+CALIBRATED = [
+    pytest.param("epi2d", {"Ry": 3, "nslices": 1, "TR": 3000000}, id="epi2d"),
+    pytest.param(
+        "epi2d",
+        {"multiband": 2, "nslices": 2, "TR": 9000000, "FatSat": False},
+        id="epi2d-multiband",
+    ),
+    pytest.param(
+        "epi3d",
+        {"Ry": 2, "Rz": 2, "nx": 64, "ny": 64, "nslices": 16, "TR": 3000000},
+        id="epi3d",
+    ),
+]
+
+
+def _wire_block(changes):
+    """The value block of the wire values ``changes``, a bool as the wire writes it."""
+    return value_block(
+        {k: str(v).lower() if isinstance(v, bool) else v for k, v in changes.items()}
+    )
+
+
+@pytest.mark.parametrize(("name", "changes"), CALIBRATED)
+def test_an_epi_layout_plays_the_rf_power_of_its_calibration(zoo, name, changes):
+    listed = parse_rf_definitions(_reply("list", name, rf_definitions=True))
+    validated = _reply("validate", name, block=_wire_block(changes), rf_layout=True)
+    assert validated.startswith("VALID"), validated
+    layout = parse_rf_layout(validated)
+    plugin = zoo[name]
+    protocol = _protocol(plugin, changes)
+    (calibration,) = _prescans(plugin, protocol)
+    rate = len(calibration.rf_instances().definition) / calibration.duration()[0]
+    own = calibration.calc_rf_power()[3] / calibration.duration()[0]
+
+    # The calibration's pulses over the period, rounded up to a whole pulse.
+    count = len(layout.definition)
+    assert own > _last_tr_power(_main(plugin, protocol))
+    assert count == np.ceil(layout.period * rate)
+    assert _wire_power(listed, layout) == pytest.approx(
+        own * count / (layout.period * rate), rel=POWER_RTOL
+    )
+    assert set(layout.control) == {None}
+    assert {listed[number].use for number in layout.definition} == {"excitation"}
+
+
+@pytest.mark.parametrize("fat_saturation", [True, False])
+def test_the_2d_epi_states_its_excitation_by_the_number_the_listing_gives_it(
+    fat_saturation,
+):
+    listed = parse_rf_definitions(_reply("list", "epi2d", rf_definitions=True))
+    validated = _reply(
+        "validate",
+        "epi2d",
+        block=_wire_block({"FatSat": fat_saturation, "nx": 64, "ny": 64}),
+        rf_layout=True,
+    )
+    layout = parse_rf_layout(validated)
+
+    uses = [listed[number].use for number in layout.definition]
+    assert uses == ["saturation", "excitation"] if fat_saturation else ["excitation"]
+
+
 def test_the_2d_epi_saturates_fat_and_plays_no_band(zoo):
     plugin = zoo["epi2d"]
     *_, main = plugin.generate(SYSTEM, _protocol(plugin, {"nx": 64, "ny": 64}))
@@ -1183,6 +1269,100 @@ def test_the_2d_epi_saturates_fat_and_plays_no_band(zoo):
     assert plugin.listing()[UIParam.FAT_SAT].value is True
     assert len(_saturations(main)) > 0
     assert all(rf.freq_ppm != 0.0 for rf in _saturations(main))
+
+
+@pytest.mark.parametrize(
+    ("name", "changes", "volumes"),
+    [
+        ("epi2d", {"nx": 32, "ny": 32, "nslices": 2, "user0_value": 2}, 2 + 3),
+        ("epi3d", {"nx": 32, "ny": 32, "nslices": 8, "user0_value": 1}, 1 + 3),
+    ],
+)
+def test_the_ttl_control_marks_every_volume_with_a_digital_output(
+    name, changes, volumes, zoo
+):
+    """user35 at 1 plays one output at the start of every volume of the time series, dummy volumes included; at 0, the default, none."""
+    plugin = zoo[name]
+    changes |= {"num_frames": 3}
+
+    def outputs(on):
+        protocol = _protocol(plugin, changes | {"user35_value": on})
+        assert protocol.arguments["volume_output"] == on
+        *prescans, main = _chain(plugin.generate(SYSTEM, protocol))
+        assert not any(_output_starts(seq) for seq in prescans)
+        return main, _output_starts(main)
+
+    _, off = outputs(0)
+    main, on = outputs(1)
+
+    assert plugin.listing()[UIParam.user_value(35)].value == 0
+    assert off == []
+    assert len(on) == volumes
+    assert on[0] < main.definitions["TR"][0]
+    assert np.diff(on) == pytest.approx(main.definitions["TR"][0])
+
+
+def _output_starts(seq):
+    """The start times of the blocks of ``seq`` that play a digital output."""
+    starts, time = [], 0.0
+    for n in range(1, seq.num_blocks + 1):
+        events = getattr(seq.get_block(n), "trig", [])
+        if any(event.type == "output" for event in events):
+            starts.append(time)
+        time += seq.block_durations[n]
+    return starts
+
+
+@pytest.mark.parametrize("name", ["epi2d", "epi3d", "fse3d", "fse_pd3d"])
+def test_an_echo_train_states_the_echo_spacing_of_its_design(zoo, name):
+    plugin = zoo[name]
+    protocol = _protocol(plugin, CHANGED[name])
+
+    evaluation = plugin.evaluate(SYSTEM, protocol)
+    main = _chain(plugin.generate(SYSTEM, protocol))[-1]
+
+    assert evaluation.echo_spacing == pytest.approx(main.definitions["EchoSpacing"][0])
+
+
+@pytest.mark.parametrize("name", ["epi2d", "epi3d"])
+def test_an_oversampled_epi_states_the_bandwidth_of_a_pixel_of_its_field_of_view(
+    zoo, name
+):
+    plugin = zoo[name]
+    protocol = _protocol(plugin, CHANGED[name] | {"num_frames": 3})
+
+    evaluation = plugin.evaluate(SYSTEM, protocol)
+    main = _chain(plugin.generate(SYSTEM, protocol))[-1]
+
+    tables = main.libraries()
+    samples, dwell = tables.adc[tables.blocks[tables.blocks[:, 4] > 0, 4][0] - 1, :2]
+    n_x = main.definitions["Matrix"][0]
+    assert samples >= 2 * n_x
+    assert evaluation.pixel_bandwidth == pytest.approx(1.0 / (dwell * samples))
+    # A frame of the time series is a volume.
+    assert evaluation.frame_time == pytest.approx(evaluation.protocol[UIParam.TR])
+
+
+def test_a_single_frame_and_a_gradient_echo_state_no_frame_time_and_no_echo_spacing(
+    zoo,
+):
+    epi = zoo["epi2d"].evaluate(SYSTEM, _protocol(zoo["epi2d"], CHANGED["epi2d"]))
+    gre = zoo["gre2d"].evaluate(SYSTEM, _protocol(zoo["gre2d"], CHANGED["gre2d"]))
+
+    assert epi.frame_time is None
+    assert (gre.echo_spacing, gre.pixel_bandwidth, gre.frame_time) == (None, None, None)
+
+
+def test_an_ungated_cine_states_a_frame_of_every_line(zoo):
+    plugin = zoo["bssfp2d"]
+    protocol = _protocol(plugin, CHANGED["bssfp2d"] | {"num_frames": 4})
+
+    evaluation = plugin.evaluate(SYSTEM, protocol)
+
+    _, lines = cartesian_2d(app_arguments(plugin, protocol))
+    assert evaluation.frame_time == pytest.approx(
+        lines * evaluation.protocol[UIParam.TR]
+    )
 
 
 def test_a_cine_is_gated_at_the_heart_rate_asked_for(zoo):
@@ -1197,7 +1377,7 @@ def test_a_cine_is_gated_at_the_heart_rate_asked_for(zoo):
     [("bssfp2d", "prospective"), ("bssfp2d+RETROSPECTIVE", "retrospective")],
 )
 @pytest.mark.parametrize("ry", [2, 3])  # Ry 3 leaves a shorter last segment
-def test_an_ecg_trigger_gates_the_cine_with_a_segment_per_heartbeat(
+def test_an_ecg_trigger_gates_the_cine_with_a_segment_per_nominal_heartbeat(
     zoo, name, gating, ry
 ):
     plugin = zoo[name]
@@ -1213,23 +1393,51 @@ def test_an_ecg_trigger_gates_the_cine_with_a_segment_per_heartbeat(
     lines = main.definitions["TR"][0] * gated["views_per_segment"] * 20
     assert lines <= 1.0 - gated["trigger_delay"]
     phases = _phase_labels(main)
+    assert (
+        abs(evaluation.duration - main.duration()[0])
+        <= 2 * SYSTEM.block_duration_raster
+    )
     if gating == "prospective":
+        # One trigger opens the slice, and the heartbeats after the first
+        # start a nominal heartbeat apart: within a repetition of it.
         segments = len(
             module._segments(_arguments(plugin, protocol), gated["views_per_segment"])
         )
-        assert evaluation.duration == pytest.approx(segments * 1.0)
         assert phases == set(range(20))
-    else:
-        assert (
-            abs(evaluation.duration - main.duration()[0])
-            <= 2 * SYSTEM.block_duration_raster
-        )
+        assert segments - 1 < evaluation.duration < segments * 1.0 + 0.1
+        assert _triggers(main) == 1
+
+
+@pytest.mark.parametrize("delay_ms", [0.0, 50.0])
+def test_a_prospective_slice_is_one_train_from_its_trigger_on(zoo, delay_ms):
+    plugin = zoo["bssfp2d"]
+    changes = {"trigger_type": "physio2", "num_frames": 5, "trigger_delay": delay_ms}
+    protocol = _protocol(plugin, changes)
+
+    evaluation = plugin.evaluate(SYSTEM, protocol)
+    main = _main(plugin, protocol)
+    first = main.get_block(1)
+
+    assert _triggers(main) == 1
+    assert first.trig is not None and first.rf is not None
+    assert (
+        abs(evaluation.duration - main.duration()[0])
+        <= 2 * SYSTEM.block_duration_raster
+    )
 
 
 def _arguments(plugin, protocol):
     from pulserver._zoo._evaluation import arguments
 
     return arguments(plugin, protocol)
+
+
+def _triggers(sequence):
+    """The blocks of ``sequence`` that wait for a trigger."""
+    return sum(
+        getattr(sequence.get_block(b), "trig", None) is not None
+        for b in range(1, sequence.num_blocks + 1)
+    )
 
 
 def _phase_labels(sequence):
@@ -1324,7 +1532,7 @@ def test_every_shared_control_a_sequence_takes_is_named_at_its_own_user_cv(name,
         if not key.startswith("user")
     }
 
-    for index, (arguments, label, factory) in enumerate(SHARED):
+    for index, (arguments, label, factory) in [*enumerate(SHARED), *PLACED.items()]:
         free = [a for a in arguments if a in taken and a not in bound]
         listed = UIParam.user_value(index) in plugin.protocol
         assert listed == bool(free), arguments
@@ -1601,6 +1809,33 @@ def test_a_prescription_no_train_realizes_is_refused_by_the_evaluation_as_by_the
         plugin.generate(SYSTEM, _protocol(plugin, request))
 
 
+@WITH_BLOCHSIM
+@pytest.mark.parametrize(
+    ("name", "options", "changes", "refused"),
+    [
+        ("fse3d", {}, {"TE": 44000}, "TE must be Minimum"),
+        ("fse3d", {"refocusing": "busse"}, {"user17_value": -1}, "must be 0"),
+        ("fse_pd3d", {}, {"TE": 44000, "user17_value": -1}, "must be 0"),
+    ],
+)
+def test_a_centre_echo_the_busse_radial_order_cannot_play_is_refused_by_the_evaluation_as_by_the_design(
+    name, options, changes, refused
+):
+    """The busse radial order acquires the centre of k-space at the first echo, whatever the console carries over."""
+    plugin = load_plugin(
+        _plugins.SEQUENCES / f"{name}.py", options | {"ordering": "busse_radial"}
+    )
+    request = {"nx": 64, "ny": 32, "nslices": 8, "etl": 20, "TR": 1800000}
+
+    assert plugin.validate(SYSTEM, request | {"TE": TEPreset.MINIMUM}).valid
+    reply = plugin.validate(SYSTEM, request | changes)
+
+    assert not reply.valid
+    assert refused in reply.info
+    with pytest.raises(ValueError, match="busse_radial requires centre echo 0"):
+        plugin.generate(SYSTEM, _protocol(plugin, request | changes))
+
+
 @pytest.mark.parametrize(
     ("name", "options"), [("fse3d", {"refocusing": "busse"}), ("fse_pd3d", {})]
 )
@@ -1848,3 +2083,36 @@ def test_a_peripheral_tr_shorter_than_the_longest_train_is_refused_by_evaluation
     with pytest.raises(ValueError) as generated:
         plugin.generate(SYSTEM, protocol)
     assert str(refused.value) == str(generated.value)
+
+
+def test_a_bandwidth_the_slew_rate_cannot_reach_is_stated_with_why():
+    from pulserver._zoo._evaluation import bandwidth_note
+
+    system = pp.Opts(adc_raster_time=2e-6)
+
+    note = bandwidth_note(system, 500e3, 256, 4e-6)
+
+    assert note.startswith(
+        "bandwidth 250 kHz, not 500 kHz: under the design's gradient"
+    )
+    assert "0.512 ms its 256 samples take at 500 kHz" in note
+    assert "2 us ADC raster" in note
+
+
+def test_a_bandwidth_off_the_adc_raster_is_stated_as_rounded_to_it():
+    from pulserver._zoo._evaluation import bandwidth_note
+
+    system = pp.Opts(adc_raster_time=2e-6)
+
+    note = bandwidth_note(system, 400e3, 256, 2e-6)
+
+    assert note == (
+        "bandwidth 500 kHz, not 400 kHz: the sampling interval is a multiple of "
+        "the 2 us ADC raster"
+    )
+
+
+def test_a_bandwidth_met_states_nothing():
+    from pulserver._zoo._evaluation import bandwidth_note
+
+    assert bandwidth_note(pp.Opts(adc_raster_time=2e-6), 250e3, 256, 4e-6) == ""

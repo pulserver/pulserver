@@ -5,24 +5,30 @@ from typing import Any
 
 import pypulseqpp as pp
 from pypulseqpp import sequences
-from pypulseqpp.sequences.sequence.epi2D_sequence import epi2d
+from pypulseqpp.sequences.sequence.epi2D_sequence import CALIBRATIONS, epi2d
 
 from pulserver._zoo._evaluation import (
     achieved,
     arguments,
+    bandwidth_note,
+    densest,
     dummies,
+    first_readout,
     packets,
+    pixel_bandwidth,
     rf_layout,
 )
-from pulserver._zoo._user import user_entries
+from pulserver._zoo._user import OWN, user_entries
 from pulserver.design import (
     BoolParam,
     Evaluation,
     FloatParam,
     IntParam,
+    RfLayout,
     SequencePlugin,
     StatedParam,
     TimeParam,
+    option,
 )
 from pulserver.protocol import (
     ImagingMode,
@@ -31,11 +37,20 @@ from pulserver.protocol import (
     UIParam,
 )
 
+#: The calibration of an undersampled or multiband scan: ``"fleet"``, the
+#: default, segmented EPI with the imaging train's echo spacing, its shots of
+#: a slice in rapid succession, in each phase-encode polarity, so the coil
+#: sensitivities are distorted as the images are; or ``"gre"``, a gradient
+#: echo per line, undistorted. This plugin's own, at its first own user entry.
+CALIBRATION = option(
+    "calibration", "fleet", choices=CALIBRATIONS, user=OWN, label="Calibration"
+)
+
 
 class Epi2D(SequencePlugin):
     # Twofold readout oversampling keeps the ramp-sampled flat top within the
     # spacing of the readout field of view, so it can be resampled onto a grid.
-    app = functools.partial(epi2d, readout_oversampling=2.0)
+    app = functools.partial(epi2d, readout_oversampling=2.0, calibration=CALIBRATION)
     protocol = {
         UIParam.IMAGING_MODE: StatedParam(ImagingMode.TWO_D),
         # On by default: with the fat shifted many pixels along the phase
@@ -91,7 +106,9 @@ class Epi2D(SequencePlugin):
     def evaluate(self, system, protocol):
         # A cycle plays one shot of every slice group of a packet, and a TR
         # the shots of a volume. The design of one group at the shortest TR
-        # plays one cycle of that group per shot, after its calibration.
+        # plays one cycle of that group per shot, after its calibration. The
+        # calibration repeats at its own TR, which the console's does not set:
+        # where it plays more RF power than a TR, the layout states its power.
         a = arguments(self, protocol)
         multiband = a["multiband"]
         if a["n_slices"] % multiband:
@@ -126,11 +143,25 @@ class Epi2D(SequencePlugin):
         dummy_cycles = n_dummy * (n_shots if n_frames > 1 else 1)
         played = 2 * dummy_cycles + (1 + n_frames) * n_shots
         tr = n_shots * max(cycles)
+        # The fat saturation is numbered after the excitation, so the
+        # excitation keeps the number the listing, made with it on, gives it.
+        layout = rf_layout(
+            volume, scaled=True, copies=max(sizes), period=tr, banded=True
+        )
+        values = achieved(self, volume) | {UIParam.TR: tr}
         return Evaluation(
-            protocol.replace(achieved(self, volume) | {UIParam.TR: tr}),
+            protocol.replace(values),
             played * sum(cycles) + groups * sequences.duration(calibration),
-            rf_layout=rf_layout(volume, scaled=True, copies=max(sizes), period=tr),
+            info=bandwidth_note(
+                system, a["readout_bandwidth_hz"], *first_readout(volume)
+            ),
+            rf_layout=densest(
+                layout, *(RfLayout.of(prescan, None) for prescan in calibration)
+            ),
             sequence=volume,
+            echo_spacing=volume.definitions["EchoSpacing"][0],
+            pixel_bandwidth=pixel_bandwidth(*first_readout(volume)),
+            frame_time=tr if n_frames > 1 else None,
         )
 
 

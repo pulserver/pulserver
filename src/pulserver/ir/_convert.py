@@ -114,6 +114,13 @@ class Grouping:
         virtual segment of its own. An interpreter that inserts
         transmit-to-receive switching time at every segment boundary needs as
         few segments as possible, and sets this False.
+    join_trailing_delay_us
+        A single pure-delay block a segment ends on, shorter than this (µs),
+        stays in the segment as its quiet tail rather than becoming a wait of
+        its own, and must last the same in every instance of the segment; 0
+        never. An interpreter that ends a segment early inside its quiet tail
+        (:class:`SequencerTiming`) states its gap plus its least wait, the
+        shortest wait of its own that costs no more than the tail.
     """
 
     boundary_gradient_hz_per_m: float = 100.0
@@ -121,6 +128,7 @@ class Grouping:
     split_by_readouts: bool = True
     split_navigators: bool = True
     split_edge_delays: bool = True
+    join_trailing_delay_us: float = 0.0
 
     def as_values(self) -> tuple[float, ...]:
         """Return the rule as the extension takes it, in the order C declares it."""
@@ -130,6 +138,7 @@ class Grouping:
             float(self.split_by_readouts),
             float(self.split_navigators),
             float(self.split_edge_delays),
+            float(self.join_trailing_delay_us),
         )
 
 
@@ -204,6 +213,15 @@ class SequencerTiming:
     ``min_wait_us``, so the scan keeps the time its file states wherever such
     a delay follows; :func:`played_time` gives what a scan plays.
 
+    With ``quiet_margin_us`` at 0 or more the sequencer also ends an instance
+    that is not a pure delay inside its quiet tail, the time from its last
+    event to its end: earlier by that tail less ``quiet_margin_us``, on the
+    raster, by at most ``gap_us`` plus ``tail_us``. A segment that ends on at
+    least that much silence then plays exactly its blocks. An RF pulse counts
+    as an event until ``rf_tail_us`` after it ends and a readout until
+    ``adc_tail_us`` after its last sample, the time the playout keeps busy
+    after either.
+
     Attributes
     ----------
     gap_us
@@ -214,6 +232,12 @@ class SequencerTiming:
         Shortest wait a pure delay plays, in µs.
     raster_us
         Raster a wait is played on, in µs.
+    rf_tail_us, adc_tail_us
+        Time the playout keeps busy after an RF pulse and after a readout, in
+        µs.
+    quiet_margin_us
+        Quiet tail an instance keeps when it ends early, in µs; negative, the
+        default, when instances are not ended early.
 
     Raises
     ------
@@ -225,9 +249,39 @@ class SequencerTiming:
     tail_us: int = 0
     min_wait_us: int = 0
     raster_us: int = 1
+    rf_tail_us: int = 0
+    adc_tail_us: int = 0
+    quiet_margin_us: int = -1
+
+    @property
+    def ends_early(self) -> bool:
+        """Whether the sequencer ends an instance early inside its quiet tail."""
+        return self.quiet_margin_us >= 0
+
+    def as_values(self) -> list[int]:
+        """Return the timing as the extension takes it, in the order C declares it."""
+        return [
+            self.gap_us,
+            self.tail_us,
+            self.min_wait_us,
+            self.raster_us,
+            self.rf_tail_us,
+            self.adc_tail_us,
+            self.quiet_margin_us,
+        ]
 
     def __post_init__(self) -> None:
-        if min(self.gap_us, self.tail_us, self.min_wait_us) < 0 or self.raster_us <= 0:
+        if (
+            min(
+                self.gap_us,
+                self.tail_us,
+                self.min_wait_us,
+                self.rf_tail_us,
+                self.adc_tail_us,
+            )
+            < 0
+            or self.raster_us <= 0
+        ):
             raise ValueError(
                 "segment times must not be negative and the raster must be positive"
             )
@@ -243,10 +297,14 @@ class PlayedTime:
         The blocks of the scan, prescan-only subsequences left out.
     played
         What the scan plays under a :class:`SequencerTiming`.
+    segment_starts
+        Segment instances the scan plays, pure delays that play a wait among
+        them.
     """
 
     blocks: float
     played: float
+    segment_starts: int = 0
 
     @property
     def extra(self) -> float:
@@ -336,9 +394,13 @@ def _played_time(
         list(label_column_map),
         None if profile is None else profile.as_pairs(),
         None if grouping is None else grouping.as_values(),
-        [timing.gap_us, timing.tail_us, timing.min_wait_us, timing.raster_us],
+        timing.as_values(),
     )
-    return PlayedTime(1e-6 * found["blocks_us"], 1e-6 * found["played_us"])
+    return PlayedTime(
+        1e-6 * found["blocks_us"],
+        1e-6 * found["played_us"],
+        int(found["segment_instances"]),
+    )
 
 
 def cache_path(seq_path: Path | str, cache_ext: str = ".pseg") -> Path:

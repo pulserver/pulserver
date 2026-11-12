@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import cmath
 import copy
+import dataclasses
 import re
 from collections.abc import Mapping
 from pathlib import Path
@@ -70,6 +71,9 @@ _SEGMENT = {
     "segment_tail_us": "tail_us",
     "segment_min_wait_us": "min_wait_us",
     "segment_raster_us": "raster_us",
+    "segment_rf_tail_us": "rf_tail_us",
+    "segment_adc_tail_us": "adc_tail_us",
+    "segment_quiet_margin_us": "quiet_margin_us",
 }
 
 
@@ -137,6 +141,17 @@ def split_limits(
     budget = _wave_budget(limits)
     if budget is not None:
         options["wave_budget"] = budget
+    if int(limits.get("segment_quiet_margin_us", -1)) >= 0:
+        # A playout that ends a segment inside its quiet tail keeps a short
+        # trailing wait in the segment: a wait of its own would cost its gap
+        # and least wait whatever its length.
+        options["grouping"] = dataclasses.replace(
+            options.get("grouping") or ir.Grouping(),
+            join_trailing_delay_us=float(
+                int(limits.get("segment_gap_us", 0))
+                + int(limits.get("segment_min_wait_us", 0))
+            ),
+        )
     return system, options, check_limits(limits)
 
 
@@ -308,10 +323,14 @@ def check_limits(limits: Mapping[str, Any]) -> ir.CheckLimits:
       local SAR limits in W/kg in its current operating mode.
     - ``pmc_enable``, a site setting, says whether a scan follows the poses
       its reconstruction publishes (:func:`follows_poses`).
-    - ``segment_gap_us``, ``segment_tail_us``, ``segment_min_wait_us`` and
-      ``segment_raster_us`` are the sequencer's segment timing in µs
+    - ``segment_gap_us``, ``segment_tail_us``, ``segment_min_wait_us``,
+      ``segment_raster_us``, ``segment_rf_tail_us``, ``segment_adc_tail_us``
+      and ``segment_quiet_margin_us`` are the sequencer's segment timing in µs
       (:class:`pulserver.ir.SequencerTiming`); ``segment_gap_us`` is required
-      with any of them.
+      with any of them. A ``segment_quiet_margin_us`` of 0 or more also has
+      the conversion keep a trailing wait shorter than the gap plus the least
+      wait in the segment before it (:class:`pulserver.ir.Grouping`), where
+      the sequencer ends that segment inside its quiet tail.
     - ``adc_gap_us`` is the least time in µs from the end of one ADC to the
       start of the next that the scanner's receiver can start a readout in.
     - ``ir_wave_max_samples`` and ``ir_wave_raster_us``, the waveform memory

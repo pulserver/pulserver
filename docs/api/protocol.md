@@ -89,7 +89,9 @@ listing and the value block ignore these.
 | {obj}`~pulserver.protocol.parse_values` | Read a value block against the listing it was edited from. |
 | {obj}`~pulserver.protocol.format_prescription` | Format prescription entries as the `name: value` lines of a block. |
 | {obj}`~pulserver.protocol.parse_prescription` | Read the prescription entries out of the `name: value` lines of a block. |
-| {obj}`~pulserver.protocol.Validation` | Reply to `VALIDATE`: validity, scan time, information line, values and the RF layout of a valid evaluation. |
+| {obj}`~pulserver.protocol.Validation` | Reply to `VALIDATE`: validity, scan time, information line, values, and the RF layout and display figures of a valid evaluation. |
+| {obj}`~pulserver.protocol.Display` | The figures of a design a console shows and nobody sets: echo spacing, pixel bandwidth, frame time. |
+| {obj}`~pulserver.protocol.parse_display` | Read the `[Display]` block of a `validate` reply. |
 | {obj}`~pulserver.protocol.format_validation` | Format a `VALIDATE` reply. |
 | {obj}`~pulserver.protocol.parse_validation` | Read a `VALIDATE` reply. |
 | {obj}`~pulserver.protocol.RfDefinitionRecord` | One RF definition of an `[RfDefinitions]` block. |

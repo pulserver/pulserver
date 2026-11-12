@@ -7,6 +7,8 @@ __all__ = ["CoilCompression", "CoilSensitivities", "MissingCalibration", "coil_m
 import copy
 import dataclasses
 import hashlib
+import logging
+import time
 from dataclasses import dataclass
 from typing import Any
 
@@ -15,8 +17,27 @@ import numpy as np
 from ._buffers import ReconBuffer, ReconData
 from .plugin import COIL_SENSITIVITIES, ReconContext
 
+_log = logging.getLogger("pulserver.recon")
+
 #: The placement axes the calibration k-space of a unit may vary along.
 _ENCODED = ("partition", "phase_encode")
+
+
+def _field_matches(name: str, stored: Any, requested: Any) -> bool:
+    continuous = {
+        "geometry.table_position",
+        "geometry.position",
+        "geometry.read_dir",
+        "geometry.phase_dir",
+        "geometry.slice_dir",
+        "geometry.fov",
+        "geometry.extent",
+    }
+    if name in continuous and stored is not None and requested is not None:
+        return np.shape(stored) == np.shape(requested) and bool(
+            np.allclose(stored, requested, rtol=0, atol=1e-6)
+        )
+    return stored == requested
 
 
 class MissingCalibration(RuntimeError):
@@ -116,7 +137,9 @@ class CoilSensitivities:
         ``context.noise``, ``basis`` with the compression in
         ``context.coil_compression``, then each component of ``geometry`` with
         that of the unit's imaging k-space, or of its calibration k-space where
-        it holds no imaging data.
+        it holds no imaging data. Continuous geometry fields admit an absolute
+        tolerance of 1e-6 (mm for positions and extents, dimensionless for
+        direction cosines); identifiers and matrix sizes must match exactly.
 
         Returns
         -------
@@ -138,7 +161,7 @@ class CoilSensitivities:
             ),
         )
         for name, stored, requested in fields:
-            if stored != requested:
+            if not _field_matches(name, stored, requested):
                 return f"{name} differs: stored {stored!r}, this unit {requested!r}"
         return None
 
@@ -156,8 +179,12 @@ def coil_maps(
 
     1. The unit's calibration k-space, ``data.ref``: the maps are estimated
        from it and stored in ``context.coil_maps`` under the unit's slice
-       counter, replacing the maps stored there.
-    2. ``context.coil_maps`` for the unit's slice.
+       counter, or under ``(slice, set)`` where its set counter is not 0,
+       replacing the maps stored there.
+    2. ``context.coil_maps`` for the unit's slice and set, then for its slice.
+       A FLEET calibration reads its lines in each phase-encode polarity, set
+       0 forward and set 1 reversed, as the EPI it calibrates reads its
+       images, so each polarity is unfolded by maps distorted as it is.
     3. The exam's ``COIL_SENSITIVITIES``, as a calibration series stored them.
 
     Maps of the stream serve only where
@@ -171,6 +198,10 @@ def coil_maps(
     slice counter, not the encoding space, so maps estimated from a
     calibration unit in an encoding space of its own serve the imaging units
     of its slice.
+
+    Maps estimated from a unit's calibration readouts are logged at ``INFO``,
+    with the lines and the time they took; maps stored in the stream or the
+    exam that serve a unit are logged at ``DEBUG``.
 
     Parameters
     ----------
@@ -206,24 +237,55 @@ def coil_maps(
     import torch
 
     location = int(data.counters.get("slice", 0))
+    polarity = int(data.counters.get("set", 0))
+    own = (location, polarity) if polarity else location
     found: CoilSensitivities | None = None
     rejected: list[str] = []
 
     if data.ref is None:
         rejected.append("this unit: it holds no calibration readouts")
+        if polarity and own in context.coil_maps:
+            found = _usable(
+                context.coil_maps[own],
+                f"this series, slice {location}, set {polarity}",
+                data,
+                context,
+                rejected,
+            )
+        if found is None:
+            found = _usable(
+                context.coil_maps.get(location),
+                f"this series, slice {location}",
+                data,
+                context,
+                rejected,
+            )
+        if found is not None:
+            _log.debug(
+                "slice %d takes the coil sensitivities its calibration stored (%s)",
+                location,
+                found.method,
+            )
     else:
+        start = time.perf_counter()
         found = _estimated(context, data.ref, estimate)
-        context.coil_maps[location] = found
-
-    if found is None:
-        stored = context.coil_maps.get(location)
-        found = _usable(
-            stored, f"this series, slice {location}", data, context, rejected
+        context.coil_maps[own] = found
+        _log.info(
+            "coil sensitivities of slice %d, set %d, estimated by %s from %d "
+            "calibration readouts of encoding space %d, maps %s, in %.1f s",
+            location,
+            polarity,
+            found.method,
+            int(data.ref.mask.any(axis=-1).sum()),
+            data.ref.space.index,
+            tuple(found.maps.shape),
+            time.perf_counter() - start,
         )
     if found is not None:
         return torch.tensor(found.maps)
     maps = _fitted(context.exam.get(COIL_SENSITIVITIES), data, context, rejected)
     if maps is not None:
+        _log.debug("slice %d takes the coil sensitivities the exam stored", location)
         return torch.tensor(maps)
 
     if not required:
@@ -514,7 +576,7 @@ def _fitted(
         ),
     )
     for name, value, requested in fields:
-        if value != requested:
+        if not _field_matches(name, value, requested):
             rejected.append(
                 f"{where}: {name} differs: stored {value!r}, this unit "
                 f"{requested!r} (estimated by {stored.method} from {origin})"
@@ -522,7 +584,12 @@ def _fitted(
             return None
 
     maps = stored.maps
-    if any(stored.geometry.get(name) != wanted.get(name) for name in _PLACEMENT):
+    if any(
+        not _field_matches(
+            f"geometry.{name}", stored.geometry.get(name), wanted.get(name)
+        )
+        for name in _PLACEMENT
+    ):
         source, target = _placement(stored.geometry), _placement(wanted)
         if source is None or target is None:
             rejected.append(

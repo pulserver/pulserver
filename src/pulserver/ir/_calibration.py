@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import logging
 import math
 from collections.abc import Sequence
@@ -32,6 +33,19 @@ SHORTEST_REST = 1e-3
 
 #: Definition that marks the generated subsequence in the cache.
 PRESCAN_ONLY = "PrescanOnly"
+#: Longest file, in s, that reads out without repeating and is still its own
+#: receive calibration. Such a file is one repetition played once, a single
+#: slice or a single shot, and a prescan calibrates on it from its start, as
+#: it does on the repetition of a file that repeats; a longer one is taken as a
+#: scan no repetition stands for, and is given a generated calibration. The
+#: value holds the longest repetition a prescan is given today with room to
+#: spare: one slice of a 2D balanced SSFP cine of 25 frames, about 16 000
+#: blocks and 22 s.
+RECEIVE_CALIBRATION_WHOLE_FILE_S = 60.0
+#: Gradient, Hz/m, under which an axis is at rest where the generated
+#: calibration starts and ends its play: the conversion's threshold for a
+#: segment boundary.
+REST_GRADIENT = 100.0
 
 _RF, _GX, _GY, _GZ, _ADC = range(5)
 _log = logging.getLogger(__name__)
@@ -170,6 +184,16 @@ def receive_calibration_sequence(
     amplitudes, the prescan calibrates on that file from its start after the
     tour, and the subsequence is the tour alone, its readouts under
     ``NOPRESCAN``, or None without pTx.
+    So does it where its only file reads out without repeating and lasts at
+    most :data:`RECEIVE_CALIBRATION_WHOLE_FILE_S`: the file is then one
+    repetition played once, a single slice or a single shot, and is its own
+    calibration as the repetition of a repeating file is. A longer such file
+    is its own calibration too where the excitation chosen below does not
+    start and end with every gradient at rest (:data:`REST_GRADIENT`), as in
+    a train whose blocks join on a gradient: no part of it plays apart. In a
+    chain of several reading files, such an excitation's blocks are widened
+    to the nearest joins at rest either side, a frame of a balanced train
+    whose frames rest between them.
     Otherwise no repetition stands for the scan, and the tour is followed by
     the calibration: the excitation scoring highest on the sine of its flip
     angle, capped at 90 degrees, times the thickness it excites, the RF
@@ -210,13 +234,30 @@ def receive_calibration_sequence(
     tour = _tour(files, channels) if channels > 1 else []
     reading = [i for i, f in enumerate(files) if f.reads.any()]
     calibration = None
-    if reading and not (len(reading) == 1 and _repeats_alike(files[reading[0]])):
+    if reading and not (len(reading) == 1 and _calibrates_on_itself(files[reading[0]])):
         # Equal signals, to rounding, go to the first in play order.
         calibration = max(
             (span for i in reading for span in _spans(files[i], i, channels)),
             key=lambda span: round(span.signal, SIGNAL_DIGITS),
             default=None,
         )
+        if calibration is not None and not _rests(files[calibration.file], calibration):
+            if len(reading) == 1:
+                _log.info(
+                    "receive calibration: file %d block %d does not start and end at "
+                    "rest; the file is its own calibration",
+                    calibration.file,
+                    calibration.first + 1,
+                )
+                calibration = None
+            else:
+                calibration = _widened(files[calibration.file], calibration)
+                _log.info(
+                    "receive calibration: file %d blocks %d-%d, widened to rest at both ends",
+                    calibration.file,
+                    calibration.first + 1,
+                    calibration.stop,
+                )
     if not tour and calibration is None:
         return None
     if calibration is not None and calibration.balanced:
@@ -226,6 +267,46 @@ def receive_calibration_sequence(
             calibration.first + 1,
         )
     return _build(files, tour, calibration, system)
+
+
+def _edge_rests(f: _File, block: int, end: str) -> bool:
+    """Whether every gradient of 0-based ``block`` is at rest at its ``end``, ``"first"`` or ``"last"``."""
+    played = f.sequence.get_block(block + 1)
+    for axis in ("gx", "gy", "gz"):
+        grad = getattr(played, axis, None)
+        if grad is None or grad.type == "trap":
+            continue
+        if abs(float(getattr(grad, end))) > REST_GRADIENT:
+            return False
+    return True
+
+
+def _rests(f: _File, span: _Span) -> bool:
+    """Whether every gradient is at rest where the span opens and where it closes."""
+    return _edge_rests(f, span.first, "first") and _edge_rests(f, span.stop - 1, "last")
+
+
+def _widened(f: _File, span: _Span) -> _Span:
+    """Return the span grown to the nearest joins at rest before it and after it, or the file's ends."""
+    first, stop, blocks = span.first, span.stop, f.blocks.shape[0]
+    while first > 0 and not (
+        _edge_rests(f, first, "first") and _edge_rests(f, first - 1, "last")
+    ):
+        first -= 1
+    while stop < blocks and not (
+        _edge_rests(f, stop - 1, "last") and _edge_rests(f, stop, "first")
+    ):
+        stop += 1
+    readouts = int(f.reads[first:stop].sum())
+    return dataclasses.replace(span, first=first, stop=stop, readouts=readouts)
+
+
+def _calibrates_on_itself(f: _File) -> bool:
+    """Whether a prescan calibrates on the file from its start: it repeats alike, or is played once and briefly."""
+    size, _ = f.sequence.repetition()
+    if 0 < size < f.blocks.shape[0]:
+        return _repeats_alike(f)
+    return float(f.sequence.duration()[0]) <= RECEIVE_CALIBRATION_WHOLE_FILE_S
 
 
 def _repeats_alike(f: _File) -> bool:

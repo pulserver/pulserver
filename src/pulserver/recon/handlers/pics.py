@@ -4,6 +4,7 @@ from __future__ import annotations
 
 __all__ = ["PLUGIN", "PicsRecon"]
 
+import logging
 import math
 from typing import Any
 
@@ -12,7 +13,7 @@ import numpy as np
 from ...mrd._acquisitions import AcquisitionFlag
 from ...mrd._images import center_crop
 from .._buffers import ReconBuffer, ReconData
-from .._calibration import CoilCompression, coil_maps
+from .._calibration import CoilCompression, MissingCalibration, coil_maps
 from .._correct import Corrections
 from ..gadgets import (
     AsymmetricEcho,
@@ -40,6 +41,8 @@ VIRTUAL_COILS = 6
 
 #: ``series_index`` of the magnitude, real and imaginary images.
 MAGNITUDE_SERIES, REAL_SERIES, IMAGINARY_SERIES = 0, 1, 2
+
+_log = logging.getLogger("pulserver.recon")
 
 
 class PicsRecon(ReconPlugin):
@@ -155,6 +158,7 @@ class PicsRecon(ReconPlugin):
 
     def startup(self, context: ReconContext) -> None:
         super().startup(context)
+        self._calibration_logged: set[str] = set()
         self.corrections = Corrections(
             context.header,
             kspace_filter=self.kspace_filter,
@@ -230,8 +234,13 @@ class PicsRecon(ReconPlugin):
 
         volume = kspace if kspace.ndim == 4 else kspace[:, None]
         volume = torch.from_numpy(np.ascontiguousarray(volume, dtype=np.complex64))
-        maps = coil_maps(context, data, estimate=nlinv_estimate, required=False)
-        maps = nlinv_estimate(volume) if maps is None else maps.reshape(volume.shape)
+        try:
+            maps = coil_maps(context, data, estimate=nlinv_estimate).reshape(
+                volume.shape
+            )
+        except MissingCalibration as missing:
+            self._self_calibrated(context, data, missing)
+            maps = nlinv_estimate(volume)
         sampled = volume.abs().sum(dim=0) > 0
         image = pics_image(
             volume, maps, sampled, self.wavelet, self.iterations, context.device
@@ -240,6 +249,34 @@ class PicsRecon(ReconPlugin):
         if kspace.ndim == 3:
             image = image[0]
         return self._filtered(np.array(center_crop(image, shape[-image.ndim :])))
+
+    def _self_calibrated(
+        self, context: ReconContext, data: ReconData, missing: MissingCalibration
+    ) -> None:
+        """Log that a unit's maps are fitted to its own k-space centre, and why.
+
+        At ``WARNING`` where the stream stored maps for the unit's slice that
+        do not serve it, such as a calibration on another grid, else at
+        ``INFO``; a reason already logged in the stream is logged at ``DEBUG``.
+        """
+        location = int(data.counters.get("slice", 0))
+        reason = str(missing).replace(":\n  ", ": ").replace("\n  ", "; ")
+        logged = self._calibration_logged
+        if reason in logged:
+            level = logging.DEBUG
+        elif location in context.coil_maps:
+            level = logging.WARNING
+        else:
+            level = logging.INFO
+        logged.add(reason)
+        _log.log(
+            level,
+            "slice %d, set %d: coil sensitivities fitted to the unit's own k-space "
+            "centre, which unfolds no undersampling, since %s",
+            location,
+            int(data.counters.get("set", 0)),
+            reason,
+        )
 
     def _filtered(self, image: np.ndarray) -> np.ndarray:
         if self.corrections is None:
@@ -380,7 +417,10 @@ def pics_image(
 
     The solve of :func:`bartorch.apps.pics` on a grid: ``sampled``, the
     ``(z, y, x)`` lines placed, as its pattern, the scaling estimated from the
-    fully sampled centre, and FISTA over the wavelet term of weight
+    fully sampled centre, or from the adjoint image where k-space has none,
+    such as an accelerated EPI whose calibration is a unit of its own
+    (:func:`bartorch.optim.data_scaling`), and FISTA over the wavelet term of
+    weight
     ``wavelet`` along the axes of at least ``WAVELET_MIN_POINTS`` points. A
     volume of one partition is solved as a plane. The k-space, the maps and
     the iteration's vectors stay on the host, and the encoding computes on
@@ -393,13 +433,14 @@ def pics_image(
     grid = tuple(kspace.shape[2:] if kspace.shape[1] == 1 else kspace.shape[1:])
     pattern = sampled.reshape(grid).to(torch.complex64)
     measured = kspace * sampled
-    scaling = optim.data_scaling(
-        bartorch.fftmod(measured, axes=(-1, -2, -3), inverse=True)
-    )
-    scaling = scaling or 1.0
+    shifted = bartorch.fftmod(measured, axes=(-1, -2, -3), inverse=True)
     encoding = linop.CartesianSense(
         maps.reshape(maps.shape[0], *grid), grid, pattern=pattern, device=device
     )
+    scaling = optim.data_scaling(shifted) or optim.data_scaling(
+        shifted.reshape(kspace.shape[0], *grid), A=encoding
+    )
+    scaling = scaling or 1.0
     axes = wavelet_axes(grid, tuple(range(-1, -len(grid) - 1, -1)))
     solve = optim.FISTA(priors.Wavelet(axes, wavelet), maxiter=iterations)
     data = (measured * (1.0 / scaling)).reshape(kspace.shape[0], *grid)

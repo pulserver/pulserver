@@ -15,8 +15,8 @@ def read_vendor(path: Path | str) -> tuple[VendorProfile, Grouping]:
 
     The file holds a ``[Grouping]`` and a ``[VendorProfile]`` block, each
     closed by its ``[... End]`` line, with one ``name: value`` line per field
-    and every field stated; blank lines and lines starting with ``#`` are
-    skipped. A grouping field is a number or ``true``/``false``; a profile
+    and every field stated but ``join_trailing_delay_us``, 0 when left out;
+    blank lines and lines starting with ``#`` are skipped. A grouping field is a number or ``true``/``false``; a profile
     field is a :class:`Format` name and the SI value of one integer step,
     ``0`` for a float::
 
@@ -79,7 +79,13 @@ def read_vendor(path: Path | str) -> tuple[VendorProfile, Grouping]:
         )
     return (
         VendorProfile(**_fields(VendorProfile, blocks["VendorProfile"], _quantity)),
-        Grouping(**_fields(Grouping, blocks["Grouping"], _grouping_value)),
+        Grouping(
+            **_fields(
+                Grouping,
+                {"join_trailing_delay_us": "0", **blocks["Grouping"]},
+                _grouping_value,
+            )
+        ),
     )
 
 
@@ -103,7 +109,7 @@ def _fields(kind: type, given: dict[str, str], parse) -> dict:
 
 
 def _grouping_value(name: str, text: str) -> float | bool:
-    if name == "boundary_gradient_hz_per_m":
+    if name in ("boundary_gradient_hz_per_m", "join_trailing_delay_us"):
         return float(text)
     return _FLAGS[text.lower()]
 

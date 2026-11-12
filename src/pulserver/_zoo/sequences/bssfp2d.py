@@ -6,7 +6,9 @@ import pypulseqpp as pp
 from pypulseqpp import sequences
 from pypulseqpp.sequences.sequence.bssfp2D_sequence import (
     PROSPECTIVE_DUMMIES,
+    STEADY_STATE_TOLERANCE,
     bssfp2d,
+    prospective_starts,
 )
 
 from pulserver._zoo._evaluation import (
@@ -31,7 +33,8 @@ from pulserver.protocol import ImagingMode, TriggerType, TRPreset, UIParam
 
 #: ECG gating is retrospective: each segment cycled over a heartbeat, binned
 #: into cardiac phases by the reconstruction. Prospective otherwise: each
-#: heartbeat triggered and acquired once per cardiac phase.
+#: slice triggered once, on its first excitation, then every nominal heartbeat
+#: acquired once per cardiac phase, the slice one train with no rest in it.
 RETROSPECTIVE = option("retrospective", False, **OPTIONS["retrospective"])
 
 
@@ -92,23 +95,36 @@ class Bssfp2D(SequencePlugin):
         return self.app(system, **_gated(self, system, protocol))
 
     def evaluate(self, system, protocol):
-        # Each slice plays its own train: the half-angle pulse, then one TR per
-        # repetition. The design of the centre and edge lines plays those
-        # repetitions of one slice; ``once`` is the train of one line.
+        # Each slice plays its own train, one TR per repetition, the first
+        # ramping the flip angle up, ungated its lines once per frame. The design of the
+        # centre and edge lines of one frame plays those repetitions of one
+        # slice; ``once`` is the train of one line.
         a = arguments(self, protocol)
         one, lines = cartesian_2d(a)
-        line = self.app(system, **(_ungated(protocol) | one | {"n_slices": 1}))
+        line = self.app(system, **(_ungated(protocol) | one | _ONE_TRAIN))
         tr = line.definitions["TR"][0]
         once = line.duration()[0] - (len(_designed_lines(a)) - 1) * tr
         gating = _gating(protocol)
         n_dummy = _dummies(a, tr, gating)
-        train = once + (n_dummy + lines - 1) * tr
+        frames = a["n_phases"] if gating == "none" else 1
+        train = once + (n_dummy + frames * lines - 1) * tr
+        # A frame of an ungated cine plays every line once; a gated one's
+        # cardiac phase plays the lines of a segment.
+        frame_time = lines * tr if a["n_phases"] > 1 else None
         if gating != "none":
             g = _segmented(a, tr, protocol)
+            frame_time = g["views_per_segment"] * tr
             segments = _segments(a, g["views_per_segment"])
             rr = 60.0 / a["heart_rate_bpm"]
             if gating == "prospective":
-                train = len(segments) * rr
+                # One trigger, on the first excitation, opens the slice; the trigger
+                # delay and the heartbeats after the first are repetitions
+                # that do not acquire.
+                starts = prospective_starts(
+                    segments, a["n_phases"], n_dummy, rr, tr, a["trigger_delay"]
+                )
+                played = starts[-1] + a["n_phases"] * segments[-1]
+                train = once + (played - 1) * tr
             else:
                 per_segment = max(1, round(rr / (g["views_per_segment"] * tr)))
                 cycles = per_segment * sum(segments)
@@ -118,7 +134,13 @@ class Bssfp2D(SequencePlugin):
             a["n_slices"] * train,
             rf_layout=rf_layout(line, scaled=True, start=once - tr),
             sequence=line,
+            frame_time=frame_time,
         )
+
+
+#: The app's arguments for one train of one slice: ungated, the frames are
+#: counted rather than designed.
+_ONE_TRAIN = {"n_slices": 1, "n_phases": 1}
 
 
 def _designed_lines(a) -> list[int]:
@@ -152,7 +174,10 @@ def _dummies(a, tr: float, gating: str) -> int:
     if gating == "prospective":
         return PROSPECTIVE_DUMMIES
     n = sequences.steady_state_dummies(
-        tr, a["flip_angle_deg"], t2_s=sequences.STEADY_STATE_T2_S
+        tr,
+        a["flip_angle_deg"],
+        t2_s=sequences.STEADY_STATE_T2_S,
+        tolerance=STEADY_STATE_TOLERANCE,
     )
     if gating == "retrospective":
         n = min(n, max(1, round(60.0 / a["heart_rate_bpm"] / tr)))
@@ -174,7 +199,7 @@ def _segmented(a, tr: float, protocol) -> dict:
     """
     rr = 60.0 / a["heart_rate_bpm"]
     gating = _gating(protocol)
-    leading = (0.5 + _dummies(a, tr, gating)) * tr if gating == "prospective" else 0.0
+    leading = _dummies(a, tr, gating) * tr if gating == "prospective" else 0.0
     free = rr - a["trigger_delay"] - leading
     views = math.floor(free / (a["n_phases"] * tr) + 1e-9)
     if views < 1:
@@ -206,5 +231,5 @@ def _gated(plugin, system, protocol) -> dict:
         return arguments_
     a = arguments(plugin, protocol)
     one, _ = cartesian_2d(a)
-    line = plugin.app(system, **(arguments_ | one | {"n_slices": 1}))
+    line = plugin.app(system, **(arguments_ | one | _ONE_TRAIN))
     return arguments_ | _segmented(a, line.definitions["TR"][0], protocol)

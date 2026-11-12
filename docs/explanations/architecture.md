@@ -24,9 +24,9 @@ both on the virtual scanner.
 - **Keeps, under a warm server, what a call worked out for the calls after it: replies, the RF a plugin lists, the slew rate of a request, the pulses pypulseqpp designed.**
 
   Code: `pulserver.host._memo`. Tests: *a kept validation is replied without evaluating again*; *the RF a plugin lists is evaluated once for every call*; *generate starts at the slew rate another call validated*; *a design lowered further drops the kept validation*; *the children of a warm server share what they keep*; *a pulse design is kept for the calls after the one that made it*; *a pulse designed through pypulseqpp is the same kept or not* (`test_design_memo.py`).
-- **Identifies a design by the SHA-256 of its plugin, sources, package versions, limits, VOP file and resolved protocol.**
+- **Identifies a design by the SHA-256 of its plugin, sources, the Python files and versions of pypulseqpp and pulserver, limits, VOP file and resolved protocol.**
 
-  Code: {func}`~pulserver.host.design_identity`. Tests: *one resolved protocol is one design*; *an edited plugin is another design of the same protocol*; *a design is one of the VOP file contents its SAR ratios came from* (`test_design_service.py`).
+  Code: {func}`~pulserver.host.design_identity`. Tests: *one resolved protocol is one design*; *an edited plugin is another design of the same protocol*; *a package file replaced in place is another design of the same protocol*; *a design is one of the VOP file contents its SAR ratios came from* (`test_design_service.py`).
 - **Designs a request once, whether it arrives as typed or as resolved.**
 
   Code: {func}`~pulserver.host.design_identity`. Test: *a request is generated once whether or not it resolves to itself* (`test_design_service.py`).
@@ -84,8 +84,9 @@ The two services between the scanner and the engines, and the design store they 
 ### Design identity
 
 No design call keeps state; the store is all that persists. A changed plugin,
-sequence function, package version or VOP file is a new design of the same
-protocol. The identifier is the first 18 hexadecimal digits of the identity,
+sequence function, package version, Python file of pypulseqpp or pulserver, or
+VOP file is a new design of the same protocol, so a module replaced in place
+under an unchanged version is never served from an older design. The identifier is the first 18 hexadecimal digits of the identity,
 split into three float32 header fields because a float32 holds every integer
 below $2^{24}$ exactly.
 

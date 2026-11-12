@@ -51,11 +51,11 @@ SAMPLING = option(
     "sampling", "lattice", choices=SAMPLINGS, user=OWN, label="View sampling"
 )
 
-#: The object the ``qsm`` reconstruction maps: ``"phantom"`` (T2* and a MEDI+0
-#: QSM of the whole object), ``"brain"`` (SWI, T2*, QSM in the brain and
-#: DECOMPOSE) or ``"body"``. The sequence states its index among these in its
-#: ``QsmAnatomy`` definition, which reaches the reconstruction in the MRD
-#: header.
+#: The object the ``qsm`` reconstruction maps, each with T2* and SWI:
+#: ``"phantom"`` (a MEDI+0 QSM of the whole object), ``"brain"`` (QSM in the
+#: brain and DECOMPOSE) or ``"body"``. The sequence states its index among
+#: these in its ``QsmAnatomy`` definition, which reaches the reconstruction in
+#: the MRD header.
 QSM_ANATOMIES = ("phantom", "brain", "body")
 QSM_ANATOMY = option(
     "qsm_anatomy",

@@ -22,6 +22,7 @@ from ..protocol import (
     FOV_OFFSET,
     FOV_ROTATION,
     PRESCRIPTION,
+    Display,
     InputMode,
     Kind,
     Parameter,
@@ -88,6 +89,19 @@ class Evaluation:
         designed under where they exceed their limits, so that the console
         shows what will play. ``None``, the default, states none: the slew
         rate is then lowered only when the generated design fails the check.
+    echo_spacing
+        The spacing of the echoes of the train the protocol plays, in
+        seconds, which a console shows; ``None``, the default, states none.
+        An EPI or FSE train states it; a gradient-echo train does not.
+    pixel_bandwidth
+        The receive bandwidth across one pixel of the readout field of view,
+        in Hz: the sampling rate over the samples that span it. ``None``, the
+        default, leaves a console to divide the bandwidth by the readout
+        matrix, which only an oversampled readout needs to correct.
+    frame_time
+        The time one frame of a scan of several takes, in seconds: the volume
+        TR of a time series, the frame of a cine. ``None``, the default,
+        states none.
     """
 
     protocol: Protocol
@@ -95,6 +109,9 @@ class Evaluation:
     info: str = ""
     rf_layout: RfLayout | tuple[()] = ()
     sequence: pp.Sequence | None = None
+    echo_spacing: float | None = None
+    pixel_bandwidth: float | None = None
+    frame_time: float | None = None
 
 
 def _warn_deprecated(cls: type) -> None:
@@ -559,6 +576,11 @@ class SequencePlugin:
             )
             info = evaluation.info
             sequence = evaluation.sequence
+            display = Display(
+                evaluation.echo_spacing,
+                evaluation.pixel_bandwidth,
+                evaluation.frame_time,
+            )
         except _INFEASIBLE as error:
             message = str(error) or type(error).__name__
             _log.warning(
@@ -571,7 +593,7 @@ class SequencePlugin:
             message = f"{type(error).__name__} in {name}.evaluate"
             _log.error("%s", message, exc_info=True)
         else:
-            valid = Validation(True, duration or None, info, wire, layout)
+            valid = Validation(True, duration or None, info, wire, layout, display)
             return valid, protocol, sequence
         asked = {key: value for key, value in values.items() if key in listing}
         return Validation(False, None, message, asked), None, None

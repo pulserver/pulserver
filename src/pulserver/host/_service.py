@@ -13,6 +13,7 @@ and the SLR pulses pypulseqpp designed.
 from __future__ import annotations
 
 import copy
+import dataclasses
 import datetime
 import functools
 import hashlib
@@ -820,11 +821,12 @@ def _dependencies(variant):
 def _source(variant: _Variant) -> str:
     """Return a digest of the code that designs with the plugin of a variant.
 
-    Covers the plugin file, the source file of the app it binds, and the
-    installed versions of pypulseqpp and pulserver, declared requirements and
-    site-library installation metadata. A :func:`functools.partial` app is
-    covered through the function it wraps. Other imports need a dependency
-    declaration to identify their installed distribution.
+    Covers the plugin file, the source file of the app it binds, every Python
+    file of the installed pypulseqpp and pulserver (:func:`_package_sources`),
+    their versions, declared requirements and site-library installation
+    metadata. A :func:`functools.partial` app is covered through the function
+    it wraps. Other imports need a dependency declaration to identify their
+    installed distribution.
     """
     digest = hashlib.sha256(Path(variant.path).read_bytes())
     app = _plugin(variant).app
@@ -840,6 +842,29 @@ def _source(variant: _Variant) -> str:
     if dependencies:
         digest.update(json.dumps(dependencies, sort_keys=True).encode())
     digest.update(f"pypulseqpp {pp.__version__} pulserver {__version__}".encode())
+    digest.update(_package_sources(_designing_packages()).encode())
+    return digest.hexdigest()
+
+
+def _designing_packages() -> tuple[Path, ...]:
+    """Return the directories of the installed pypulseqpp and pulserver packages."""
+    return Path(pp.__file__).parent, Path(__file__).resolve().parent.parent
+
+
+def _package_sources(packages: tuple[Path, ...]) -> str:
+    """Return a digest of every ``.py`` file under ``packages``, by path within its package.
+
+    A file replaced in place, its package's version unchanged, changes the
+    digest; byte-compiled caches are left out.
+    """
+    digest = hashlib.sha256()
+    for package in packages:
+        for path in sorted(package.rglob("*.py")):
+            if "__pycache__" in path.parts:
+                continue
+            content = path.read_bytes()
+            name = f"{package.name}/{path.relative_to(package).as_posix()}"
+            digest.update(f"{name}\0{len(content)}\0".encode() + content)
     return digest.hexdigest()
 
 
@@ -947,7 +972,60 @@ def _validated(
     if validation.valid:
         _LOWERED.put(remembered, ceiling)
         _LOWERED.put(family, _next(family, tried, ceiling, limit))
+        validation = _with_played_note(validation, sequence, limits)
     return validation
+
+
+def _with_played_note(
+    validation: Validation, sequence: Any, limits: Mapping[str, Any]
+) -> Validation:
+    """Return ``validation`` with the repetition time the scanner plays added to its info, where segment starts lengthen it.
+
+    The representative sequence is segmented as the conversion segments it and
+    played under the limits' sequencer timing (:func:`pulserver.ir.played_time`).
+    Nothing is added without a timing, a sequence or a ``TR`` definition,
+    where that TR is not the protocol's, where fewer segments start than the
+    sequence plays repetitions, or where the gaps it keeps are all absorbed.
+    """
+    if sequence is None:
+        return validation
+    system, options, checked = split_limits(limits)
+    timing = checked.sequencer_timing
+    tr = np.atleast_1d(sequence.definitions.get("TR", [0.0]))[0]
+    if timing is None or not tr:
+        return validation
+    # The representative sequence states the scan's TR only where it is the
+    # TR the protocol resolved to; a scan that fills a longer one plays waits.
+    asked = validation.values.get(UIParam.TR)
+    if asked is not None and abs(float(asked) * 1e-6 - float(tr)) > 1e-5:
+        return validation
+    path = Path("evaluated.seq")
+    try:
+        played = ir.played_time(
+            path, system, timing, designed=[(path, sequence)], **options
+        )
+    except ValueError:
+        return validation
+    repetitions = round(played.blocks / float(tr))
+    # Stated where a segment starts at every repetition: the TR is then what
+    # each repetition plays, where a longer segment lengthens only the one
+    # repetition it starts on.
+    if played.segment_starts < max(1, repetitions) or played.extra < 0.5e-6:
+        return validation
+    gap = played.extra / played.segment_starts
+    tr_played = float(tr) + played.extra / max(1, repetitions)
+    whole = timing.gap_us + timing.tail_us
+    room = (
+        "no room in the design"
+        if gap * 1e6 >= whole - timing.raster_us
+        else "the rest absorbed by the quiet tail the segment ends on"
+    )
+    note = (
+        f"TR {float(tr) * 1e3:.3f} ms designed, {tr_played * 1e3:.3f} ms played: "
+        f"{gap * 1e6:.0f} us sequencer gap per segment, {room}"
+    )
+    info = f"{validation.info}; {note}" if validation.info else note
+    return dataclasses.replace(validation, info=info)
 
 
 #: The slew rate of a plugin's last request is kept for the next request

@@ -1,4 +1,4 @@
-"""The qsm reconstruction: each echo as pics makes it, then the maps of the stated anatomy once the last echo is in."""
+"""The qsm reconstruction: the maps of the stated anatomy once the last echo is in, from each echo as pics makes it."""
 
 from types import SimpleNamespace
 
@@ -17,6 +17,7 @@ from test_pics import (
 )
 
 from pulserver.recon.handlers import qsm
+from pulserver.recon.handlers.pics import MAGNITUDE_SERIES
 from pulserver.recon.handlers.qsm import QsmRecon
 
 pytest.importorskip("bartorch")
@@ -40,8 +41,8 @@ class Maps(QsmRecon):
         self.results.extend(result if isinstance(result, list) else [result])
         return result
 
-    def maps(self, context, data, echoes, te):
-        self.calls.append((echoes, te))
+    def maps(self, context, data, echoes, te, magnitudes=None):
+        self.calls.append((echoes, te, magnitudes))
         return []
 
 
@@ -72,7 +73,9 @@ def multi_echo(te_ms, echoes=None):
     return echoes, acquisitions, header
 
 
-def test_each_echo_is_the_pics_image_and_the_maps_follow_the_last_echo_once(device):
+def test_the_maps_follow_the_last_echo_once_and_take_each_echo_as_pics_makes_it(
+    device,
+):
     _, acquisitions, header = multi_echo([3.0, 8.0])
     plugin = Maps()
 
@@ -80,14 +83,14 @@ def test_each_echo_is_the_pics_image_and_the_maps_follow_the_last_echo_once(devi
     pics = Images()
     reconstruct(acquisitions, header, device=device, plugin=pics)
 
-    images = magnitudes(plugin.results)
     expected = magnitudes(pics.results)
-    assert len(images) == len(expected) == 2
-    for image, reference in zip(images, expected, strict=True):
+    assert len(expected) == 2
+    ((echoes, te, corrected),) = plugin.calls
+    for result, reference in zip(corrected, expected, strict=True):
+        assert result.series_index == MAGNITUDE_SERIES
         np.testing.assert_allclose(
-            image, reference, rtol=1e-5, atol=1e-6 * reference.max()
+            result.data, reference, rtol=1e-5, atol=1e-6 * reference.max()
         )
-    ((echoes, te),) = plugin.calls
     assert echoes.shape == (2, MATRIX, MATRIX)
     assert np.iscomplexobj(echoes)
     np.testing.assert_allclose(
@@ -96,7 +99,7 @@ def test_each_echo_is_the_pics_image_and_the_maps_follow_the_last_echo_once(devi
     assert te == pytest.approx([3e-3, 8e-3])
 
 
-def test_the_magnitude_series_is_intensity_corrected_and_the_echoes_the_maps_take_are_not():
+def test_the_magnitudes_the_rss_takes_are_intensity_corrected_and_the_complex_echoes_are_not():
     pytest.importorskip("SimpleITK")
     kspace = coil_phantom(COILS, MATRIX)[2]
     _, acquisitions, header = multi_echo([3.0, 8.0], echoes=[kspace, 0.5 * kspace])
@@ -106,15 +109,29 @@ def test_the_magnitude_series_is_intensity_corrected_and_the_echoes_the_maps_tak
     reconstruct(acquisitions, header, plugin=corrected)
     reconstruct(acquisitions, header, plugin=filtered)
 
-    for result in corrected.results:
+    ((echoes, _, magnitudes_),) = corrected.calls
+    ((reference, _, _),) = filtered.calls
+    for result in magnitudes_:
         history = result.attributes["ImageProcessingHistory"]
         assert "FERMI" in history
-        assert ("N4" in history) is (result.image_type == "magnitude")
-    ((echoes, _),) = corrected.calls
-    ((reference, _),) = filtered.calls
+        assert "N4" in history
     np.testing.assert_allclose(
         echoes, reference, rtol=1e-5, atol=1e-6 * np.abs(reference).max()
     )
+
+
+def test_a_multi_echo_scan_sends_no_echo_and_the_maps_take_the_echoes_complex(
+    device,
+):
+    _, acquisitions, header = multi_echo([3.0, 8.0])
+    plugin = Maps()
+
+    reconstruct(acquisitions, header, device=device, plugin=plugin)
+
+    assert [r for r in plugin.results if r is not None] == []
+    ((echoes, _, _),) = plugin.calls
+    assert np.iscomplexobj(echoes)
+    assert np.abs(np.angle(echoes)).max() > 0.1
 
 
 def test_a_single_echo_scan_makes_no_maps(device):
@@ -185,11 +202,8 @@ def _vial_echoes(n=40, te=(4e-3, 8e-3, 12e-3), b0=7.0):
     return np.transpose(xyz, (0, 3, 2, 1)).astype(np.complex64), plus, minus, list(te)
 
 
-def test_the_phantom_maps_are_rss_t2star_and_a_medi_qsm_with_positive_paramagnetic_vials():
-    pytest.importorskip("fastqsm")
-    pytest.importorskip("scipy")
-    echoes, plus, minus, te = _vial_echoes()
-    n = echoes.shape[-1]
+def _maps_inputs(n, anatomy):
+    """The context and data ``QsmRecon.maps`` takes for an ``n``-cube of 2 mm voxels at 7 T, B0 along the slices."""
     header = SimpleNamespace(
         experimentalConditions=SimpleNamespace(
             H1resonanceFrequency_Hz=7.0 * qsm.GAMMA_HZ_T
@@ -205,7 +219,11 @@ def test_the_phantom_maps_are_rss_t2star_and_a_medi_qsm_with_positive_paramagnet
         userParameters=SimpleNamespace(
             userParameterLong=[],
             userParameterDouble=[],
-            userParameterString=[SimpleNamespace(name="QsmAnatomy", value="0")],
+            userParameterString=[
+                SimpleNamespace(
+                    name="QsmAnatomy", value=str(qsm.ANATOMIES.index(anatomy))
+                )
+            ],
         ),
     )
     reference = SimpleNamespace(
@@ -213,11 +231,63 @@ def test_the_phantom_maps_are_rss_t2star_and_a_medi_qsm_with_positive_paramagnet
     )
     context = SimpleNamespace(header=header, device="cpu")
     data = SimpleNamespace(data=SimpleNamespace(reference=reference))
+    return context, data
+
+
+#: The maps of each anatomy, in the order they are returned.
+MAPS = {
+    "phantom": ["rss", "t2star", "qsm"],
+    "brain": ["rss", "t2star", "qsm", "swi", "pcs", "dcs"],
+    "body": ["rss", "t2star", "qsm", "swi"],
+}
+
+
+@pytest.mark.parametrize("anatomy", qsm.ANATOMIES)
+def test_swi_is_made_outside_a_phantom_and_decompose_for_the_brain_alone_in_series_order(
+    anatomy, monkeypatch
+):
+    pytest.importorskip("fastqsm")
+    from fastqsm import pipeline
+
+    calls = []
+
+    def run(magnitude, phase, te, voxel, **kwargs):
+        calls.append(kwargs)
+        volume = np.ones(magnitude.shape[1:], np.float32)
+        names = ("chi", "chi_masked", "pcs", "dcs")
+        return SimpleNamespace(maps=dict.fromkeys(names, volume), info={})
+
+    monkeypatch.setattr(pipeline, "run", run)
+    monkeypatch.setattr(qsm, "_t2star_ms", lambda m, p, te: np.zeros(m.shape[1:]))
+    echoes, _, _, te = _vial_echoes(n=16)
+    context, data = _maps_inputs(16, anatomy)
+
+    results = QsmRecon().maps(context, data, echoes, te)
+
+    assert [result.series_index for result in results] == [
+        qsm.SERIES[name] for name in MAPS[anatomy]
+    ]
+    (kwargs,) = calls
+    assert kwargs["anatomy"] == {"phantom": "phantom", "brain": "head"}.get(
+        anatomy, anatomy
+    )
+    assert (kwargs.get("phantom_inversion") == "medi") is (anatomy == "phantom")
+    if anatomy != "phantom":
+        swi = {r.series_index: r for r in results}[qsm.SERIES["swi"]]
+        assert swi.data.shape == echoes.shape[1:]
+        assert swi.attributes["SeriesDescriptionAdditional"] == "_SWI_MINIP"
+
+
+def test_the_phantom_maps_are_rss_t2star_and_a_medi_qsm_with_positive_paramagnetic_vials():
+    pytest.importorskip("fastqsm")
+    pytest.importorskip("scipy")
+    echoes, plus, minus, te = _vial_echoes()
+    context, data = _maps_inputs(echoes.shape[-1], "phantom")
 
     results = QsmRecon().maps(context, data, echoes, te)
 
     series = {result.series_index: result for result in results}
-    assert set(series) == {qsm.SERIES["rss"], qsm.SERIES["t2star"], qsm.SERIES["qsm"]}
+    assert set(series) == {qsm.SERIES[name] for name in MAPS["phantom"]}
     t2 = np.transpose(series[qsm.SERIES["t2star"]].data, (2, 1, 0))
     assert np.median(t2[plus]) == pytest.approx(30.0, rel=0.05)
     chi = np.transpose(series[qsm.SERIES["qsm"]].data, (2, 1, 0))
@@ -256,3 +326,21 @@ def test_synthstrip_weights_are_the_named_file_else_the_shipped_one(
     shipped.parent.mkdir(parents=True)
     shipped.write_bytes(b"")
     assert qsm.synthstrip_weights() == str(shipped)
+
+
+def test_the_rss_is_that_of_the_corrected_magnitudes_with_their_attributes():
+    echoes = np.ones((2, 3, 4, 5), np.complex64)
+    corrected = [
+        qsm.ReconResult(
+            np.full((3, 4, 5), value, np.float32),
+            attributes={"ImageProcessingHistory": ["PULSERVER", "N4"]},
+        )
+        for value in (3.0, 4.0)
+    ]
+
+    rss = qsm._rss(echoes, corrected)
+
+    assert rss.series_index == qsm.SERIES["rss"]
+    np.testing.assert_allclose(rss.data, 5.0)
+    assert rss.attributes["ImageProcessingHistory"] == ["PULSERVER", "N4"]
+    assert rss.attributes["SeriesDescriptionAdditional"] == "_RSS"

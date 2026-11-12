@@ -57,3 +57,62 @@ def test_the_timing_refuses_negative_times():
         ir.SequencerTiming(gap_us=-1)
     with pytest.raises(ValueError):
         ir.SequencerTiming(gap_us=250, raster_us=0)
+
+
+# The same sequencer ending a segment inside its quiet tail, keeping a raster
+# of it, with the playout busy 20 us past a readout.
+EARLY = ir.SequencerTiming(
+    gap_us=250,
+    tail_us=4,
+    min_wait_us=500,
+    raster_us=4,
+    adc_tail_us=20,
+    quiet_margin_us=4,
+)
+JOINED = ir.Grouping(join_trailing_delay_us=EARLY.gap_us + EARLY.min_wait_us)
+
+
+def _quiet_readouts(path, quiet):
+    """Three readouts, each in a block ``quiet`` s longer than it."""
+    adc = pp.make_adc(num_samples=64, duration=3.2e-3, system=SYSTEM)
+    scan = pp.Sequence(SYSTEM)
+    for _ in range(3):
+        scan.add_block(adc, pp.make_delay(3.2e-3 + quiet))
+    return Path(sequences.write(path, [scan])[0])
+
+
+#: What a segment ending on enough quiet still plays past its blocks: the part
+#: of the gap and tail off the raster, which a segment's end keeps to.
+RESIDUAL = (EARLY.gap_us + EARLY.tail_us) % EARLY.raster_us
+
+
+def test_a_segment_ending_on_enough_quiet_plays_its_blocks_to_the_raster(tmp_path):
+    path = _quiet_readouts(tmp_path / "quiet.seq", 4e-4)
+    early = ir.played_time(path, SYSTEM, EARLY)
+    late = ir.played_time(path, SYSTEM, TIMING)
+
+    assert early.extra == pytest.approx(early.segment_starts * RESIDUAL * 1e-6)
+    assert late.extra == pytest.approx(
+        late.segment_starts * (TIMING.gap_us + TIMING.tail_us) * 1e-6
+    )
+
+
+def test_a_quiet_tail_shorter_than_the_gap_leaves_the_rest_of_it(tmp_path):
+    path = _quiet_readouts(tmp_path / "brief.seq", 1e-4)
+    early = ir.played_time(path, SYSTEM, EARLY)
+    # 100 us of quiet, 20 us of it busy after the readout, 4 us kept.
+    ended = 100 - EARLY.adc_tail_us - EARLY.quiet_margin_us
+
+    assert early.extra == pytest.approx(
+        early.segment_starts * (EARLY.gap_us + EARLY.tail_us - ended) * 1e-6
+    )
+
+
+def test_a_short_trailing_wait_is_its_segments_quiet_tail(tmp_path):
+    path = _readouts(tmp_path / "short.seq", 6e-4)
+    joined = ir.played_time(path, SYSTEM, EARLY, grouping=JOINED)
+    apart = ir.played_time(path, SYSTEM, EARLY)
+
+    assert joined.extra == pytest.approx(joined.segment_starts * RESIDUAL * 1e-6)
+    assert joined.segment_starts < apart.segment_starts
+    assert apart.extra > 0.0

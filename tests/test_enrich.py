@@ -213,6 +213,30 @@ def test_a_ramp_sampled_cartesian_readout_carries_its_k_as_one_axis():
     assert enriched.encoding[0].trajectory == ismrmrd.xsd.trajectoryType.CARTESIAN
 
 
+@pytest.mark.parametrize("polarity", [1.0, -1.0])
+def test_a_triangular_readout_carries_its_nonuniform_sampling_trajectory(
+    tmp_path, polarity
+):
+    system = pp.Opts()
+    seq = pp.Sequence(system)
+    gradient = pp.make_trapezoid(
+        "x", amplitude=polarity * 1e6, rise_time=160e-6, flat_time=0.0, system=system
+    )
+    seq.add_block(pp.make_trapezoid("x", area=-gradient.area / 2, system=system))
+    seq.add_block(gradient, pp.make_adc(num_samples=32, duration=320e-6, system=system))
+    seq.set_definition("Matrix", [32, 1, 1])
+    seq.set_definition("FOV", [0.2, 0.2, 0.005])
+    table = written(seq, tmp_path)
+    (acquisition,) = acquisitions(table)
+
+    enrich_acquisition(acquisition, table, 0)
+
+    assert table.spaces[0].ramp_sampled
+    assert acquisition.trajectory_dimensions == 1
+    expected = np.asarray(seq.calculate_kspace()[0])[0]
+    np.testing.assert_allclose(acquisition.traj[:, 0], expected, atol=1e-3)
+
+
 @pytest.mark.parametrize("name", ["zte_3d.seq", "mprage_stack_of_spirals_3d.seq"])
 def test_a_non_cartesian_readout_carries_its_absolute_k(name):
     table = fixture(name)
@@ -703,3 +727,38 @@ def test_a_sequence_without_recon_parameters_adds_none_to_the_header(tmp_path):
     enriched = header()
     enrich_header(enriched, table)
     assert user_parameter(enriched, "ReconParameters") is None
+
+
+def _defined(seq, **definitions):
+    for key, value in definitions.items():
+        seq.set_definition(key=key, value=value)
+    return seq
+
+
+def test_the_main_sequence_not_a_prescan_states_the_sequence_parameters(tmp_path):
+    # A gradient-echo calibration ahead of an EPI: its short TE and TR must not
+    # annotate the images.
+    calibration = _defined(pp.Sequence(pp.Opts()), TE=2.9e-3, TR=6.4e-3)
+    add_readout(calibration)
+    main = _defined(pp.Sequence(pp.Opts()), TE=18.2e-3, TR=0.25)
+    add_readout(main)
+
+    enriched = header()
+    enrich_header(enriched, designed(tmp_path, [calibration, main]))
+
+    assert pytest.approx([250.0]) == enriched.sequenceParameters.TR
+    assert pytest.approx([18.2]) == enriched.sequenceParameters.TE
+
+
+def test_a_parameter_the_main_sequence_does_not_state_is_taken_from_the_chain(
+    tmp_path,
+):
+    calibration = _defined(pp.Sequence(pp.Opts()), TE=2.9e-3, TR=6.4e-3, TI=0.9)
+    add_readout(calibration)
+    main = _defined(pp.Sequence(pp.Opts()), TE=18.2e-3, TR=0.25)
+    add_readout(main)
+
+    enriched = header()
+    enrich_header(enriched, designed(tmp_path, [calibration, main]))
+
+    assert pytest.approx([900.0]) == enriched.sequenceParameters.TI

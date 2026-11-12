@@ -85,15 +85,52 @@ def repetitions_of(main: pp.Sequence) -> tuple[int, float]:
     return count, total / count
 
 
-def _readout_bandwidth(main: pp.Sequence) -> float:
-    """Return the receiver bandwidth in Hz of the first ADC event outside a navigator: the inverse of its dwell time."""
+def first_readout(main: pp.Sequence) -> tuple[int, float]:
+    """Return the samples and the dwell time in seconds of the first ADC event of ``main`` outside a navigator."""
     tables = main.libraries()
     played = tables.blocks[:, 4]
     adcs = played[played > 0]
     navigator = main.evaluate_labels(evolution="adc").get("NAV")
     if navigator is not None:
         adcs = adcs[np.asarray(navigator) == 0]
-    return 1.0 / float(tables.adc[adcs[0] - 1, 1])
+    row = tables.adc[adcs[0] - 1]
+    return int(row[0]), float(row[1])
+
+
+def _readout_bandwidth(main: pp.Sequence) -> float:
+    """Return the receiver bandwidth in Hz of the first ADC event outside a navigator: the inverse of its dwell time."""
+    return 1.0 / first_readout(main)[1]
+
+
+def bandwidth_note(
+    system: pp.Opts, requested_hz: float, samples: int, dwell: float
+) -> str:
+    """Return why an EPI line samples at ``1 / dwell`` rather than the ``requested_hz`` asked; empty where it samples at it.
+
+    The dwell is a multiple of ``system.adc_raster_time``: the one nearest
+    the request, unless the read gradient cannot sweep a ramp-sampled line in
+    the time ``samples`` take at that dwell under the design's gradient
+    limits, which then set it.
+    """
+    achieved = 1.0 / dwell
+    if abs(achieved - requested_hz) <= 1e-6 * requested_hz:
+        return ""
+    raster = system.adc_raster_time
+    nearest = max(1, round(1.0 / (requested_hz * raster))) * raster
+    if dwell > nearest * (1 + 1e-9):
+        why = (
+            "under the design's gradient limits a ramp-sampled line needs longer "
+            f"than the {1e3 * samples * nearest:.3f} ms its {samples} "
+            f"samples take at {1e-3 / nearest:.0f} kHz, and the sampling interval "
+            f"steps by the {1e6 * raster:g} us ADC raster"
+        )
+    else:
+        why = (
+            f"the sampling interval is a multiple of the {1e6 * raster:g} us ADC raster"
+        )
+    return (
+        f"bandwidth {1e-3 * achieved:.0f} kHz, not {1e-3 * requested_hz:.0f} kHz: {why}"
+    )
 
 
 #: The entries that hold the value the design achieved, and where the main
@@ -106,6 +143,11 @@ _ACHIEVED: dict[ProtocolKey, Callable[[pp.Sequence], float]] = {
     UIParam.TR: lambda main: main.definitions["TR"][0],
     UIParam.BANDWIDTH: _readout_bandwidth,
 }
+
+
+def pixel_bandwidth(samples: int, dwell: float) -> float:
+    """Return the nominal pixel bandwidth (Hz), the inverse ADC window duration."""
+    return 1.0 / (samples * dwell)
 
 
 def arguments(plugin: SequencePlugin, protocol: Protocol) -> dict[str, Any]:
@@ -170,10 +212,10 @@ def rf_layout(
     ``main`` from ``start``, ``copies`` times over, in play order, and its
     period is that definition unless ``period`` is given. The definitions are
     those the TR plays, numbered by first play in it; when ``banded``, those
-    of the saturation bands after the others, so a band placed or removed
-    leaves the numbers of the others as the listing, made with every band
-    placed, states them. The flip angle scales each excitation when
-    ``scaled``, and no instance has a control otherwise.
+    of the saturation pulses after the others, so a saturation band or a fat
+    saturation placed or removed leaves the numbers of the others as the
+    listing, made with every one placed, states them. The flip angle scales
+    each excitation when ``scaled``, and no instance has a control otherwise.
     """
     tr = main.definitions["TR"][0]
     tables = main.libraries()
@@ -209,6 +251,91 @@ def rf_layout(
         for number in instances.definition
     )
     return RfLayout(instances, control, tr if period is None else period)
+
+
+def rf_power(layout: RfLayout) -> float:
+    """Return the mean RF power of a layout over its period, in Hz².
+
+    Each instance plays its peak, ``amplitude * peak_hz``, squared, times the
+    integral of the squared magnitude of its definition's unit-peak waveform
+    over its channels, by the trapezoidal rule over the sample times.
+    """
+    instances = layout.instances
+    energy = np.array(
+        [
+            definition.peak_hz**2
+            * sum(
+                np.trapezoid(np.abs(channel) ** 2, definition.time)
+                for channel in definition.waveform
+            )
+            for definition in instances.definitions
+        ]
+    )
+    played = instances.amplitude**2 * energy[instances.definition]
+    return float(np.sum(played) / layout.period)
+
+
+def _same_pulse(a: pp.RfDefinition, b: pp.RfDefinition) -> bool:
+    """Whether two definitions play one pulse: one use, sample times and unit-peak waveform."""
+    return (
+        a.use == b.use
+        and a.time.shape == b.time.shape
+        and a.waveform.shape == b.waveform.shape
+        and np.allclose(a.time, b.time, rtol=0.0, atol=1e-9)
+        and np.allclose(a.waveform, b.waveform, rtol=0.0, atol=1e-6)
+    )
+
+
+def densest(layout: RfLayout, *prescans: RfLayout) -> RfLayout:
+    """Return ``layout``, or the RF of a prescan of the chain where it plays more RF power, over the layout's period.
+
+    A scanner costs each sequence of a chain over its own repetition, and a
+    layout is one TR of the main sequence. A prescan that does not repeat at
+    the TR, such as a calibration at its own shortest TR, can play more RF
+    power than the TR does, and a protocol whose TR meets the limits is then
+    refused before the scan. Each of ``prescans`` states the prescan's
+    instances over its duration (:meth:`RfLayout.of`). The one of the most RF
+    power (:func:`rf_power`), where it is more than the layout's, is returned
+    as its instances in play order, repeated, as many as it plays in
+    ``layout.period``, rounded up, over that period: the period stays the TR
+    the console sets, and the power is at least the prescan's at every TR, so
+    a scanner that lengthens the TR to meet its limits cannot meet them for a
+    prescan that exceeds them.
+
+    The prescan's definitions take the numbers of the layout's, which the
+    listing names: the definition that plays the same pulse, else the first
+    of its use, and the amplitudes are over that definition's peak, so the
+    peak each instance plays is its own. A definition of a use the layout
+    plays no pulse of is numbered after the layout's. The instances follow no
+    control: a prescan's flip angle is its own.
+    """
+    strongest = max(prescans, key=rf_power, default=None)
+    if strongest is None or rf_power(strongest) <= rf_power(layout):
+        return layout
+    own = layout.instances.definitions
+    definitions = list(own)
+    numbers = []
+    for pulse in strongest.instances.definitions:
+        number = next((i for i, d in enumerate(own) if _same_pulse(d, pulse)), None)
+        if number is None:
+            number = next((i for i, d in enumerate(own) if d.use == pulse.use), None)
+        if number is None:
+            number = len(definitions)
+            definitions.append(pulse)
+        numbers.append(number)
+    peak = np.array([d.peak_hz for d in strongest.instances.definitions])
+    over = np.array([definitions[n].peak_hz for n in numbers])
+    scale = np.divide(peak, over, out=np.ones_like(peak), where=over > 0)
+    played = len(strongest.instances.definition)
+    count = math.ceil(layout.period * played / strongest.period - 1e-9)
+    picks = np.arange(count) % played
+    which = strongest.instances.definition[picks]
+    instances = pp.RfInstances(
+        tuple(definitions),
+        np.asarray(numbers)[which],
+        strongest.instances.amplitude[picks] * scale[which],
+    )
+    return RfLayout(instances, (None,) * count, layout.period)
 
 
 def packets(

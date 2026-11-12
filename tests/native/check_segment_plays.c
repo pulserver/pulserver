@@ -123,7 +123,7 @@ static void check(const char *what, const stream *s, int short_us, double total_
     pulseg_sequence_descriptor desc;
     pulseg_scan_time_info time = PULSEG_SCAN_TIME_INFO_INIT;
     pulseg_segment_plays plays = PULSEG_SEGMENT_PLAYS_INIT;
-    pulseg_sequencer_timing timing = {250, 4, 500, 4};
+    pulseg_sequencer_timing timing = {250, 4, 500, 4, 0, 0, -1};
     pulseg_played_time played = PULSEG_PLAYED_TIME_INIT;
     char label[96];
 

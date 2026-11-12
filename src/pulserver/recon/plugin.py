@@ -453,7 +453,9 @@ class ReconContext:
     The calibration helpers keep the state of one stream on the context, empty
     when the stream starts and not shared with other series. :attr:`coil_maps`
     maps a slice counter to the :class:`CoilSensitivities` the stream holds for
-    it, :attr:`noise` is the prewhitening a :class:`Prewhiten` applies and
+    it, and ``(slice, set)`` to those estimated from calibration readouts of a
+    later set, such as a FLEET calibration's reversed phase encode;
+    :attr:`noise` is the prewhitening a :class:`Prewhiten` applies and
     :attr:`coil_compression` the basis a :class:`CoilCompression` applies; the
     last two are ``None`` until the stream has them. A hook may assign them.
 
@@ -493,7 +495,9 @@ class ReconContext:
     exam: ExamCache
     config: Any = None
     device: str | None = None
-    coil_maps: dict[int, Any] = field(default_factory=dict, init=False, repr=False)
+    coil_maps: dict[int | tuple[int, int], Any] = field(
+        default_factory=dict, init=False, repr=False
+    )
     noise: Any = field(default=None, init=False, repr=False)
     coil_compression: Any = field(default=None, init=False, repr=False)
 

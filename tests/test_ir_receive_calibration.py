@@ -79,6 +79,82 @@ def test_a_single_sequence_that_repeats_alike_generates_nothing(tmp_path):
     assert cal["subsequence"] == 0
 
 
+def _once(flips=(20.0, 30.0)):
+    """A train played once whose repetitions differ in structure, so that none repeats."""
+    seq = pp.Sequence(SYSTEM)
+    for index, flip in enumerate(flips):
+        _repetition(seq, flip, 5e-3, delay=5e-3 * (index + 1), phase_area=20.0 * index)
+    return seq
+
+
+def test_a_brief_file_played_once_calibrates_on_itself(tmp_path):
+    """One repetition played once stands for itself, as a repetition that repeats does."""
+    seq = _once()
+    assert seq.repetition()[0] == seq.num_blocks
+    assert ir.receive_calibration_sequence([seq], SYSTEM) is None
+    path, calibration = _converted(tmp_path, [_once()])
+    assert calibration is None
+    assert ir.summary(path, SYSTEM, cache_ext=".pseg")["num_subsequences"] == 1
+
+
+def test_a_file_played_once_past_the_threshold_is_calibrated_apart(monkeypatch):
+    from pulserver.ir import _calibration
+
+    seq = _once()
+    monkeypatch.setattr(
+        _calibration, "RECEIVE_CALIBRATION_WHOLE_FILE_S", 0.5 * seq.duration()[0]
+    )
+    assert ir.receive_calibration_sequence([seq], SYSTEM) is not None
+
+
+def test_a_train_that_never_rests_calibrates_on_itself_past_the_threshold(
+    tmp_path, monkeypatch
+):
+    """A gated, bridged slice has no excitation that starts and ends at rest to play apart."""
+    from pypulseqpp.sequences.sequence.bssfp2D_sequence import bssfp2d
+
+    from pulserver.ir import _calibration
+
+    seq = bssfp2d(
+        SYSTEM,
+        n_x=32,
+        n_y=16,
+        readout_bandwidth_hz=25e3,
+        n_dummy=0,
+        gating="retrospective",
+    )
+    monkeypatch.setattr(
+        _calibration, "RECEIVE_CALIBRATION_WHOLE_FILE_S", 0.5 * seq.duration()[0]
+    )
+    path, calibration = _converted(tmp_path, [seq])
+
+    assert calibration is None
+    assert ir.summary(path, SYSTEM, cache_ext=".pseg")["num_subsequences"] == 1
+
+
+def test_a_chain_of_resting_repetitions_calibrates_on_one_excitation_per_slice(
+    tmp_path,
+):
+    """Ungated slices rest between repetitions, so each calibrates on one excitation."""
+    from pypulseqpp.sequences.sequence.bssfp2D_sequence import bssfp2d
+
+    chain = bssfp2d(
+        SYSTEM,
+        n_x=32,
+        n_y=16,
+        readout_bandwidth_hz=25e3,
+        n_dummy=2,
+        n_phases=3,
+        n_slices=2,
+    )
+    path, calibration = _converted(tmp_path, chain)
+    cal = ir.receive_calibration(path)
+
+    assert calibration is not None
+    assert calibration.get_definition("NumGainCalibrationReadouts") == [2]
+    assert cal["generated"] and cal["readouts"] == 2
+
+
 def test_a_chain_calibrates_on_the_thick_slab_over_the_strong_thin_slice(tmp_path):
     path, calibration = _converted(tmp_path, [_periodic(90, 3e-3), _periodic(15, 0.1)])
     cal = ir.receive_calibration(path)

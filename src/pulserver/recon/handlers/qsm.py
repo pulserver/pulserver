@@ -1,4 +1,4 @@
-"""Multi-echo 3D gradient echo: the ``pics`` image of each echo, then T2*, QSM and SWI with fast-qsm once every echo is in."""
+"""Multi-echo 3D gradient echo: the root sum of squares of the echoes, T2*, QSM and, outside a phantom, SWI with fast-qsm once every echo is in."""
 
 from __future__ import annotations
 
@@ -16,21 +16,20 @@ from ... import _site_packages
 from ...mrd._metadata import user_parameter
 from .._buffers import ReconData
 from ..plugin import ReconContext, ReconResult
-from .pics import IMAGINARY_SERIES, REAL_SERIES, PicsRecon
+from .pics import IMAGINARY_SERIES, MAGNITUDE_SERIES, REAL_SERIES, PicsRecon
 
 _log = logging.getLogger(__name__)
 
 #: The anatomies of the ``QsmAnatomy`` recon parameter, by its value.
 ANATOMIES = ("phantom", "brain", "body")
 
-#: The series of each derived map, after the echoes' magnitude, real and
-#: imaginary series of ``pics``.
+#: The series of each map. The echoes of a multi-echo scan, ``pics``'s
+#: magnitude, real and imaginary series 0 to 2, are not sent.
 SERIES = {
     "rss": 3,
     "t2star": 4,
     "qsm": 5,
     "swi": 6,
-    "swi_mip": 7,
     "pcs": 8,
     "dcs": 9,
 }
@@ -52,23 +51,29 @@ SWI_TE_3T = 20e-3
 
 
 class QsmRecon(PicsRecon):
-    """Each echo as ``pics`` makes it, and once the last echo of a volume is in, the maps of the anatomy the sequence states.
+    """Once the last echo of a volume is in, the maps of the anatomy the sequence states; the echoes themselves are not sent.
 
     The anatomy is the ``QsmAnatomy`` recon parameter of the header (0
-    phantom, 1 brain, 2 body), as ``gre_multiecho3d`` states it. The complex
-    image of each echo, the real and imaginary series ``pics`` sends, is kept
-    until the last echo of its slice and loop position closes; then, each its
-    own series (:data:`SERIES`):
+    phantom, 1 brain, 2 body), as ``gre_multiecho3d`` states it. Each echo
+    ``pics`` makes, its intensity-corrected magnitude and its complex image,
+    is kept until the last echo of its slice and loop position closes. Then,
+    each its own series (:data:`SERIES`):
 
-    - every anatomy: the root sum of squares of the echo magnitudes and T2*
-      (ms) of the whole object, from the field fit of fast-qsm;
+    - every anatomy: the root sum of squares of the echo magnitudes, and T2*
+      (ms) of the whole object from the field fit of fast-qsm;
     - phantom: QSM by PDF and MEDI+0 referenced to the water
       (``fastqsm.pipeline.run(anatomy="phantom", phantom_inversion="medi")``);
-    - brain: SWI and its minimum intensity projection from the echo nearest
-      :data:`SWI_TE_3T` scaled to B0, QSM by V-SHARP and iLSQR inside the
-      SynthStrip brain mask, and the DECOMPOSE paramagnetic and diamagnetic
-      component susceptibilities;
-    - body: QSM by mask-free TFI (``anatomy="body"``).
+    - brain: QSM by V-SHARP and iLSQR inside the SynthStrip brain mask, the
+      DECOMPOSE paramagnetic and diamagnetic component susceptibilities, and
+      the minimum intensity projection of SWI from the echo nearest
+      :data:`SWI_TE_3T` scaled to B0;
+    - body: QSM by mask-free TFI (``anatomy="body"``) and SWI as for the brain.
+
+    A single-echo scan is ``pics``'s magnitude image alone.
+
+    The maps are returned in the order of their series index, the same for
+    every anatomy, so a DICOM builder that numbers series by arrival numbers
+    each map alike whatever the anatomy.
 
     The B0 direction in the image axes is that of the unit's reference
     acquisition, B0 is the header's resonance frequency over gamma, the echo
@@ -76,7 +81,7 @@ class QsmRecon(PicsRecon):
     partial-Fourier axis leaves ``pics`` a real image without the field's
     phase, so the scan must sample k-space fully. The
     SynthStrip weights are those of :func:`synthstrip_weights`. Without
-    fast-qsm the plugin makes the echoes alone and logs why.
+    fast-qsm the plugin makes the root sum of squares alone and logs why.
 
     Each echo is Fermi filtered and corrected for gradient nonlinearity as a
     complex image, and its magnitude series alone is divided by the receive
@@ -93,7 +98,7 @@ class QsmRecon(PicsRecon):
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
-        self._echoes: dict[tuple[int, ...], dict[int, np.ndarray]] = {}
+        self._echoes: dict[tuple[int, ...], dict[int, tuple[np.ndarray, Any]]] = {}
 
     def spawn(self) -> QsmRecon:
         clone = super().spawn()
@@ -104,25 +109,33 @@ class QsmRecon(PicsRecon):
         self, context: ReconContext, branch: str, data: ReconData
     ) -> list[ReconResult] | ReconResult | None:
         result = super().recon(context, branch, data)
+        if not isinstance(result, list):
+            return result
+        parts = {r.series_index: r for r in result}
         te = _echo_times(context.header)
-        if not isinstance(result, list) or len(te) < 2:
-            return result
-        parts = {r.series_index: r.data for r in result}
-        if REAL_SERIES not in parts or IMAGINARY_SERIES not in parts:
-            return result
-        image = np.asarray(parts[REAL_SERIES]) + 1j * np.asarray(
-            parts[IMAGINARY_SERIES]
+        if len(te) < 2 or REAL_SERIES not in parts or IMAGINARY_SERIES not in parts:
+            return [
+                r
+                for r in result
+                if r.series_index not in (REAL_SERIES, IMAGINARY_SERIES)
+            ]
+        image = np.asarray(parts[REAL_SERIES].data) + 1j * np.asarray(
+            parts[IMAGINARY_SERIES].data
         )
         idx = data.data.reference.idx
         echo = int(idx.contrast)
         position = (int(idx.slice), int(idx.phase), int(idx.set), int(idx.repetition))
         held = self._echoes.setdefault(position, {})
-        held[echo] = image.astype(np.complex64)
-        if len(held) == len(te):
-            del self._echoes[position]
-            echoes = np.stack([held[e] for e in sorted(held)])
-            result.extend(self.maps(context, data, echoes, te))
-        return result
+        held[echo] = (image.astype(np.complex64), parts.get(MAGNITUDE_SERIES))
+        if len(held) < len(te):
+            return []
+        del self._echoes[position]
+        order = sorted(held)
+        echoes = np.stack([held[e][0] for e in order])
+        corrected = [held[e][1] for e in order]
+        return self.maps(
+            context, data, echoes, te, None if None in corrected else corrected
+        )
 
     def maps(
         self,
@@ -130,14 +143,23 @@ class QsmRecon(PicsRecon):
         data: ReconData,
         echoes: np.ndarray,
         te: list[float],
+        magnitudes: list[ReconResult] | None = None,
     ) -> list[ReconResult]:
-        """Return the derived series of ``(echoes, z, y, x)`` complex images at echo times ``te`` (s)."""
+        """Return the maps of ``(echoes, z, y, x)`` complex images at echo times ``te`` (s).
+
+        ``magnitudes`` are ``pics``'s magnitude results of the echoes, whose
+        intensity correction the root sum of squares takes; without them it
+        is that of the echoes as given.
+        """
+        rss = _rss(echoes, magnitudes)
         try:
             import torch
             from fastqsm import pipeline, swi
         except ImportError as error:
-            _log.warning("qsm: fast-qsm is not installed, echoes only (%s)", error)
-            return []
+            _log.warning(
+                "qsm: fast-qsm is not installed, root sum of squares only (%s)", error
+            )
+            return [rss]
         header = context.header
         anatomy = _anatomy(header)
         b0 = _b0(header)
@@ -173,9 +195,12 @@ class QsmRecon(PicsRecon):
                 },
             )
 
-        rss = np.sqrt((magnitude.astype(np.float64) ** 2).sum(0)).astype(np.float32)
-        out = [result("rss", rss, "RSS")]
-        out.append(result("t2star", _t2star_ms(magnitude, phase, te), "T2STAR"))
+        out = [rss, result("t2star", _t2star_ms(magnitude, phase, te), "T2STAR")]
+        target = SWI_TE_3T * 3.0 / b0
+        nearest = int(np.argmin([abs(t - target) for t in te]))
+        if anatomy != "phantom":
+            sw = swi(xyz[nearest] if PHASE_SIGN == 1 else np.conj(xyz[nearest]), voxel)
+            out.append(result("swi", sw.mip, "SWI_MINIP"))
         common = {"b0": b0, "b0_dir": b0_dir, "device": device}
         if anatomy == "phantom":
             run = pipeline.run(
@@ -192,11 +217,6 @@ class QsmRecon(PicsRecon):
             run = pipeline.run(magnitude, phase, te, voxel, anatomy="body", **common)
             out.append(result("qsm", run.maps["chi"], "QSM"))
         else:
-            target = SWI_TE_3T * 3.0 / b0
-            nearest = int(np.argmin([abs(t - target) for t in te]))
-            sw = swi(xyz[nearest] if PHASE_SIGN == 1 else np.conj(xyz[nearest]), voxel)
-            out.append(result("swi", sw.swi, "SWI"))
-            out.append(result("swi_mip", sw.mip, "SWI_MIP"))
             run = pipeline.run(
                 magnitude,
                 phase,
@@ -210,9 +230,31 @@ class QsmRecon(PicsRecon):
             out.append(result("pcs", run.maps["pcs"], "PCS"))
             out.append(result("dcs", run.maps["dcs"], "DCS"))
         _log.info(
-            "qsm: %s maps in %s s on %s", anatomy, run.info.get("total_s"), device
+            "qsm: %s maps in %s s on %s%s",
+            anatomy,
+            run.info.get("total_s"),
+            device,
+            ""
+            if anatomy == "phantom"
+            else f", SWI from echo {nearest} (TE {1e3 * te[nearest]:.1f} ms)",
         )
-        return out
+        return sorted(out, key=lambda map_: map_.series_index)
+
+
+def _rss(echoes: np.ndarray, magnitudes: list[ReconResult] | None) -> ReconResult:
+    """Return the root sum of squares over echoes, of ``magnitudes`` with their attributes where given."""
+    if magnitudes is None:
+        stack = np.abs(echoes)
+        attributes = {"ImageProcessingHistory": ["PULSERVER", "PYTHON"]}
+    else:
+        stack = np.stack([np.asarray(m.data) for m in magnitudes])
+        attributes = dict(magnitudes[0].attributes)
+    rss = np.sqrt((stack.astype(np.float64) ** 2).sum(0)).astype(np.float32)
+    return ReconResult(
+        rss,
+        series_index=SERIES["rss"],
+        attributes={**attributes, "SeriesDescriptionAdditional": "_RSS"},
+    )
 
 
 def synthstrip_weights() -> str | None:

@@ -18,6 +18,7 @@ from pulserver._zoo._evaluation import (
 )
 from pulserver._zoo._fse import (
     bounding_train,
+    check_centre_first,
     echo_train_layout,
     effective_te,
     one_train,
@@ -233,6 +234,7 @@ class FsePd3D(SequencePlugin):
         # per train under a warm server, on the centre view alone. The RF of
         # a train does not depend on the view order.
         a = arguments(self, protocol)
+        check_centre_first(a)
         one = {"n_dummy": 0, "ordering": "radial"}
         centre = {"ry": a["n_y"], "rz": a["n_z"], "n_acs_y": 0, "n_acs_z": 0}
         solved = protocol.arguments | one | centre | {"flip_modulation": "pd"}
@@ -280,4 +282,5 @@ class FsePd3D(SequencePlugin):
             leading * times[0] + sum(times),
             sequence=representative,
             rf_layout=echo_train_layout(train, lengths, times),
+            echo_spacing=train.definitions["EchoSpacing"][0],
         )

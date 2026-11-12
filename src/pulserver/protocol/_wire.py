@@ -43,6 +43,42 @@ _FORMER_END = "[NimPulseqGUI Protocol End]"
 
 
 @dataclass(frozen=True)
+class Display:
+    """What a design states about itself that a console shows and nobody sets.
+
+    A valid ``validate`` reply carries the figures stated in its ``[Display]``
+    block.
+
+    Attributes
+    ----------
+    echo_spacing
+        The spacing of the echoes of the train the protocol plays, in
+        seconds; ``None`` where the design states none.
+    pixel_bandwidth
+        The receive bandwidth across one pixel of the readout field of view,
+        in Hz; ``None`` where the design states none.
+    frame_time
+        The time one frame of a scan of several takes, in seconds; ``None``
+        where the design states none.
+    """
+
+    echo_spacing: float | None = None
+    pixel_bandwidth: float | None = None
+    frame_time: float | None = None
+
+
+#: The names of the figures of a ``[Display]`` block, by attribute of
+#: :class:`Display`.
+_DISPLAY_NAMES = {
+    "echo_spacing": "EchoSpacing",
+    "pixel_bandwidth": "PixelBandwidth",
+    "frame_time": "FrameTime",
+}
+
+_DISPLAY = ("[Display]", "[Display End]")
+
+
+@dataclass(frozen=True)
 class Validation:
     """Reply of the ``validate`` design call.
 
@@ -61,6 +97,9 @@ class Validation:
         The RF layout of a valid evaluation; ``None`` where the plugin states
         none or plays no RF, for an invalid request, and for a reply read from
         text. Excluded from equality and from the representation.
+    display
+        The figures the evaluation states for a console to show; none for an
+        invalid request.
     """
 
     valid: bool
@@ -68,6 +107,7 @@ class Validation:
     info: str
     values: dict[ProtocolKey, float | int | bool | str]
     rf_layout: RfLayout | None = field(default=None, compare=False, repr=False)
+    display: Display = field(default_factory=Display)
 
 
 def _key(name: str) -> ProtocolKey | str:
@@ -263,9 +303,12 @@ def format_validation(
     """Format a ``validate`` reply: status line, info line, value block.
 
     Whitespace in the info text, newlines included, is folded to single spaces.
-    With ``rf_layout``, a valid reply that holds an RF layout ends with its
-    ``[RfLayout]`` block, as :func:`format_rf_layout` formats it over
-    ``listed_peak_hz``.
+    With ``rf_layout``, a valid reply that holds an RF layout continues with
+    its ``[RfLayout]`` block, as :func:`format_rf_layout` formats it over
+    ``listed_peak_hz``. A valid reply whose evaluation states a figure for
+    display ends with a ``[Display]`` block of ``Name: value`` lines, one per
+    figure stated: ``EchoSpacing`` and ``FrameTime`` in seconds,
+    ``PixelBandwidth`` in Hz.
     """
     if validation.valid:
         duration = "?" if validation.duration is None else repr(validation.duration)
@@ -276,13 +319,46 @@ def format_validation(
     text = f"{status}\nINFO {info}\n" + format_values(validation.values, listing)
     if rf_layout and validation.valid and validation.rf_layout is not None:
         text += format_rf_layout(validation.rf_layout, listed_peak_hz)
+    if validation.valid:
+        text += _format_display(validation.display)
     return text
+
+
+def _format_display(display: Display) -> str:
+    """Return the ``[Display]`` block of the figures ``display`` states, empty where it states none."""
+    lines = [
+        f"{name}: {_number(value)}"
+        for attribute, name in _DISPLAY_NAMES.items()
+        if (value := getattr(display, attribute)) is not None
+    ]
+    if not lines:
+        return ""
+    return "\n".join([_DISPLAY[0], *lines, _DISPLAY[1]]) + "\n"
+
+
+def parse_display(text: str) -> Display:
+    """Read the ``[Display]`` block of a ``validate`` reply; a reply without one states no figure."""
+    attributes = {name: attribute for attribute, name in _DISPLAY_NAMES.items()}
+    found: dict[str, float] = {}
+    inside = False
+    for line in text.splitlines():
+        line = line.strip()
+        if line == _DISPLAY[0]:
+            inside = True
+        elif line == _DISPLAY[1]:
+            break
+        elif inside:
+            name, _, value = line.partition(": ")
+            if name in attributes:
+                found[attributes[name]] = float(value)
+    return Display(**found)
 
 
 def parse_validation(text: str, listing: Mapping[ProtocolKey, Parameter]) -> Validation:
     """Read a ``validate`` reply.
 
-    Blocks after the value block are left to :func:`parse_rf_layout`.
+    The ``[RfLayout]`` block is left to :func:`parse_rf_layout`; the
+    ``[Display]`` block is read into :attr:`Validation.display`.
     """
     status, info, block = text.split("\n", 2)
     word, _, duration = status.partition(" ")
@@ -292,6 +368,7 @@ def parse_validation(text: str, listing: Mapping[ProtocolKey, Parameter]) -> Val
         duration=float(duration) if valid and duration not in ("", "?") else None,
         info=info.removeprefix("INFO").strip(),
         values=parse_values(block, listing),
+        display=parse_display(block),
     )
 
 
