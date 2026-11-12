@@ -443,8 +443,8 @@
 
 <span class="sd">    The file holds a ``[Grouping]`` and a ``[VendorProfile]`` block, each</span>
 <span class="sd">    closed by its ``[... End]`` line, with one ``name: value`` line per field</span>
-<span class="sd">    and every field stated; blank lines and lines starting with ``#`` are</span>
-<span class="sd">    skipped. A grouping field is a number or ``true``/``false``; a profile</span>
+<span class="sd">    and every field stated but ``join_trailing_delay_us``, 0 when left out;</span>
+<span class="sd">    blank lines and lines starting with ``#`` are skipped. A grouping field is a number or ``true``/``false``; a profile</span>
 <span class="sd">    field is a :class:`Format` name and the SI value of one integer step,</span>
 <span class="sd">    ``0`` for a float::</span>
 
@@ -507,7 +507,13 @@
         <span class="p">)</span>
     <span class="k">return</span> <span class="p">(</span>
         <span class="n">VendorProfile</span><span class="p">(</span><span class="o">**</span><span class="n">_fields</span><span class="p">(</span><span class="n">VendorProfile</span><span class="p">,</span> <span class="n">blocks</span><span class="p">[</span><span class="s2">"VendorProfile"</span><span class="p">],</span> <span class="n">_quantity</span><span class="p">)),</span>
-        <span class="n">Grouping</span><span class="p">(</span><span class="o">**</span><span class="n">_fields</span><span class="p">(</span><span class="n">Grouping</span><span class="p">,</span> <span class="n">blocks</span><span class="p">[</span><span class="s2">"Grouping"</span><span class="p">],</span> <span class="n">_grouping_value</span><span class="p">)),</span>
+        <span class="n">Grouping</span><span class="p">(</span>
+            <span class="o">**</span><span class="n">_fields</span><span class="p">(</span>
+                <span class="n">Grouping</span><span class="p">,</span>
+                <span class="p">{</span><span class="s2">"join_trailing_delay_us"</span><span class="p">:</span> <span class="s2">"0"</span><span class="p">,</span> <span class="o">**</span><span class="n">blocks</span><span class="p">[</span><span class="s2">"Grouping"</span><span class="p">]},</span>
+                <span class="n">_grouping_value</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="p">),</span>
     <span class="p">)</span></div>
 
 
@@ -532,7 +538,7 @@
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_grouping_value</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">text</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span> <span class="o">|</span> <span class="nb">bool</span><span class="p">:</span>
-    <span class="k">if</span> <span class="n">name</span> <span class="o">==</span> <span class="s2">"boundary_gradient_hz_per_m"</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"boundary_gradient_hz_per_m"</span><span class="p">,</span> <span class="s2">"join_trailing_delay_us"</span><span class="p">):</span>
         <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">text</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">_FLAGS</span><span class="p">[</span><span class="n">text</span><span class="o">.</span><span class="n">lower</span><span class="p">()]</span>
 

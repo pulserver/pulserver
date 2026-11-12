@@ -737,7 +737,10 @@ defines (<code class="docutils literal notranslate"><span class="pre">kSpaceCent
 none, and for every other counter, the centre is the minimum plus half the
 number of positions between the minimum and the maximum, rounded down.</p></li>
 <li><p>The header’s sequence parameters are the TR, TE, TI and flip angles the
-sequence defines. The TR and TE it does not define are measured by
+main sequence, the last of the chain, defines, so that a prescan, such as
+the gradient-echo calibration ahead of an accelerated EPI, does not
+annotate the images; a parameter the main sequence neither defines nor
+measures is taken over the whole chain. The TR and TE it does not define are measured by
 pypulseqpp’s <code class="docutils literal notranslate"><span class="pre">Sequence.test_report_dict</span></code>: TE from the excitation before the
 closest approach to the k-space centre, and TR between the excitations
 around it. The flip angles it does not define are the distinct values of

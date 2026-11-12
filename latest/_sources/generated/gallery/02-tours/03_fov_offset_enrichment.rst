@@ -239,7 +239,7 @@ engine's bases. As received, the echo planar samples do not.
  .. code-block:: none
 
     gradient echo: relative difference from the isocentre, as received 4.5e-03, with the proxy phase 4.5e-03
-    echo planar: relative difference from the isocentre, as received 9.1e-02, with the proxy phase 6.7e-02
+    echo planar: relative difference from the isocentre, as received 2.0e-01, with the proxy phase 1.2e-01
 
 
 
@@ -313,7 +313,7 @@ needs no new cache.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.477 seconds)
+   **Total running time of the script:** (0 minutes 0.446 seconds)
 
 
 .. _sphx_glr_download_generated_gallery_02-tours_03_fov_offset_enrichment.py:

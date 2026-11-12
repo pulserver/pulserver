@@ -490,6 +490,7 @@
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#rf-layout">RF layout</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#keys-and-values">Keys and values</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#listing-and-value-blocks">Listing and value blocks</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#display-block">Display figures</a></li>
 </ul>
             </nav>
         </div>
@@ -543,10 +544,15 @@ the definitions of the evaluation at the default protocol, and a layout names
 the pulses of the listing only where the protocol does not change which pulses
 are played first: the length of a train, a flip angle schedule and the matrix do
 not, and a protocol that adds a preparation pulse does. Explicit saturation
-bands are the exception a console needs, since it places them without listing
-again: the listing’s evaluation places every band the plugin offers, and the
-shipped plugins number the band pulse after the others, so a band placed or
-removed changes no other number.</p>
+bands and a fat saturation are the exception a console needs, since it places
+them without listing again: the listing’s evaluation places every band the
+plugin offers and its fat saturation, and the shipped plugins number the
+saturation pulses after the others, so one placed or removed changes no other
+number. A prescan of the chain that repeats at its own TR, such as the
+calibration of the EPI plugins, is costed by a scanner over its own
+repetition; where it plays more RF power than a TR, the layout is its pulses
+over the TR, each numbered as the pulse of the listing it plays, or else the
+first of its use.</p>
 <p>The layout is an estimate for the prescription. An evaluation that states none
 states no estimate and is valid, and what the scanner checks before the scan is
 the stored design (<a class="reference internal" href="../../explanations/architecture.html"><span class="doc">Architecture</span></a>).</p>
@@ -648,6 +654,27 @@ request, as does every run where the evaluation at the default protocol is
 invalid. <code class="docutils literal notranslate"><span class="pre">control</span></code> is the wire name of the entry the amplitude is proportional
 to, or <code class="docutils literal notranslate"><span class="pre">-</span></code>. A reader skips the blocks it does not know.</p>
 </section>
+<section id="display-block">
+<span id="display-figures"></span><h2>Display figures<a class="headerlink" href="#display-block" title="Link to this heading">#</a></h2>
+<p>An evaluation may state figures of its design that a console shows and the
+operator does not set (<a class="reference internal" href="../../generated/pulserver.protocol.Display.html#pulserver.protocol.Display" title="pulserver.protocol.Display"><code class="xref py py-class docutils literal notranslate"><span class="pre">Display</span></code></a>): the echo spacing
+of an EPI or FSE train, the receive bandwidth across one pixel of the readout
+field of view, and the time one frame of a time series or cine takes. A valid
+<code class="docutils literal notranslate"><span class="pre">validate</span></code> reply that states any ends with a <code class="docutils literal notranslate"><span class="pre">[Display]</span></code> block, one line per
+figure stated:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>[Display]
+EchoSpacing: &lt;s&gt;
+PixelBandwidth: &lt;Hz&gt;
+FrameTime: &lt;s&gt;
+[Display End]
+</pre></div>
+</div>
+<p>A console reading no block, from an older server or for a figure not stated,
+falls back on what it computes itself: the bandwidth over the readout matrix
+for the pixel bandwidth, the scan time for the frame time. The pixel
+bandwidth is stated where the readout is oversampled, where that fallback
+would be too large by the oversampling factor.</p>
+</section>
 </section>
 
 
@@ -700,6 +727,7 @@ to, or <code class="docutils literal notranslate"><span class="pre">-</span></co
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#rf-layout">RF layout</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#keys-and-values">Keys and values</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#listing-and-value-blocks">Listing and value blocks</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#display-block">Display figures</a></li>
 </ul>
   </nav></div>
 

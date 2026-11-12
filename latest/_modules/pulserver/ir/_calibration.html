@@ -428,6 +428,7 @@
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
+<span class="kn">import</span><span class="w"> </span><span class="nn">dataclasses</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">math</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Sequence</span>
@@ -458,6 +459,19 @@
 
 <span class="c1">#: Definition that marks the generated subsequence in the cache.</span>
 <span class="n">PRESCAN_ONLY</span> <span class="o">=</span> <span class="s2">"PrescanOnly"</span>
+<span class="c1">#: Longest file, in s, that reads out without repeating and is still its own</span>
+<span class="c1">#: receive calibration. Such a file is one repetition played once, a single</span>
+<span class="c1">#: slice or a single shot, and a prescan calibrates on it from its start, as</span>
+<span class="c1">#: it does on the repetition of a file that repeats; a longer one is taken as a</span>
+<span class="c1">#: scan no repetition stands for, and is given a generated calibration. The</span>
+<span class="c1">#: value holds the longest repetition a prescan is given today with room to</span>
+<span class="c1">#: spare: one slice of a 2D balanced SSFP cine of 25 frames, about 16 000</span>
+<span class="c1">#: blocks and 22 s.</span>
+<span class="n">RECEIVE_CALIBRATION_WHOLE_FILE_S</span> <span class="o">=</span> <span class="mf">60.0</span>
+<span class="c1">#: Gradient, Hz/m, under which an axis is at rest where the generated</span>
+<span class="c1">#: calibration starts and ends its play: the conversion's threshold for a</span>
+<span class="c1">#: segment boundary.</span>
+<span class="n">REST_GRADIENT</span> <span class="o">=</span> <span class="mf">100.0</span>
 
 <span class="n">_RF</span><span class="p">,</span> <span class="n">_GX</span><span class="p">,</span> <span class="n">_GY</span><span class="p">,</span> <span class="n">_GZ</span><span class="p">,</span> <span class="n">_ADC</span> <span class="o">=</span> <span class="nb">range</span><span class="p">(</span><span class="mi">5</span><span class="p">)</span>
 <span class="n">_log</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
@@ -598,6 +612,16 @@
 <span class="sd">    amplitudes, the prescan calibrates on that file from its start after the</span>
 <span class="sd">    tour, and the subsequence is the tour alone, its readouts under</span>
 <span class="sd">    ``NOPRESCAN``, or None without pTx.</span>
+<span class="sd">    So does it where its only file reads out without repeating and lasts at</span>
+<span class="sd">    most :data:`RECEIVE_CALIBRATION_WHOLE_FILE_S`: the file is then one</span>
+<span class="sd">    repetition played once, a single slice or a single shot, and is its own</span>
+<span class="sd">    calibration as the repetition of a repeating file is. A longer such file</span>
+<span class="sd">    is its own calibration too where the excitation chosen below does not</span>
+<span class="sd">    start and end with every gradient at rest (:data:`REST_GRADIENT`), as in</span>
+<span class="sd">    a train whose blocks join on a gradient: no part of it plays apart. In a</span>
+<span class="sd">    chain of several reading files, such an excitation's blocks are widened</span>
+<span class="sd">    to the nearest joins at rest either side, a frame of a balanced train</span>
+<span class="sd">    whose frames rest between them.</span>
 <span class="sd">    Otherwise no repetition stands for the scan, and the tour is followed by</span>
 <span class="sd">    the calibration: the excitation scoring highest on the sine of its flip</span>
 <span class="sd">    angle, capped at 90 degrees, times the thickness it excites, the RF</span>
@@ -638,13 +662,30 @@
     <span class="n">tour</span> <span class="o">=</span> <span class="n">_tour</span><span class="p">(</span><span class="n">files</span><span class="p">,</span> <span class="n">channels</span><span class="p">)</span> <span class="k">if</span> <span class="n">channels</span> <span class="o">&gt;</span> <span class="mi">1</span> <span class="k">else</span> <span class="p">[]</span>
     <span class="n">reading</span> <span class="o">=</span> <span class="p">[</span><span class="n">i</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">f</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">files</span><span class="p">)</span> <span class="k">if</span> <span class="n">f</span><span class="o">.</span><span class="n">reads</span><span class="o">.</span><span class="n">any</span><span class="p">()]</span>
     <span class="n">calibration</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="k">if</span> <span class="n">reading</span> <span class="ow">and</span> <span class="ow">not</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">reading</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span> <span class="ow">and</span> <span class="n">_repeats_alike</span><span class="p">(</span><span class="n">files</span><span class="p">[</span><span class="n">reading</span><span class="p">[</span><span class="mi">0</span><span class="p">]])):</span>
+    <span class="k">if</span> <span class="n">reading</span> <span class="ow">and</span> <span class="ow">not</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">reading</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span> <span class="ow">and</span> <span class="n">_calibrates_on_itself</span><span class="p">(</span><span class="n">files</span><span class="p">[</span><span class="n">reading</span><span class="p">[</span><span class="mi">0</span><span class="p">]])):</span>
         <span class="c1"># Equal signals, to rounding, go to the first in play order.</span>
         <span class="n">calibration</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span>
             <span class="p">(</span><span class="n">span</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">reading</span> <span class="k">for</span> <span class="n">span</span> <span class="ow">in</span> <span class="n">_spans</span><span class="p">(</span><span class="n">files</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">i</span><span class="p">,</span> <span class="n">channels</span><span class="p">)),</span>
             <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">span</span><span class="p">:</span> <span class="nb">round</span><span class="p">(</span><span class="n">span</span><span class="o">.</span><span class="n">signal</span><span class="p">,</span> <span class="n">SIGNAL_DIGITS</span><span class="p">),</span>
             <span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="p">)</span>
+        <span class="k">if</span> <span class="n">calibration</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">_rests</span><span class="p">(</span><span class="n">files</span><span class="p">[</span><span class="n">calibration</span><span class="o">.</span><span class="n">file</span><span class="p">],</span> <span class="n">calibration</span><span class="p">):</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">reading</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="n">_log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                    <span class="s2">"receive calibration: file </span><span class="si">%d</span><span class="s2"> block </span><span class="si">%d</span><span class="s2"> does not start and end at "</span>
+                    <span class="s2">"rest; the file is its own calibration"</span><span class="p">,</span>
+                    <span class="n">calibration</span><span class="o">.</span><span class="n">file</span><span class="p">,</span>
+                    <span class="n">calibration</span><span class="o">.</span><span class="n">first</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="n">calibration</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">calibration</span> <span class="o">=</span> <span class="n">_widened</span><span class="p">(</span><span class="n">files</span><span class="p">[</span><span class="n">calibration</span><span class="o">.</span><span class="n">file</span><span class="p">],</span> <span class="n">calibration</span><span class="p">)</span>
+                <span class="n">_log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                    <span class="s2">"receive calibration: file </span><span class="si">%d</span><span class="s2"> blocks </span><span class="si">%d</span><span class="s2">-</span><span class="si">%d</span><span class="s2">, widened to rest at both ends"</span><span class="p">,</span>
+                    <span class="n">calibration</span><span class="o">.</span><span class="n">file</span><span class="p">,</span>
+                    <span class="n">calibration</span><span class="o">.</span><span class="n">first</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span>
+                    <span class="n">calibration</span><span class="o">.</span><span class="n">stop</span><span class="p">,</span>
+                <span class="p">)</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="n">tour</span> <span class="ow">and</span> <span class="n">calibration</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">return</span> <span class="kc">None</span>
     <span class="k">if</span> <span class="n">calibration</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">calibration</span><span class="o">.</span><span class="n">balanced</span><span class="p">:</span>
@@ -655,6 +696,46 @@
         <span class="p">)</span>
     <span class="k">return</span> <span class="n">_build</span><span class="p">(</span><span class="n">files</span><span class="p">,</span> <span class="n">tour</span><span class="p">,</span> <span class="n">calibration</span><span class="p">,</span> <span class="n">system</span><span class="p">)</span></div>
 
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_edge_rests</span><span class="p">(</span><span class="n">f</span><span class="p">:</span> <span class="n">_File</span><span class="p">,</span> <span class="n">block</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">end</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Whether every gradient of 0-based ``block`` is at rest at its ``end``, ``"first"`` or ``"last"``."""</span>
+    <span class="n">played</span> <span class="o">=</span> <span class="n">f</span><span class="o">.</span><span class="n">sequence</span><span class="o">.</span><span class="n">get_block</span><span class="p">(</span><span class="n">block</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">axis</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"gx"</span><span class="p">,</span> <span class="s2">"gy"</span><span class="p">,</span> <span class="s2">"gz"</span><span class="p">):</span>
+        <span class="n">grad</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">played</span><span class="p">,</span> <span class="n">axis</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">grad</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">grad</span><span class="o">.</span><span class="n">type</span> <span class="o">==</span> <span class="s2">"trap"</span><span class="p">:</span>
+            <span class="k">continue</span>
+        <span class="k">if</span> <span class="nb">abs</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">grad</span><span class="p">,</span> <span class="n">end</span><span class="p">)))</span> <span class="o">&gt;</span> <span class="n">REST_GRADIENT</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">False</span>
+    <span class="k">return</span> <span class="kc">True</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_rests</span><span class="p">(</span><span class="n">f</span><span class="p">:</span> <span class="n">_File</span><span class="p">,</span> <span class="n">span</span><span class="p">:</span> <span class="n">_Span</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Whether every gradient is at rest where the span opens and where it closes."""</span>
+    <span class="k">return</span> <span class="n">_edge_rests</span><span class="p">(</span><span class="n">f</span><span class="p">,</span> <span class="n">span</span><span class="o">.</span><span class="n">first</span><span class="p">,</span> <span class="s2">"first"</span><span class="p">)</span> <span class="ow">and</span> <span class="n">_edge_rests</span><span class="p">(</span><span class="n">f</span><span class="p">,</span> <span class="n">span</span><span class="o">.</span><span class="n">stop</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="s2">"last"</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_widened</span><span class="p">(</span><span class="n">f</span><span class="p">:</span> <span class="n">_File</span><span class="p">,</span> <span class="n">span</span><span class="p">:</span> <span class="n">_Span</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">_Span</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the span grown to the nearest joins at rest before it and after it, or the file's ends."""</span>
+    <span class="n">first</span><span class="p">,</span> <span class="n">stop</span><span class="p">,</span> <span class="n">blocks</span> <span class="o">=</span> <span class="n">span</span><span class="o">.</span><span class="n">first</span><span class="p">,</span> <span class="n">span</span><span class="o">.</span><span class="n">stop</span><span class="p">,</span> <span class="n">f</span><span class="o">.</span><span class="n">blocks</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">while</span> <span class="n">first</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="ow">and</span> <span class="ow">not</span> <span class="p">(</span>
+        <span class="n">_edge_rests</span><span class="p">(</span><span class="n">f</span><span class="p">,</span> <span class="n">first</span><span class="p">,</span> <span class="s2">"first"</span><span class="p">)</span> <span class="ow">and</span> <span class="n">_edge_rests</span><span class="p">(</span><span class="n">f</span><span class="p">,</span> <span class="n">first</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="s2">"last"</span><span class="p">)</span>
+    <span class="p">):</span>
+        <span class="n">first</span> <span class="o">-=</span> <span class="mi">1</span>
+    <span class="k">while</span> <span class="n">stop</span> <span class="o">&lt;</span> <span class="n">blocks</span> <span class="ow">and</span> <span class="ow">not</span> <span class="p">(</span>
+        <span class="n">_edge_rests</span><span class="p">(</span><span class="n">f</span><span class="p">,</span> <span class="n">stop</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="s2">"last"</span><span class="p">)</span> <span class="ow">and</span> <span class="n">_edge_rests</span><span class="p">(</span><span class="n">f</span><span class="p">,</span> <span class="n">stop</span><span class="p">,</span> <span class="s2">"first"</span><span class="p">)</span>
+    <span class="p">):</span>
+        <span class="n">stop</span> <span class="o">+=</span> <span class="mi">1</span>
+    <span class="n">readouts</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">f</span><span class="o">.</span><span class="n">reads</span><span class="p">[</span><span class="n">first</span><span class="p">:</span><span class="n">stop</span><span class="p">]</span><span class="o">.</span><span class="n">sum</span><span class="p">())</span>
+    <span class="k">return</span> <span class="n">dataclasses</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="n">span</span><span class="p">,</span> <span class="n">first</span><span class="o">=</span><span class="n">first</span><span class="p">,</span> <span class="n">stop</span><span class="o">=</span><span class="n">stop</span><span class="p">,</span> <span class="n">readouts</span><span class="o">=</span><span class="n">readouts</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_calibrates_on_itself</span><span class="p">(</span><span class="n">f</span><span class="p">:</span> <span class="n">_File</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Whether a prescan calibrates on the file from its start: it repeats alike, or is played once and briefly."""</span>
+    <span class="n">size</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">f</span><span class="o">.</span><span class="n">sequence</span><span class="o">.</span><span class="n">repetition</span><span class="p">()</span>
+    <span class="k">if</span> <span class="mi">0</span> <span class="o">&lt;</span> <span class="n">size</span> <span class="o">&lt;</span> <span class="n">f</span><span class="o">.</span><span class="n">blocks</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span>
+        <span class="k">return</span> <span class="n">_repeats_alike</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
+    <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">f</span><span class="o">.</span><span class="n">sequence</span><span class="o">.</span><span class="n">duration</span><span class="p">()[</span><span class="mi">0</span><span class="p">])</span> <span class="o">&lt;=</span> <span class="n">RECEIVE_CALIBRATION_WHOLE_FILE_S</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_repeats_alike</span><span class="p">(</span><span class="n">f</span><span class="p">:</span> <span class="n">_File</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>

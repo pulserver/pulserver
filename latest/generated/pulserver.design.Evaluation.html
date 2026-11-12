@@ -528,6 +528,16 @@ the scan is designed, and lowers the slew rate the protocol is
 designed under where they exceed their limits, so that the console
 shows what will play. <code class="docutils literal notranslate"><span class="pre">None</span></code>, the default, states none: the slew
 rate is then lowered only when the generated design fails the check.</p></li>
+<li><p><strong>echo_spacing</strong> (<em>float | None</em>) – The spacing of the echoes of the train the protocol plays, in
+seconds, which a console shows; <code class="docutils literal notranslate"><span class="pre">None</span></code>, the default, states none.
+An EPI or FSE train states it; a gradient-echo train does not.</p></li>
+<li><p><strong>pixel_bandwidth</strong> (<em>float | None</em>) – The receive bandwidth across one pixel of the readout field of view,
+in Hz: the sampling rate over the samples that span it. <code class="docutils literal notranslate"><span class="pre">None</span></code>, the
+default, leaves a console to divide the bandwidth by the readout
+matrix, which only an oversampled readout needs to correct.</p></li>
+<li><p><strong>frame_time</strong> (<em>float | None</em>) – The time one frame of a scan of several takes, in seconds: the volume
+TR of a time series, the frame of a cine. <code class="docutils literal notranslate"><span class="pre">None</span></code>, the default,
+states none.</p></li>
 </ul>
 </dd>
 </dl>
@@ -539,16 +549,25 @@ rate is then lowered only when the generated design fails the check.</p></li>
 <tr class="row-odd"><td><p><a class="reference internal" href="pulserver.design.Evaluation.duration.html#pulserver.design.Evaluation.duration" title="pulserver.design.Evaluation.duration"><code class="xref py py-obj docutils literal notranslate"><span class="pre">duration</span></code></a></p></td>
 <td><p></p></td>
 </tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.design.Evaluation.echo_spacing.html#pulserver.design.Evaluation.echo_spacing" title="pulserver.design.Evaluation.echo_spacing"><code class="xref py py-obj docutils literal notranslate"><span class="pre">echo_spacing</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.design.Evaluation.frame_time.html#pulserver.design.Evaluation.frame_time" title="pulserver.design.Evaluation.frame_time"><code class="xref py py-obj docutils literal notranslate"><span class="pre">frame_time</span></code></a></p></td>
+<td><p></p></td>
+</tr>
 <tr class="row-even"><td><p><a class="reference internal" href="pulserver.design.Evaluation.info.html#pulserver.design.Evaluation.info" title="pulserver.design.Evaluation.info"><code class="xref py py-obj docutils literal notranslate"><span class="pre">info</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.design.Evaluation.rf_layout.html#pulserver.design.Evaluation.rf_layout" title="pulserver.design.Evaluation.rf_layout"><code class="xref py py-obj docutils literal notranslate"><span class="pre">rf_layout</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.design.Evaluation.pixel_bandwidth.html#pulserver.design.Evaluation.pixel_bandwidth" title="pulserver.design.Evaluation.pixel_bandwidth"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pixel_bandwidth</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.design.Evaluation.sequence.html#pulserver.design.Evaluation.sequence" title="pulserver.design.Evaluation.sequence"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sequence</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.design.Evaluation.rf_layout.html#pulserver.design.Evaluation.rf_layout" title="pulserver.design.Evaluation.rf_layout"><code class="xref py py-obj docutils literal notranslate"><span class="pre">rf_layout</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.design.Evaluation.protocol.html#pulserver.design.Evaluation.protocol" title="pulserver.design.Evaluation.protocol"><code class="xref py py-obj docutils literal notranslate"><span class="pre">protocol</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.design.Evaluation.sequence.html#pulserver.design.Evaluation.sequence" title="pulserver.design.Evaluation.sequence"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sequence</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.design.Evaluation.protocol.html#pulserver.design.Evaluation.protocol" title="pulserver.design.Evaluation.protocol"><code class="xref py py-obj docutils literal notranslate"><span class="pre">protocol</span></code></a></p></td>
 <td><p></p></td>
 </tr>
 </tbody>

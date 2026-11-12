@@ -511,6 +511,14 @@ delay <code class="docutils literal notranslate"><span class="pre">tail_us</span
 gives that time back, playing a shorter wait but never one under
 <code class="docutils literal notranslate"><span class="pre">min_wait_us</span></code>, so the scan keeps the time its file states wherever such
 a delay follows; <a class="reference internal" href="pulserver.ir.played_time.html#pulserver.ir.played_time" title="pulserver.ir.played_time"><code class="xref py py-func docutils literal notranslate"><span class="pre">played_time()</span></code></a> gives what a scan plays.</p>
+<p>With <code class="docutils literal notranslate"><span class="pre">quiet_margin_us</span></code> at 0 or more the sequencer also ends an instance
+that is not a pure delay inside its quiet tail, the time from its last
+event to its end: earlier by that tail less <code class="docutils literal notranslate"><span class="pre">quiet_margin_us</span></code>, on the
+raster, by at most <code class="docutils literal notranslate"><span class="pre">gap_us</span></code> plus <code class="docutils literal notranslate"><span class="pre">tail_us</span></code>. A segment that ends on at
+least that much silence then plays exactly its blocks. An RF pulse counts
+as an event until <code class="docutils literal notranslate"><span class="pre">rf_tail_us</span></code> after it ends and a readout until
+<code class="docutils literal notranslate"><span class="pre">adc_tail_us</span></code> after its last sample, the time the playout keeps busy
+after either.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Attributes<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -518,6 +526,10 @@ a delay follows; <a class="reference internal" href="pulserver.ir.played_time.ht
 <li><p><strong>tail_us</strong> (<em>int</em>) – Time an instance that is not a pure delay plays past its blocks, in µs.</p></li>
 <li><p><strong>min_wait_us</strong> (<em>int</em>) – Shortest wait a pure delay plays, in µs.</p></li>
 <li><p><strong>raster_us</strong> (<em>int</em>) – Raster a wait is played on, in µs.</p></li>
+<li><p><strong>rf_tail_us, adc_tail_us</strong> – Time the playout keeps busy after an RF pulse and after a readout, in
+µs.</p></li>
+<li><p><strong>quiet_margin_us</strong> (<em>int</em>) – Quiet tail an instance keeps when it ends early, in µs; negative, the
+default, when instances are not ended early.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Raises<span class="colon">:</span></dt>
@@ -526,13 +538,34 @@ a delay follows; <a class="reference internal" href="pulserver.ir.played_time.ht
 </dl>
 </dd></dl>
 
+<p class="rubric">Methods</p>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.ir.SequencerTiming.as_values.html#pulserver.ir.SequencerTiming.as_values" title="pulserver.ir.SequencerTiming.as_values"><code class="xref py py-obj docutils literal notranslate"><span class="pre">as_values</span></code></a></p></td>
+<td><p>Return the timing as the extension takes it, in the order C declares it.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
 <p class="rubric">Attributes</p>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table">
 <tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.ir.SequencerTiming.adc_tail_us.html#pulserver.ir.SequencerTiming.adc_tail_us" title="pulserver.ir.SequencerTiming.adc_tail_us"><code class="xref py py-obj docutils literal notranslate"><span class="pre">adc_tail_us</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.ir.SequencerTiming.ends_early.html#pulserver.ir.SequencerTiming.ends_early" title="pulserver.ir.SequencerTiming.ends_early"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ends_early</span></code></a></p></td>
+<td><p>Whether the sequencer ends an instance early inside its quiet tail.</p></td>
+</tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="pulserver.ir.SequencerTiming.min_wait_us.html#pulserver.ir.SequencerTiming.min_wait_us" title="pulserver.ir.SequencerTiming.min_wait_us"><code class="xref py py-obj docutils literal notranslate"><span class="pre">min_wait_us</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.ir.SequencerTiming.raster_us.html#pulserver.ir.SequencerTiming.raster_us" title="pulserver.ir.SequencerTiming.raster_us"><code class="xref py py-obj docutils literal notranslate"><span class="pre">raster_us</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.ir.SequencerTiming.quiet_margin_us.html#pulserver.ir.SequencerTiming.quiet_margin_us" title="pulserver.ir.SequencerTiming.quiet_margin_us"><code class="xref py py-obj docutils literal notranslate"><span class="pre">quiet_margin_us</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.ir.SequencerTiming.raster_us.html#pulserver.ir.SequencerTiming.raster_us" title="pulserver.ir.SequencerTiming.raster_us"><code class="xref py py-obj docutils literal notranslate"><span class="pre">raster_us</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.ir.SequencerTiming.rf_tail_us.html#pulserver.ir.SequencerTiming.rf_tail_us" title="pulserver.ir.SequencerTiming.rf_tail_us"><code class="xref py py-obj docutils literal notranslate"><span class="pre">rf_tail_us</span></code></a></p></td>
 <td><p></p></td>
 </tr>
 <tr class="row-odd"><td><p><a class="reference internal" href="pulserver.ir.SequencerTiming.tail_us.html#pulserver.ir.SequencerTiming.tail_us" title="pulserver.ir.SequencerTiming.tail_us"><code class="xref py py-obj docutils literal notranslate"><span class="pre">tail_us</span></code></a></p></td>

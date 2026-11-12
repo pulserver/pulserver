@@ -508,7 +508,9 @@ labels of the context’s header, <code class="docutils literal notranslate"><sp
 <code class="docutils literal notranslate"><span class="pre">context.noise</span></code>, <code class="docutils literal notranslate"><span class="pre">basis</span></code> with the compression in
 <code class="docutils literal notranslate"><span class="pre">context.coil_compression</span></code>, then each component of <code class="docutils literal notranslate"><span class="pre">geometry</span></code> with
 that of the unit’s imaging k-space, or of its calibration k-space where
-it holds no imaging data.</p>
+it holds no imaging data. Continuous geometry fields admit an absolute
+tolerance of 1e-6 (mm for positions and extents, dimensionless for
+direction cosines); identifiers and matrix sizes must match exactly.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
 <dd class="field-odd"><p>The first field that differs, with the stored value and the

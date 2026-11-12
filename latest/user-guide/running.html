@@ -565,7 +565,7 @@ directory name, not starting with <code class="docutils literal notranslate"><sp
 <td><p><code class="docutils literal notranslate"><span class="pre">PROTOCOL</span></code> and the plugin’s listing block at the options of the value block in <code class="docutils literal notranslate"><span class="pre">--values</span></code> (<a class="reference internal" href="scanner-sequences.html#plugin-options"><span class="std std-ref">Options</span></a>); with <code class="docutils literal notranslate"><span class="pre">--rf-definitions</span></code>, the <code class="docutils literal notranslate"><span class="pre">[RfDefinitions]</span></code> block</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">validate</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">VALID</span> <span class="pre">&lt;seconds&gt;</span></code> or <code class="docutils literal notranslate"><span class="pre">INVALID</span></code>, an <code class="docutils literal notranslate"><span class="pre">INFO</span></code> line and the value block of the resolved protocol; with <code class="docutils literal notranslate"><span class="pre">--rf-layout</span></code>, a valid reply ends with the <code class="docutils literal notranslate"><span class="pre">[RfLayout]</span></code> block</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">VALID</span> <span class="pre">&lt;seconds&gt;</span></code> or <code class="docutils literal notranslate"><span class="pre">INVALID</span></code>, an <code class="docutils literal notranslate"><span class="pre">INFO</span></code> line and the value block of the resolved protocol; with <code class="docutils literal notranslate"><span class="pre">--rf-layout</span></code>, a valid reply continues with the <code class="docutils literal notranslate"><span class="pre">[RfLayout]</span></code> block; a valid reply whose evaluation states display figures ends with the <code class="docutils literal notranslate"><span class="pre">[Display]</span></code> block</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">generate</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">GENERATED</span> <span class="pre">&lt;id&gt;</span></code>, the identifier of the design in the scan’s directory</p></td>
@@ -836,6 +836,9 @@ gradient heating from it.</p>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">segment_gap_us</span></code>, <code class="docutils literal notranslate"><span class="pre">segment_tail_us</span></code>, <code class="docutils literal notranslate"><span class="pre">segment_min_wait_us</span></code>, <code class="docutils literal notranslate"><span class="pre">segment_raster_us</span></code></p></td>
 <td><p>How the scanner’s sequencer plays segments (<a class="reference internal" href="../generated/pulserver.ir.SequencerTiming.html#pulserver.ir.SequencerTiming" title="pulserver.ir.SequencerTiming"><code class="xref py py-class docutils literal notranslate"><span class="pre">SequencerTiming</span></code></a>), in µs: the time it takes after every segment, how far an active segment plays past its blocks, the shortest wait a pure delay plays, and the raster a wait is played on. <code class="docutils literal notranslate"><span class="pre">segment_gap_us</span></code> is given with any of them</p></td>
 </tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">segment_quiet_margin_us</span></code>, <code class="docutils literal notranslate"><span class="pre">segment_rf_tail_us</span></code>, <code class="docutils literal notranslate"><span class="pre">segment_adc_tail_us</span></code></p></td>
+<td><p>Whether and how the sequencer ends an active segment early, inside the silence it ends on, in µs: the silence it keeps, negative or left out for a sequencer that does not; and how long the playout stays busy after an RF pulse and after a readout, which counts as part of them. Given 0 or more, a single wait a segment ends on, shorter than the gap plus the least wait, stays in that segment as its quiet tail</p></td>
+</tr>
 </tbody>
 </table>
 </div>
@@ -844,7 +847,12 @@ plays, <code class="docutils literal notranslate"><span class="pre">played_time_
 (<a class="reference internal" href="../generated/pulserver.ir.played_time.html#pulserver.ir.played_time" title="pulserver.ir.played_time"><code class="xref py py-func docutils literal notranslate"><span class="pre">played_time()</span></code></a>). A pure delay gives the time between
 segments back, so a scan whose repetitions end in a wait of more than about a
 millisecond plays the time its file states; one whose segments follow each
-other without a delay plays longer by that time per segment.</p>
+other without a delay plays longer by that time per segment. A sequencer that
+ends a segment early takes that time out of the silence the segment ends on:
+leave at least the gap and tail plus the margins of silence after a segment’s
+last gradient, RF pulse or readout, and the segment plays the time its file
+states, to the raster. A validation states the TR the scanner plays where each
+repetition is a segment that does not end on enough silence.</p>
 <p>A call refuses limits it cannot read. A design is identified by the contents
 of the VOP, vendor and acoustic files as well as by their paths.</p>
 </section>

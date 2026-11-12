@@ -230,7 +230,10 @@ scanner limits and the requested {class}`~pulserver.design.Protocol`, in the
 units of the sequence function's arguments, and returns an
 {class}`~pulserver.design.Evaluation`: the protocol holding the values the
 design achieves, the scan time in seconds, a note shown with the valid protocol
-and, optionally, the RF layout ({ref}`stating-the-rf-layout`). Returning `None`
+and, optionally, the RF layout ({ref}`stating-the-rf-layout`) and the figures a
+console displays: the echo spacing of a train, the bandwidth of a pixel of an
+oversampled readout and the time one frame of a scan of several takes
+({ref}`display-block`). Returning `None`
 accepts the protocol unchanged. Raising an exception makes the protocol
 invalid:
 
@@ -423,7 +426,7 @@ scanner's reconstruction client names one in its config
 Each shipped plugin offers every one of these controls that its sequence
 function takes, at the same user entry in every plugin, each as a
 `user<n>_name` label and a `user<n>_value`; a plugin's own user entries start at
-`user12`:
+`user12`, and `user35` lies above all of them:
 
 | User entry | Control |
 | --- | --- |
@@ -436,9 +439,30 @@ function takes, at the same user entry in every plugin, each as a
 | `user8` | Refocusing flip angle, in degrees |
 | `user9` | CAIPIRINHA shift, in partitions per acquired line |
 | `user10`, `user11` | Wave-encoding amplitude, in mT/m, and cycles per readout, shown while the `wave` option is on |
+| `user35` | TTL output per volume: 0, the default, off; 1 plays a digital output on trigger channel `ext1`, 1 ms or the excitation if shorter, at the first excitation of every volume of the time series, dummy volumes included, and none in the reference volume or the calibration (`epi2d`, `epi3d`) |
 
 `bssfp3d` takes its number of phase cycles, each a train with its own RF phase
 increment, as `user12`.
+
+`bssfp2d` takes its frames from the console's number of frames. Ungated, each
+slice's k-space is acquired that many times back to back, a free-running series
+that keeps its steady state from one frame to the next and is reconstructed as
+one image per frame; under prospective ECG gating they are the cardiac phases of
+each heartbeat, and retrospective gating sets its own from the heart rate.
+Each slice opens with a catalyst, its first dummies ramping the flip angle
+linearly up to the one prescribed, and its default dummies bring the steady
+state within 5 %. Ungated, each slice is two files of the chain, its catalyst
+and dummies and then its frames, and every repetition rests at its ends: the
+scanner plays one repetition per segment, the same segment for every line of
+every frame, and adds its segment start time to every repetition time alike,
+so the played TR, which validation reports, is longer than the designed one
+but the same throughout and the steady state is undisturbed. Under prospective
+gating each slice's first excitation waits for one trigger, and the slice then
+runs free at the heart rate entered: every gated slice is one train with no rest in it, and repetitions
+that do not acquire fill the trigger delay and each heartbeat after its
+cardiac phases. The train waits for its trigger itself, so the scanner sets
+the whole slice up before the trigger arrives rather than in the time between
+the trigger and the train.
 
 ### Console controls
 
@@ -519,7 +543,8 @@ GE scanner:
 | `gre_multiecho3d` | `qsm_anatomy` | `user13` | `"phantom"` (0, the default), `"brain"` (1) or `"body"` (2): the maps the `qsm` reconstruction makes, stated to it as the `QsmAnatomy` recon parameter | None |
 | `gre_multiecho3d` | `sampling` | `user12` | `"lattice"`, the CAIPIRINHA lattice, the default; or `"poisson"`: a variable-density Poisson-disc draw at the undersampling `ry * rz`, for the compressed-sensing `pics` solve | None |
 | `zte3d` | `scheme` | `user43` | Spokes ordered `"spiral"`, at a constant step across many rings; `"meridian"`; or `"quiet"`, the default: the spiral's directions in steps about a ring gap long, every other shell played backwards | None |
-| `bssfp2d` | `retrospective` | `user44` | ECG gating: off, prospective, each heartbeat triggered and acquired once per cardiac phase; on, retrospective, each segment cycled over a heartbeat and binned into cardiac phases by the reconstruction | None |
+| `epi2d`, `epi3d` | `calibration` | `user12` | `"fleet"` (0, the default): the central `n_acs_y` lines read by `n_shots * ry` interleaved EPI shots with the imaging train's read lobe, blip, echo spacing and echo time, a slice's (`epi3d`: a partition's) shots in rapid succession at 10 degrees, once in each phase-encode polarity, so each polarity of the EPI is unfolded by coil sensitivities distorted as its image is (Polimeni et al., Magn Reson Med 2016); `"gre"` (1): a gradient echo per line, undistorted | None |
+| `bssfp2d` | `retrospective` | `user44` | ECG gating: off, prospective, each slice triggered once and every heartbeat of the heart rate entered acquired once per cardiac phase; on, retrospective, each segment cycled over a heartbeat and binned into cardiac phases by the reconstruction | None |
 | `gre_spiral2d`, `se_spiral2d`, `gre_stack_of_spirals3d`, `se_stack_of_spirals3d`, `mprage_stack_of_spirals3d` | `variable_density` | `user42` | Variable-density spirals | `user12`: periphery undersampling |
 
 Every 3D FSE train is packed: the read prephaser shares the excitation block
@@ -549,7 +574,10 @@ reference effective TE within 0.1 ms. The achieved value is recorded in
 `EffectiveEchoTime` and reported to the UI and MRD header; `TE` remains the
 physical excitation-to-centre-echo time. This reference contrast annotation
 does not model all tissues, B1 variation or inter-shot steady state. The selected echo must precede the last acquired echo in every
-train. `busse_radial` requires centre echo 0 and identical trains. `pclo`
+train. `busse_radial` requires centre echo 0 and identical trains: the
+evaluation refuses a TE other than Minimum for a constant or optimized train,
+and a centre acquired echo other than 0 for a Busse or PD train, so the
+console refuses such a prescription before it is downloaded. `pclo`
 uses Rydén's pivot-centre, linear-outer ring permutation for an arbitrary
 centre echo in identical trains, except that a centre echo in the second half
 of the train is not mirrored: the echoes after it take the outer rings in
@@ -653,7 +681,12 @@ repetition from the modules their function is built from.
   and `TR` definitions (`EffectiveEchoTime` takes precedence where supplied), the receiver bandwidth as the inverse of the dwell time
   of its first ADC event, and the slice thickness in its `SliceThickness`
   definition. A multi-echo sequence lists every echo time, and the `TE` entry
-  holds the first.
+  holds the first. `epi2d` and `epi3d` state in the protocol's note why the
+  bandwidth differs from the one asked: the sampling interval is a multiple
+  of the ADC raster. EPI adds samples at that interval to cover the
+  gradient-limited acquisition window. Where the receiver's sample limit
+  prevents that count, the interval increases instead. The displayed pixel
+  bandwidth uses the achieved ADC window duration.
 - **Invalid protocols.** A prescription the design refuses is invalid, with
   the message of its error.
 - **Representative sequence.** The repetitions on which the design service
@@ -684,7 +717,17 @@ repetition from the modules their function is built from.
   a volume. The flip angle is the control of every excitation of the plugins
   with a `flip` entry, which an MPRAGE's inversion is not. The spin-echo
   plugins, `fse3d` among them, have none, and the amplitude of their
-  excitation and refocusing pulses is that of the design.
+  excitation and refocusing pulses is that of the design. The calibration of
+  `epi2d` and `epi3d`, FLEET or gradient echo, repeats at its own shortest TR, which the
+  console's TR does not set, and a scanner costs each sequence of the chain
+  over its own repetition. Where the calibration plays more RF power than a
+  TR, which a slice a long TR apart or a few long 3D shots allow, the layout is
+  its pulses, as many as it plays in a TR, over the TR, with no control: the
+  console then refuses a protocol whose calibration exceeds the RF limits,
+  whatever its TR. The calibration plays the excitation's waveform at
+  `CALIBRATION_FLIP_DEG` of the sequence function, 10 degrees, and the fat
+  saturation of `epi2d` is numbered after the excitation, so the excitation
+  keeps the number the listing gives it with the fat saturation on or off.
 
 ## Logging
 

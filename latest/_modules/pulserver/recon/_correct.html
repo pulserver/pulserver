@@ -867,6 +867,19 @@
         <span class="k">return</span> <span class="n">applied</span></div>
 
 
+<div class="viewcode-block" id="Corrections.ran">
+<a class="viewcode-back" href="../../../generated/pulserver.recon.Corrections.ran.html#pulserver.recon.Corrections.ran">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">ran</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tag</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">message</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Record a step a plugin made to the image itself, such as the EPI susceptibility correction.</span>
+
+<span class="sd">        ``tag`` joins the history :meth:`applied` returns, and ``message``, a</span>
+<span class="sd">        logging format with ``args``, is logged as each correction's own line</span>
+<span class="sd">        is: at ``INFO`` the first time the tag runs in the stream, at</span>
+<span class="sd">        ``DEBUG`` after.</span>
+<span class="sd">        """</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_ran</span><span class="p">(</span><span class="n">tag</span><span class="p">,</span> <span class="n">message</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">)</span></div>
+
+
     <span class="k">def</span><span class="w"> </span><span class="nf">_ran</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tag</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">message</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_applied</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">tag</span><span class="p">)</span>
         <span class="n">level</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">DEBUG</span> <span class="k">if</span> <span class="n">tag</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_logged</span> <span class="k">else</span> <span class="n">logging</span><span class="o">.</span><span class="n">INFO</span>

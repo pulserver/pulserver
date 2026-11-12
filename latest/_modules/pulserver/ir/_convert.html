@@ -554,6 +554,13 @@
 <span class="sd">        virtual segment of its own. An interpreter that inserts</span>
 <span class="sd">        transmit-to-receive switching time at every segment boundary needs as</span>
 <span class="sd">        few segments as possible, and sets this False.</span>
+<span class="sd">    join_trailing_delay_us</span>
+<span class="sd">        A single pure-delay block a segment ends on, shorter than this (µs),</span>
+<span class="sd">        stays in the segment as its quiet tail rather than becoming a wait of</span>
+<span class="sd">        its own, and must last the same in every instance of the segment; 0</span>
+<span class="sd">        never. An interpreter that ends a segment early inside its quiet tail</span>
+<span class="sd">        (:class:`SequencerTiming`) states its gap plus its least wait, the</span>
+<span class="sd">        shortest wait of its own that costs no more than the tail.</span>
 <span class="sd">    """</span>
 
     <span class="n">boundary_gradient_hz_per_m</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">100.0</span>
@@ -561,6 +568,7 @@
     <span class="n">split_by_readouts</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
     <span class="n">split_navigators</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
     <span class="n">split_edge_delays</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="n">join_trailing_delay_us</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span>
 
 <div class="viewcode-block" id="Grouping.as_values">
 <a class="viewcode-back" href="../../../generated/pulserver.ir.Grouping.as_values.html#pulserver.ir.Grouping.as_values">[docs]</a>
@@ -572,6 +580,7 @@
             <span class="nb">float</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">split_by_readouts</span><span class="p">),</span>
             <span class="nb">float</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">split_navigators</span><span class="p">),</span>
             <span class="nb">float</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">split_edge_delays</span><span class="p">),</span>
+            <span class="nb">float</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">join_trailing_delay_us</span><span class="p">),</span>
         <span class="p">)</span></div>
 </div>
 
@@ -653,6 +662,15 @@
 <span class="sd">    ``min_wait_us``, so the scan keeps the time its file states wherever such</span>
 <span class="sd">    a delay follows; :func:`played_time` gives what a scan plays.</span>
 
+<span class="sd">    With ``quiet_margin_us`` at 0 or more the sequencer also ends an instance</span>
+<span class="sd">    that is not a pure delay inside its quiet tail, the time from its last</span>
+<span class="sd">    event to its end: earlier by that tail less ``quiet_margin_us``, on the</span>
+<span class="sd">    raster, by at most ``gap_us`` plus ``tail_us``. A segment that ends on at</span>
+<span class="sd">    least that much silence then plays exactly its blocks. An RF pulse counts</span>
+<span class="sd">    as an event until ``rf_tail_us`` after it ends and a readout until</span>
+<span class="sd">    ``adc_tail_us`` after its last sample, the time the playout keeps busy</span>
+<span class="sd">    after either.</span>
+
 <span class="sd">    Attributes</span>
 <span class="sd">    ----------</span>
 <span class="sd">    gap_us</span>
@@ -663,6 +681,12 @@
 <span class="sd">        Shortest wait a pure delay plays, in µs.</span>
 <span class="sd">    raster_us</span>
 <span class="sd">        Raster a wait is played on, in µs.</span>
+<span class="sd">    rf_tail_us, adc_tail_us</span>
+<span class="sd">        Time the playout keeps busy after an RF pulse and after a readout, in</span>
+<span class="sd">        µs.</span>
+<span class="sd">    quiet_margin_us</span>
+<span class="sd">        Quiet tail an instance keeps when it ends early, in µs; negative, the</span>
+<span class="sd">        default, when instances are not ended early.</span>
 
 <span class="sd">    Raises</span>
 <span class="sd">    ------</span>
@@ -674,9 +698,42 @@
     <span class="n">tail_us</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
     <span class="n">min_wait_us</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
     <span class="n">raster_us</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span>
+    <span class="n">rf_tail_us</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">adc_tail_us</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">quiet_margin_us</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">ends_early</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Whether the sequencer ends an instance early inside its quiet tail."""</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">quiet_margin_us</span> <span class="o">&gt;=</span> <span class="mi">0</span>
+
+<div class="viewcode-block" id="SequencerTiming.as_values">
+<a class="viewcode-back" href="../../../generated/pulserver.ir.SequencerTiming.as_values.html#pulserver.ir.SequencerTiming.as_values">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">as_values</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">int</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""Return the timing as the extension takes it, in the order C declares it."""</span>
+        <span class="k">return</span> <span class="p">[</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">gap_us</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">tail_us</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">min_wait_us</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">raster_us</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">rf_tail_us</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">adc_tail_us</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">quiet_margin_us</span><span class="p">,</span>
+        <span class="p">]</span></div>
+
 
     <span class="k">def</span><span class="w"> </span><span class="nf">__post_init__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="k">if</span> <span class="nb">min</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">gap_us</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">tail_us</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">min_wait_us</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">raster_us</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="nb">min</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">gap_us</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">tail_us</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">min_wait_us</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">rf_tail_us</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">adc_tail_us</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="o">&lt;</span> <span class="mi">0</span>
+            <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">raster_us</span> <span class="o">&lt;=</span> <span class="mi">0</span>
+        <span class="p">):</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                 <span class="s2">"segment times must not be negative and the raster must be positive"</span>
             <span class="p">)</span></div>
@@ -695,10 +752,14 @@
 <span class="sd">        The blocks of the scan, prescan-only subsequences left out.</span>
 <span class="sd">    played</span>
 <span class="sd">        What the scan plays under a :class:`SequencerTiming`.</span>
+<span class="sd">    segment_starts</span>
+<span class="sd">        Segment instances the scan plays, pure delays that play a wait among</span>
+<span class="sd">        them.</span>
 <span class="sd">    """</span>
 
     <span class="n">blocks</span><span class="p">:</span> <span class="nb">float</span>
     <span class="n">played</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">segment_starts</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">extra</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
@@ -792,9 +853,13 @@
         <span class="nb">list</span><span class="p">(</span><span class="n">label_column_map</span><span class="p">),</span>
         <span class="kc">None</span> <span class="k">if</span> <span class="n">profile</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">profile</span><span class="o">.</span><span class="n">as_pairs</span><span class="p">(),</span>
         <span class="kc">None</span> <span class="k">if</span> <span class="n">grouping</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">grouping</span><span class="o">.</span><span class="n">as_values</span><span class="p">(),</span>
-        <span class="p">[</span><span class="n">timing</span><span class="o">.</span><span class="n">gap_us</span><span class="p">,</span> <span class="n">timing</span><span class="o">.</span><span class="n">tail_us</span><span class="p">,</span> <span class="n">timing</span><span class="o">.</span><span class="n">min_wait_us</span><span class="p">,</span> <span class="n">timing</span><span class="o">.</span><span class="n">raster_us</span><span class="p">],</span>
+        <span class="n">timing</span><span class="o">.</span><span class="n">as_values</span><span class="p">(),</span>
     <span class="p">)</span>
-    <span class="k">return</span> <span class="n">PlayedTime</span><span class="p">(</span><span class="mf">1e-6</span> <span class="o">*</span> <span class="n">found</span><span class="p">[</span><span class="s2">"blocks_us"</span><span class="p">],</span> <span class="mf">1e-6</span> <span class="o">*</span> <span class="n">found</span><span class="p">[</span><span class="s2">"played_us"</span><span class="p">])</span>
+    <span class="k">return</span> <span class="n">PlayedTime</span><span class="p">(</span>
+        <span class="mf">1e-6</span> <span class="o">*</span> <span class="n">found</span><span class="p">[</span><span class="s2">"blocks_us"</span><span class="p">],</span>
+        <span class="mf">1e-6</span> <span class="o">*</span> <span class="n">found</span><span class="p">[</span><span class="s2">"played_us"</span><span class="p">],</span>
+        <span class="nb">int</span><span class="p">(</span><span class="n">found</span><span class="p">[</span><span class="s2">"segment_instances"</span><span class="p">]),</span>
+    <span class="p">)</span>
 
 
 <div class="viewcode-block" id="cache_path">

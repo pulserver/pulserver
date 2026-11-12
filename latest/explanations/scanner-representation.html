@@ -495,6 +495,7 @@
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#the-pulseg-model">The PulSeg model</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#repetition-detection">Repetition detection</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#segmentation-rules">Segmentation rules</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#segment-timing">Segment timing</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#vendor-configuration">Vendor configuration</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#field-of-view-offset">Field-of-view offset</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#differences-from-pulseg-2-1-alpha">Differences from PulSeg 2.1-alpha</a></li>
@@ -652,8 +653,31 @@ a gradient is refused;</p></li>
 <li><p>a boundary is <strong>added</strong> around navigator readouts (<code class="docutils literal notranslate"><span class="pre">split_navigators</span></code>),
 around pure delays at a segment’s edge (<code class="docutils literal notranslate"><span class="pre">split_edge_delays</span></code>), and between
 runs that play other RF or ADC events (<code class="docutils literal notranslate"><span class="pre">split_by_pulses</span></code>,
-<code class="docutils literal notranslate"><span class="pre">split_by_readouts</span></code>).</p></li>
+<code class="docutils literal notranslate"><span class="pre">split_by_readouts</span></code>);</p></li>
+<li><p>a single pure delay a segment ends on, shorter than
+<code class="docutils literal notranslate"><span class="pre">join_trailing_delay_us</span></code>, is <strong>kept</strong> in that segment as its quiet tail, and
+lasts the same in every instance of the segment.</p></li>
 </ul>
+</section>
+<section id="segment-timing">
+<h3>Segment timing<a class="headerlink" href="#segment-timing" title="Link to this heading">#</a></h3>
+<p>A scanner’s sequencer takes a gap after every segment instance and plays an
+active one a short tail past its blocks
+(<a class="reference internal" href="../generated/pulserver.ir.SequencerTiming.html#pulserver.ir.SequencerTiming" title="pulserver.ir.SequencerTiming"><code class="xref py py-class docutils literal notranslate"><span class="pre">SequencerTiming</span></code></a>). A pure delay gives that time back by
+playing a shorter wait, but never one under the sequencer’s least wait, so a
+delay shorter than the gap plus the least wait costs time of its own. A
+sequencer that ends an active segment early ends it inside its <strong>quiet tail</strong>,
+the silence from its last event to its end: an RF pulse counts until its
+ringdown, a readout until the receiver’s dead time after its last sample, a
+gradient until its last non-zero corner. It ends the segment by the quiet tail
+less a margin of at least one gradient raster, on the raster, and by no more
+than the gap and tail. A segment that ends on enough silence then plays its
+blocks, short of them by nothing and long by only the part of the gap and
+tail off the raster. Such a sequencer states the gap plus the least wait as
+<code class="docutils literal notranslate"><span class="pre">join_trailing_delay_us</span></code>, so a short wait at the end of a segment becomes that
+segment’s quiet tail instead of a wait of its own. The conversion and the
+sequencer evaluate the same quiet tail, so the time
+<a class="reference internal" href="../generated/pulserver.ir.played_time.html#pulserver.ir.played_time" title="pulserver.ir.played_time"><code class="xref py py-func docutils literal notranslate"><span class="pre">played_time()</span></code></a> predicts is the time the scanner plays.</p>
 <p>A repetition whose pulses, timing or arbitrary gradients differ from the
 first plays its own variant of a segment, up to 64 per segment.</p>
 </section>
@@ -682,8 +706,9 @@ boundary sets <code class="docutils literal notranslate"><span class="pre">split
 <code class="docutils literal notranslate"><span class="pre">[VendorProfile]</span></code> block gives each waveform and amplitude as a float or as an
 integer with its step, so a sequencer that plays integers converts nothing
 while it plays. The <code class="docutils literal notranslate"><span class="pre">ir_wave_</span></code> limits state the waveform memory the waves are
-laid out for (<a class="reference internal" href="../generated/pulserver.ir.WaveBudget.html#pulserver.ir.WaveBudget" title="pulserver.ir.WaveBudget"><code class="xref py py-class docutils literal notranslate"><span class="pre">WaveBudget</span></code></a>). Every field must be stated,
-and <a class="reference internal" href="../generated/pulserver.ir.read_vendor.html#pulserver.ir.read_vendor" title="pulserver.ir.read_vendor"><code class="xref py py-func docutils literal notranslate"><span class="pre">read_vendor()</span></code></a> refuses a file that leaves one out.</p>
+laid out for (<a class="reference internal" href="../generated/pulserver.ir.WaveBudget.html#pulserver.ir.WaveBudget" title="pulserver.ir.WaveBudget"><code class="xref py py-class docutils literal notranslate"><span class="pre">WaveBudget</span></code></a>). Every field but
+<code class="docutils literal notranslate"><span class="pre">join_trailing_delay_us</span></code>, 0 when left out, must be stated, and
+<a class="reference internal" href="../generated/pulserver.ir.read_vendor.html#pulserver.ir.read_vendor" title="pulserver.ir.read_vendor"><code class="xref py py-func docutils literal notranslate"><span class="pre">read_vendor()</span></code></a> refuses a file that leaves one out.</p>
 </section>
 <section id="field-of-view-offset">
 <h3>Field-of-view offset<a class="headerlink" href="#field-of-view-offset" title="Link to this heading">#</a></h3>
@@ -790,6 +815,7 @@ the two stages of a playout and the cache file.</p></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#the-pulseg-model">The PulSeg model</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#repetition-detection">Repetition detection</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#segmentation-rules">Segmentation rules</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#segment-timing">Segment timing</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#vendor-configuration">Vendor configuration</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#field-of-view-offset">Field-of-view offset</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#differences-from-pulseg-2-1-alpha">Differences from PulSeg 2.1-alpha</a></li>

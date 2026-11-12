@@ -448,6 +448,7 @@
     <span class="n">FOV_OFFSET</span><span class="p">,</span>
     <span class="n">FOV_ROTATION</span><span class="p">,</span>
     <span class="n">PRESCRIPTION</span><span class="p">,</span>
+    <span class="n">Display</span><span class="p">,</span>
     <span class="n">InputMode</span><span class="p">,</span>
     <span class="n">Kind</span><span class="p">,</span>
     <span class="n">Parameter</span><span class="p">,</span>
@@ -516,13 +517,29 @@
 <span class="sd">        designed under where they exceed their limits, so that the console</span>
 <span class="sd">        shows what will play. ``None``, the default, states none: the slew</span>
 <span class="sd">        rate is then lowered only when the generated design fails the check.</span>
+<span class="sd">    echo_spacing</span>
+<span class="sd">        The spacing of the echoes of the train the protocol plays, in</span>
+<span class="sd">        seconds, which a console shows; ``None``, the default, states none.</span>
+<span class="sd">        An EPI or FSE train states it; a gradient-echo train does not.</span>
+<span class="sd">    pixel_bandwidth</span>
+<span class="sd">        The receive bandwidth across one pixel of the readout field of view,</span>
+<span class="sd">        in Hz: the sampling rate over the samples that span it. ``None``, the</span>
+<span class="sd">        default, leaves a console to divide the bandwidth by the readout</span>
+<span class="sd">        matrix, which only an oversampled readout needs to correct.</span>
+<span class="sd">    frame_time</span>
+<span class="sd">        The time one frame of a scan of several takes, in seconds: the volume</span>
+<span class="sd">        TR of a time series, the frame of a cine. ``None``, the default,</span>
+<span class="sd">        states none.</span>
 <span class="sd">    """</span>
 
     <span class="n">protocol</span><span class="p">:</span> <span class="n">Protocol</span>
     <span class="n">duration</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span>
     <span class="n">info</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">""</span>
     <span class="n">rf_layout</span><span class="p">:</span> <span class="n">RfLayout</span> <span class="o">|</span> <span class="nb">tuple</span><span class="p">[()]</span> <span class="o">=</span> <span class="p">()</span>
-    <span class="n">sequence</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Sequence</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span></div>
+    <span class="n">sequence</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Sequence</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">echo_spacing</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">pixel_bandwidth</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">frame_time</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span></div>
 
 
 
@@ -1005,6 +1022,11 @@
             <span class="p">)</span>
             <span class="n">info</span> <span class="o">=</span> <span class="n">evaluation</span><span class="o">.</span><span class="n">info</span>
             <span class="n">sequence</span> <span class="o">=</span> <span class="n">evaluation</span><span class="o">.</span><span class="n">sequence</span>
+            <span class="n">display</span> <span class="o">=</span> <span class="n">Display</span><span class="p">(</span>
+                <span class="n">evaluation</span><span class="o">.</span><span class="n">echo_spacing</span><span class="p">,</span>
+                <span class="n">evaluation</span><span class="o">.</span><span class="n">pixel_bandwidth</span><span class="p">,</span>
+                <span class="n">evaluation</span><span class="o">.</span><span class="n">frame_time</span><span class="p">,</span>
+            <span class="p">)</span>
         <span class="k">except</span> <span class="n">_INFEASIBLE</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
             <span class="n">message</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">error</span><span class="p">)</span> <span class="ow">or</span> <span class="nb">type</span><span class="p">(</span><span class="n">error</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span>
             <span class="n">_log</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
@@ -1017,7 +1039,7 @@
             <span class="n">message</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">error</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2"> in </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">.evaluate"</span>
             <span class="n">_log</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">"</span><span class="si">%s</span><span class="s2">"</span><span class="p">,</span> <span class="n">message</span><span class="p">,</span> <span class="n">exc_info</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="n">valid</span> <span class="o">=</span> <span class="n">Validation</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="n">duration</span> <span class="ow">or</span> <span class="kc">None</span><span class="p">,</span> <span class="n">info</span><span class="p">,</span> <span class="n">wire</span><span class="p">,</span> <span class="n">layout</span><span class="p">)</span>
+            <span class="n">valid</span> <span class="o">=</span> <span class="n">Validation</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="n">duration</span> <span class="ow">or</span> <span class="kc">None</span><span class="p">,</span> <span class="n">info</span><span class="p">,</span> <span class="n">wire</span><span class="p">,</span> <span class="n">layout</span><span class="p">,</span> <span class="n">display</span><span class="p">)</span>
             <span class="k">return</span> <span class="n">valid</span><span class="p">,</span> <span class="n">protocol</span><span class="p">,</span> <span class="n">sequence</span>
         <span class="n">asked</span> <span class="o">=</span> <span class="p">{</span><span class="n">key</span><span class="p">:</span> <span class="n">value</span> <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">values</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">listing</span><span class="p">}</span>
         <span class="k">return</span> <span class="n">Validation</span><span class="p">(</span><span class="kc">False</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="n">message</span><span class="p">,</span> <span class="n">asked</span><span class="p">),</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span></div>

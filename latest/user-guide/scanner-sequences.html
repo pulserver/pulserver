@@ -761,7 +761,10 @@ scanner limits and the requested <a class="reference internal" href="../generate
 units of the sequence function’s arguments, and returns an
 <a class="reference internal" href="../generated/pulserver.design.Evaluation.html#pulserver.design.Evaluation" title="pulserver.design.Evaluation"><code class="xref py py-class docutils literal notranslate"><span class="pre">Evaluation</span></code></a>: the protocol holding the values the
 design achieves, the scan time in seconds, a note shown with the valid protocol
-and, optionally, the RF layout (<a class="reference internal" href="#stating-the-rf-layout"><span class="std std-ref">RF layout</span></a>). Returning <code class="docutils literal notranslate"><span class="pre">None</span></code>
+and, optionally, the RF layout (<a class="reference internal" href="#stating-the-rf-layout"><span class="std std-ref">RF layout</span></a>) and the figures a
+console displays: the echo spacing of a train, the bandwidth of a pixel of an
+oversampled readout and the time one frame of a scan of several takes
+(<a class="reference internal" href="../developer-guide/internals/protocol-wire.html#display-block"><span class="std std-ref">Display figures</span></a>). Returning <code class="docutils literal notranslate"><span class="pre">None</span></code>
 accepts the protocol unchanged. Raising an exception makes the protocol
 invalid:</p>
 <div class="highlight-pycon notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">Timed</span><span class="p">(</span><span class="n">PulseAcquire</span><span class="p">):</span>
@@ -953,7 +956,7 @@ scanner’s reconstruction client names one in its config
 <p>Each shipped plugin offers every one of these controls that its sequence
 function takes, at the same user entry in every plugin, each as a
 <code class="docutils literal notranslate"><span class="pre">user&lt;n&gt;_name</span></code> label and a <code class="docutils literal notranslate"><span class="pre">user&lt;n&gt;_value</span></code>; a plugin’s own user entries start at
-<code class="docutils literal notranslate"><span class="pre">user12</span></code>:</p>
+<code class="docutils literal notranslate"><span class="pre">user12</span></code>, and <code class="docutils literal notranslate"><span class="pre">user35</span></code> lies above all of them:</p>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
 <tr class="row-odd"><th class="head"><p>User entry</p></th>
@@ -988,11 +991,33 @@ function takes, at the same user entry in every plugin, each as a
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">user10</span></code>, <code class="docutils literal notranslate"><span class="pre">user11</span></code></p></td>
 <td><p>Wave-encoding amplitude, in mT/m, and cycles per readout, shown while the <code class="docutils literal notranslate"><span class="pre">wave</span></code> option is on</p></td>
 </tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">user35</span></code></p></td>
+<td><p>TTL output per volume: 0, the default, off; 1 plays a digital output on trigger channel <code class="docutils literal notranslate"><span class="pre">ext1</span></code>, 1 ms or the excitation if shorter, at the first excitation of every volume of the time series, dummy volumes included, and none in the reference volume or the calibration (<code class="docutils literal notranslate"><span class="pre">epi2d</span></code>, <code class="docutils literal notranslate"><span class="pre">epi3d</span></code>)</p></td>
+</tr>
 </tbody>
 </table>
 </div>
 <p><code class="docutils literal notranslate"><span class="pre">bssfp3d</span></code> takes its number of phase cycles, each a train with its own RF phase
 increment, as <code class="docutils literal notranslate"><span class="pre">user12</span></code>.</p>
+<p><code class="docutils literal notranslate"><span class="pre">bssfp2d</span></code> takes its frames from the console’s number of frames. Ungated, each
+slice’s k-space is acquired that many times back to back, a free-running series
+that keeps its steady state from one frame to the next and is reconstructed as
+one image per frame; under prospective ECG gating they are the cardiac phases of
+each heartbeat, and retrospective gating sets its own from the heart rate.
+Each slice opens with a catalyst, its first dummies ramping the flip angle
+linearly up to the one prescribed, and its default dummies bring the steady
+state within 5 %. Ungated, each slice is two files of the chain, its catalyst
+and dummies and then its frames, and every repetition rests at its ends: the
+scanner plays one repetition per segment, the same segment for every line of
+every frame, and adds its segment start time to every repetition time alike,
+so the played TR, which validation reports, is longer than the designed one
+but the same throughout and the steady state is undisturbed. Under prospective
+gating each slice’s first excitation waits for one trigger, and the slice then
+runs free at the heart rate entered: every gated slice is one train with no rest in it, and repetitions
+that do not acquire fill the trigger delay and each heartbeat after its
+cardiac phases. The train waits for its trigger itself, so the scanner sets
+the whole slice up before the trigger arrives rather than in the time between
+the trigger and the train.</p>
 </section>
 <section id="console-controls">
 <h3>Console controls<a class="headerlink" href="#console-controls" title="Link to this heading">#</a></h3>
@@ -1170,13 +1195,19 @@ GE scanner:</p>
 <td><p>Spokes ordered <code class="docutils literal notranslate"><span class="pre">&quot;spiral&quot;</span></code>, at a constant step across many rings; <code class="docutils literal notranslate"><span class="pre">&quot;meridian&quot;</span></code>; or <code class="docutils literal notranslate"><span class="pre">&quot;quiet&quot;</span></code>, the default: the spiral’s directions in steps about a ring gap long, every other shell played backwards</p></td>
 <td><p>None</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">bssfp2d</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">retrospective</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">user44</span></code></p></td>
-<td><p>ECG gating: off, prospective, each heartbeat triggered and acquired once per cardiac phase; on, retrospective, each segment cycled over a heartbeat and binned into cardiac phases by the reconstruction</p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">epi2d</span></code>, <code class="docutils literal notranslate"><span class="pre">epi3d</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">calibration</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">user12</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">&quot;fleet&quot;</span></code> (0, the default): the central <code class="docutils literal notranslate"><span class="pre">n_acs_y</span></code> lines read by <code class="docutils literal notranslate"><span class="pre">n_shots</span> <span class="pre">*</span> <span class="pre">ry</span></code> interleaved EPI shots with the imaging train’s read lobe, blip, echo spacing and echo time, a slice’s (<code class="docutils literal notranslate"><span class="pre">epi3d</span></code>: a partition’s) shots in rapid succession at 10 degrees, once in each phase-encode polarity, so each polarity of the EPI is unfolded by coil sensitivities distorted as its image is (Polimeni et al., Magn Reson Med 2016); <code class="docutils literal notranslate"><span class="pre">&quot;gre&quot;</span></code> (1): a gradient echo per line, undistorted</p></td>
 <td><p>None</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">gre_spiral2d</span></code>, <code class="docutils literal notranslate"><span class="pre">se_spiral2d</span></code>, <code class="docutils literal notranslate"><span class="pre">gre_stack_of_spirals3d</span></code>, <code class="docutils literal notranslate"><span class="pre">se_stack_of_spirals3d</span></code>, <code class="docutils literal notranslate"><span class="pre">mprage_stack_of_spirals3d</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">bssfp2d</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">retrospective</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">user44</span></code></p></td>
+<td><p>ECG gating: off, prospective, each slice triggered once and every heartbeat of the heart rate entered acquired once per cardiac phase; on, retrospective, each segment cycled over a heartbeat and binned into cardiac phases by the reconstruction</p></td>
+<td><p>None</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">gre_spiral2d</span></code>, <code class="docutils literal notranslate"><span class="pre">se_spiral2d</span></code>, <code class="docutils literal notranslate"><span class="pre">gre_stack_of_spirals3d</span></code>, <code class="docutils literal notranslate"><span class="pre">se_stack_of_spirals3d</span></code>, <code class="docutils literal notranslate"><span class="pre">mprage_stack_of_spirals3d</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">variable_density</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">user42</span></code></p></td>
 <td><p>Variable-density spirals</p></td>
@@ -1211,7 +1242,10 @@ reference effective TE within 0.1 ms. The achieved value is recorded in
 <code class="docutils literal notranslate"><span class="pre">EffectiveEchoTime</span></code> and reported to the UI and MRD header; <code class="docutils literal notranslate"><span class="pre">TE</span></code> remains the
 physical excitation-to-centre-echo time. This reference contrast annotation
 does not model all tissues, B1 variation or inter-shot steady state. The selected echo must precede the last acquired echo in every
-train. <code class="docutils literal notranslate"><span class="pre">busse_radial</span></code> requires centre echo 0 and identical trains. <code class="docutils literal notranslate"><span class="pre">pclo</span></code>
+train. <code class="docutils literal notranslate"><span class="pre">busse_radial</span></code> requires centre echo 0 and identical trains: the
+evaluation refuses a TE other than Minimum for a constant or optimized train,
+and a centre acquired echo other than 0 for a Busse or PD train, so the
+console refuses such a prescription before it is downloaded. <code class="docutils literal notranslate"><span class="pre">pclo</span></code>
 uses Rydén’s pivot-centre, linear-outer ring permutation for an arbitrary
 centre echo in identical trains, except that a centre echo in the second half
 of the train is not mirrored: the echoes after it take the outer rings in
@@ -1313,7 +1347,12 @@ where the plugin has the entry: the echo time and repetition time in its <code c
 and <code class="docutils literal notranslate"><span class="pre">TR</span></code> definitions (<code class="docutils literal notranslate"><span class="pre">EffectiveEchoTime</span></code> takes precedence where supplied), the receiver bandwidth as the inverse of the dwell time
 of its first ADC event, and the slice thickness in its <code class="docutils literal notranslate"><span class="pre">SliceThickness</span></code>
 definition. A multi-echo sequence lists every echo time, and the <code class="docutils literal notranslate"><span class="pre">TE</span></code> entry
-holds the first.</p></li>
+holds the first. <code class="docutils literal notranslate"><span class="pre">epi2d</span></code> and <code class="docutils literal notranslate"><span class="pre">epi3d</span></code> state in the protocol’s note why the
+bandwidth differs from the one asked: the sampling interval is a multiple
+of the ADC raster. EPI adds samples at that interval to cover the
+gradient-limited acquisition window. Where the receiver’s sample limit
+prevents that count, the interval increases instead. The displayed pixel
+bandwidth uses the achieved ADC window duration.</p></li>
 <li><p><strong>Invalid protocols.</strong> A prescription the design refuses is invalid, with
 the message of its error.</p></li>
 <li><p><strong>Representative sequence.</strong> The repetitions on which the design service
@@ -1344,7 +1383,17 @@ holds an echo train, that of an MPRAGE an inversion shot, and that of <code clas
 a volume. The flip angle is the control of every excitation of the plugins
 with a <code class="docutils literal notranslate"><span class="pre">flip</span></code> entry, which an MPRAGE’s inversion is not. The spin-echo
 plugins, <code class="docutils literal notranslate"><span class="pre">fse3d</span></code> among them, have none, and the amplitude of their
-excitation and refocusing pulses is that of the design.</p></li>
+excitation and refocusing pulses is that of the design. The calibration of
+<code class="docutils literal notranslate"><span class="pre">epi2d</span></code> and <code class="docutils literal notranslate"><span class="pre">epi3d</span></code>, FLEET or gradient echo, repeats at its own shortest TR, which the
+console’s TR does not set, and a scanner costs each sequence of the chain
+over its own repetition. Where the calibration plays more RF power than a
+TR, which a slice a long TR apart or a few long 3D shots allow, the layout is
+its pulses, as many as it plays in a TR, over the TR, with no control: the
+console then refuses a protocol whose calibration exceeds the RF limits,
+whatever its TR. The calibration plays the excitation’s waveform at
+<code class="docutils literal notranslate"><span class="pre">CALIBRATION_FLIP_DEG</span></code> of the sequence function, 10 degrees, and the fat
+saturation of <code class="docutils literal notranslate"><span class="pre">epi2d</span></code> is numbered after the excitation, so the excitation
+keeps the number the listing gives it with the fat saturation on or off.</p></li>
 </ul>
 </section>
 </section>

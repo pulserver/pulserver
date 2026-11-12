@@ -505,8 +505,8 @@
 <dd><p>Read a vendor file into the profile and grouping a conversion takes.</p>
 <p>The file holds a <code class="docutils literal notranslate"><span class="pre">[Grouping]</span></code> and a <code class="docutils literal notranslate"><span class="pre">[VendorProfile]</span></code> block, each
 closed by its <code class="docutils literal notranslate"><span class="pre">[...</span> <span class="pre">End]</span></code> line, with one <code class="docutils literal notranslate"><span class="pre">name:</span> <span class="pre">value</span></code> line per field
-and every field stated; blank lines and lines starting with <code class="docutils literal notranslate"><span class="pre">#</span></code> are
-skipped. A grouping field is a number or <code class="docutils literal notranslate"><span class="pre">true</span></code>/<code class="docutils literal notranslate"><span class="pre">false</span></code>; a profile
+and every field stated but <code class="docutils literal notranslate"><span class="pre">join_trailing_delay_us</span></code>, 0 when left out;
+blank lines and lines starting with <code class="docutils literal notranslate"><span class="pre">#</span></code> are skipped. A grouping field is a number or <code class="docutils literal notranslate"><span class="pre">true</span></code>/<code class="docutils literal notranslate"><span class="pre">false</span></code>; a profile
 field is a <a class="reference internal" href="pulserver.ir.Format.html#pulserver.ir.Format" title="pulserver.ir.Format"><code class="xref py py-class docutils literal notranslate"><span class="pre">Format</span></code></a> name and the SI value of one integer step,
 <code class="docutils literal notranslate"><span class="pre">0</span></code> for a float:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="p">[</span><span class="n">Grouping</span><span class="p">]</span>

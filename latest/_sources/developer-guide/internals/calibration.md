@@ -115,11 +115,12 @@ non-Cartesian space {func}`~pulserver.recon.coil_maps` raises `ValueError`.
 ### Resolution
 
 {func}`~pulserver.recon.coil_maps` returns the maps of a unit from the first of
-these sources, the location being the unit's `slice` counter:
+these sources, the location being the unit's `slice` counter, and its `set`
+counter where that is not 0:
 
 1. The unit's own calibration k-space, from which the maps are estimated and
-   stored for the slice, replacing any stored there.
-2. The maps stored in the stream for the slice.
+   stored for the slice, or for the slice and set, replacing any stored there.
+2. The maps stored in the stream for the slice and set, then for the slice.
 3. The exam's `COIL_SENSITIVITIES`, which holds one set of maps, stored by a
    calibration series.
 4. No source: {class}`~pulserver.recon.MissingCalibration` is raised, or
@@ -132,7 +133,12 @@ reach the exam only from a reconstruction plugin that assigns
 readouts stay in that series.
 
 The slice is the location because a calibration unit and the imaging units that
-use its maps may be in different encoding spaces. A unit that needs maps before
+use its maps may be in different encoding spaces. The set separates maps
+estimated from calibration readouts distorted as the images of their set are:
+a FLEET calibration ahead of an EPI reads its lines in both phase-encode
+polarities, set 0 forward and set 1 reversed, so each polarity of the EPI is
+unfolded by maps displaced as its own image is, and a calibration of set 0
+alone, such as a gradient echo, serves every set. A unit that needs maps before
 the unit that estimates them has closed finds none in the first three sources.
 
 ### Reuse

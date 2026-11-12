@@ -439,6 +439,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">copy</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">dataclasses</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">datetime</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">functools</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">hashlib</span>
@@ -1249,11 +1250,12 @@
 <span class="k">def</span><span class="w"> </span><span class="nf">_source</span><span class="p">(</span><span class="n">variant</span><span class="p">:</span> <span class="n">_Variant</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Return a digest of the code that designs with the plugin of a variant.</span>
 
-<span class="sd">    Covers the plugin file, the source file of the app it binds, and the</span>
-<span class="sd">    installed versions of pypulseqpp and pulserver, declared requirements and</span>
-<span class="sd">    site-library installation metadata. A :func:`functools.partial` app is</span>
-<span class="sd">    covered through the function it wraps. Other imports need a dependency</span>
-<span class="sd">    declaration to identify their installed distribution.</span>
+<span class="sd">    Covers the plugin file, the source file of the app it binds, every Python</span>
+<span class="sd">    file of the installed pypulseqpp and pulserver (:func:`_package_sources`),</span>
+<span class="sd">    their versions, declared requirements and site-library installation</span>
+<span class="sd">    metadata. A :func:`functools.partial` app is covered through the function</span>
+<span class="sd">    it wraps. Other imports need a dependency declaration to identify their</span>
+<span class="sd">    installed distribution.</span>
 <span class="sd">    """</span>
     <span class="n">digest</span> <span class="o">=</span> <span class="n">hashlib</span><span class="o">.</span><span class="n">sha256</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="n">variant</span><span class="o">.</span><span class="n">path</span><span class="p">)</span><span class="o">.</span><span class="n">read_bytes</span><span class="p">())</span>
     <span class="n">app</span> <span class="o">=</span> <span class="n">_plugin</span><span class="p">(</span><span class="n">variant</span><span class="p">)</span><span class="o">.</span><span class="n">app</span>
@@ -1269,6 +1271,29 @@
     <span class="k">if</span> <span class="n">dependencies</span><span class="p">:</span>
         <span class="n">digest</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">dependencies</span><span class="p">,</span> <span class="n">sort_keys</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">encode</span><span class="p">())</span>
     <span class="n">digest</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="sa">f</span><span class="s2">"pypulseqpp </span><span class="si">{</span><span class="n">pp</span><span class="o">.</span><span class="n">__version__</span><span class="si">}</span><span class="s2"> pulserver </span><span class="si">{</span><span class="n">__version__</span><span class="si">}</span><span class="s2">"</span><span class="o">.</span><span class="n">encode</span><span class="p">())</span>
+    <span class="n">digest</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">_package_sources</span><span class="p">(</span><span class="n">_designing_packages</span><span class="p">())</span><span class="o">.</span><span class="n">encode</span><span class="p">())</span>
+    <span class="k">return</span> <span class="n">digest</span><span class="o">.</span><span class="n">hexdigest</span><span class="p">()</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_designing_packages</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Path</span><span class="p">,</span> <span class="o">...</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Return the directories of the installed pypulseqpp and pulserver packages."""</span>
+    <span class="k">return</span> <span class="n">Path</span><span class="p">(</span><span class="n">pp</span><span class="o">.</span><span class="vm">__file__</span><span class="p">)</span><span class="o">.</span><span class="n">parent</span><span class="p">,</span> <span class="n">Path</span><span class="p">(</span><span class="vm">__file__</span><span class="p">)</span><span class="o">.</span><span class="n">resolve</span><span class="p">()</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">parent</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_package_sources</span><span class="p">(</span><span class="n">packages</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">Path</span><span class="p">,</span> <span class="o">...</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return a digest of every ``.py`` file under ``packages``, by path within its package.</span>
+
+<span class="sd">    A file replaced in place, its package's version unchanged, changes the</span>
+<span class="sd">    digest; byte-compiled caches are left out.</span>
+<span class="sd">    """</span>
+    <span class="n">digest</span> <span class="o">=</span> <span class="n">hashlib</span><span class="o">.</span><span class="n">sha256</span><span class="p">()</span>
+    <span class="k">for</span> <span class="n">package</span> <span class="ow">in</span> <span class="n">packages</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">path</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">package</span><span class="o">.</span><span class="n">rglob</span><span class="p">(</span><span class="s2">"*.py"</span><span class="p">)):</span>
+            <span class="k">if</span> <span class="s2">"__pycache__"</span> <span class="ow">in</span> <span class="n">path</span><span class="o">.</span><span class="n">parts</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="n">content</span> <span class="o">=</span> <span class="n">path</span><span class="o">.</span><span class="n">read_bytes</span><span class="p">()</span>
+            <span class="n">name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">package</span><span class="o">.</span><span class="n">name</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">path</span><span class="o">.</span><span class="n">relative_to</span><span class="p">(</span><span class="n">package</span><span class="p">)</span><span class="o">.</span><span class="n">as_posix</span><span class="p">()</span><span class="si">}</span><span class="s2">"</span>
+            <span class="n">digest</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="se">\0</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">content</span><span class="p">)</span><span class="si">}</span><span class="se">\0</span><span class="s2">"</span><span class="o">.</span><span class="n">encode</span><span class="p">()</span> <span class="o">+</span> <span class="n">content</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">digest</span><span class="o">.</span><span class="n">hexdigest</span><span class="p">()</span>
 
 
@@ -1376,7 +1401,60 @@
     <span class="k">if</span> <span class="n">validation</span><span class="o">.</span><span class="n">valid</span><span class="p">:</span>
         <span class="n">_LOWERED</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">remembered</span><span class="p">,</span> <span class="n">ceiling</span><span class="p">)</span>
         <span class="n">_LOWERED</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">family</span><span class="p">,</span> <span class="n">_next</span><span class="p">(</span><span class="n">family</span><span class="p">,</span> <span class="n">tried</span><span class="p">,</span> <span class="n">ceiling</span><span class="p">,</span> <span class="n">limit</span><span class="p">))</span>
+        <span class="n">validation</span> <span class="o">=</span> <span class="n">_with_played_note</span><span class="p">(</span><span class="n">validation</span><span class="p">,</span> <span class="n">sequence</span><span class="p">,</span> <span class="n">limits</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">validation</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_with_played_note</span><span class="p">(</span>
+    <span class="n">validation</span><span class="p">:</span> <span class="n">Validation</span><span class="p">,</span> <span class="n">sequence</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">limits</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Validation</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return ``validation`` with the repetition time the scanner plays added to its info, where segment starts lengthen it.</span>
+
+<span class="sd">    The representative sequence is segmented as the conversion segments it and</span>
+<span class="sd">    played under the limits' sequencer timing (:func:`pulserver.ir.played_time`).</span>
+<span class="sd">    Nothing is added without a timing, a sequence or a ``TR`` definition,</span>
+<span class="sd">    where that TR is not the protocol's, where fewer segments start than the</span>
+<span class="sd">    sequence plays repetitions, or where the gaps it keeps are all absorbed.</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="n">sequence</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">validation</span>
+    <span class="n">system</span><span class="p">,</span> <span class="n">options</span><span class="p">,</span> <span class="n">checked</span> <span class="o">=</span> <span class="n">split_limits</span><span class="p">(</span><span class="n">limits</span><span class="p">)</span>
+    <span class="n">timing</span> <span class="o">=</span> <span class="n">checked</span><span class="o">.</span><span class="n">sequencer_timing</span>
+    <span class="n">tr</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">atleast_1d</span><span class="p">(</span><span class="n">sequence</span><span class="o">.</span><span class="n">definitions</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"TR"</span><span class="p">,</span> <span class="p">[</span><span class="mf">0.0</span><span class="p">]))[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">timing</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">tr</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">validation</span>
+    <span class="c1"># The representative sequence states the scan's TR only where it is the</span>
+    <span class="c1"># TR the protocol resolved to; a scan that fills a longer one plays waits.</span>
+    <span class="n">asked</span> <span class="o">=</span> <span class="n">validation</span><span class="o">.</span><span class="n">values</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">UIParam</span><span class="o">.</span><span class="n">TR</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">asked</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">abs</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">asked</span><span class="p">)</span> <span class="o">*</span> <span class="mf">1e-6</span> <span class="o">-</span> <span class="nb">float</span><span class="p">(</span><span class="n">tr</span><span class="p">))</span> <span class="o">&gt;</span> <span class="mf">1e-5</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">validation</span>
+    <span class="n">path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="s2">"evaluated.seq"</span><span class="p">)</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">played</span> <span class="o">=</span> <span class="n">ir</span><span class="o">.</span><span class="n">played_time</span><span class="p">(</span>
+            <span class="n">path</span><span class="p">,</span> <span class="n">system</span><span class="p">,</span> <span class="n">timing</span><span class="p">,</span> <span class="n">designed</span><span class="o">=</span><span class="p">[(</span><span class="n">path</span><span class="p">,</span> <span class="n">sequence</span><span class="p">)],</span> <span class="o">**</span><span class="n">options</span>
+        <span class="p">)</span>
+    <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">validation</span>
+    <span class="n">repetitions</span> <span class="o">=</span> <span class="nb">round</span><span class="p">(</span><span class="n">played</span><span class="o">.</span><span class="n">blocks</span> <span class="o">/</span> <span class="nb">float</span><span class="p">(</span><span class="n">tr</span><span class="p">))</span>
+    <span class="c1"># Stated where a segment starts at every repetition: the TR is then what</span>
+    <span class="c1"># each repetition plays, where a longer segment lengthens only the one</span>
+    <span class="c1"># repetition it starts on.</span>
+    <span class="k">if</span> <span class="n">played</span><span class="o">.</span><span class="n">segment_starts</span> <span class="o">&lt;</span> <span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">repetitions</span><span class="p">)</span> <span class="ow">or</span> <span class="n">played</span><span class="o">.</span><span class="n">extra</span> <span class="o">&lt;</span> <span class="mf">0.5e-6</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">validation</span>
+    <span class="n">gap</span> <span class="o">=</span> <span class="n">played</span><span class="o">.</span><span class="n">extra</span> <span class="o">/</span> <span class="n">played</span><span class="o">.</span><span class="n">segment_starts</span>
+    <span class="n">tr_played</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">tr</span><span class="p">)</span> <span class="o">+</span> <span class="n">played</span><span class="o">.</span><span class="n">extra</span> <span class="o">/</span> <span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">repetitions</span><span class="p">)</span>
+    <span class="n">whole</span> <span class="o">=</span> <span class="n">timing</span><span class="o">.</span><span class="n">gap_us</span> <span class="o">+</span> <span class="n">timing</span><span class="o">.</span><span class="n">tail_us</span>
+    <span class="n">room</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="s2">"no room in the design"</span>
+        <span class="k">if</span> <span class="n">gap</span> <span class="o">*</span> <span class="mf">1e6</span> <span class="o">&gt;=</span> <span class="n">whole</span> <span class="o">-</span> <span class="n">timing</span><span class="o">.</span><span class="n">raster_us</span>
+        <span class="k">else</span> <span class="s2">"the rest absorbed by the quiet tail the segment ends on"</span>
+    <span class="p">)</span>
+    <span class="n">note</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="sa">f</span><span class="s2">"TR </span><span class="si">{</span><span class="nb">float</span><span class="p">(</span><span class="n">tr</span><span class="p">)</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mf">1e3</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2"> ms designed, </span><span class="si">{</span><span class="n">tr_played</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mf">1e3</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2"> ms played: "</span>
+        <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">gap</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mf">1e6</span><span class="si">:</span><span class="s2">.0f</span><span class="si">}</span><span class="s2"> us sequencer gap per segment, </span><span class="si">{</span><span class="n">room</span><span class="si">}</span><span class="s2">"</span>
+    <span class="p">)</span>
+    <span class="n">info</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">validation</span><span class="o">.</span><span class="n">info</span><span class="si">}</span><span class="s2">; </span><span class="si">{</span><span class="n">note</span><span class="si">}</span><span class="s2">"</span> <span class="k">if</span> <span class="n">validation</span><span class="o">.</span><span class="n">info</span> <span class="k">else</span> <span class="n">note</span>
+    <span class="k">return</span> <span class="n">dataclasses</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="n">validation</span><span class="p">,</span> <span class="n">info</span><span class="o">=</span><span class="n">info</span><span class="p">)</span>
 
 
 <span class="c1">#: The slew rate of a plugin's last request is kept for the next request</span>

@@ -509,6 +509,8 @@
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>blocks</strong> (<em>float</em>) – The blocks of the scan, prescan-only subsequences left out.</p></li>
 <li><p><strong>played</strong> (<em>float</em>) – What the scan plays under a <a class="reference internal" href="pulserver.ir.SequencerTiming.html#pulserver.ir.SequencerTiming" title="pulserver.ir.SequencerTiming"><code class="xref py py-class docutils literal notranslate"><span class="pre">SequencerTiming</span></code></a>.</p></li>
+<li><p><strong>segment_starts</strong> (<em>int</em>) – Segment instances the scan plays, pure delays that play a wait among
+them.</p></li>
 </ul>
 </dd>
 </dl>
@@ -520,10 +522,13 @@
 <tr class="row-odd"><td><p><a class="reference internal" href="pulserver.ir.PlayedTime.extra.html#pulserver.ir.PlayedTime.extra" title="pulserver.ir.PlayedTime.extra"><code class="xref py py-obj docutils literal notranslate"><span class="pre">extra</span></code></a></p></td>
 <td><p>The time the scan plays past its blocks, in s.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.ir.PlayedTime.blocks.html#pulserver.ir.PlayedTime.blocks" title="pulserver.ir.PlayedTime.blocks"><code class="xref py py-obj docutils literal notranslate"><span class="pre">blocks</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.ir.PlayedTime.segment_starts.html#pulserver.ir.PlayedTime.segment_starts" title="pulserver.ir.PlayedTime.segment_starts"><code class="xref py py-obj docutils literal notranslate"><span class="pre">segment_starts</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.ir.PlayedTime.played.html#pulserver.ir.PlayedTime.played" title="pulserver.ir.PlayedTime.played"><code class="xref py py-obj docutils literal notranslate"><span class="pre">played</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.ir.PlayedTime.blocks.html#pulserver.ir.PlayedTime.blocks" title="pulserver.ir.PlayedTime.blocks"><code class="xref py py-obj docutils literal notranslate"><span class="pre">blocks</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.ir.PlayedTime.played.html#pulserver.ir.PlayedTime.played" title="pulserver.ir.PlayedTime.played"><code class="xref py py-obj docutils literal notranslate"><span class="pre">played</span></code></a></p></td>
 <td><p></p></td>
 </tr>
 </tbody>

@@ -640,11 +640,12 @@ non-Cartesian space <a class="reference internal" href="../../generated/pulserve
 <section id="resolution">
 <h3>Resolution<a class="headerlink" href="#resolution" title="Link to this heading">#</a></h3>
 <p><a class="reference internal" href="../../generated/pulserver.recon.coil_maps.html#pulserver.recon.coil_maps" title="pulserver.recon.coil_maps"><code class="xref py py-func docutils literal notranslate"><span class="pre">coil_maps()</span></code></a> returns the maps of a unit from the first of
-these sources, the location being the unit’s <code class="docutils literal notranslate"><span class="pre">slice</span></code> counter:</p>
+these sources, the location being the unit’s <code class="docutils literal notranslate"><span class="pre">slice</span></code> counter, and its <code class="docutils literal notranslate"><span class="pre">set</span></code>
+counter where that is not 0:</p>
 <ol class="arabic simple">
 <li><p>The unit’s own calibration k-space, from which the maps are estimated and
-stored for the slice, replacing any stored there.</p></li>
-<li><p>The maps stored in the stream for the slice.</p></li>
+stored for the slice, or for the slice and set, replacing any stored there.</p></li>
+<li><p>The maps stored in the stream for the slice and set, then for the slice.</p></li>
 <li><p>The exam’s <code class="docutils literal notranslate"><span class="pre">COIL_SENSITIVITIES</span></code>, which holds one set of maps, stored by a
 calibration series.</p></li>
 <li><p>No source: <a class="reference internal" href="../../generated/pulserver.recon.MissingCalibration.html#pulserver.recon.MissingCalibration" title="pulserver.recon.MissingCalibration"><code class="xref py py-class docutils literal notranslate"><span class="pre">MissingCalibration</span></code></a> is raised, or
@@ -656,7 +657,12 @@ reach the exam only from a reconstruction plugin that assigns
 <code class="docutils literal notranslate"><span class="pre">context.coil_sensitivities</span></code>; maps a series estimates from its own calibration
 readouts stay in that series.</p>
 <p>The slice is the location because a calibration unit and the imaging units that
-use its maps may be in different encoding spaces. A unit that needs maps before
+use its maps may be in different encoding spaces. The set separates maps
+estimated from calibration readouts distorted as the images of their set are:
+a FLEET calibration ahead of an EPI reads its lines in both phase-encode
+polarities, set 0 forward and set 1 reversed, so each polarity of the EPI is
+unfolded by maps displaced as its own image is, and a calibration of set 0
+alone, such as a gradient echo, serves every set. A unit that needs maps before
 the unit that estimates them has closed finds none in the first three sources.</p>
 </section>
 <section id="reuse">

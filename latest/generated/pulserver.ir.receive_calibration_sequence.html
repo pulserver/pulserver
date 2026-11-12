@@ -514,6 +514,16 @@ it.</p>
 amplitudes, the prescan calibrates on that file from its start after the
 tour, and the subsequence is the tour alone, its readouts under
 <code class="docutils literal notranslate"><span class="pre">NOPRESCAN</span></code>, or None without pTx.
+So does it where its only file reads out without repeating and lasts at
+most <code class="xref py py-data docutils literal notranslate"><span class="pre">RECEIVE_CALIBRATION_WHOLE_FILE_S</span></code>: the file is then one
+repetition played once, a single slice or a single shot, and is its own
+calibration as the repetition of a repeating file is. A longer such file
+is its own calibration too where the excitation chosen below does not
+start and end with every gradient at rest (<code class="xref py py-data docutils literal notranslate"><span class="pre">REST_GRADIENT</span></code>), as in
+a train whose blocks join on a gradient: no part of it plays apart. In a
+chain of several reading files, such an excitation’s blocks are widened
+to the nearest joins at rest either side, a frame of a balanced train
+whose frames rest between them.
 Otherwise no repetition stands for the scan, and the tour is followed by
 the calibration: the excitation scoring highest on the sine of its flip
 angle, capped at 90 degrees, times the thickness it excites, the RF

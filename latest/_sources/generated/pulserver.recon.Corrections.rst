@@ -18,6 +18,7 @@
    ~Corrections.filtered
    ~Corrections.filtered_along
    ~Corrections.intensity_corrected
+   ~Corrections.ran
    ~Corrections.unwarped
 
 

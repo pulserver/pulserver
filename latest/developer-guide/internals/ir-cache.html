@@ -763,7 +763,17 @@ exactly one file reads out and it repeats with the same RF amplitudes, the
 prescan then calibrates on that file from its start, the scan’s own steady
 state, the tour’s readouts play under <code class="docutils literal notranslate"><span class="pre">NOPRESCAN</span></code>, labelled on its first block,
 and the subsequence is the tour alone, or is not generated without parallel
-transmit. Otherwise no repetition stands for the scan, and the tour is followed
+transmit. A single file that reads out without repeating calibrates on itself
+too where it lasts at most <code class="docutils literal notranslate"><span class="pre">RECEIVE_CALIBRATION_WHOLE_FILE_S</span></code> (60 s): it is
+one repetition played once, a single slice or a single shot, and stands for
+itself as the repetition of a repeating file does. A longer one stands for
+itself too where the excitation the calibration would play does not start and
+end with every gradient under <code class="docutils literal notranslate"><span class="pre">REST_GRADIENT</span></code>, the conversion’s segment-boundary
+threshold: a train whose blocks join on a gradient, a bridged 2D balanced SSFP
+slice, has no part a prescan can play apart. In a chain of several reading
+files the same excitation is widened instead to the nearest joins at rest
+either side, a whole frame of a balanced train that rests between frames.
+Otherwise no repetition stands for the scan, and the tour is followed
 by the calibration, and the tour’s readouts set the gain with the
 calibration’s: a parallel-transmit pulse a prescan plays without acquiring
 still distorts in the scan. The calibration is the excitation scoring highest on the sine of its flip angle, capped at 90

@@ -622,7 +622,7 @@ refused and nothing it produced is returned, even when every readout arrived.</p
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">sequenceParameters</span></code></p></td>
 <td><p>Optional</p></td>
-<td><p>TR, TE, TI and flip angles replaced by those the sequence defines; TR and TE it does not define are measured by pypulseqpp’s <code class="docutils literal notranslate"><span class="pre">test_report_dict</span></code>, flip angles it does not define are the distinct values of <code class="docutils literal notranslate"><span class="pre">rf_flip_angles</span></code></p></td>
+<td><p>TR, TE, TI and flip angles replaced by those the main sequence, the last of the chain, defines, a parameter it does not state taken over the whole chain; TR and TE it does not define are measured by pypulseqpp’s <code class="docutils literal notranslate"><span class="pre">test_report_dict</span></code>, flip angles it does not define are the distinct values of <code class="docutils literal notranslate"><span class="pre">rf_flip_angles</span></code></p></td>
 </tr>
 </tbody>
 </table>

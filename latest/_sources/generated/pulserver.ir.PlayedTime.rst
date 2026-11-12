@@ -17,5 +17,6 @@
    :nosignatures:
 
    ~PlayedTime.extra
+   ~PlayedTime.segment_starts
    ~PlayedTime.blocks
    ~PlayedTime.played

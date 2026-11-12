@@ -137,7 +137,30 @@ virtual segment ends and the next begins:
 - a boundary is **added** around navigator readouts (`split_navigators`),
   around pure delays at a segment's edge (`split_edge_delays`), and between
   runs that play other RF or ADC events (`split_by_pulses`,
-  `split_by_readouts`).
+  `split_by_readouts`);
+- a single pure delay a segment ends on, shorter than
+  `join_trailing_delay_us`, is **kept** in that segment as its quiet tail, and
+  lasts the same in every instance of the segment.
+
+### Segment timing
+
+A scanner's sequencer takes a gap after every segment instance and plays an
+active one a short tail past its blocks
+({class}`~pulserver.ir.SequencerTiming`). A pure delay gives that time back by
+playing a shorter wait, but never one under the sequencer's least wait, so a
+delay shorter than the gap plus the least wait costs time of its own. A
+sequencer that ends an active segment early ends it inside its **quiet tail**,
+the silence from its last event to its end: an RF pulse counts until its
+ringdown, a readout until the receiver's dead time after its last sample, a
+gradient until its last non-zero corner. It ends the segment by the quiet tail
+less a margin of at least one gradient raster, on the raster, and by no more
+than the gap and tail. A segment that ends on enough silence then plays its
+blocks, short of them by nothing and long by only the part of the gap and
+tail off the raster. Such a sequencer states the gap plus the least wait as
+`join_trailing_delay_us`, so a short wait at the end of a segment becomes that
+segment's quiet tail instead of a wait of its own. The conversion and the
+sequencer evaluate the same quiet tail, so the time
+{func}`~pulserver.ir.played_time` predicts is the time the scanner plays.
 
 A repetition whose pulses, timing or arbitrary gradients differ from the
 first plays its own variant of a segment, up to 64 per segment.
@@ -169,8 +192,9 @@ boundary sets `split_edge_delays: false` to keep segments few. The
 `[VendorProfile]` block gives each waveform and amplitude as a float or as an
 integer with its step, so a sequencer that plays integers converts nothing
 while it plays. The `ir_wave_` limits state the waveform memory the waves are
-laid out for ({class}`~pulserver.ir.WaveBudget`). Every field must be stated,
-and {func}`~pulserver.ir.read_vendor` refuses a file that leaves one out.
+laid out for ({class}`~pulserver.ir.WaveBudget`). Every field but
+`join_trailing_delay_us`, 0 when left out, must be stated, and
+{func}`~pulserver.ir.read_vendor` refuses a file that leaves one out.
 
 ### Field-of-view offset
 

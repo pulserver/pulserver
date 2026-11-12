@@ -468,6 +468,45 @@
 <span class="n">_FORMER_END</span> <span class="o">=</span> <span class="s2">"[NimPulseqGUI Protocol End]"</span>
 
 
+<div class="viewcode-block" id="Display">
+<a class="viewcode-back" href="../../../generated/pulserver.protocol.Display.html#pulserver.protocol.Display">[docs]</a>
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">Display</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""What a design states about itself that a console shows and nobody sets.</span>
+
+<span class="sd">    A valid ``validate`` reply carries the figures stated in its ``[Display]``</span>
+<span class="sd">    block.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    echo_spacing</span>
+<span class="sd">        The spacing of the echoes of the train the protocol plays, in</span>
+<span class="sd">        seconds; ``None`` where the design states none.</span>
+<span class="sd">    pixel_bandwidth</span>
+<span class="sd">        The receive bandwidth across one pixel of the readout field of view,</span>
+<span class="sd">        in Hz; ``None`` where the design states none.</span>
+<span class="sd">    frame_time</span>
+<span class="sd">        The time one frame of a scan of several takes, in seconds; ``None``</span>
+<span class="sd">        where the design states none.</span>
+<span class="sd">    """</span>
+
+    <span class="n">echo_spacing</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">pixel_bandwidth</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">frame_time</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span></div>
+
+
+
+<span class="c1">#: The names of the figures of a ``[Display]`` block, by attribute of</span>
+<span class="c1">#: :class:`Display`.</span>
+<span class="n">_DISPLAY_NAMES</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">"echo_spacing"</span><span class="p">:</span> <span class="s2">"EchoSpacing"</span><span class="p">,</span>
+    <span class="s2">"pixel_bandwidth"</span><span class="p">:</span> <span class="s2">"PixelBandwidth"</span><span class="p">,</span>
+    <span class="s2">"frame_time"</span><span class="p">:</span> <span class="s2">"FrameTime"</span><span class="p">,</span>
+<span class="p">}</span>
+
+<span class="n">_DISPLAY</span> <span class="o">=</span> <span class="p">(</span><span class="s2">"[Display]"</span><span class="p">,</span> <span class="s2">"[Display End]"</span><span class="p">)</span>
+
+
 <div class="viewcode-block" id="Validation">
 <a class="viewcode-back" href="../../../generated/pulserver.protocol.Validation.html#pulserver.protocol.Validation">[docs]</a>
 <span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
@@ -489,13 +528,17 @@
 <span class="sd">        The RF layout of a valid evaluation; ``None`` where the plugin states</span>
 <span class="sd">        none or plays no RF, for an invalid request, and for a reply read from</span>
 <span class="sd">        text. Excluded from equality and from the representation.</span>
+<span class="sd">    display</span>
+<span class="sd">        The figures the evaluation states for a console to show; none for an</span>
+<span class="sd">        invalid request.</span>
 <span class="sd">    """</span>
 
     <span class="n">valid</span><span class="p">:</span> <span class="nb">bool</span>
     <span class="n">duration</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span>
     <span class="n">info</span><span class="p">:</span> <span class="nb">str</span>
     <span class="n">values</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="nb">float</span> <span class="o">|</span> <span class="nb">int</span> <span class="o">|</span> <span class="nb">bool</span> <span class="o">|</span> <span class="nb">str</span><span class="p">]</span>
-    <span class="n">rf_layout</span><span class="p">:</span> <span class="n">RfLayout</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">compare</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="nb">repr</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span></div>
+    <span class="n">rf_layout</span><span class="p">:</span> <span class="n">RfLayout</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">compare</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="nb">repr</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">display</span><span class="p">:</span> <span class="n">Display</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="n">Display</span><span class="p">)</span></div>
 
 
 
@@ -712,9 +755,12 @@
 <span class="w">    </span><span class="sd">"""Format a ``validate`` reply: status line, info line, value block.</span>
 
 <span class="sd">    Whitespace in the info text, newlines included, is folded to single spaces.</span>
-<span class="sd">    With ``rf_layout``, a valid reply that holds an RF layout ends with its</span>
-<span class="sd">    ``[RfLayout]`` block, as :func:`format_rf_layout` formats it over</span>
-<span class="sd">    ``listed_peak_hz``.</span>
+<span class="sd">    With ``rf_layout``, a valid reply that holds an RF layout continues with</span>
+<span class="sd">    its ``[RfLayout]`` block, as :func:`format_rf_layout` formats it over</span>
+<span class="sd">    ``listed_peak_hz``. A valid reply whose evaluation states a figure for</span>
+<span class="sd">    display ends with a ``[Display]`` block of ``Name: value`` lines, one per</span>
+<span class="sd">    figure stated: ``EchoSpacing`` and ``FrameTime`` in seconds,</span>
+<span class="sd">    ``PixelBandwidth`` in Hz.</span>
 <span class="sd">    """</span>
     <span class="k">if</span> <span class="n">validation</span><span class="o">.</span><span class="n">valid</span><span class="p">:</span>
         <span class="n">duration</span> <span class="o">=</span> <span class="s2">"?"</span> <span class="k">if</span> <span class="n">validation</span><span class="o">.</span><span class="n">duration</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="nb">repr</span><span class="p">(</span><span class="n">validation</span><span class="o">.</span><span class="n">duration</span><span class="p">)</span>
@@ -725,7 +771,42 @@
     <span class="n">text</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">status</span><span class="si">}</span><span class="se">\n</span><span class="s2">INFO </span><span class="si">{</span><span class="n">info</span><span class="si">}</span><span class="se">\n</span><span class="s2">"</span> <span class="o">+</span> <span class="n">format_values</span><span class="p">(</span><span class="n">validation</span><span class="o">.</span><span class="n">values</span><span class="p">,</span> <span class="n">listing</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">rf_layout</span> <span class="ow">and</span> <span class="n">validation</span><span class="o">.</span><span class="n">valid</span> <span class="ow">and</span> <span class="n">validation</span><span class="o">.</span><span class="n">rf_layout</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">text</span> <span class="o">+=</span> <span class="n">format_rf_layout</span><span class="p">(</span><span class="n">validation</span><span class="o">.</span><span class="n">rf_layout</span><span class="p">,</span> <span class="n">listed_peak_hz</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">validation</span><span class="o">.</span><span class="n">valid</span><span class="p">:</span>
+        <span class="n">text</span> <span class="o">+=</span> <span class="n">_format_display</span><span class="p">(</span><span class="n">validation</span><span class="o">.</span><span class="n">display</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">text</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_format_display</span><span class="p">(</span><span class="n">display</span><span class="p">:</span> <span class="n">Display</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the ``[Display]`` block of the figures ``display`` states, empty where it states none."""</span>
+    <span class="n">lines</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">_number</span><span class="p">(</span><span class="n">value</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span>
+        <span class="k">for</span> <span class="n">attribute</span><span class="p">,</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">_DISPLAY_NAMES</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">value</span> <span class="o">:=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">display</span><span class="p">,</span> <span class="n">attribute</span><span class="p">))</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+    <span class="p">]</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">lines</span><span class="p">:</span>
+        <span class="k">return</span> <span class="s2">""</span>
+    <span class="k">return</span> <span class="s2">"</span><span class="se">\n</span><span class="s2">"</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="n">_DISPLAY</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="o">*</span><span class="n">lines</span><span class="p">,</span> <span class="n">_DISPLAY</span><span class="p">[</span><span class="mi">1</span><span class="p">]])</span> <span class="o">+</span> <span class="s2">"</span><span class="se">\n</span><span class="s2">"</span>
+
+
+<div class="viewcode-block" id="parse_display">
+<a class="viewcode-back" href="../../../generated/pulserver.protocol.parse_display.html#pulserver.protocol.parse_display">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">parse_display</span><span class="p">(</span><span class="n">text</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Display</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Read the ``[Display]`` block of a ``validate`` reply; a reply without one states no figure."""</span>
+    <span class="n">attributes</span> <span class="o">=</span> <span class="p">{</span><span class="n">name</span><span class="p">:</span> <span class="n">attribute</span> <span class="k">for</span> <span class="n">attribute</span><span class="p">,</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">_DISPLAY_NAMES</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
+    <span class="n">found</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">inside</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">text</span><span class="o">.</span><span class="n">splitlines</span><span class="p">():</span>
+        <span class="n">line</span> <span class="o">=</span> <span class="n">line</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">line</span> <span class="o">==</span> <span class="n">_DISPLAY</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span>
+            <span class="n">inside</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="k">elif</span> <span class="n">line</span> <span class="o">==</span> <span class="n">_DISPLAY</span><span class="p">[</span><span class="mi">1</span><span class="p">]:</span>
+            <span class="k">break</span>
+        <span class="k">elif</span> <span class="n">inside</span><span class="p">:</span>
+            <span class="n">name</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">value</span> <span class="o">=</span> <span class="n">line</span><span class="o">.</span><span class="n">partition</span><span class="p">(</span><span class="s2">": "</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">attributes</span><span class="p">:</span>
+                <span class="n">found</span><span class="p">[</span><span class="n">attributes</span><span class="p">[</span><span class="n">name</span><span class="p">]]</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">Display</span><span class="p">(</span><span class="o">**</span><span class="n">found</span><span class="p">)</span></div>
 
 
 
@@ -734,7 +815,8 @@
 <span class="k">def</span><span class="w"> </span><span class="nf">parse_validation</span><span class="p">(</span><span class="n">text</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">listing</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="n">ProtocolKey</span><span class="p">,</span> <span class="n">Parameter</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Validation</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Read a ``validate`` reply.</span>
 
-<span class="sd">    Blocks after the value block are left to :func:`parse_rf_layout`.</span>
+<span class="sd">    The ``[RfLayout]`` block is left to :func:`parse_rf_layout`; the</span>
+<span class="sd">    ``[Display]`` block is read into :attr:`Validation.display`.</span>
 <span class="sd">    """</span>
     <span class="n">status</span><span class="p">,</span> <span class="n">info</span><span class="p">,</span> <span class="n">block</span> <span class="o">=</span> <span class="n">text</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">"</span><span class="se">\n</span><span class="s2">"</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
     <span class="n">word</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">duration</span> <span class="o">=</span> <span class="n">status</span><span class="o">.</span><span class="n">partition</span><span class="p">(</span><span class="s2">" "</span><span class="p">)</span>
@@ -744,6 +826,7 @@
         <span class="n">duration</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">duration</span><span class="p">)</span> <span class="k">if</span> <span class="n">valid</span> <span class="ow">and</span> <span class="n">duration</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">""</span><span class="p">,</span> <span class="s2">"?"</span><span class="p">)</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">info</span><span class="o">=</span><span class="n">info</span><span class="o">.</span><span class="n">removeprefix</span><span class="p">(</span><span class="s2">"INFO"</span><span class="p">)</span><span class="o">.</span><span class="n">strip</span><span class="p">(),</span>
         <span class="n">values</span><span class="o">=</span><span class="n">parse_values</span><span class="p">(</span><span class="n">block</span><span class="p">,</span> <span class="n">listing</span><span class="p">),</span>
+        <span class="n">display</span><span class="o">=</span><span class="n">parse_display</span><span class="p">(</span><span class="n">block</span><span class="p">),</span>
     <span class="p">)</span></div>
 
 

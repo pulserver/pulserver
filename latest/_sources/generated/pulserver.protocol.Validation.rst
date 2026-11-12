@@ -21,3 +21,4 @@
    ~Validation.duration
    ~Validation.info
    ~Validation.values
+   ~Validation.display

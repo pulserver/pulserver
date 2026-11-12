@@ -507,8 +507,12 @@
 <ol class="arabic simple">
 <li><p>The unit’s calibration k-space, <code class="docutils literal notranslate"><span class="pre">data.ref</span></code>: the maps are estimated
 from it and stored in <code class="docutils literal notranslate"><span class="pre">context.coil_maps</span></code> under the unit’s slice
-counter, replacing the maps stored there.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">context.coil_maps</span></code> for the unit’s slice.</p></li>
+counter, or under <code class="docutils literal notranslate"><span class="pre">(slice,</span> <span class="pre">set)</span></code> where its set counter is not 0,
+replacing the maps stored there.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">context.coil_maps</span></code> for the unit’s slice and set, then for its slice.
+A FLEET calibration reads its lines in each phase-encode polarity, set
+0 forward and set 1 reversed, as the EPI it calibrates reads its
+images, so each polarity is unfolded by maps distorted as it is.</p></li>
 <li><p>The exam’s <code class="docutils literal notranslate"><span class="pre">COIL_SENSITIVITIES</span></code>, as a calibration series stored them.</p></li>
 </ol>
 <p>Maps of the stream serve only where
@@ -522,6 +526,9 @@ onto the unit’s compression basis, as its k-space was. The location is the
 slice counter, not the encoding space, so maps estimated from a
 calibration unit in an encoding space of its own serve the imaging units
 of its slice.</p>
+<p>Maps estimated from a unit’s calibration readouts are logged at <code class="docutils literal notranslate"><span class="pre">INFO</span></code>,
+with the lines and the time they took; maps stored in the stream or the
+exam that serve a unit are logged at <code class="docutils literal notranslate"><span class="pre">DEBUG</span></code>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">

@@ -527,6 +527,12 @@ are different virtual segments.</p></li>
 virtual segment of its own. An interpreter that inserts
 transmit-to-receive switching time at every segment boundary needs as
 few segments as possible, and sets this False.</p></li>
+<li><p><strong>join_trailing_delay_us</strong> (<em>float</em>) – A single pure-delay block a segment ends on, shorter than this (µs),
+stays in the segment as its quiet tail rather than becoming a wait of
+its own, and must last the same in every instance of the segment; 0
+never. An interpreter that ends a segment early inside its quiet tail
+(<a class="reference internal" href="pulserver.ir.SequencerTiming.html#pulserver.ir.SequencerTiming" title="pulserver.ir.SequencerTiming"><code class="xref py py-class docutils literal notranslate"><span class="pre">SequencerTiming</span></code></a>) states its gap plus its least wait, the
+shortest wait of its own that costs no more than the tail.</p></li>
 </ul>
 </dd>
 </dl>
@@ -547,16 +553,19 @@ few segments as possible, and sets this False.</p></li>
 <tr class="row-odd"><td><p><a class="reference internal" href="pulserver.ir.Grouping.boundary_gradient_hz_per_m.html#pulserver.ir.Grouping.boundary_gradient_hz_per_m" title="pulserver.ir.Grouping.boundary_gradient_hz_per_m"><code class="xref py py-obj docutils literal notranslate"><span class="pre">boundary_gradient_hz_per_m</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.ir.Grouping.split_by_pulses.html#pulserver.ir.Grouping.split_by_pulses" title="pulserver.ir.Grouping.split_by_pulses"><code class="xref py py-obj docutils literal notranslate"><span class="pre">split_by_pulses</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.ir.Grouping.join_trailing_delay_us.html#pulserver.ir.Grouping.join_trailing_delay_us" title="pulserver.ir.Grouping.join_trailing_delay_us"><code class="xref py py-obj docutils literal notranslate"><span class="pre">join_trailing_delay_us</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.ir.Grouping.split_by_readouts.html#pulserver.ir.Grouping.split_by_readouts" title="pulserver.ir.Grouping.split_by_readouts"><code class="xref py py-obj docutils literal notranslate"><span class="pre">split_by_readouts</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.ir.Grouping.split_by_pulses.html#pulserver.ir.Grouping.split_by_pulses" title="pulserver.ir.Grouping.split_by_pulses"><code class="xref py py-obj docutils literal notranslate"><span class="pre">split_by_pulses</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.ir.Grouping.split_edge_delays.html#pulserver.ir.Grouping.split_edge_delays" title="pulserver.ir.Grouping.split_edge_delays"><code class="xref py py-obj docutils literal notranslate"><span class="pre">split_edge_delays</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.ir.Grouping.split_by_readouts.html#pulserver.ir.Grouping.split_by_readouts" title="pulserver.ir.Grouping.split_by_readouts"><code class="xref py py-obj docutils literal notranslate"><span class="pre">split_by_readouts</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.ir.Grouping.split_navigators.html#pulserver.ir.Grouping.split_navigators" title="pulserver.ir.Grouping.split_navigators"><code class="xref py py-obj docutils literal notranslate"><span class="pre">split_navigators</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.ir.Grouping.split_edge_delays.html#pulserver.ir.Grouping.split_edge_delays" title="pulserver.ir.Grouping.split_edge_delays"><code class="xref py py-obj docutils literal notranslate"><span class="pre">split_edge_delays</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.ir.Grouping.split_navigators.html#pulserver.ir.Grouping.split_navigators" title="pulserver.ir.Grouping.split_navigators"><code class="xref py py-obj docutils literal notranslate"><span class="pre">split_navigators</span></code></a></p></td>
 <td><p></p></td>
 </tr>
 </tbody>

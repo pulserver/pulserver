@@ -902,7 +902,9 @@
 <span class="sd">    The calibration helpers keep the state of one stream on the context, empty</span>
 <span class="sd">    when the stream starts and not shared with other series. :attr:`coil_maps`</span>
 <span class="sd">    maps a slice counter to the :class:`CoilSensitivities` the stream holds for</span>
-<span class="sd">    it, :attr:`noise` is the prewhitening a :class:`Prewhiten` applies and</span>
+<span class="sd">    it, and ``(slice, set)`` to those estimated from calibration readouts of a</span>
+<span class="sd">    later set, such as a FLEET calibration's reversed phase encode;</span>
+<span class="sd">    :attr:`noise` is the prewhitening a :class:`Prewhiten` applies and</span>
 <span class="sd">    :attr:`coil_compression` the basis a :class:`CoilCompression` applies; the</span>
 <span class="sd">    last two are ``None`` until the stream has them. A hook may assign them.</span>
 
@@ -942,7 +944,9 @@
     <span class="n">exam</span><span class="p">:</span> <span class="n">ExamCache</span>
     <span class="n">config</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">device</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="n">coil_maps</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">dict</span><span class="p">,</span> <span class="n">init</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="nb">repr</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">coil_maps</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span> <span class="o">|</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">],</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">default_factory</span><span class="o">=</span><span class="nb">dict</span><span class="p">,</span> <span class="n">init</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="nb">repr</span><span class="o">=</span><span class="kc">False</span>
+    <span class="p">)</span>
     <span class="n">noise</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">init</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="nb">repr</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
     <span class="n">coil_compression</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">init</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="nb">repr</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 
