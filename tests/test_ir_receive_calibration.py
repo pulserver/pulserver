@@ -115,7 +115,7 @@ def test_a_train_that_never_rests_calibrates_on_itself_past_the_threshold(
 
     from pulserver.ir import _calibration
 
-    seq = bssfp2d(SYSTEM, n_x=32, n_y=16, readout_bandwidth_hz=25e3, n_dummy=2)
+    seq = bssfp2d(SYSTEM, n_x=32, n_y=16, readout_bandwidth_hz=25e3, n_dummy=0)
     monkeypatch.setattr(
         _calibration, "RECEIVE_CALIBRATION_WHOLE_FILE_S", 0.5 * seq.duration()[0]
     )
@@ -124,6 +124,27 @@ def test_a_train_that_never_rests_calibrates_on_itself_past_the_threshold(
 
     assert calibration is None
     assert ir.summary(path, SYSTEM, cache_ext=".pseg")["num_subsequences"] == 1
+
+
+def test_a_chain_of_resting_frames_calibrates_on_a_whole_frame(tmp_path):
+    """Several slices of bridged frames: the excitation is widened to the frame around it."""
+    from pypulseqpp.sequences.sequence.bssfp2D_sequence import bssfp2d
+
+    chain = bssfp2d(
+        SYSTEM,
+        n_x=32,
+        n_y=16,
+        readout_bandwidth_hz=25e3,
+        n_dummy=2,
+        n_phases=3,
+        n_slices=2,
+    )
+    path, calibration = _converted(tmp_path, chain)
+    cal = ir.receive_calibration(path)
+
+    assert calibration is not None
+    assert calibration.get_definition("NumGainCalibrationReadouts") == [2 * 16]
+    assert cal["generated"] and cal["readouts"] == 2 * 16
 
 
 def test_a_chain_calibrates_on_the_thick_slab_over_the_strong_thin_slice(tmp_path):

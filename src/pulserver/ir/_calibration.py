@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import logging
 import math
 from collections.abc import Sequence
@@ -189,7 +190,10 @@ def receive_calibration_sequence(
     calibration as the repetition of a repeating file is. A longer such file
     is its own calibration too where the excitation chosen below does not
     start and end with every gradient at rest (:data:`REST_GRADIENT`), as in
-    a train whose blocks join on a gradient: no part of it plays apart.
+    a train whose blocks join on a gradient: no part of it plays apart. In a
+    chain of several reading files, such an excitation's blocks are widened
+    to the nearest joins at rest either side, a frame of a balanced train
+    whose frames rest between them.
     Otherwise no repetition stands for the scan, and the tour is followed by
     the calibration: the excitation scoring highest on the sine of its flip
     angle, capped at 90 degrees, times the thickness it excites, the RF
@@ -237,18 +241,23 @@ def receive_calibration_sequence(
             key=lambda span: round(span.signal, SIGNAL_DIGITS),
             default=None,
         )
-        if (
-            calibration is not None
-            and len(reading) == 1
-            and not _rests(files[calibration.file], calibration)
-        ):
-            _log.info(
-                "receive calibration: file %d block %d does not start and end at rest; "
-                "the file is its own calibration",
-                calibration.file,
-                calibration.first + 1,
-            )
-            calibration = None
+        if calibration is not None and not _rests(files[calibration.file], calibration):
+            if len(reading) == 1:
+                _log.info(
+                    "receive calibration: file %d block %d does not start and end at "
+                    "rest; the file is its own calibration",
+                    calibration.file,
+                    calibration.first + 1,
+                )
+                calibration = None
+            else:
+                calibration = _widened(files[calibration.file], calibration)
+                _log.info(
+                    "receive calibration: file %d blocks %d-%d, widened to rest at both ends",
+                    calibration.file,
+                    calibration.first + 1,
+                    calibration.stop,
+                )
     if not tour and calibration is None:
         return None
     if calibration is not None and calibration.balanced:
@@ -260,17 +269,36 @@ def receive_calibration_sequence(
     return _build(files, tour, calibration, system)
 
 
+def _edge_rests(f: _File, block: int, end: str) -> bool:
+    """Whether every gradient of 0-based ``block`` is at rest at its ``end``, ``"first"`` or ``"last"``."""
+    played = f.sequence.get_block(block + 1)
+    for axis in ("gx", "gy", "gz"):
+        grad = getattr(played, axis, None)
+        if grad is None or grad.type == "trap":
+            continue
+        if abs(float(getattr(grad, end))) > REST_GRADIENT:
+            return False
+    return True
+
+
 def _rests(f: _File, span: _Span) -> bool:
     """Whether every gradient is at rest where the span opens and where it closes."""
-    for block, end in ((span.first + 1, "first"), (span.stop, "last")):
-        played = f.sequence.get_block(block)
-        for axis in ("gx", "gy", "gz"):
-            grad = getattr(played, axis, None)
-            if grad is None or grad.type == "trap":
-                continue
-            if abs(float(getattr(grad, end))) > REST_GRADIENT:
-                return False
-    return True
+    return _edge_rests(f, span.first, "first") and _edge_rests(f, span.stop - 1, "last")
+
+
+def _widened(f: _File, span: _Span) -> _Span:
+    """Return the span grown to the nearest joins at rest before it and after it, or the file's ends."""
+    first, stop, blocks = span.first, span.stop, f.blocks.shape[0]
+    while first > 0 and not (
+        _edge_rests(f, first, "first") and _edge_rests(f, first - 1, "last")
+    ):
+        first -= 1
+    while stop < blocks and not (
+        _edge_rests(f, stop - 1, "last") and _edge_rests(f, stop, "first")
+    ):
+        stop += 1
+    readouts = int(f.reads[first:stop].sum())
+    return dataclasses.replace(span, first=first, stop=stop, readouts=readouts)
 
 
 def _calibrates_on_itself(f: _File) -> bool:
