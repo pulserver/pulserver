@@ -92,14 +92,32 @@ def shipped_options(name):
     }
 
 
+#: The options a choice designs only alongside, by plugin, option and choice:
+#: an ordering of trains that differ from shot to shot needs a transition, and
+#: a periphery whose trains are shorter than the centre's (``OPTION_CHANGES``).
+COMPANIONS = {
+    ("fse3d", "ordering", "buonincontri_golden"): {"refocusing": "dual_region"},
+    ("fse_pd3d", "ordering", "buonincontri_golden"): {"dual_region": True},
+}
+
 #: Each shipped plugin with every other choice of each of its options, one
-#: option at a time, by ``<plugin>/<option>=<choice>``.
+#: option at a time with the options it needs, by ``<plugin>/<option>=<choice>``.
 OPTION_VARIANTS = {
-    f"{name}/{entry.name}={choice}": (name, {entry.name: choice})
+    f"{name}/{entry.name}={choice}": (
+        name,
+        {entry.name: choice} | COMPANIONS.get((name, entry.name, choice), {}),
+    )
     for name in sorted(path.stem for path in _plugins.SEQUENCES.glob("*.py"))
     for entry in shipped_options(name).values()
     for choice in entry.choices
     if choice != entry.value
+}
+
+#: The wire values a variant of ``OPTION_VARIANTS`` designs at, by variant.
+OPTION_CHANGES = {
+    variant: {"user13_value": 20}
+    for variant, (name, options) in OPTION_VARIANTS.items()
+    if options.get("ordering") == "buonincontri_golden"
 }
 
 
@@ -108,6 +126,7 @@ def needs_blochsim(options):
     return (
         options.get("refocusing", "constant") != "constant"
         or options.get("fit_controls", False)
+        or options.get("pd_target", False)
     ) and importlib.util.find_spec("blochsim") is None
 
 
