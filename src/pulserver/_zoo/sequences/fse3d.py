@@ -93,8 +93,11 @@ if OPTIMIZED and importlib.util.find_spec("blochsim") is None:
     )
 
 #: Shared trains use Busse radial/PCLO; changing endpoint parameters uses
-#: Buonincontri joint shot/echo assignment. ``radial`` selects from the protocol.
-ORDERINGS = ("radial", "shuffling", "busse_radial", "pclo")
+#: Buonincontri joint shot/echo assignment, the shot index sweeping with the
+#: angle in each radial section. ``radial`` selects from the protocol;
+#: ``buonincontri_golden`` keeps each shot of a transition to one golden-ratio
+#: angle. Indices are released: a new choice goes last.
+ORDERINGS = ("radial", "shuffling", "busse_radial", "pclo", "buonincontri_golden")
 ORDERING = option("ordering", "radial", choices=ORDERINGS, **OPTIONS["ordering"])
 
 

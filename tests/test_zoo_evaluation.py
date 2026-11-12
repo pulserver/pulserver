@@ -1943,7 +1943,13 @@ def test_fse_ordering_choices_keep_their_indices_across_refocusing_modes(mode):
         for entry in plugin.protocol.values()
         if isinstance(entry, OptionParam) and entry.name == "ordering"
     )
-    assert ordering.choices == ("radial", "shuffling", "busse_radial", "pclo")
+    assert ordering.choices == (
+        "radial",
+        "shuffling",
+        "busse_radial",
+        "pclo",
+        "buonincontri_golden",
+    )
 
 
 @WITH_BLOCHSIM
@@ -2116,3 +2122,26 @@ def test_a_bandwidth_met_states_nothing():
     from pulserver._zoo._evaluation import bandwidth_note
 
     assert bandwidth_note(pp.Opts(adc_raster_time=2e-6), 250e3, 256, 4e-6) == ""
+
+
+@WITH_BLOCHSIM
+def test_golden_ordering_designs_a_dual_region_fse_with_that_ordering():
+    plugin = load_plugin(
+        _plugins.SEQUENCES / "fse3d.py",
+        {"refocusing": "dual_region", "ordering": "buonincontri_golden"},
+    )
+    protocol = _protocol(
+        plugin,
+        {
+            "nslices": 16,
+            "etl": 10,
+            "nx": 64,
+            "ny": 32,
+            "TR": 1000000,
+            "user12_value": 300.0,
+            "user13_value": 20,
+        },
+    )
+    designed = plugin.app(SYSTEM, **protocol.arguments)
+    seq = designed[-1] if isinstance(designed, list) else designed
+    assert seq.definitions["ResolvedViewOrdering"] == "buonincontri_golden"

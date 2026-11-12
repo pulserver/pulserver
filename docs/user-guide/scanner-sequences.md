@@ -532,7 +532,7 @@ GE scanner:
 | `fse_pd3d` | PD controls | `user14`–`user17`, `user19`, `user22` | First/final angles, startup count, explicit centre echo, crusher cycles, signal-tail onset fraction | `flip` gives peak angle; TE is reference contrast-equivalent TE |
 | `fse_pd3d` | `dual_region` | `user20` | Off: shared train; on: centre/periphery controls with cubic transition | `user12`/`user13`: peripheral TR/ETL; `user23`: final angle, 0 inherits |
 | `fse_pd3d` | `fit_controls` | `user21` | Off: prescribed inverse-EPG train; on: CPU multi-tissue/B1 control fitting | Requires the design extra |
-| `fse3d`, `fse_pd3d` | `ordering` | `user39` | `"radial"`: PCLO for identical trains, Buonincontri assignment for varying trains; `"pclo"`, `"busse_radial"` (radius then polar angle, centre echo 0), and `"shuffling"` require identical trains | None |
+| `fse3d`, `fse_pd3d` | `ordering` | `user39` | `"radial"`: PCLO for identical trains, Buonincontri assignment for varying trains; `"pclo"`, `"busse_radial"` (radius then polar angle, centre echo 0), and `"shuffling"` require identical trains; `"buonincontri_golden"` requires varying trains and keeps each shot to one golden-ratio angle | None |
 | `mprage3d` | `ordering` | `user39` | `"radial"`, each partition's lines centre-out, or `"shuffling"`: Poisson-disc lines in random order, for a time-resolved reconstruction | None |
 | `fse3d` | Busse controls | `user14`–`user17` | Minimum angle, centre angle, startup count, acquired centre echo (`-1`: midpoint) | Busse modes only; `flip` gives the maximum angle |
 | `fse3d` | Crusher cycles | `user19` | Read-axis crusher area in cycles across one readout voxel, default 0.5 | Every refocusing mode |
