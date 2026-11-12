@@ -984,8 +984,8 @@ def _with_played_note(
     The representative sequence is segmented as the conversion segments it and
     played under the limits' sequencer timing (:func:`pulserver.ir.played_time`).
     Nothing is added without a timing, a sequence or a ``TR`` definition,
-    where fewer segments start than the sequence plays repetitions, or where
-    the gaps it keeps are all absorbed.
+    where that TR is not the protocol's, where fewer segments start than the
+    sequence plays repetitions, or where the gaps it keeps are all absorbed.
     """
     if sequence is None:
         return validation
@@ -993,6 +993,11 @@ def _with_played_note(
     timing = checked.sequencer_timing
     tr = np.atleast_1d(sequence.definitions.get("TR", [0.0]))[0]
     if timing is None or not tr:
+        return validation
+    # The representative sequence states the scan's TR only where it is the
+    # TR the protocol resolved to; a scan that fills a longer one plays waits.
+    asked = validation.values.get(UIParam.TR)
+    if asked is not None and abs(float(asked) * 1e-6 - float(tr)) > 1e-5:
         return validation
     path = Path("evaluated.seq")
     try:
