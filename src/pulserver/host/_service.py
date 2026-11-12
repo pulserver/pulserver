@@ -820,11 +820,12 @@ def _dependencies(variant):
 def _source(variant: _Variant) -> str:
     """Return a digest of the code that designs with the plugin of a variant.
 
-    Covers the plugin file, the source file of the app it binds, and the
-    installed versions of pypulseqpp and pulserver, declared requirements and
-    site-library installation metadata. A :func:`functools.partial` app is
-    covered through the function it wraps. Other imports need a dependency
-    declaration to identify their installed distribution.
+    Covers the plugin file, the source file of the app it binds, every Python
+    file of the installed pypulseqpp and pulserver (:func:`_package_sources`),
+    their versions, declared requirements and site-library installation
+    metadata. A :func:`functools.partial` app is covered through the function
+    it wraps. Other imports need a dependency declaration to identify their
+    installed distribution.
     """
     digest = hashlib.sha256(Path(variant.path).read_bytes())
     app = _plugin(variant).app
@@ -840,6 +841,29 @@ def _source(variant: _Variant) -> str:
     if dependencies:
         digest.update(json.dumps(dependencies, sort_keys=True).encode())
     digest.update(f"pypulseqpp {pp.__version__} pulserver {__version__}".encode())
+    digest.update(_package_sources(_designing_packages()).encode())
+    return digest.hexdigest()
+
+
+def _designing_packages() -> tuple[Path, ...]:
+    """Return the directories of the installed pypulseqpp and pulserver packages."""
+    return Path(pp.__file__).parent, Path(__file__).resolve().parent.parent
+
+
+def _package_sources(packages: tuple[Path, ...]) -> str:
+    """Return a digest of every ``.py`` file under ``packages``, by path within its package.
+
+    A file replaced in place, its package's version unchanged, changes the
+    digest; byte-compiled caches are left out.
+    """
+    digest = hashlib.sha256()
+    for package in packages:
+        for path in sorted(package.rglob("*.py")):
+            if "__pycache__" in path.parts:
+                continue
+            content = path.read_bytes()
+            name = f"{package.name}/{path.relative_to(package).as_posix()}"
+            digest.update(f"{name}\0{len(content)}\0".encode() + content)
     return digest.hexdigest()
 
 

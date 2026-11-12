@@ -347,6 +347,28 @@ def test_an_edited_plugin_is_another_design_of_the_same_protocol(tmp_path, store
     assert written[1] == 2 * written[0]
 
 
+def test_a_package_file_replaced_in_place_is_another_design_of_the_same_protocol(
+    tmp_path, store, monkeypatch
+):
+    package = tmp_path / "package"
+    (package / "readout").mkdir(parents=True)
+    module = package / "readout" / "bssfp.py"
+    module.write_text("SPAN = 1\n")
+    (package / "__pycache__").mkdir()
+    (package / "__pycache__" / "stale.py").write_text("ignored\n")
+    monkeypatch.setattr(service, "_designing_packages", lambda: (package,))
+    first = generated(generate(store, "tiny", {"TE": 8000}))
+    assert (
+        generated(generate(another_scan(store, "same"), "tiny", {"TE": 8000})) == first
+    )
+    (package / "__pycache__" / "stale.py").write_text("changed\n")
+    assert (
+        generated(generate(another_scan(store, "cache"), "tiny", {"TE": 8000})) == first
+    )
+    module.write_text("SPAN = 2\n")
+    assert generated(generate(another_scan(store), "tiny", {"TE": 8000})) != first
+
+
 def test_an_invalid_protocol_is_an_error_and_stores_nothing(store):
     status, text = generate(store, "tiny", {"TE": 1000})
     assert status == 1
