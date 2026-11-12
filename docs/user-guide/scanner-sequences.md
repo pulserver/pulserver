@@ -532,7 +532,8 @@ GE scanner:
 | `fse_pd3d` | PD controls | `user14`–`user17`, `user19`, `user22` | First/final angles, startup count, explicit centre echo, crusher cycles, signal-tail onset fraction | `flip` gives peak angle; TE is reference contrast-equivalent TE |
 | `fse_pd3d` | `dual_region` | `user20` | Off: shared train; on: centre/periphery controls with cubic transition | `user12`/`user13`: peripheral TR/ETL; `user23`: final angle, 0 inherits |
 | `fse_pd3d` | `fit_controls` | `user21` | Off: prescribed inverse-EPG train; on: CPU multi-tissue/B1 control fitting | Requires the design extra |
-| `fse3d`, `fse_pd3d` | `ordering` | `user39` | `"radial"`: PCLO for identical trains, Buonincontri assignment for varying trains; `"pclo"`, `"busse_radial"` (radius then polar angle, centre echo 0), and `"shuffling"` require identical trains | None |
+| `fse_pd3d` | `pd_target` | `user26` | Off: the signal-shape PD design; on: the target-signal design, inverse EPG of the signal of Buonincontri et al. with every angle at most `flip` | `flip`: largest angle (default 150°); `user27`: first angle; `user28`: plateau signal; `user29`: tail signal over plateau; `user30`: signal-tail onset fraction, in place of `user14`, `user15`, `user22` and `user23`. Under `dual_region`, `user31`–`user33`: the periphery's plateau signal, tail signal and onset, the rest of its target the fitted peripheral train's. `fit_controls` has no effect |
+| `fse3d`, `fse_pd3d` | `ordering` | `user39` | `"radial"`: PCLO for identical trains, Buonincontri assignment for varying trains; `"pclo"`, `"busse_radial"` (radius then polar angle, centre echo 0), and `"shuffling"` require identical trains; `"buonincontri_golden"` requires varying trains and keeps each shot to one golden-ratio angle | None |
 | `mprage3d` | `ordering` | `user39` | `"radial"`, each partition's lines centre-out, or `"shuffling"`: Poisson-disc lines in random order, for a time-resolved reconstruction | None |
 | `fse3d` | Busse controls | `user14`–`user17` | Minimum angle, centre angle, startup count, acquired centre echo (`-1`: midpoint) | Busse modes only; `flip` gives the maximum angle |
 | `fse3d` | Crusher cycles | `user19` | Read-axis crusher area in cycles across one readout voxel, default 0.5 | Every refocusing mode |
@@ -607,6 +608,17 @@ PCLO/basic Busse radial; changing endpoint parameters uses Buonincontri joint
 assignment. Default inverse design, listing and evaluation import no Torch.
 First and final angles must not exceed the maximum. The reference signal
 prescription follows [Mugler et al., ISMRM 1999, abstract 1631](https://cds.ismrm.org/ismrm-1999/PDF6/1631.pdf); numerical envelope controls are independently chosen.
+
+The `pd_target` option designs instead from an explicit target signal: an
+initial exponential decay, a sloped plateau and a power-law tail, its eight
+controls fitted to the centre and peripheral trains of Fig. 1 of
+Buonincontri et al., Proc. ISMRM 2025, abstract 566-05-007
+(`PD_CENTRE` and `PD_PERIPHERY` in pypulseqpp). blochsim's inverse EPG solves
+each train for its signal with every angle bounded by `flip`; a pulse at the
+bound holds the bound and the train continues from it. Its derivatives with
+respect to the controls are exact, from the forward-mode tangents of the
+solver, and the transition interpolates the controls between the two
+endpoint trains.
 
 ### Diffusion tables
 

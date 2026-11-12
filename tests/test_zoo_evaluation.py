@@ -114,7 +114,10 @@ WITH_BLOCHSIM = pytest.mark.skipif(
 #: with the argument that holds the largest. Their evaluation designs as
 #: many pulses at that angle, which last as long and bound the RF, and asks
 #: the solve only for the effective TE.
-PRESCRIBED = {"fse_pd3d": "pd_maximum_angle_deg"}
+PRESCRIBED = {
+    "fse_pd3d": "pd_maximum_angle_deg",
+    "fse_pd3d+PD_TARGET": "pd_target_maximum_angle_deg",
+}
 
 # The defaults, and prescriptions that change what the repetitions of a scan
 # are counted from: slices in packets of unequal size at a requested TR or in
@@ -433,6 +436,7 @@ TOGGLED = {
     "fse3d+OPTIMIZED": ("fse3d", {"refocusing": "optimized"}),
     "fse3d+DUAL_REGION": ("fse3d", {"refocusing": "dual_region"}),
     "fse3d+NAVIGATOR": ("fse3d", {"navigator": True}),
+    "fse_pd3d+PD_TARGET": ("fse_pd3d", {"pd_target": True}),
     "mprage3d+NAVIGATOR": ("mprage3d", {"navigator": True}),
     "gre3d+WAVE": ("gre3d", {"wave": True}),
     "gre_multiecho3d+WAVE": ("gre_multiecho3d", {"wave": True}),
@@ -1943,7 +1947,13 @@ def test_fse_ordering_choices_keep_their_indices_across_refocusing_modes(mode):
         for entry in plugin.protocol.values()
         if isinstance(entry, OptionParam) and entry.name == "ordering"
     )
-    assert ordering.choices == ("radial", "shuffling", "busse_radial", "pclo")
+    assert ordering.choices == (
+        "radial",
+        "shuffling",
+        "busse_radial",
+        "pclo",
+        "buonincontri_golden",
+    )
 
 
 @WITH_BLOCHSIM
@@ -2116,3 +2126,68 @@ def test_a_bandwidth_met_states_nothing():
     from pulserver._zoo._evaluation import bandwidth_note
 
     assert bandwidth_note(pp.Opts(adc_raster_time=2e-6), 250e3, 256, 4e-6) == ""
+
+
+@WITH_BLOCHSIM
+def test_golden_ordering_designs_a_dual_region_fse_with_that_ordering():
+    plugin = load_plugin(
+        _plugins.SEQUENCES / "fse3d.py",
+        {"refocusing": "dual_region", "ordering": "buonincontri_golden"},
+    )
+    protocol = _protocol(
+        plugin,
+        {
+            "nslices": 16,
+            "etl": 10,
+            "nx": 64,
+            "ny": 32,
+            "TR": 1000000,
+            "user12_value": 300.0,
+            "user13_value": 20,
+        },
+    )
+    designed = plugin.app(SYSTEM, **protocol.arguments)
+    seq = designed[-1] if isinstance(designed, list) else designed
+    assert seq.definitions["ResolvedViewOrdering"] == "buonincontri_golden"
+
+
+@WITH_BLOCHSIM
+@pytest.mark.parametrize("dual_region", [False, True])
+def test_a_pd_target_train_stays_within_its_flip_and_lasts_its_evaluation(
+    dual_region,
+):
+    plugin = load_plugin(
+        _plugins.SEQUENCES / "fse_pd3d.py",
+        {"pd_target": True, "dual_region": dual_region},
+    )
+    assert plugin.protocol[UIParam.FLIP].argument == "pd_target_maximum_angle_deg"
+    request = {
+        "nx": 64,
+        "ny": 32,
+        "nslices": 8,
+        "etl": 28,
+        "TR": 800000,
+        "flip": 140.0,
+        "user0_value": 0,
+    }
+    if dual_region:
+        request |= {"user12_value": 400, "user13_value": 20, "user32_value": 0.6}
+    evaluation = plugin.evaluate(SYSTEM, _protocol(plugin, request))
+    main = _chain(plugin.generate(SYSTEM, evaluation.protocol))[-1]
+    assert main.check_timing()[0]
+    assert main.definitions["FlipModulation"] == "pd_target"
+    assert evaluation.duration == pytest.approx(
+        main.duration()[0], abs=SYSTEM.block_duration_raster * _excitations(main) + 1e-9
+    )
+    angles = np.asarray(main.definitions["RefocusingFlipAngles"], dtype=float)
+    if dual_region:
+        periphery = main.definitions["RefocusingFlipAnglesPeriphery"]
+        angles = np.append(angles, np.asarray(periphery, dtype=float))
+    assert angles.max() <= 140.0 + 1e-6
+
+
+def test_pd_target_option_offers_no_control_fitting():
+    plugin = load_plugin(
+        _plugins.SEQUENCES / "fse_pd3d.py", {"pd_target": True, "fit_controls": True}
+    )
+    assert plugin.app.keywords["pd_optimize"] is False

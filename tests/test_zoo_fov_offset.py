@@ -17,7 +17,14 @@ from pathlib import Path
 import numpy as np
 import pypulseqpp as pp
 import pytest
-from _host import LIMITS, OPTION_VARIANTS, SMALL, SMALLER, needs_blochsim
+from _host import (
+    LIMITS,
+    OPTION_CHANGES,
+    OPTION_VARIANTS,
+    SMALL,
+    SMALLER,
+    needs_blochsim,
+)
 
 from pulserver import _plugins, ir, virtual
 from pulserver.design import load_plugin
@@ -33,7 +40,7 @@ VARIANTS = (
     + [(name, None, changes) for name, changes in SLICES.items()]
     + [
         pytest.param(
-            (name, variant),
+            (name, variant, OPTION_CHANGES.get(variant, {})),
             marks=pytest.mark.skipif(needs_blochsim(options), reason="needs blochsim"),
         )
         for variant, (name, options) in OPTION_VARIANTS.items()
@@ -161,9 +168,11 @@ def _designed(name, variant, directory, changes=None):
 
 def _id(variant):
     name, options, *changes = variant
+    if options is not None:
+        return options
     if changes:
         return f"{name}-" + "-".join(f"{k}{v}" for k, v in changes[0].items())
-    return name if options is None else options
+    return name
 
 
 @pytest.fixture(scope="module", params=VARIANTS, ids=_id)
