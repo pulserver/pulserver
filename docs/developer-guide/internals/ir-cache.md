@@ -241,7 +241,11 @@ and the subsequence is the tour alone, or is not generated without parallel
 transmit. A single file that reads out without repeating calibrates on itself
 too where it lasts at most `RECEIVE_CALIBRATION_WHOLE_FILE_S` (60 s): it is
 one repetition played once, a single slice or a single shot, and stands for
-itself as the repetition of a repeating file does. Otherwise no repetition stands for the scan, and the tour is followed
+itself as the repetition of a repeating file does. A longer one stands for
+itself too where the excitation the calibration would play does not start and
+end with every gradient under `REST_GRADIENT`, the conversion's segment-boundary
+threshold: a train whose blocks join on a gradient, a bridged 2D balanced SSFP
+slice, has no part a prescan can play apart. Otherwise no repetition stands for the scan, and the tour is followed
 by the calibration, and the tour's readouts set the gain with the
 calibration's: a parallel-transmit pulse a prescan plays without acquiring
 still distorts in the scan. The calibration is the excitation scoring highest on the sine of its flip angle, capped at 90

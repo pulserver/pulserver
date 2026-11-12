@@ -41,6 +41,10 @@ PRESCAN_ONLY = "PrescanOnly"
 #: spare: one slice of a 2D balanced SSFP cine of 25 frames, about 16 000
 #: blocks and 22 s.
 RECEIVE_CALIBRATION_WHOLE_FILE_S = 60.0
+#: Gradient, Hz/m, under which an axis is at rest where the generated
+#: calibration starts and ends its play: the conversion's threshold for a
+#: segment boundary.
+REST_GRADIENT = 100.0
 
 _RF, _GX, _GY, _GZ, _ADC = range(5)
 _log = logging.getLogger(__name__)
@@ -182,7 +186,10 @@ def receive_calibration_sequence(
     So does it where its only file reads out without repeating and lasts at
     most :data:`RECEIVE_CALIBRATION_WHOLE_FILE_S`: the file is then one
     repetition played once, a single slice or a single shot, and is its own
-    calibration as the repetition of a repeating file is.
+    calibration as the repetition of a repeating file is. A longer such file
+    is its own calibration too where the excitation chosen below does not
+    start and end with every gradient at rest (:data:`REST_GRADIENT`), as in
+    a train whose blocks join on a gradient: no part of it plays apart.
     Otherwise no repetition stands for the scan, and the tour is followed by
     the calibration: the excitation scoring highest on the sine of its flip
     angle, capped at 90 degrees, times the thickness it excites, the RF
@@ -230,6 +237,18 @@ def receive_calibration_sequence(
             key=lambda span: round(span.signal, SIGNAL_DIGITS),
             default=None,
         )
+        if (
+            calibration is not None
+            and len(reading) == 1
+            and not _rests(files[calibration.file], calibration)
+        ):
+            _log.info(
+                "receive calibration: file %d block %d does not start and end at rest; "
+                "the file is its own calibration",
+                calibration.file,
+                calibration.first + 1,
+            )
+            calibration = None
     if not tour and calibration is None:
         return None
     if calibration is not None and calibration.balanced:
@@ -239,6 +258,19 @@ def receive_calibration_sequence(
             calibration.first + 1,
         )
     return _build(files, tour, calibration, system)
+
+
+def _rests(f: _File, span: _Span) -> bool:
+    """Whether every gradient is at rest where the span opens and where it closes."""
+    for block, end in ((span.first + 1, "first"), (span.stop, "last")):
+        played = f.sequence.get_block(block)
+        for axis in ("gx", "gy", "gz"):
+            grad = getattr(played, axis, None)
+            if grad is None or grad.type == "trap":
+                continue
+            if abs(float(getattr(grad, end))) > REST_GRADIENT:
+                return False
+    return True
 
 
 def _calibrates_on_itself(f: _File) -> bool:

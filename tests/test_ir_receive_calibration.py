@@ -107,6 +107,25 @@ def test_a_file_played_once_past_the_threshold_is_calibrated_apart(monkeypatch):
     assert ir.receive_calibration_sequence([seq], SYSTEM) is not None
 
 
+def test_a_train_that_never_rests_calibrates_on_itself_past_the_threshold(
+    tmp_path, monkeypatch
+):
+    """A bridged slice has no excitation that starts and ends at rest to play apart."""
+    from pypulseqpp.sequences.sequence.bssfp2D_sequence import bssfp2d
+
+    from pulserver.ir import _calibration
+
+    seq = bssfp2d(SYSTEM, n_x=32, n_y=16, readout_bandwidth_hz=25e3, n_dummy=2)
+    monkeypatch.setattr(
+        _calibration, "RECEIVE_CALIBRATION_WHOLE_FILE_S", 0.5 * seq.duration()[0]
+    )
+    assert seq.repetition()[0] == seq.num_blocks
+    path, calibration = _converted(tmp_path, [seq])
+
+    assert calibration is None
+    assert ir.summary(path, SYSTEM, cache_ext=".pseg")["num_subsequences"] == 1
+
+
 def test_a_chain_calibrates_on_the_thick_slab_over_the_strong_thin_slice(tmp_path):
     path, calibration = _converted(tmp_path, [_periodic(90, 3e-3), _periodic(15, 0.1)])
     cal = ir.receive_calibration(path)
