@@ -1408,6 +1408,24 @@ def test_an_ecg_trigger_gates_the_cine_with_a_segment_per_nominal_heartbeat(
         assert _triggers(main) == 1
 
 
+@pytest.mark.parametrize("delay_ms", [0.0, 50.0])
+def test_a_prospective_slice_is_one_train_from_its_trigger_on(zoo, delay_ms):
+    plugin = zoo["bssfp2d"]
+    changes = {"trigger_type": "physio2", "num_frames": 5, "trigger_delay": delay_ms}
+    protocol = _protocol(plugin, changes)
+
+    evaluation = plugin.evaluate(SYSTEM, protocol)
+    main = _main(plugin, protocol)
+    first = main.get_block(1)
+
+    assert _triggers(main) == 1
+    assert first.trig is not None and first.rf is not None
+    assert (
+        abs(evaluation.duration - main.duration()[0])
+        <= 2 * SYSTEM.block_duration_raster
+    )
+
+
 def _arguments(plugin, protocol):
     from pulserver._zoo._evaluation import arguments
 

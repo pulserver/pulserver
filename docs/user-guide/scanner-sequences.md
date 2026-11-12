@@ -448,11 +448,13 @@ increment, as `user12`.
 slice's k-space is acquired that many times back to back, a free-running series
 that keeps its steady state from one frame to the next and is reconstructed as
 one image per frame; under prospective ECG gating they are the cardiac phases of
-each heartbeat, and retrospective gating sets its own from the heart rate. A
-gated slice waits for one trigger, at its start under prospective gating, and
-then runs free at the heart rate entered: every slice is one train with no
-rest in it, and repetitions that do not acquire fill each heartbeat after its
-cardiac phases.
+each heartbeat, and retrospective gating sets its own from the heart rate.
+Under prospective gating each slice's half flip waits for one trigger, and the
+slice then runs free at the heart rate entered: every slice is one train with
+no rest in it, and repetitions that do not acquire fill the trigger delay and
+each heartbeat after its cardiac phases. The train waits for its trigger
+itself, so the scanner sets the whole slice up before the trigger arrives
+rather than in the time between the trigger and the train.
 
 ### Console controls
 

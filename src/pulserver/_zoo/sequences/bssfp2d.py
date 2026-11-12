@@ -6,7 +6,6 @@ import pypulseqpp as pp
 from pypulseqpp import sequences
 from pypulseqpp.sequences.sequence.bssfp2D_sequence import (
     PROSPECTIVE_DUMMIES,
-    TRIGGER_CHANNEL,
     bssfp2d,
     prospective_starts,
 )
@@ -33,8 +32,8 @@ from pulserver.protocol import ImagingMode, TriggerType, TRPreset, UIParam
 
 #: ECG gating is retrospective: each segment cycled over a heartbeat, binned
 #: into cardiac phases by the reconstruction. Prospective otherwise: each
-#: slice triggered once, then every nominal heartbeat acquired once per
-#: cardiac phase, the slice one train with no rest in it.
+#: slice triggered once, on its half flip, then every nominal heartbeat
+#: acquired once per cardiac phase, the slice one train with no rest in it.
 RETROSPECTIVE = option("retrospective", False, **OPTIONS["retrospective"])
 
 
@@ -117,21 +116,14 @@ class Bssfp2D(SequencePlugin):
             segments = _segments(a, g["views_per_segment"])
             rr = 60.0 / a["heart_rate_bpm"]
             if gating == "prospective":
-                # One trigger opens the slice; the heartbeats after the first
-                # start at the nominal rate, with repetitions that do not
-                # acquire between them.
-                starts = prospective_starts(segments, a["n_phases"], n_dummy, rr, tr)
-                wait = pp.calc_duration(
-                    pp.make_trigger(
-                        TRIGGER_CHANNEL, duration=a["trigger_delay"], system=system
-                    )
+                # One trigger, on the half flip, opens the slice; the trigger
+                # delay and the heartbeats after the first are repetitions
+                # that do not acquire.
+                starts = prospective_starts(
+                    segments, a["n_phases"], n_dummy, rr, tr, a["trigger_delay"]
                 )
                 played = starts[-1] + a["n_phases"] * segments[-1]
-                train = (
-                    pp.ceil_to_raster(wait, system.block_duration_raster)
-                    + once
-                    + (played - 1) * tr
-                )
+                train = once + (played - 1) * tr
             else:
                 per_segment = max(1, round(rr / (g["views_per_segment"] * tr)))
                 cycles = per_segment * sum(segments)
