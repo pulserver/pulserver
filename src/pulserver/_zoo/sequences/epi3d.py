@@ -34,7 +34,7 @@ from pulserver._zoo._evaluation import (
     rf_layout,
 )
 from pulserver._zoo._slab import slab
-from pulserver._zoo._user import OWN, user_entries
+from pulserver._zoo._user import OPTIONS, OWN, user_entries
 from pulserver.design import (
     ChoiceParam,
     Evaluation,
@@ -56,13 +56,27 @@ from pulserver.protocol import Excitation, ImagingMode, TEPreset, TRPreset, UIPa
 CALIBRATION = option(
     "calibration", "fleet", choices=CALIBRATIONS, user=OWN, label="Calibration"
 )
+#: The odd/even phase correction: off, the default, a blip-free reference
+#: train in the last dummy shot, the imaging train's own with every phase and
+#: partition encode at zero, which the reconstruction fits echo by echo; on,
+#: ``NAVIGATOR_LINES`` navigator lines at the start of every shot instead,
+#: which lengthen the minimum TE.
+NAVIGATOR = option("navigator", False, **OPTIONS["navigator"])
+#: Navigator lines every shot reads.
+_NAVIGATOR_LINES = NAVIGATOR_LINES if NAVIGATOR else 0
 
 
 class Epi3D(SequencePlugin):
     # Twofold readout oversampling keeps the ramp-sampled flat top within the
     # spacing of the readout field of view, so it can be resampled onto a grid.
     app = slab(
-        functools.partial(epi3d, readout_oversampling=2.0, calibration=CALIBRATION)
+        functools.partial(
+            epi3d,
+            readout_oversampling=2.0,
+            calibration=CALIBRATION,
+            phase_reference=not NAVIGATOR,
+            navigator_lines=_NAVIGATOR_LINES,
+        )
     )
     protocol = {
         UIParam.IMAGING_MODE: StatedParam(ImagingMode.THREE_D),
@@ -117,9 +131,9 @@ class Epi3D(SequencePlugin):
 
     def evaluate(self, system, protocol):
         # A TR is a volume: one shot of every shell, each an excitation, the
-        # navigator lines and a train. The shot is built from the modules the
-        # function builds it from, at its prescription, and the volumes the
-        # scan plays are counted from the function's own rules.
+        # navigator lines when asked and a train. The shot is built from the
+        # modules the function builds it from, at its prescription, and the
+        # volumes the scan plays are counted from the function's own rules.
         a = arguments(self, protocol)
         a["fov_z"] = a["n_z"] * a.pop("slice_thickness")
         system = pp.cap_system(system, max_grad=MAX_GRAD, max_slew=MAX_SLEW)
@@ -159,7 +173,7 @@ class Epi3D(SequencePlugin):
             ),
             te=a["te"],
             te_line=(n_y // 2 - start) // ry / n_shots,
-            navigator_lines=NAVIGATOR_LINES,
+            navigator_lines=_NAVIGATOR_LINES,
             echo_shifts=n_shots,
             fov=fov,
             matrix=matrix,
@@ -192,6 +206,9 @@ class Epi3D(SequencePlugin):
             excitations = dummies(a, shot)
             n_dummy = -(-excitations // volume) if a["n_frames"] > 1 else excitations
         dummy_shots = n_dummy * (volume if a["n_frames"] > 1 else 1)
+        if not NAVIGATOR:
+            # The reference plays in the last dummy shot, so there is one.
+            dummy_shots = max(dummy_shots, 1)
         duration = (2 * dummy_shots + (1 + a["n_frames"]) * volume) * shot
         excitation = pp.Sequence(system)
         excitation.add_block(exc.rf, *gz)
@@ -217,7 +234,7 @@ class Epi3D(SequencePlugin):
                     epi,
                     lines_y,
                     acs_shots,
-                    navigator_lines=NAVIGATOR_LINES,
+                    navigator_lines=_NAVIGATOR_LINES,
                     fov=fov,
                     matrix=matrix,
                     oversampling=a["readout_oversampling"],

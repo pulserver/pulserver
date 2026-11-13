@@ -406,3 +406,106 @@ def test_the_reversed_reference_is_reconstructed_and_kept_but_sent_as_no_image(
     assert len(reconstructed) == 1
     assert plugin.recon(None, "", _unit(0)) == "sent"
     assert len(reconstructed) == 1
+
+
+def _hybrid(data, inverse):
+    transform = np.fft.ifft if inverse else np.fft.fft
+    return np.fft.fftshift(transform(np.fft.ifftshift(data)))
+
+
+def _reversed(line, constant, slope):
+    """``line`` read reversed, carrying ``constant + slope * u`` in hybrid space."""
+    u = np.linspace(-1, 1, COLUMNS)
+    phased = _hybrid(_hybrid(line, True) * np.exp(1j * (constant + slope * u)), False)
+    return phased[::-1][None]
+
+
+def _labelled(flags, echo, location=0):
+    acquisition = _acquisition(flags)
+    acquisition.idx = SimpleNamespace(user=[echo, 0, 0, 0, 0, 0, 0, 0], slice=location)
+    return acquisition
+
+
+def test_the_reference_phase_of_each_echo_is_removed_from_the_reversed_readouts_of_that_echo():
+    grid = (np.arange(COLUMNS) - COLUMNS // 2) / COLUMNS
+    line = _sampled(grid)
+    phases = {1: (0.4, 0.8), 3: (-0.2, 1.1), 5: (0.0, 0.5)}
+    gadget = EpiPhaseCorrection()
+    gadget.startup(SimpleNamespace(header=None))
+    reference = AcquisitionFlag.IS_PHASECORR_DATA
+    for echo in range(6):
+        if echo in phases:
+            data, flags = (
+                _reversed(line, *phases[echo]),
+                reference | AcquisitionFlag.IS_REVERSE,
+            )
+        else:
+            data, flags = line[None], reference
+        assert gadget(_labelled(flags, echo), data) is None
+
+    for echo in (1, 3):
+        corrected = gadget(
+            _labelled(AcquisitionFlag.IS_REVERSE, echo), _reversed(line, *phases[echo])
+        )
+        np.testing.assert_allclose(corrected[0], line, atol=1e-3 * np.abs(line).max())
+    # The last echo has a forward neighbour on one side only: it takes echo 3's.
+    corrected = gadget(
+        _labelled(AcquisitionFlag.IS_REVERSE, 5), _reversed(line, *phases[3])
+    )
+    np.testing.assert_allclose(corrected[0], line, atol=1e-3 * np.abs(line).max())
+
+
+def test_a_slice_without_its_own_reference_takes_the_latest_and_navigators_are_ignored():
+    grid = (np.arange(COLUMNS) - COLUMNS // 2) / COLUMNS
+    line = _sampled(grid)
+    gadget = EpiPhaseCorrection()
+    gadget.startup(SimpleNamespace(header=None))
+    reference = AcquisitionFlag.IS_PHASECORR_DATA
+    for echo in range(4):
+        reverse = echo % 2 == 1
+        flags = reference | (
+            AcquisitionFlag.IS_REVERSE if reverse else AcquisitionFlag(0)
+        )
+        data = _reversed(line, 0.4, 0.8) if reverse else line[None]
+        gadget(_labelled(flags, echo, location=2), data)
+    # A navigator measuring another phase does not displace the reference.
+    nav = AcquisitionFlag.IS_NAVIGATION_DATA
+    for flags, data in (
+        (AcquisitionFlag(0), line[None]),
+        (AcquisitionFlag.IS_REVERSE, _reversed(line, -1.0, 0.1)),
+        (AcquisitionFlag(0), line[None]),
+    ):
+        assert gadget(_labelled(flags | nav, 0), data) is None
+
+    corrected = gadget(
+        _labelled(AcquisitionFlag.IS_REVERSE, 1, location=5), _reversed(line, 0.4, 0.8)
+    )
+
+    np.testing.assert_allclose(corrected[0], line, atol=1e-3 * np.abs(line).max())
+
+
+def test_reversed_readouts_without_reference_or_navigator_are_flipped_with_a_warning(
+    caplog,
+):
+    gadget = EpiPhaseCorrection()
+    gadget.startup(SimpleNamespace(header=None))
+    data = (np.arange(COLUMNS) + 1j).astype(complex)[None]
+
+    with caplog.at_level("WARNING", logger="pulserver.recon"):
+        first = gadget(_labelled(AcquisitionFlag.IS_REVERSE, 1), data)
+        gadget(_labelled(AcquisitionFlag.IS_REVERSE, 3), data)
+
+    np.testing.assert_allclose(first[0], data[0, ::-1])
+    assert (
+        sum("neither an odd/even phase reference" in r.message for r in caplog.records)
+        == 1
+    )
+
+
+def test_the_epi_reconstruction_takes_in_the_phase_reference():
+    from pulserver.recon.handlers.epi import EpiRecon
+
+    recon = EpiRecon()
+    acquisition = _labelled(AcquisitionFlag.IS_PHASECORR_DATA, 0)
+
+    assert recon._accepts(acquisition)

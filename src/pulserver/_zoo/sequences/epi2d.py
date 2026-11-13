@@ -5,7 +5,11 @@ from typing import Any
 
 import pypulseqpp as pp
 from pypulseqpp import sequences
-from pypulseqpp.sequences.sequence.epi2D_sequence import CALIBRATIONS, epi2d
+from pypulseqpp.sequences.sequence.epi2D_sequence import (
+    CALIBRATIONS,
+    NAVIGATOR_LINES,
+    epi2d,
+)
 
 from pulserver._zoo._evaluation import (
     achieved,
@@ -18,7 +22,7 @@ from pulserver._zoo._evaluation import (
     pixel_bandwidth,
     rf_layout,
 )
-from pulserver._zoo._user import OWN, user_entries
+from pulserver._zoo._user import OPTIONS, OWN, user_entries
 from pulserver.design import (
     BoolParam,
     Evaluation,
@@ -45,12 +49,24 @@ from pulserver.protocol import (
 CALIBRATION = option(
     "calibration", "fleet", choices=CALIBRATIONS, user=OWN, label="Calibration"
 )
+#: The odd/even phase correction: off, the default, a blip-free reference
+#: train in a dummy shot of each slice, the imaging train's own with every
+#: phase encode at zero, which the reconstruction fits echo by echo; on,
+#: ``NAVIGATOR_LINES`` navigator lines at the start of every shot instead,
+#: which lengthen the minimum TE.
+NAVIGATOR = option("navigator", False, **OPTIONS["navigator"])
 
 
 class Epi2D(SequencePlugin):
     # Twofold readout oversampling keeps the ramp-sampled flat top within the
     # spacing of the readout field of view, so it can be resampled onto a grid.
-    app = functools.partial(epi2d, readout_oversampling=2.0, calibration=CALIBRATION)
+    app = functools.partial(
+        epi2d,
+        readout_oversampling=2.0,
+        calibration=CALIBRATION,
+        phase_reference=not NAVIGATOR,
+        navigator_lines=NAVIGATOR_LINES if NAVIGATOR else 0,
+    )
     protocol = {
         UIParam.IMAGING_MODE: StatedParam(ImagingMode.TWO_D),
         # On by default: with the fat shifted many pixels along the phase
@@ -126,6 +142,8 @@ class Epi2D(SequencePlugin):
             "tr": None,
             "n_frames": 1,
             "n_dummy": 0,
+            # The reference only fills a dummy shot, which `played` counts.
+            "phase_reference": False,
         }
         *calibration, _, volume = self.app(system, **(protocol.arguments | one))
         n_shots, n_frames = a["n_shots"], a["n_frames"]
@@ -141,6 +159,9 @@ class Epi2D(SequencePlugin):
             excitations = dummies(a, max(cycles))
             n_dummy = -(-excitations // n_shots) if n_frames > 1 else excitations
         dummy_cycles = n_dummy * (n_shots if n_frames > 1 else 1)
+        if not NAVIGATOR:
+            # The reference plays in the last dummy cycle, so there is one.
+            dummy_cycles = max(dummy_cycles, 1)
         played = 2 * dummy_cycles + (1 + n_frames) * n_shots
         tr = n_shots * max(cycles)
         # The fat saturation is numbered after the excitation, so the
