@@ -388,3 +388,21 @@ def test_a_corrected_image_is_logged_and_carries_hysco_in_its_history(
         for r in caplog.records
     )
     assert plugin.corrections.applied() == ["HYSCO"]
+
+
+def test_the_reversed_reference_is_reconstructed_and_kept_but_sent_as_no_image(
+    monkeypatch,
+):
+    from pulserver.recon.handlers.pics import PicsRecon
+
+    plugin = _epi_recon(monkeypatch, np.ones((6, 8)))
+    reconstructed = []
+    monkeypatch.setattr(
+        plugin, "unit_image", lambda context, data: reconstructed.append(data)
+    )
+    monkeypatch.setattr(PicsRecon, "recon", lambda self, context, branch, data: "sent")
+
+    assert plugin.recon(None, "", _unit(1)) is None
+    assert len(reconstructed) == 1
+    assert plugin.recon(None, "", _unit(0)) == "sent"
+    assert len(reconstructed) == 1

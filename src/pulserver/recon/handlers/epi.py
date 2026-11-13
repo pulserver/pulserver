@@ -144,10 +144,11 @@ class EpiRecon(PicsRecon):
     ramp-resampled (:class:`RampSampling`) and has its odd/even phase removed
     (:class:`EpiPhaseCorrection`) on arrival, so the k-space is Cartesian,
     forward-ordered and at the reconstruction matrix when its slice closes.
-    The phase-encode-reversed reference volume (``SET`` 1) is reconstructed as
-    an image of its own, and when PyHySCO is installed (bartorch's ``pyhysco``
-    extra, GPL-3.0) each later image of the same slice, or each later volume
-    of a 3D scan, is corrected for susceptibility distortion against it
+    The phase-encode-reversed reference volume (``SET`` 1) is reconstructed and
+    kept, Fermi filtered as the images are, but sent as no image of the
+    series: when PyHySCO is installed (bartorch's ``pyhysco`` extra, GPL-3.0)
+    each later image of the same slice, or each later volume of a 3D scan, is
+    corrected for susceptibility distortion against it
     (:func:`bartorch.tools.correct_susceptibility`), history ``HYSCO``. The
     correction is logged as the other corrections are, and an image left
     uncorrected, for want of PyHySCO or of its reference, is logged with the
@@ -195,6 +196,14 @@ class EpiRecon(PicsRecon):
         super().startup(context)
         self.references = {}
         self._skips_logged = set()
+
+    def recon(self, context: ReconContext, branch: str, data: ReconData):
+        if int(data.counters.get("set", 0)) != 1:
+            return super().recon(context, branch, data)
+        # The reference only corrects the images of its slice (image() keeps
+        # it); it is not an image of the series.
+        self.unit_image(context, data)
+        return None
 
     def image(
         self,
