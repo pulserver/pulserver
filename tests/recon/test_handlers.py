@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 
 from pulserver import mrd, recon
-from pulserver.recon.handlers.epi import EpiRecon
+from pulserver.recon.handlers.epi import EpiPhaseCorrection, EpiRecon
 from pulserver.recon.handlers.nufft import NufftRecon
 from pulserver.recon.handlers.nufft_train import NufftTrainRecon
 from pulserver.recon.handlers.pics import PicsRecon, averaged
@@ -104,7 +104,20 @@ def test_a_reconstruction_through_bartorch_whitens_first_and_takes_noise_readout
 
     assert isinstance(plugin.gadgets[0], recon.Prewhiten)
     assert mrd.AcquisitionFlag.IS_NOISE_MEASUREMENT not in plugin.reject_flags
-    assert mrd.AcquisitionFlag.IS_PHASECORR_DATA in plugin.reject_flags
+
+
+@pytest.mark.parametrize("handler", [PicsRecon, NufftRecon, NufftTrainRecon, PmcRecon])
+def test_a_reconstruction_without_an_odd_even_correction_rejects_phase_reference_readouts(
+    handler,
+):
+    assert mrd.AcquisitionFlag.IS_PHASECORR_DATA in handler().reject_flags
+
+
+def test_the_epi_reconstruction_keeps_phase_reference_readouts_for_its_odd_even_correction():
+    plugin = EpiRecon()
+
+    assert mrd.AcquisitionFlag.IS_PHASECORR_DATA not in plugin.reject_flags
+    assert any(isinstance(g, EpiPhaseCorrection) for g in plugin.gadgets)
 
 
 SHOTS = 6
