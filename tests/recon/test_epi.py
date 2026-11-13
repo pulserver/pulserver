@@ -193,14 +193,20 @@ def test_forward_and_reversed_lines_leave_the_gadgets_in_one_direction_with_one_
 
 
 class _Correction:
-    """Stands in for bartorch's susceptibility correction: records what it is given and shifts ``blip_up`` by one along the phase encode."""
+    """Stands in for bartorch's susceptibility estimate: records what it is given and returns a field displacing the k-th slice of its last axis by k voxels."""
 
     def __init__(self):
         self.calls = []
 
     def __call__(self, blip_up, blip_down, *, voxel_size, phase_encoding_axis):
+        import torch
+
         self.calls.append((tuple(blip_up.shape), voxel_size, phase_encoding_axis))
-        return SimpleNamespace(blip_up=blip_up.roll(1, dims=phase_encoding_axis))
+        shape = list(blip_up.shape)
+        shape[phase_encoding_axis] += 1
+        steps = torch.arange(shape[-1], dtype=torch.float64)
+        field = (voxel_size[phase_encoding_axis] * steps).expand(shape).clone()
+        return SimpleNamespace(field_map=field)
 
 
 @pytest.fixture
@@ -212,29 +218,36 @@ def correction(monkeypatch):
     return stand_in
 
 
-def test_a_slice_is_corrected_as_three_identical_slices_its_phase_encode_first(
+def test_a_slice_is_estimated_as_three_identical_slices_its_phase_encode_first(
     correction,
 ):
-    from pulserver.recon.handlers.epi import undistorted
+    from pulserver.recon.handlers.epi import susceptibility_field, undistorted
 
     image = np.random.default_rng(0).random((6, 8))
 
-    corrected = undistorted(image, image, (2.0, 3.0))
+    field = susceptibility_field(image, image, (2.0, 3.0))
+    corrected = undistorted(image, field, (2.0, 3.0))
 
     assert correction.calls == [((6, 8, 3), (2.0, 3.0, 1.0), 0)]
-    np.testing.assert_allclose(corrected, np.roll(image, 1, axis=0))
+    # The middle slice's field: one voxel, so the image is sampled at x + 1.
+    assert field.shape == (7, 8)
+    np.testing.assert_allclose(corrected, np.roll(image, -1, axis=0))
 
 
-def test_a_volume_is_corrected_as_one_its_phase_encode_first(correction):
-    from pulserver.recon.handlers.epi import undistorted
+def test_a_volume_is_estimated_as_one_its_phase_encode_first(correction):
+    from pulserver.recon.handlers.epi import susceptibility_field, undistorted
 
     volume = np.random.default_rng(1).random((4, 6, 8))
 
-    corrected = undistorted(volume, volume, (5.0, 2.0, 3.0))
+    field = susceptibility_field(volume, volume, (5.0, 2.0, 3.0))
+    corrected = undistorted(volume, field, (5.0, 2.0, 3.0))
 
-    # (partition, phase, readout) goes in as (phase, readout, partition).
+    # (partition, phase, readout) goes in as (phase, readout, partition), and
+    # the field comes back in the volume's axes: partition k displaced by k.
     assert correction.calls == [((6, 8, 4), (2.0, 3.0, 5.0), 0)]
-    np.testing.assert_allclose(corrected, np.roll(volume, 1, axis=1))
+    assert field.shape == (4, 7, 8)
+    for k in range(4):
+        np.testing.assert_allclose(corrected[k], np.roll(volume[k], -k, axis=0))
 
 
 def _oversampled_header(columns, oversampling):
@@ -288,12 +301,12 @@ def test_a_readout_without_a_trajectory_is_cropped_to_the_epi_readout_grid():
     np.testing.assert_allclose(out[0] / out[0, COLUMNS // 2], expected, atol=1e-4)
 
 
-def test_without_pyhysco_undistorted_raises_rather_than_passing_the_image_on(
+def test_without_pyhysco_the_field_raises_rather_than_passing_the_image_on(
     monkeypatch,
 ):
     from bartorch import tools
 
-    from pulserver.recon.handlers.epi import undistorted
+    from pulserver.recon.handlers.epi import susceptibility_field
 
     def missing(*args, **kwargs):
         raise ImportError("no PyHySCO")
@@ -301,7 +314,7 @@ def test_without_pyhysco_undistorted_raises_rather_than_passing_the_image_on(
     monkeypatch.setattr(tools, "correct_susceptibility", missing)
 
     with pytest.raises(ImportError):
-        undistorted(np.ones((6, 8)), np.ones((6, 8)), (2.0, 3.0))
+        susceptibility_field(np.ones((6, 8)), np.ones((6, 8)), (2.0, 3.0))
 
 
 def _epi_recon(monkeypatch, image):
@@ -388,6 +401,38 @@ def test_a_corrected_image_is_logged_and_carries_hysco_in_its_history(
         for r in caplog.records
     )
     assert plugin.corrections.applied() == ["HYSCO"]
+
+
+def test_the_field_of_a_slice_is_estimated_once_and_applied_to_each_of_its_images(
+    monkeypatch, caplog, correction
+):
+    import logging
+
+    image = np.random.default_rng(2).random((6, 8))
+    plugin = _epi_recon(monkeypatch, image)
+
+    with caplog.at_level(logging.DEBUG, logger="pulserver.recon"):
+        _image(plugin, 1)
+        first = _image(plugin, 0)
+        second = _image(plugin, 0)
+
+    assert len(correction.calls) == 1
+    # The stand-in field displaces the slice by one voxel, the first image
+    # included.
+    np.testing.assert_allclose(first, np.roll(image, -1, axis=0))
+    np.testing.assert_allclose(second, np.roll(image, -1, axis=0))
+    logged = [
+        r.getMessage()
+        for r in caplog.records
+        if r.getMessage().startswith("susceptibility distortion")
+    ]
+    assert "field of slice 0 estimated" in logged[0]
+    assert "applying the field of slice 0" in logged[1]
+
+    # A new reference of the slice is estimated against again.
+    _image(plugin, 1)
+    _image(plugin, 0)
+    assert len(correction.calls) == 2
 
 
 def test_the_reversed_reference_is_reconstructed_and_kept_but_sent_as_no_image(

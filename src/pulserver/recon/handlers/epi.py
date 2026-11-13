@@ -239,9 +239,12 @@ class EpiRecon(PicsRecon):
     The phase-encode-reversed reference volume (``SET`` 1) is reconstructed and
     kept, Fermi filtered as the images are, but sent as no image of the
     series: when PyHySCO is installed (bartorch's ``pyhysco`` extra, GPL-3.0)
-    each later image of the same slice, or each later volume of a 3D scan, is
-    corrected for susceptibility distortion against it
-    (:func:`bartorch.tools.correct_susceptibility`), history ``HYSCO``. The
+    the first later image of the same slice, or volume of a 3D scan, and the
+    reference give the slice's susceptibility displacement field
+    (:func:`bartorch.tools.correct_susceptibility`), which is kept and applied
+    to that image and every later one of the slice
+    (:func:`bartorch.tools.apply_susceptibility`, as FSL's ``applytopup
+    --method=jac``), history ``HYSCO``. The
     correction is logged as the other corrections are, and an image left
     uncorrected, for want of PyHySCO or of its reference, is logged with the
     reason at ``WARNING``. The calibration readouts of an accelerated scan
@@ -288,6 +291,9 @@ class EpiRecon(PicsRecon):
     def startup(self, context):
         super().startup(context)
         self.references = {}
+        # The displacement field of each slice, estimated once from its first
+        # image and its reference.
+        self.fields = {}
         self._skips_logged = set()
 
     def recon(self, context: ReconContext, branch: str, data: ReconData):
@@ -309,6 +315,7 @@ class EpiRecon(PicsRecon):
         location = int(data.counters.get("slice", 0))
         if int(data.counters.get("set", 0)) == 1:
             self.references[location] = image
+            self.fields.pop(location, None)
             return image
         reference = self.references.get(location)
         space = data.data.space
@@ -328,9 +335,14 @@ class EpiRecon(PicsRecon):
                 1e3 * fov / n
                 for fov, n in zip(space.recon_fov, space.recon_matrix, strict=False)
             )
+            voxel = voxel[-image.ndim :]
             start = time.perf_counter()
+            field = self.fields.get(location)
+            estimated = field is None
             try:
-                corrected = undistorted(image, reference, voxel[-image.ndim :])
+                if estimated:
+                    field = susceptibility_field(image, reference, voxel)
+                corrected = undistorted(image, field, voxel)
             except ImportError as error:
                 reason = f"PyHySCO is not installed ({error})"
             except Exception:
@@ -340,13 +352,20 @@ class EpiRecon(PicsRecon):
                 )
                 return image
             else:
+                self.fields[location] = field
                 if self.corrections is not None:
                     self.corrections.ran(
                         "HYSCO",
-                        "susceptibility distortion of a %s image corrected against "
-                        "its phase-encode-reversed reference in %.1f s",
+                        "susceptibility distortion of a %s image corrected in %.2f s "
+                        "by %s",
                         image.shape,
                         time.perf_counter() - start,
+                        (
+                            f"the field of slice {location} estimated against its "
+                            "phase-encode-reversed reference"
+                            if estimated
+                            else f"applying the field of slice {location}"
+                        ),
                     )
                 return corrected
         level = logging.DEBUG if reason in self._skips_logged else logging.WARNING
@@ -363,14 +382,17 @@ class EpiRecon(PicsRecon):
 PLUGIN = EpiRecon()
 
 
-def undistorted(image, reverse, voxel_size):
-    """Return ``image`` corrected for susceptibility distortion against its phase-encode-reversed ``reverse``.
+def susceptibility_field(image, reverse, voxel_size):
+    """Return the displacement field of ``image`` against its phase-encode-reversed ``reverse``.
 
     A slice is ``(phase encode, readout)`` and a volume ``(partition, phase
-    encode, readout)``, with ``voxel_size`` in mm along the same axes.
-    PyHySCO corrects volumes: a volume is corrected as one, its phase encode
-    first, and a slice as three identical slices, which its smoothness penalty
-    leaves uncoupled.
+    encode, readout)``, with ``voxel_size`` in mm along the same axes. The
+    field is PyHySCO's (:func:`bartorch.tools.correct_susceptibility`), in mm
+    on the cell edges of the phase encode, in the axes of ``image``: one row
+    (a volume: one phase-encode line) longer. PyHySCO corrects volumes: a
+    volume is corrected as one, its phase encode first, and a slice as three
+    identical slices, which its smoothness penalty leaves uncoupled, the
+    middle one's field kept.
 
     Raises
     ------
@@ -397,6 +419,26 @@ def undistorted(image, reverse, voxel_size):
         voxel_size=voxel,
         phase_encoding_axis=0,
     )
-    result = corrected.blip_up.cpu().numpy()
-    result = result[:, :, 1] if image.ndim == 2 else result.transpose(2, 0, 1)
-    return np.clip(result, 0.0, None)
+    field = corrected.field_map.detach().cpu().numpy()
+    return field[:, :, 1] if image.ndim == 2 else field.transpose(2, 0, 1)
+
+
+def undistorted(image, field, voxel_size):
+    """Return ``image`` corrected for susceptibility distortion by its slice's displacement ``field``.
+
+    ``field`` is :func:`susceptibility_field`'s, of the first image of the
+    slice: the image is sampled at the displaced position along its phase
+    encode and its intensity modulated by the field's derivative
+    (:func:`bartorch.tools.apply_susceptibility`).
+    """
+    import torch
+    from bartorch import tools
+
+    image = np.asarray(image, dtype=np.float64)
+    corrected = tools.apply_susceptibility(
+        torch.from_numpy(np.ascontiguousarray(image)),
+        torch.from_numpy(np.ascontiguousarray(field)),
+        voxel_size=tuple(voxel_size),
+        phase_encoding_axis=image.ndim - 2,
+    )
+    return np.clip(corrected.cpu().numpy(), 0.0, None)
