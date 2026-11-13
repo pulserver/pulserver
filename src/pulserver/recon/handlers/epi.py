@@ -98,23 +98,91 @@ class RampSampling(Gadget):
         return data @ self.operators[key]
 
 
-class EpiPhaseCorrection(Gadget):
-    """Remove the odd/even phase of EPI readouts, fitted to each shot's navigator.
+def _echo_index(acquisition) -> int:
+    """Position of a readout in its EPI train: the ``user[0]`` counter (``USER0``), 0 where absent."""
+    counters = getattr(getattr(acquisition, "idx", None), "user", None)
+    try:
+        return int(counters[0])
+    except (TypeError, IndexError):
+        return 0
 
-    Navigator readouts (``NAV``) are consumed: each run of three, of
-    alternating polarity, gives the phase
-    (:func:`bartorch.tools.estimate_epi_phase`) applied to the reversed
-    readouts (``REV``) that follow it. Each of those is flipped into forward
-    order (:func:`bartorch.tools.correct_lines`), and its ``center_sample``
-    and discards are mirrored with it. A run of polarity ``- + -`` measures
-    the phase of the forward readout against the reversed ones, the negative
-    of the correction.
+
+class EpiPhaseCorrection(Gadget):
+    """Remove the odd/even phase of EPI readouts, fitted to a blip-free reference train or to each shot's navigator.
+
+    Reference readouts (``ACQ_IS_PHASECORR_DATA``) are consumed: the lines of
+    one train, each at its position in the train (``user[0]``), give a
+    constant and linear phase per echo
+    (:func:`bartorch.tools.estimate_epi_echo_phase`) once the first readout
+    after them arrives. Each reversed readout (``REV``) of the same slice is
+    corrected by the phase of its own echo; a readout past the reference's
+    last echo takes the last reversed echo's, and a slice without a reference
+    of its own the latest reference of any slice. Without a reference,
+    navigator readouts (``NAV``) are used: each run of three, of alternating
+    polarity, gives the phase (:func:`bartorch.tools.estimate_epi_phase`)
+    applied to the reversed readouts that follow it, a run of polarity
+    ``- + -`` measuring the negative of the correction. With neither, the
+    reversed readouts are only flipped, and a ``WARNING`` says so once. Each
+    reversed readout is flipped into forward order
+    (:func:`bartorch.tools.correct_lines`), and its ``center_sample`` and
+    discards are mirrored with it. Navigator readouts are consumed whether or
+    not a reference serves.
     """
 
     def startup(self, context):
         super().startup(context)
         self.navigator = []
         self.phase = None
+        self.pending = {}
+        self.references = {}
+        self.latest = None
+        self._warned = False
+
+    def _close_references(self) -> None:
+        """Fit every reference train still collecting."""
+        from bartorch import tools
+
+        for location, lines in self.pending.items():
+            lines = sorted(lines, key=lambda item: item[0])
+            polarity = [reverse for _, (_, reverse) in lines]
+            try:
+                fit = tools.estimate_epi_echo_phase(
+                    tools.correct_lines([line for _, line in lines]), polarity
+                )
+            except ValueError as error:
+                _log.warning(
+                    "the odd/even phase reference of slice %d is unusable (%s); "
+                    "it is ignored",
+                    location,
+                    error,
+                )
+                continue
+            echoes = [echo for echo, _ in lines]
+            table = {echo: fit[row] for row, echo in enumerate(echoes)}
+            last = max(
+                (e for e, r in zip(echoes, polarity, strict=True) if r), default=None
+            )
+            self.references[location] = (table, last)
+            self.latest = location
+            slope = float(fit[[r for r, flag in enumerate(polarity) if flag], 1].mean())
+            _log.info(
+                "odd/even phase of slice %d fitted to a %d-echo reference train: "
+                "mean linear term %.4f rad across the readout",
+                location,
+                len(lines),
+                slope,
+            )
+        self.pending = {}
+
+    def _reference_phase(self, acquisition):
+        if not self.references:
+            return None
+        location = int(acquisition_label(acquisition, "slice", 0) or 0)
+        table, last = self.references.get(location, self.references[self.latest])
+        echo = _echo_index(acquisition)
+        if echo in table:
+            return table[echo]
+        return None if last is None else table[last]
 
     def __call__(self, acquisition, data):
         import torch
@@ -122,6 +190,17 @@ class EpiPhaseCorrection(Gadget):
 
         reverse = has_acquisition_flag(acquisition, "ACQ_IS_REVERSE")
         line = (torch.from_numpy(np.ascontiguousarray(data)), reverse)
+        if has_acquisition_flag(acquisition, "ACQ_IS_PHASECORR_DATA"):
+            location = int(acquisition_label(acquisition, "slice", 0) or 0)
+            echo = _echo_index(acquisition)
+            collected = self.pending.get(location)
+            if collected and echo <= collected[-1][0]:
+                # A new train of a slice still collecting closes the last.
+                self._close_references()
+            self.pending.setdefault(location, []).append((echo, line))
+            return None
+        if self.pending:
+            self._close_references()
         if has_acquisition_flag(acquisition, "ACQ_IS_NAVIGATION_DATA"):
             self.navigator.append(line)
             if len(self.navigator) == 3:
@@ -129,12 +208,23 @@ class EpiPhaseCorrection(Gadget):
                 self.phase = -phase if self.navigator[0][1] else phase
                 self.navigator = []
             return None
+        phase = None
         if reverse:
             samples = data.shape[-1]
             acquisition.center_sample = samples - 1 - echo_centre(acquisition, samples)
             before, after = discards(acquisition)
             acquisition.discard_pre, acquisition.discard_post = after, before
-        return tools.correct_lines([line], self.phase)[0].numpy()
+            phase = self._reference_phase(acquisition)
+            if phase is None:
+                phase = self.phase
+            if phase is None and not self._warned:
+                self._warned = True
+                _log.warning(
+                    "the EPI readouts carry neither an odd/even phase reference nor "
+                    "a navigator: reversed lines are flipped but not phase "
+                    "corrected, and the images will show an N/2 ghost"
+                )
+        return tools.correct_lines([line], phase)[0].numpy()
 
 
 class EpiRecon(PicsRecon):
@@ -142,21 +232,26 @@ class EpiRecon(PicsRecon):
 
     Each readout is whitened (:class:`~pulserver.recon.Prewhiten`),
     ramp-resampled (:class:`RampSampling`) and has its odd/even phase removed
-    (:class:`EpiPhaseCorrection`) on arrival, so the k-space is Cartesian,
+    (:class:`EpiPhaseCorrection`, from the blip-free reference train
+    ``ACQ_IS_PHASECORR_DATA`` the sequence plays in a dummy shot, else from
+    the navigator) on arrival, so the k-space is Cartesian,
     forward-ordered and at the reconstruction matrix when its slice closes.
-    The phase-encode-reversed reference volume (``SET`` 1) is reconstructed as
-    an image of its own, and when PyHySCO is installed (bartorch's ``pyhysco``
-    extra, GPL-3.0) each later image of the same slice, or each later volume
-    of a 3D scan, is corrected for susceptibility distortion against it
-    (:func:`bartorch.tools.correct_susceptibility`), history ``HYSCO``. The
+    The phase-encode-reversed reference volume (``SET`` 1) is reconstructed and
+    kept, Fermi filtered as the images are, but sent as no image of the
+    series: when PyHySCO is installed (bartorch's ``pyhysco`` extra, GPL-3.0)
+    the first later image of the same slice, or volume of a 3D scan, and the
+    reference give the slice's susceptibility displacement field
+    (:func:`bartorch.tools.correct_susceptibility`), which is kept and applied
+    to that image and every later one of the slice
+    (:func:`bartorch.tools.apply_susceptibility`, as FSL's ``applytopup
+    --method=jac``), history ``HYSCO``. The
     correction is logged as the other corrections are, and an image left
     uncorrected, for want of PyHySCO or of its reference, is logged with the
     reason at ``WARNING``. The calibration readouts of an accelerated scan
     reach the same readout grid as the EPI lines (:class:`RampSampling`), so
     the coil sensitivities estimated from them unfold it. A FLEET
     calibration's readouts are EPI lines, ramp-resampled and phase-corrected
-    against their own shot's navigator, read once in each phase-encode
-    polarity: each set is unfolded by the maps of its own polarity, distorted
+    as the imaging lines are, read once in each phase-encode polarity: each set is unfolded by the maps of its own polarity, distorted
     as its image is (:func:`~pulserver.recon.coil_maps`). Each image is Fermi
     filtered before its magnitude is taken, and corrected for gradient
     nonlinearity and divided by the receive field after the distortion
@@ -190,11 +285,24 @@ class EpiRecon(PicsRecon):
             intensity_correction=intensity_correction,
         )
         self.gadgets = (Prewhiten(), RampSampling(), EpiPhaseCorrection())
+        # The odd/even phase reference is consumed by EpiPhaseCorrection.
+        self.reject_flags = ()
 
     def startup(self, context):
         super().startup(context)
         self.references = {}
+        # The displacement field of each slice, estimated once from its first
+        # image and its reference.
+        self.fields = {}
         self._skips_logged = set()
+
+    def recon(self, context: ReconContext, branch: str, data: ReconData):
+        if int(data.counters.get("set", 0)) != 1:
+            return super().recon(context, branch, data)
+        # The reference only corrects the images of its slice (image() keeps
+        # it); it is not an image of the series.
+        self.unit_image(context, data)
+        return None
 
     def image(
         self,
@@ -207,6 +315,7 @@ class EpiRecon(PicsRecon):
         location = int(data.counters.get("slice", 0))
         if int(data.counters.get("set", 0)) == 1:
             self.references[location] = image
+            self.fields.pop(location, None)
             return image
         reference = self.references.get(location)
         space = data.data.space
@@ -226,9 +335,14 @@ class EpiRecon(PicsRecon):
                 1e3 * fov / n
                 for fov, n in zip(space.recon_fov, space.recon_matrix, strict=False)
             )
+            voxel = voxel[-image.ndim :]
             start = time.perf_counter()
+            field = self.fields.get(location)
+            estimated = field is None
             try:
-                corrected = undistorted(image, reference, voxel[-image.ndim :])
+                if estimated:
+                    field = susceptibility_field(image, reference, voxel)
+                corrected = undistorted(image, field, voxel)
             except ImportError as error:
                 reason = f"PyHySCO is not installed ({error})"
             except Exception:
@@ -238,13 +352,20 @@ class EpiRecon(PicsRecon):
                 )
                 return image
             else:
+                self.fields[location] = field
                 if self.corrections is not None:
                     self.corrections.ran(
                         "HYSCO",
-                        "susceptibility distortion of a %s image corrected against "
-                        "its phase-encode-reversed reference in %.1f s",
+                        "susceptibility distortion of a %s image corrected in %.2f s "
+                        "by %s",
                         image.shape,
                         time.perf_counter() - start,
+                        (
+                            f"the field of slice {location} estimated against its "
+                            "phase-encode-reversed reference"
+                            if estimated
+                            else f"applying the field of slice {location}"
+                        ),
                     )
                 return corrected
         level = logging.DEBUG if reason in self._skips_logged else logging.WARNING
@@ -261,14 +382,17 @@ class EpiRecon(PicsRecon):
 PLUGIN = EpiRecon()
 
 
-def undistorted(image, reverse, voxel_size):
-    """Return ``image`` corrected for susceptibility distortion against its phase-encode-reversed ``reverse``.
+def susceptibility_field(image, reverse, voxel_size):
+    """Return the displacement field of ``image`` against its phase-encode-reversed ``reverse``.
 
     A slice is ``(phase encode, readout)`` and a volume ``(partition, phase
-    encode, readout)``, with ``voxel_size`` in mm along the same axes.
-    PyHySCO corrects volumes: a volume is corrected as one, its phase encode
-    first, and a slice as three identical slices, which its smoothness penalty
-    leaves uncoupled.
+    encode, readout)``, with ``voxel_size`` in mm along the same axes. The
+    field is PyHySCO's (:func:`bartorch.tools.correct_susceptibility`), in mm
+    on the cell edges of the phase encode, in the axes of ``image``: one row
+    (a volume: one phase-encode line) longer. PyHySCO corrects volumes: a
+    volume is corrected as one, its phase encode first, and a slice as three
+    identical slices, which its smoothness penalty leaves uncoupled, the
+    middle one's field kept.
 
     Raises
     ------
@@ -295,6 +419,26 @@ def undistorted(image, reverse, voxel_size):
         voxel_size=voxel,
         phase_encoding_axis=0,
     )
-    result = corrected.blip_up.cpu().numpy()
-    result = result[:, :, 1] if image.ndim == 2 else result.transpose(2, 0, 1)
-    return np.clip(result, 0.0, None)
+    field = corrected.field_map.detach().cpu().numpy()
+    return field[:, :, 1] if image.ndim == 2 else field.transpose(2, 0, 1)
+
+
+def undistorted(image, field, voxel_size):
+    """Return ``image`` corrected for susceptibility distortion by its slice's displacement ``field``.
+
+    ``field`` is :func:`susceptibility_field`'s, of the first image of the
+    slice: the image is sampled at the displaced position along its phase
+    encode and its intensity modulated by the field's derivative
+    (:func:`bartorch.tools.apply_susceptibility`).
+    """
+    import torch
+    from bartorch import tools
+
+    image = np.asarray(image, dtype=np.float64)
+    corrected = tools.apply_susceptibility(
+        torch.from_numpy(np.ascontiguousarray(image)),
+        torch.from_numpy(np.ascontiguousarray(field)),
+        voxel_size=tuple(voxel_size),
+        phase_encoding_axis=image.ndim - 2,
+    )
+    return np.clip(corrected.cpu().numpy(), 0.0, None)

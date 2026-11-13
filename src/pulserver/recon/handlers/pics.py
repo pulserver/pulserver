@@ -170,17 +170,11 @@ class PicsRecon(ReconPlugin):
         self, context: ReconContext, branch: str, data: ReconData
     ) -> ReconResult | None:
         del branch
-        data = compressed(context, data, self.virtual_coils)
-        if data.data is None and data.ref is not None:
-            coil_maps(context, data, estimate=nlinv_estimate)
-        buffer = data.data
-        if buffer is None:
+        unit = self.unit_image(context, data)
+        if unit is None:
             return None
+        buffer, data, image = unit
         corrections = self.corrections
-        if buffer.space.cartesian:
-            image = self.image(averaged(buffer), buffer.image_shape, context, data)
-        else:
-            image = self.wave_image(context, data)
         history = ["PULSERVER", "PYTHON", "PICS"]
         if corrections is not None:
             image = corrections.unwarped(image, context, data)
@@ -205,6 +199,29 @@ class PicsRecon(ReconPlugin):
         if corrections is not None:
             results = corrections.intensity_corrected(results, data)
         return results if len(results) > 1 else results[0]
+
+    def unit_image(
+        self, context: ReconContext, data: ReconData
+    ) -> tuple[ReconBuffer, ReconData, np.ndarray] | None:
+        """Return the unit's buffer, its data and its image before the image corrections; ``None`` without a buffer.
+
+        The data are compressed to the virtual coils, and a unit holding only
+        calibration readouts stores their coil sensitivities and has no image.
+        The image is Fermi filtered where the corrections say so, as
+        :meth:`image` filters it; gradient nonlinearity and the receive field
+        are left to :meth:`recon`.
+        """
+        data = compressed(context, data, self.virtual_coils)
+        if data.data is None and data.ref is not None:
+            coil_maps(context, data, estimate=nlinv_estimate)
+        buffer = data.data
+        if buffer is None:
+            return None
+        if buffer.space.cartesian:
+            image = self.image(averaged(buffer), buffer.image_shape, context, data)
+        else:
+            image = self.wave_image(context, data)
+        return buffer, data, image
 
     def _contrasts_are_images(self, context: ReconContext, buffer: ReconBuffer) -> bool:
         """Return whether the encoding space of ``buffer`` states more than one contrast, each its own image."""
