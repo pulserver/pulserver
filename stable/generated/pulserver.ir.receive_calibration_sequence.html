@@ -45,7 +45,7 @@
   <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../_static/documentation_options.js?v=da2c3ea9"></script>
+    <script src="../_static/documentation_options.js?v=47770eee"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -56,7 +56,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.16';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.23';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -68,7 +68,7 @@
     <link rel="search" title="Search" href="../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.4.16" />
+  <meta name="docsearch:version" content="v0.4.23" />
   
     
     <script src="../_static/searchtools.js"></script>
@@ -215,6 +215,7 @@
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/protocol-wire.html">Protocol text blocks</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/reconstruction-proxy.html">Reconstruction proxy</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/sar-ratios.html">SAR ratios against a reference pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/sequence-definitions.html">Sequence definitions</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
@@ -513,6 +514,16 @@ it.</p>
 amplitudes, the prescan calibrates on that file from its start after the
 tour, and the subsequence is the tour alone, its readouts under
 <code class="docutils literal notranslate"><span class="pre">NOPRESCAN</span></code>, or None without pTx.
+So does it where its only file reads out without repeating and lasts at
+most <code class="xref py py-data docutils literal notranslate"><span class="pre">RECEIVE_CALIBRATION_WHOLE_FILE_S</span></code>: the file is then one
+repetition played once, a single slice or a single shot, and is its own
+calibration as the repetition of a repeating file is. A longer such file
+is its own calibration too where the excitation chosen below does not
+start and end with every gradient at rest (<code class="xref py py-data docutils literal notranslate"><span class="pre">REST_GRADIENT</span></code>), as in
+a train whose blocks join on a gradient: no part of it plays apart. In a
+chain of several reading files, such an excitation’s blocks are widened
+to the nearest joins at rest either side, a frame of a balanced train
+whose frames rest between them.
 Otherwise no repetition stands for the scan, and the tour is followed by
 the calibration: the excitation scoring highest on the sine of its flip
 angle, capped at 90 degrees, times the thickness it excites, the RF

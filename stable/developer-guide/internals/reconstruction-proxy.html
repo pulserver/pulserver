@@ -45,7 +45,7 @@
   <link rel="preload" as="script" href="../../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../../_static/documentation_options.js?v=da2c3ea9"></script>
+    <script src="../../_static/documentation_options.js?v=47770eee"></script>
     <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -56,7 +56,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.16';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.23';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -70,7 +70,7 @@
     <link rel="prev" title="Protocol text blocks" href="protocol-wire.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.4.16" />
+  <meta name="docsearch:version" content="v0.4.23" />
   
     
     <script src="../../_static/searchtools.js"></script>
@@ -217,6 +217,7 @@
 <li class="toctree-l3"><a class="reference internal" href="protocol-wire.html">Protocol text blocks</a></li>
 <li class="toctree-l3 current active"><a class="current reference internal" href="#">Reconstruction proxy</a></li>
 <li class="toctree-l3"><a class="reference internal" href="sar-ratios.html">SAR ratios against a reference pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="sequence-definitions.html">Sequence definitions</a></li>
 <li class="toctree-l3"><a class="reference internal" href="virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
@@ -492,7 +493,7 @@
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#values">Values</a></li>
 </ul>
 </li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#placement">Placement</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reconstruction-placement">Placement</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#workers">Workers</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#enrichment">Enrichment</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#trajectory-integration">Trajectory integration</a></li>
@@ -585,8 +586,8 @@ smallest and largest finite value of the result, of its magnitude where it is
 complex, in the meta attributes <code class="docutils literal notranslate"><span class="pre">ArrayMinimum</span></code> and <code class="docutils literal notranslate"><span class="pre">ArrayMaximum</span></code>.</p>
 </section>
 </section>
-<section id="placement">
-<span id="reconstruction-placement"></span><h2>Placement<a class="headerlink" href="#placement" title="Link to this heading">#</a></h2>
+<section id="reconstruction-placement">
+<span id="placement"></span><h2>Placement<a class="headerlink" href="#reconstruction-placement" title="Link to this heading">#</a></h2>
 <p>The readouts of a Cartesian encoding space are placed as Gadgetron’s
 acquisition bucket places them.</p>
 <p>Along the readout axis, a readout is placed by its echo. The samples from
@@ -736,7 +737,10 @@ defines (<code class="docutils literal notranslate"><span class="pre">kSpaceCent
 none, and for every other counter, the centre is the minimum plus half the
 number of positions between the minimum and the maximum, rounded down.</p></li>
 <li><p>The header’s sequence parameters are the TR, TE, TI and flip angles the
-sequence defines. The TR and TE it does not define are measured by
+main sequence, the last of the chain, defines, so that a prescan, such as
+the gradient-echo calibration ahead of an accelerated EPI, does not
+annotate the images; a parameter the main sequence neither defines nor
+measures is taken over the whole chain. The TR and TE it does not define are measured by
 pypulseqpp’s <code class="docutils literal notranslate"><span class="pre">Sequence.test_report_dict</span></code>: TE from the excitation before the
 closest approach to the k-space centre, and TR between the excitations
 around it. The flip angles it does not define are the distinct values of
@@ -854,7 +858,7 @@ with the length of the scan.</p>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#values">Values</a></li>
 </ul>
 </li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#placement">Placement</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#reconstruction-placement">Placement</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#workers">Workers</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#enrichment">Enrichment</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#trajectory-integration">Trajectory integration</a></li>

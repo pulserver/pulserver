@@ -74,8 +74,10 @@ problems = ir.check(path, system, limits=limits)
 print("\n".join(problems) or "no problems")
 
 # %%
-# The design is refused. On a scanner this message is what the operator reads
-# instead of a scan starting, and nothing is played.
+# The design is refused. On a scanner the design service then designs it again
+# at a lower slew rate, as this lesson does by hand below; for a plugin that
+# asks to be held strictly, this message is what the operator reads instead
+# of a scan starting, and nothing is played.
 # :doc:`/explanations/safety-checks` lists every check and what each one
 # needs from the scanner.
 #

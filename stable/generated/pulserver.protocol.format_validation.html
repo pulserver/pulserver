@@ -45,7 +45,7 @@
   <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../_static/documentation_options.js?v=da2c3ea9"></script>
+    <script src="../_static/documentation_options.js?v=47770eee"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -56,7 +56,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.16';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.23';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -68,7 +68,7 @@
     <link rel="search" title="Search" href="../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.4.16" />
+  <meta name="docsearch:version" content="v0.4.23" />
   
     
     <script src="../_static/searchtools.js"></script>
@@ -215,6 +215,7 @@
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/protocol-wire.html">Protocol text blocks</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/reconstruction-proxy.html">Reconstruction proxy</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/sar-ratios.html">SAR ratios against a reference pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/sequence-definitions.html">Sequence definitions</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
@@ -503,9 +504,12 @@
 <span class="sig-prename descclassname"><span class="pre">pulserver.protocol.</span></span><span class="sig-name descname"><span class="pre">format_validation</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pulserver/protocol/_wire.html#format_validation"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.protocol.format_validation" title="Link to this definition">#</a></dt>
 <dd><p>Format a <code class="docutils literal notranslate"><span class="pre">validate</span></code> reply: status line, info line, value block.</p>
 <p>Whitespace in the info text, newlines included, is folded to single spaces.
-With <code class="docutils literal notranslate"><span class="pre">rf_layout</span></code>, a valid reply that holds an RF layout ends with its
-<code class="docutils literal notranslate"><span class="pre">[RfLayout]</span></code> block, as <a class="reference internal" href="pulserver.protocol.format_rf_layout.html#pulserver.protocol.format_rf_layout" title="pulserver.protocol.format_rf_layout"><code class="xref py py-func docutils literal notranslate"><span class="pre">format_rf_layout()</span></code></a> formats it over
-<code class="docutils literal notranslate"><span class="pre">listed_peak_hz</span></code>.</p>
+With <code class="docutils literal notranslate"><span class="pre">rf_layout</span></code>, a valid reply that holds an RF layout continues with
+its <code class="docutils literal notranslate"><span class="pre">[RfLayout]</span></code> block, as <a class="reference internal" href="pulserver.protocol.format_rf_layout.html#pulserver.protocol.format_rf_layout" title="pulserver.protocol.format_rf_layout"><code class="xref py py-func docutils literal notranslate"><span class="pre">format_rf_layout()</span></code></a> formats it over
+<code class="docutils literal notranslate"><span class="pre">listed_peak_hz</span></code>. A valid reply whose evaluation states a figure for
+display ends with a <code class="docutils literal notranslate"><span class="pre">[Display]</span></code> block of <code class="docutils literal notranslate"><span class="pre">Name:</span> <span class="pre">value</span></code> lines, one per
+figure stated: <code class="docutils literal notranslate"><span class="pre">EchoSpacing</span></code> and <code class="docutils literal notranslate"><span class="pre">FrameTime</span></code> in seconds,
+<code class="docutils literal notranslate"><span class="pre">PixelBandwidth</span></code> in Hz.</p>
 </dd></dl>
 
 </section>

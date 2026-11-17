@@ -45,7 +45,7 @@
   <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../_static/documentation_options.js?v=da2c3ea9"></script>
+    <script src="../_static/documentation_options.js?v=47770eee"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -56,7 +56,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.16';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.23';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -68,7 +68,7 @@
     <link rel="search" title="Search" href="../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.4.16" />
+  <meta name="docsearch:version" content="v0.4.23" />
   
     
     <script src="../_static/searchtools.js"></script>
@@ -215,6 +215,7 @@
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/protocol-wire.html">Protocol text blocks</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/reconstruction-proxy.html">Reconstruction proxy</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/sar-ratios.html">SAR ratios against a reference pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/sequence-definitions.html">Sequence definitions</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
@@ -526,6 +527,12 @@ are different virtual segments.</p></li>
 virtual segment of its own. An interpreter that inserts
 transmit-to-receive switching time at every segment boundary needs as
 few segments as possible, and sets this False.</p></li>
+<li><p><strong>join_trailing_delay_us</strong> (<em>float</em>) – A single pure-delay block a segment ends on, shorter than this (µs),
+stays in the segment as its quiet tail rather than becoming a wait of
+its own, and must last the same in every instance of the segment; 0
+never. An interpreter that ends a segment early inside its quiet tail
+(<a class="reference internal" href="pulserver.ir.SequencerTiming.html#pulserver.ir.SequencerTiming" title="pulserver.ir.SequencerTiming"><code class="xref py py-class docutils literal notranslate"><span class="pre">SequencerTiming</span></code></a>) states its gap plus its least wait, the
+shortest wait of its own that costs no more than the tail.</p></li>
 </ul>
 </dd>
 </dl>
@@ -546,16 +553,19 @@ few segments as possible, and sets this False.</p></li>
 <tr class="row-odd"><td><p><a class="reference internal" href="pulserver.ir.Grouping.boundary_gradient_hz_per_m.html#pulserver.ir.Grouping.boundary_gradient_hz_per_m" title="pulserver.ir.Grouping.boundary_gradient_hz_per_m"><code class="xref py py-obj docutils literal notranslate"><span class="pre">boundary_gradient_hz_per_m</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.ir.Grouping.split_by_pulses.html#pulserver.ir.Grouping.split_by_pulses" title="pulserver.ir.Grouping.split_by_pulses"><code class="xref py py-obj docutils literal notranslate"><span class="pre">split_by_pulses</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.ir.Grouping.join_trailing_delay_us.html#pulserver.ir.Grouping.join_trailing_delay_us" title="pulserver.ir.Grouping.join_trailing_delay_us"><code class="xref py py-obj docutils literal notranslate"><span class="pre">join_trailing_delay_us</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.ir.Grouping.split_by_readouts.html#pulserver.ir.Grouping.split_by_readouts" title="pulserver.ir.Grouping.split_by_readouts"><code class="xref py py-obj docutils literal notranslate"><span class="pre">split_by_readouts</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.ir.Grouping.split_by_pulses.html#pulserver.ir.Grouping.split_by_pulses" title="pulserver.ir.Grouping.split_by_pulses"><code class="xref py py-obj docutils literal notranslate"><span class="pre">split_by_pulses</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.ir.Grouping.split_edge_delays.html#pulserver.ir.Grouping.split_edge_delays" title="pulserver.ir.Grouping.split_edge_delays"><code class="xref py py-obj docutils literal notranslate"><span class="pre">split_edge_delays</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.ir.Grouping.split_by_readouts.html#pulserver.ir.Grouping.split_by_readouts" title="pulserver.ir.Grouping.split_by_readouts"><code class="xref py py-obj docutils literal notranslate"><span class="pre">split_by_readouts</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.ir.Grouping.split_navigators.html#pulserver.ir.Grouping.split_navigators" title="pulserver.ir.Grouping.split_navigators"><code class="xref py py-obj docutils literal notranslate"><span class="pre">split_navigators</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.ir.Grouping.split_edge_delays.html#pulserver.ir.Grouping.split_edge_delays" title="pulserver.ir.Grouping.split_edge_delays"><code class="xref py py-obj docutils literal notranslate"><span class="pre">split_edge_delays</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.ir.Grouping.split_navigators.html#pulserver.ir.Grouping.split_navigators" title="pulserver.ir.Grouping.split_navigators"><code class="xref py py-obj docutils literal notranslate"><span class="pre">split_navigators</span></code></a></p></td>
 <td><p></p></td>
 </tr>
 </tbody>

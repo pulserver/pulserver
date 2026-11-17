@@ -45,7 +45,7 @@
   <link rel="preload" as="script" href="../../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../../_static/documentation_options.js?v=da2c3ea9"></script>
+    <script src="../../_static/documentation_options.js?v=47770eee"></script>
     <script src="../../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -58,7 +58,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.16';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.23';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -68,11 +68,11 @@
     <link rel="icon" href="../../_static/pulserver-mark.svg"/>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="Virtual scanner" href="virtual-scanner.html" />
+    <link rel="next" title="Sequence definitions" href="sequence-definitions.html" />
     <link rel="prev" title="Reconstruction proxy" href="reconstruction-proxy.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.4.16" />
+  <meta name="docsearch:version" content="v0.4.23" />
   
     
     <script src="../../_static/searchtools.js"></script>
@@ -219,6 +219,7 @@
 <li class="toctree-l3"><a class="reference internal" href="protocol-wire.html">Protocol text blocks</a></li>
 <li class="toctree-l3"><a class="reference internal" href="reconstruction-proxy.html">Reconstruction proxy</a></li>
 <li class="toctree-l3 current active"><a class="current reference internal" href="#">SAR ratios against a reference pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="sequence-definitions.html">Sequence definitions</a></li>
 <li class="toctree-l3"><a class="reference internal" href="virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
@@ -508,12 +509,10 @@ each transmit channel and <span class="math notranslate nohighlight">\(Q_v\)</sp
 it is the same integral with that model’s head SAR matrix <span class="math notranslate nohighlight">\(G_b\)</span>. For each
 repetition <span class="math notranslate nohighlight">\(w\)</span> of a subsequence, <a class="reference internal" href="../../generated/pulserver.ir.sar_ratios.html#pulserver.ir.sar_ratios" title="pulserver.ir.sar_ratios"><code class="xref py py-func docutils literal notranslate"><span class="pre">sar_ratios()</span></code></a> computes</p>
 <div class="math notranslate nohighlight">
-\[
-r_{\mathrm{local}} = \frac{L_{\mathrm{head}}}{L_{\mathrm{local}}} \max_w
+\[r_{\mathrm{local}} = \frac{L_{\mathrm{head}}}{L_{\mathrm{local}}} \max_w
 \frac{M \max_v E_{v,w}}{N_w \min_b E^{\mathrm{ref}}_{G_b}},
 \qquad
-r_{\mathrm{head}} = \max_w \max_b \frac{E_{G_b,w}}{N_w\, E^{\mathrm{ref}}_{G_b}},
-\]</div>
+r_{\mathrm{head}} = \max_w \max_b \frac{E_{G_b,w}}{N_w\, E^{\mathrm{ref}}_{G_b}},\]</div>
 <p>with <span class="math notranslate nohighlight">\(E_{v,w}\)</span> and <span class="math notranslate nohighlight">\(E_{G_b,w}\)</span> the energy of the repetition at VOP <span class="math notranslate nohighlight">\(v\)</span> and in
 the head of body model <span class="math notranslate nohighlight">\(b\)</span>, <span class="math notranslate nohighlight">\(N_w\)</span> the number of pulses it plays,
 <span class="math notranslate nohighlight">\(E^{\mathrm{ref}}_{G_b}\)</span> the head energy of one reference pulse, <span class="math notranslate nohighlight">\(M\)</span> the VOP
@@ -565,11 +564,11 @@ lasting the reference pulse’s time times the larger of the two.</p>
       </div>
     </a>
     <a class="right-next"
-       href="virtual-scanner.html"
+       href="sequence-definitions.html"
        title="next page">
       <div class="prev-next-info">
         <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Virtual scanner</p>
+        <p class="prev-next-title">Sequence definitions</p>
       </div>
       <i class="fa-solid fa-angle-right"></i>
     </a>

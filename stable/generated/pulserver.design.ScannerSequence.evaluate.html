@@ -45,7 +45,7 @@
   <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../_static/documentation_options.js?v=da2c3ea9"></script>
+    <script src="../_static/documentation_options.js?v=47770eee"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -56,7 +56,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.16';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.23';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -68,7 +68,7 @@
     <link rel="search" title="Search" href="../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.4.16" />
+  <meta name="docsearch:version" content="v0.4.23" />
   
     
     <script src="../_static/searchtools.js"></script>
@@ -215,6 +215,7 @@
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/protocol-wire.html">Protocol text blocks</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/reconstruction-proxy.html">Reconstruction proxy</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/sar-ratios.html">SAR ratios against a reference pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/sequence-definitions.html">Sequence definitions</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
@@ -508,6 +509,11 @@ console shows with it. Returning <code class="docutils literal notranslate"><spa
 <a class="reference internal" href="pulserver.design.ScannerSequence.validate.html#pulserver.design.ScannerSequence.validate" title="pulserver.design.ScannerSequence.validate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">validate()</span></code></a> describes.</p>
 <p>The default accepts the protocol unchanged with no scan time estimate,
 and does not call the sequence function.</p>
+<p>A console waits for each evaluation, so an override is a simplified
+design: it states the scan time exactly, an upper bound of the RF
+and a repetition whose gradients stand for the scan’s, and leaves to
+<a class="reference internal" href="pulserver.design.ScannerSequence.generate.html#pulserver.design.ScannerSequence.generate" title="pulserver.design.ScannerSequence.generate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">generate()</span></code></a> what takes a solve, an optimization or the whole
+scan.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">

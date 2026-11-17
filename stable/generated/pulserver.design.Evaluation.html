@@ -45,7 +45,7 @@
   <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../_static/documentation_options.js?v=da2c3ea9"></script>
+    <script src="../_static/documentation_options.js?v=47770eee"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -56,7 +56,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.16';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.23';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -68,7 +68,7 @@
     <link rel="search" title="Search" href="../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.4.16" />
+  <meta name="docsearch:version" content="v0.4.23" />
   
     
     <script src="../_static/searchtools.js"></script>
@@ -215,6 +215,7 @@
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/protocol-wire.html">Protocol text blocks</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/reconstruction-proxy.html">Reconstruction proxy</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/sar-ratios.html">SAR ratios against a reference pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/sequence-definitions.html">Sequence definitions</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
@@ -517,6 +518,26 @@ RF of a protocol before it is designed. <code class="docutils literal notranslat
 states no estimate and is not invalid. Every control of the layout must
 be an entry of <a class="reference internal" href="pulserver.design.SequencePlugin.protocol.html#pulserver.design.SequencePlugin.protocol" title="pulserver.design.SequencePlugin.protocol"><code class="xref py py-attr docutils literal notranslate"><span class="pre">SequencePlugin.protocol</span></code></a> whose value in
 <code class="docutils literal notranslate"><span class="pre">protocol</span></code> is positive, or the protocol is invalid.</p></li>
+<li><p><strong>sequence</strong> (<em>pypulseqpp._sequence.Sequence | None</em>) – A representative design of the protocol, such as the repetitions or
+the echo train the evaluation designed, in the logical frame: the
+ones whose gradients are the largest of the scan, such as the views
+at the edges of k-space, so that what is read on it bounds what the
+scan plays. The
+design service checks nerve stimulation and slew rate on it before
+the scan is designed, and lowers the slew rate the protocol is
+designed under where they exceed their limits, so that the console
+shows what will play. <code class="docutils literal notranslate"><span class="pre">None</span></code>, the default, states none: the slew
+rate is then lowered only when the generated design fails the check.</p></li>
+<li><p><strong>echo_spacing</strong> (<em>float | None</em>) – The spacing of the echoes of the train the protocol plays, in
+seconds, which a console shows; <code class="docutils literal notranslate"><span class="pre">None</span></code>, the default, states none.
+An EPI or FSE train states it; a gradient-echo train does not.</p></li>
+<li><p><strong>pixel_bandwidth</strong> (<em>float | None</em>) – The receive bandwidth across one pixel of the readout field of view,
+in Hz: the sampling rate over the samples that span it. <code class="docutils literal notranslate"><span class="pre">None</span></code>, the
+default, leaves a console to divide the bandwidth by the readout
+matrix, which only an oversampled readout needs to correct.</p></li>
+<li><p><strong>frame_time</strong> (<em>float | None</em>) – The time one frame of a scan of several takes, in seconds: the volume
+TR of a time series, the frame of a cine. <code class="docutils literal notranslate"><span class="pre">None</span></code>, the default,
+states none.</p></li>
 </ul>
 </dd>
 </dl>
@@ -528,10 +549,22 @@ be an entry of <a class="reference internal" href="pulserver.design.SequencePlug
 <tr class="row-odd"><td><p><a class="reference internal" href="pulserver.design.Evaluation.duration.html#pulserver.design.Evaluation.duration" title="pulserver.design.Evaluation.duration"><code class="xref py py-obj docutils literal notranslate"><span class="pre">duration</span></code></a></p></td>
 <td><p></p></td>
 </tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.design.Evaluation.echo_spacing.html#pulserver.design.Evaluation.echo_spacing" title="pulserver.design.Evaluation.echo_spacing"><code class="xref py py-obj docutils literal notranslate"><span class="pre">echo_spacing</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.design.Evaluation.frame_time.html#pulserver.design.Evaluation.frame_time" title="pulserver.design.Evaluation.frame_time"><code class="xref py py-obj docutils literal notranslate"><span class="pre">frame_time</span></code></a></p></td>
+<td><p></p></td>
+</tr>
 <tr class="row-even"><td><p><a class="reference internal" href="pulserver.design.Evaluation.info.html#pulserver.design.Evaluation.info" title="pulserver.design.Evaluation.info"><code class="xref py py-obj docutils literal notranslate"><span class="pre">info</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.design.Evaluation.rf_layout.html#pulserver.design.Evaluation.rf_layout" title="pulserver.design.Evaluation.rf_layout"><code class="xref py py-obj docutils literal notranslate"><span class="pre">rf_layout</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.design.Evaluation.pixel_bandwidth.html#pulserver.design.Evaluation.pixel_bandwidth" title="pulserver.design.Evaluation.pixel_bandwidth"><code class="xref py py-obj docutils literal notranslate"><span class="pre">pixel_bandwidth</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.design.Evaluation.rf_layout.html#pulserver.design.Evaluation.rf_layout" title="pulserver.design.Evaluation.rf_layout"><code class="xref py py-obj docutils literal notranslate"><span class="pre">rf_layout</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.design.Evaluation.sequence.html#pulserver.design.Evaluation.sequence" title="pulserver.design.Evaluation.sequence"><code class="xref py py-obj docutils literal notranslate"><span class="pre">sequence</span></code></a></p></td>
 <td><p></p></td>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="pulserver.design.Evaluation.protocol.html#pulserver.design.Evaluation.protocol" title="pulserver.design.Evaluation.protocol"><code class="xref py py-obj docutils literal notranslate"><span class="pre">protocol</span></code></a></p></td>

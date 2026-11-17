@@ -45,7 +45,7 @@
   <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../_static/documentation_options.js?v=da2c3ea9"></script>
+    <script src="../_static/documentation_options.js?v=47770eee"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -58,7 +58,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.16';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.23';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -72,7 +72,7 @@
     <link rel="prev" title="Coding style" href="style.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.4.16" />
+  <meta name="docsearch:version" content="v0.4.23" />
   
     
     <script src="../_static/searchtools.js"></script>
@@ -219,6 +219,7 @@
 <li class="toctree-l3"><a class="reference internal" href="internals/protocol-wire.html">Protocol text blocks</a></li>
 <li class="toctree-l3"><a class="reference internal" href="internals/reconstruction-proxy.html">Reconstruction proxy</a></li>
 <li class="toctree-l3"><a class="reference internal" href="internals/sar-ratios.html">SAR ratios against a reference pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="internals/sequence-definitions.html">Sequence definitions</a></li>
 <li class="toctree-l3"><a class="reference internal" href="internals/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
@@ -678,9 +679,7 @@
 <p>Use rendered equations when they specify behavior more precisely than prose.</p>
 <p>For example, if an operator implements</p>
 <div class="math notranslate nohighlight">
-\[
-A = PFS,
-\]</div>
+\[A = PFS,\]</div>
 <p>stating the model and defining (P), (F), and (S) may be clearer than describing the sequence of operations indirectly.</p>
 <p>Equations in API reference document semantics. Extended derivations and theoretical motivation generally belong in explanatory documentation.</p>
 <p>Normalization, units, signs, coordinate systems, and other conventions must be established before documenting an equation.</p>
@@ -920,14 +919,10 @@ A = PFS,
 <p>Where possible, begin from the scientific, mathematical, or computational concept rather than from the Python class hierarchy.</p>
 <p>For example, an explanation of an inverse-problem library might first introduce</p>
 <div class="math notranslate nohighlight">
-\[
-y = A(x) + \varepsilon
-\]</div>
+\[y = A(x) + \varepsilon\]</div>
 <p>and a regularized formulation such as</p>
 <div class="math notranslate nohighlight">
-\[
-\min_x D(Ax, y) + \lambda R(x),
-\]</div>
+\[\min_x D(Ax, y) + \lambda R(x),\]</div>
 <p>before explaining how the library represents (A), (D), and (R).</p>
 </section>
 <section id="accessibility-and-terminology">

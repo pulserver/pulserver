@@ -25,6 +25,7 @@
    :nosignatures:
 
    ~Grouping.boundary_gradient_hz_per_m
+   ~Grouping.join_trailing_delay_us
    ~Grouping.split_by_pulses
    ~Grouping.split_by_readouts
    ~Grouping.split_edge_delays

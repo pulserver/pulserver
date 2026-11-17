@@ -68,6 +68,9 @@ from.
    summary
    play
    plan_waves
+   played_time
+   SequencerTiming
+   PlayedTime
    WaveBudget
    Grouping
    VendorProfile
@@ -145,6 +148,8 @@ from.
    format_prescription
    parse_prescription
    Validation
+   Display
+   parse_display
    format_validation
    parse_validation
    RfDefinitionRecord
@@ -221,7 +226,10 @@ from.
    CoilSensitivities
    MissingCalibration
    CoilCompression
+   Corrections
+   fermi_filtered
    gradient_unwarped
+   IntensityCorrection
    ReconData
    ReconBuffer
    ReconResult

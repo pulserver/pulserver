@@ -45,7 +45,7 @@
   <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../_static/documentation_options.js?v=da2c3ea9"></script>
+    <script src="../_static/documentation_options.js?v=47770eee"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -58,7 +58,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.16';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.23';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -72,7 +72,7 @@
     <link rel="prev" title="Explanations" href="index.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.4.16" />
+  <meta name="docsearch:version" content="v0.4.23" />
   
     
     <script src="../_static/searchtools.js"></script>
@@ -219,6 +219,7 @@
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/protocol-wire.html">Protocol text blocks</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/reconstruction-proxy.html">Reconstruction proxy</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/sar-ratios.html">SAR ratios against a reference pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/sequence-definitions.html">Sequence definitions</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
@@ -531,8 +532,11 @@ both on the virtual scanner.</p>
 <li><p><strong>Answers the interpreter’s design calls, one command per call or through a warm server.</strong></p>
 <p>Code: <code class="docutils literal notranslate"><span class="pre">pulserver</span> <span class="pre">design</span></code>, <code class="xref py py-mod docutils literal notranslate"><span class="pre">pulserver.host</span></code>. Tests: <em>a forwarded call replies as the call answered in its own process</em>; <em>a crashing plugin fails only its call</em>; <em>a call is answered while another runs</em> (<code class="docutils literal notranslate"><span class="pre">test_design_server.py</span></code>).</p>
 </li>
-<li><p><strong>Identifies a design by the SHA-256 of its plugin, sources, package versions, limits, VOP file and resolved protocol.</strong></p>
-<p>Code: <a class="reference internal" href="../generated/pulserver.host.design_identity.html#pulserver.host.design_identity" title="pulserver.host.design_identity"><code class="xref py py-func docutils literal notranslate"><span class="pre">design_identity()</span></code></a>. Tests: <em>one resolved protocol is one design</em>; <em>an edited plugin is another design of the same protocol</em>; <em>a design is one of the VOP file contents its SAR ratios came from</em> (<code class="docutils literal notranslate"><span class="pre">test_design_service.py</span></code>).</p>
+<li><p><strong>Keeps, under a warm server, what a call worked out for the calls after it: replies, the RF a plugin lists, the slew rate of a request, the pulses pypulseqpp designed.</strong></p>
+<p>Code: <code class="docutils literal notranslate"><span class="pre">pulserver.host._memo</span></code>. Tests: <em>a kept validation is replied without evaluating again</em>; <em>the RF a plugin lists is evaluated once for every call</em>; <em>generate starts at the slew rate another call validated</em>; <em>a design lowered further drops the kept validation</em>; <em>the children of a warm server share what they keep</em>; <em>a pulse design is kept for the calls after the one that made it</em>; <em>a pulse designed through pypulseqpp is the same kept or not</em> (<code class="docutils literal notranslate"><span class="pre">test_design_memo.py</span></code>).</p>
+</li>
+<li><p><strong>Identifies a design by the SHA-256 of its plugin, sources, the Python files and versions of pypulseqpp and pulserver, limits, VOP file and resolved protocol.</strong></p>
+<p>Code: <a class="reference internal" href="../generated/pulserver.host.design_identity.html#pulserver.host.design_identity" title="pulserver.host.design_identity"><code class="xref py py-func docutils literal notranslate"><span class="pre">design_identity()</span></code></a>. Tests: <em>one resolved protocol is one design</em>; <em>an edited plugin is another design of the same protocol</em>; <em>a package file replaced in place is another design of the same protocol</em>; <em>a design is one of the VOP file contents its SAR ratios came from</em> (<code class="docutils literal notranslate"><span class="pre">test_design_service.py</span></code>).</p>
 </li>
 <li><p><strong>Designs a request once, whether it arrives as typed or as resolved.</strong></p>
 <p>Code: <a class="reference internal" href="../generated/pulserver.host.design_identity.html#pulserver.host.design_identity" title="pulserver.host.design_identity"><code class="xref py py-func docutils literal notranslate"><span class="pre">design_identity()</span></code></a>. Test: <em>a request is generated once whether or not it resolves to itself</em> (<code class="docutils literal notranslate"><span class="pre">test_design_service.py</span></code>).</p>
@@ -595,8 +599,9 @@ both on the virtual scanner.</p>
 <section id="design-identity">
 <h3>Design identity<a class="headerlink" href="#design-identity" title="Link to this heading">#</a></h3>
 <p>No design call keeps state; the store is all that persists. A changed plugin,
-sequence function, package version or VOP file is a new design of the same
-protocol. The identifier is the first 18 hexadecimal digits of the identity,
+sequence function, package version, Python file of pypulseqpp or pulserver, or
+VOP file is a new design of the same protocol, so a module replaced in place
+under an unchanged version is never served from an older design. The identifier is the first 18 hexadecimal digits of the identity,
 split into three float32 header fields because a float32 holds every integer
 below <span class="math notranslate nohighlight">\(2^{24}\)</span> exactly.</p>
 </section>

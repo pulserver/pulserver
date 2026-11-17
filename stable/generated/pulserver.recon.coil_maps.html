@@ -45,7 +45,7 @@
   <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../_static/documentation_options.js?v=da2c3ea9"></script>
+    <script src="../_static/documentation_options.js?v=47770eee"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -56,7 +56,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.16';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.23';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -68,7 +68,7 @@
     <link rel="search" title="Search" href="../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.4.16" />
+  <meta name="docsearch:version" content="v0.4.23" />
   
     
     <script src="../_static/searchtools.js"></script>
@@ -215,6 +215,7 @@
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/protocol-wire.html">Protocol text blocks</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/reconstruction-proxy.html">Reconstruction proxy</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/sar-ratios.html">SAR ratios against a reference pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/sequence-definitions.html">Sequence definitions</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
@@ -506,8 +507,12 @@
 <ol class="arabic simple">
 <li><p>The unit’s calibration k-space, <code class="docutils literal notranslate"><span class="pre">data.ref</span></code>: the maps are estimated
 from it and stored in <code class="docutils literal notranslate"><span class="pre">context.coil_maps</span></code> under the unit’s slice
-counter, replacing the maps stored there.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">context.coil_maps</span></code> for the unit’s slice.</p></li>
+counter, or under <code class="docutils literal notranslate"><span class="pre">(slice,</span> <span class="pre">set)</span></code> where its set counter is not 0,
+replacing the maps stored there.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">context.coil_maps</span></code> for the unit’s slice and set, then for its slice.
+A FLEET calibration reads its lines in each phase-encode polarity, set
+0 forward and set 1 reversed, as the EPI it calibrates reads its
+images, so each polarity is unfolded by maps distorted as it is.</p></li>
 <li><p>The exam’s <code class="docutils literal notranslate"><span class="pre">COIL_SENSITIVITIES</span></code>, as a calibration series stored them.</p></li>
 </ol>
 <p>Maps of the stream serve only where
@@ -521,6 +526,9 @@ onto the unit’s compression basis, as its k-space was. The location is the
 slice counter, not the encoding space, so maps estimated from a
 calibration unit in an encoding space of its own serve the imaging units
 of its slice.</p>
+<p>Maps estimated from a unit’s calibration readouts are logged at <code class="docutils literal notranslate"><span class="pre">INFO</span></code>,
+with the lines and the time they took; maps stored in the stream or the
+exam that serve a unit are logged at <code class="docutils literal notranslate"><span class="pre">DEBUG</span></code>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">

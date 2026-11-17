@@ -31,4 +31,5 @@
    ~SequencePlugin.options
    ~SequencePlugin.protocol
    ~SequencePlugin.reads_exam
+   ~SequencePlugin.strict_limits
    ~SequencePlugin.app

@@ -230,7 +230,10 @@ scanner limits and the requested {class}`~pulserver.design.Protocol`, in the
 units of the sequence function's arguments, and returns an
 {class}`~pulserver.design.Evaluation`: the protocol holding the values the
 design achieves, the scan time in seconds, a note shown with the valid protocol
-and, optionally, the RF layout ({ref}`stating-the-rf-layout`). Returning `None`
+and, optionally, the RF layout ({ref}`stating-the-rf-layout`) and the figures a
+console displays: the echo spacing of a train, the bandwidth of a pixel of an
+oversampled readout and the time one frame of a scan of several takes
+({ref}`display-block`). Returning `None`
 accepts the protocol unchanged. Raising an exception makes the protocol
 invalid:
 
@@ -256,6 +259,15 @@ error of that call, and not while the operator edits the protocol. An
 `evaluate` that builds or checks the design rejects such a protocol when it is
 evaluated.
 
+The console waits for every evaluation, so `evaluate` is a simplified design
+and not the design: it states the scan time exactly, an upper bound of the RF
+and one repetition whose gradients stand for the scan's, and leaves to
+`generate` whatever takes a solve, an optimization or the whole scan. Where
+the angles of a train are solved for, the train at their largest angle lasts
+as long and bounds its RF; `fse3d` and `fse_pd3d` design that train, and ask
+the solve only for the effective TE and for whether a train exists, once per
+train under a warm design server.
+
 `ValueError` and `AssertionError`, which pypulseqpp and PyPulseq raise for an
 event or a timing they cannot realize, reject the protocol with the message of
 the error as `info`, and are logged as a warning. Any other exception also
@@ -263,6 +275,18 @@ makes the protocol invalid, but the reply names only its type, as in
 `TypeError in Timed.evaluate`, and the exception is logged as an error with its
 traceback. A request that names an entry the protocol does not declare, or an
 option a choice does not offer, is invalid in the same way.
+
+An evaluation that designs the sequence, or a few repetitions of it, states that
+design as its representative `sequence`: the repetitions whose gradients are
+the largest of the scan, such as the views at the edges of k-space, so that
+what is read on them bounds what the scan plays. The design service checks peripheral
+nerve stimulation and slew rate on it, rotated to the prescription, and
+evaluates the protocol again at a lower slew rate while it exceeds them, as
+`generate` does with the whole design ({ref}`scanner-limits`); without one,
+the console shows the protocol at the design limits and only `generate` lowers
+the slew rate. A plugin that sets
+{attr}`~pulserver.design.SequencePlugin.strict_limits` is never designed again:
+its files set `StrictLimits`, and a design past a limit is refused.
 
 {meth}`~pulserver.design.SequencePlugin.generate` builds the sequence of a
 requested protocol. The default calls the sequence function with the arguments
@@ -402,7 +426,7 @@ scanner's reconstruction client names one in its config
 Each shipped plugin offers every one of these controls that its sequence
 function takes, at the same user entry in every plugin, each as a
 `user<n>_name` label and a `user<n>_value`; a plugin's own user entries start at
-`user12`:
+`user12`, and `user35` lies above all of them:
 
 | User entry | Control |
 | --- | --- |
@@ -415,9 +439,30 @@ function takes, at the same user entry in every plugin, each as a
 | `user8` | Refocusing flip angle, in degrees |
 | `user9` | CAIPIRINHA shift, in partitions per acquired line |
 | `user10`, `user11` | Wave-encoding amplitude, in mT/m, and cycles per readout, shown while the `wave` option is on |
+| `user35` | TTL output per volume: 0, the default, off; 1 plays a digital output on trigger channel `ext1`, 1 ms or the excitation if shorter, at the first excitation of every volume of the time series, dummy volumes included, and none in the reference volume or the calibration (`epi2d`, `epi3d`) |
 
 `bssfp3d` takes its number of phase cycles, each a train with its own RF phase
 increment, as `user12`.
+
+`bssfp2d` takes its frames from the console's number of frames. Ungated, each
+slice's k-space is acquired that many times back to back, a free-running series
+that keeps its steady state from one frame to the next and is reconstructed as
+one image per frame; under prospective ECG gating they are the cardiac phases of
+each heartbeat, and retrospective gating sets its own from the heart rate.
+Each slice opens with a catalyst, its first dummies ramping the flip angle
+linearly up to the one prescribed, and its default dummies bring the steady
+state within 5 %. Ungated, each slice is two files of the chain, its catalyst
+and dummies and then its frames, and every repetition rests at its ends: the
+scanner plays one repetition per segment, the same segment for every line of
+every frame, and adds its segment start time to every repetition time alike,
+so the played TR, which validation reports, is longer than the designed one
+but the same throughout and the steady state is undisturbed. Under prospective
+gating each slice's first excitation waits for one trigger, and the slice then
+runs free at the heart rate entered: every gated slice is one train with no rest in it, and repetitions
+that do not acquire fill the trigger delay and each heartbeat after its
+cardiac phases. The train waits for its trigger itself, so the scanner sets
+the whole slice up before the trigger arrives rather than in the time between
+the trigger and the train.
 
 ### Console controls
 
@@ -484,12 +529,14 @@ GE scanner:
 | Plugin | Option | User entry | Choices | Entries added |
 | --- | --- | --- | --- | --- |
 | `fse3d` | `refocusing` | `user38` | `"constant"`; `"optimized"`, a train designed with blochsim and shared by every shot; `"dual_region"`, direct-angle trains for the centre and periphery; `"busse"`, prescribed-PSS inverse EPG with forward-EPG control fitting; or `"busse_dual_region"`, independent Busse endpoint fits with a cubic control transition | Flip angle: the refocusing angle at TE for direct-angle designs, first/final maximum for Busse. Both dual-region options add `user12` and `user13`, TR and ETL at the periphery |
-| `fse_pd3d` | PD controls | `user14`–`user19`, `user22` | First/final angles, startup count, explicit centre echo, RF-dead-time overlap, crusher cycles, signal-tail onset fraction | `flip` gives peak angle; TE is reference contrast-equivalent TE |
+| `fse_pd3d` | PD controls | `user14`–`user17`, `user19`, `user22` | First/final angles, startup count, explicit centre echo, crusher cycles, signal-tail onset fraction | `flip` gives peak angle; TE is reference contrast-equivalent TE |
 | `fse_pd3d` | `dual_region` | `user20` | Off: shared train; on: centre/periphery controls with cubic transition | `user12`/`user13`: peripheral TR/ETL; `user23`: final angle, 0 inherits |
 | `fse_pd3d` | `fit_controls` | `user21` | Off: prescribed inverse-EPG train; on: CPU multi-tissue/B1 control fitting | Requires the design extra |
-| `fse3d`, `fse_pd3d` | `ordering` | `user39` | `"radial"`: PCLO for identical trains, Buonincontri assignment for varying trains; `"pclo"`, `"busse_radial"` (radius then polar angle, centre echo 0), and `"shuffling"` require identical trains | None |
+| `fse_pd3d` | `pd_target` | `user26` | Off: the signal-shape PD design; on: the target-signal design, inverse EPG of the signal of Buonincontri et al. with every angle at most `flip` | `flip`: largest angle (default 150°); `user27`: first angle; `user28`: plateau signal; `user29`: tail signal over plateau; `user30`: signal-tail onset fraction, in place of `user14`, `user15`, `user22` and `user23`. Under `dual_region`, `user31`–`user33`: the periphery's plateau signal, tail signal and onset, the rest of its target the fitted peripheral train's. `fit_controls` has no effect |
+| `fse3d`, `fse_pd3d` | `ordering` | `user39` | `"radial"`: PCLO for identical trains, Buonincontri assignment for varying trains; `"pclo"`, `"busse_radial"` (radius then polar angle, centre echo 0), and `"shuffling"` require identical trains; `"buonincontri_golden"` requires varying trains and keeps each shot to one golden-ratio angle | None |
 | `mprage3d` | `ordering` | `user39` | `"radial"`, each partition's lines centre-out, or `"shuffling"`: Poisson-disc lines in random order, for a time-resolved reconstruction | None |
-| `fse3d` | Busse controls | `user14`–`user19` | Minimum angle, centre angle, startup count, acquired centre echo (`-1`: midpoint), RF-dead-time overlap, crusher cycles | Busse modes only; `flip` gives the maximum angle |
+| `fse3d` | Busse controls | `user14`–`user17` | Minimum angle, centre angle, startup count, acquired centre echo (`-1`: midpoint) | Busse modes only; `flip` gives the maximum angle |
+| `fse3d` | Crusher cycles | `user19` | Read-axis crusher area in cycles across one readout voxel, default 0.5 | Every refocusing mode |
 | `fse3d`, `fse_pd3d`, `mprage3d` | `navigator` | `user36` | Three-plane navigators; the design sets `EnablePmc`, and `pmc` publishes each pose to the scan | None |
 | `gre3d`, `gre_multiecho3d`, `mprage3d`, `fse3d`, `fse_pd3d` | `wave` | `user37` | Wave-CAIPI; the calibration region is acquired first without the wave, and `pics` and `pmc` reconstruct the wave-encoded volume | `user10` and `user11`: wave amplitude and cycles |
 | `gre3d`, `se3d`, `gre_multiecho3d` | `elliptical` | `user40` | Only the phase encodes inside the ky-kz ellipse; on by default | None |
@@ -497,8 +544,22 @@ GE scanner:
 | `gre_multiecho3d` | `qsm_anatomy` | `user13` | `"phantom"` (0, the default), `"brain"` (1) or `"body"` (2): the maps the `qsm` reconstruction makes, stated to it as the `QsmAnatomy` recon parameter | None |
 | `gre_multiecho3d` | `sampling` | `user12` | `"lattice"`, the CAIPIRINHA lattice, the default; or `"poisson"`: a variable-density Poisson-disc draw at the undersampling `ry * rz`, for the compressed-sensing `pics` solve | None |
 | `zte3d` | `scheme` | `user43` | Spokes ordered `"spiral"`, at a constant step across many rings; `"meridian"`; or `"quiet"`, the default: the spiral's directions in steps about a ring gap long, every other shell played backwards | None |
-| `bssfp2d` | `retrospective` | `user44` | ECG gating: off, prospective, each heartbeat triggered and acquired once per cardiac phase; on, retrospective, each segment cycled over a heartbeat and binned into cardiac phases by the reconstruction | None |
+| `epi2d`, `epi3d` | `calibration` | `user12` | `"fleet"` (0, the default): the central `n_acs_y` lines read by `n_shots * ry` interleaved EPI shots with the imaging train's read lobe, blip, echo spacing and echo time, a slice's (`epi3d`: a partition's) shots in rapid succession at 10 degrees, once in each phase-encode polarity, so each polarity of the EPI is unfolded by coil sensitivities distorted as its image is (Polimeni et al., Magn Reson Med 2016); `"gre"` (1): a gradient echo per line, undistorted | None |
+| `bssfp2d` | `retrospective` | `user44` | ECG gating: off, prospective, each slice triggered once and every heartbeat of the heart rate entered acquired once per cardiac phase; on, retrospective, each segment cycled over a heartbeat and binned into cardiac phases by the reconstruction | None |
 | `gre_spiral2d`, `se_spiral2d`, `gre_stack_of_spirals3d`, `se_stack_of_spirals3d`, `mprage_stack_of_spirals3d` | `variable_density` | `user42` | Variable-density spirals | `user12`: periphery undersampling |
+
+Every 3D FSE train is packed: the read prephaser shares the excitation block
+and each echo's rewinders end in the next refocusing pulse's dead time, so the
+train plays as one segment. Where the excitation and prephaser take more than
+half an echo spacing, the first interval alone is longer, and in `constant`
+and optimized modes its refocusing pulse is 180°. A TR or peripheral TR
+shorter than the longest train is refused at evaluation as at generation.
+The console's RF estimate is the train of the largest RF power, each train
+playing its own number of refocusing pulses in its own TR, the first as
+designed and the rest at the train's peak angle, which for a Busse or PD
+train is the maximum angle prescribed, every pulse of the estimate playing
+it; the designed sequence is costed at predownload. `fse3d` and `fse_pd3d` ask to be costed under the SAR
+burst limits.
 
 Busse modes play startup pulses without acquisition and use the same RF widths
 and echo spacing in every shot. All shots retain the longest train layout,
@@ -514,9 +575,16 @@ reference effective TE within 0.1 ms. The achieved value is recorded in
 `EffectiveEchoTime` and reported to the UI and MRD header; `TE` remains the
 physical excitation-to-centre-echo time. This reference contrast annotation
 does not model all tissues, B1 variation or inter-shot steady state. The selected echo must precede the last acquired echo in every
-train. `busse_radial` requires centre echo 0 and identical trains. `pclo`
+train. `busse_radial` requires centre echo 0 and identical trains: the
+evaluation refuses a TE other than Minimum for a constant or optimized train,
+and a centre acquired echo other than 0 for a Busse or PD train, so the
+console refuses such a prescription before it is downloaded. `pclo`
 uses Rydén's pivot-centre, linear-outer ring permutation for an arbitrary
-centre echo in identical trains. `radial` selects PCLO for identical trains
+centre echo in identical trains, except that a centre echo in the second half
+of the train is not mirrored: the echoes after it take the outer rings in
+order, so a train whose signal is flat up to the centre echo and decays
+after it, as a Busse train's is, weights k-space flat and then decreasing
+outwards. `radial` selects PCLO for identical trains
 or Buonincontri joint shot/echo assignment for a centre/periphery parameter
 transition. The menu retains the same choice indices across refocusing modes.
 Sampling acceleration and the CAIPI shift are independent of this ordering
@@ -540,6 +608,17 @@ PCLO/basic Busse radial; changing endpoint parameters uses Buonincontri joint
 assignment. Default inverse design, listing and evaluation import no Torch.
 First and final angles must not exceed the maximum. The reference signal
 prescription follows [Mugler et al., ISMRM 1999, abstract 1631](https://cds.ismrm.org/ismrm-1999/PDF6/1631.pdf); numerical envelope controls are independently chosen.
+
+The `pd_target` option designs instead from an explicit target signal: an
+initial exponential decay, a sloped plateau and a power-law tail, its eight
+controls fitted to the centre and peripheral trains of Fig. 1 of
+Buonincontri et al., Proc. ISMRM 2025, abstract 566-05-007
+(`PD_CENTRE` and `PD_PERIPHERY` in pypulseqpp). blochsim's inverse EPG solves
+each train for its signal with every angle bounded by `flip`; a pulse at the
+bound holds the bound and the train continues from it. Its derivatives with
+respect to the controls are exact, from the forward-mode tangents of the
+solver, and the transition interpolates the controls between the two
+endpoint trains.
 
 ### Diffusion tables
 
@@ -597,10 +676,11 @@ the prescription.
 
 ### Shipped evaluation
 
-Each shipped plugin evaluates a protocol from one repetition of the scan: one
-line, partition, spoke, interleaf, blade line, echo train or inversion shot of
-one slice, without dummy repetitions. Most call the sequence function with the
-arguments that reduce it to that repetition; `epi3d` and `zte3d` build the
+Each shipped plugin evaluates a protocol from a few repetitions of the scan:
+the lines or partitions at the centre and edge of k-space, eight spokes,
+interleaves or blade lines, an echo train or an inversion shot of one slice,
+without dummy repetitions. Most call the sequence function with the
+arguments that reduce it to those repetitions; `epi3d` and `zte3d` build one
 repetition from the modules their function is built from.
 
 - **Scan time.** The duration of the repetition times the number of
@@ -613,9 +693,35 @@ repetition from the modules their function is built from.
   and `TR` definitions (`EffectiveEchoTime` takes precedence where supplied), the receiver bandwidth as the inverse of the dwell time
   of its first ADC event, and the slice thickness in its `SliceThickness`
   definition. A multi-echo sequence lists every echo time, and the `TE` entry
-  holds the first.
+  holds the first. `epi2d` and `epi3d` state in the protocol's note why the
+  bandwidth differs from the one asked: the sampling interval is a multiple
+  of the ADC raster. EPI adds samples at that interval to cover the
+  gradient-limited acquisition window. Where the receiver's sample limit
+  prevents that count, the interval increases instead. The displayed pixel
+  bandwidth uses the achieved ADC window duration.
 - **Invalid protocols.** A prescription the design refuses is invalid, with
   the message of its error.
+- **Representative sequence.** The repetitions on which the design service
+  checks nerve stimulation and slew rate before the scan is designed. A
+  Cartesian sequence designs the views at the centre and at the edge of each
+  phase-encoding axis, a lattice at half the matrix with no calibration
+  region, partial Fourier or CAIPI shift: the largest phase encode of each
+  axis, at one edge of k-space. `mprage3d` designs them as short shots beside
+  the shot its scan time and RF are read from. A sequence that turns one
+  readout about the slice axis, a spoke, a blade or an interleaf, designs
+  eight of them, evenly spread in angle. The nerve response read on these is
+  the scan's largest under a nerve model that is the same on every axis, and
+  so are the slew rate and the amplitude on an axis-aligned prescription.
+  The slew rate on a physical axis of an oblique prescription is not
+  bounded: the scan plays the other edge of k-space too, and over random
+  rotations it read up to 11 % more than these views (`gre3d`, `se3d`,
+  `mprage3d`; `fse3d` 8 %), the nerve response never more. The design
+  service holds their readings to 97 % of the limits, which takes up the
+  first 3 %; past that the check of the generated design finds the excess
+  and `generate` lowers the slew rate again. That of
+  `fse3d` and `fse_pd3d` is the packed echo train their evaluation designs,
+  as long as the longest train, startup echoes included, at a constant
+  refocusing angle: the largest of a Busse or PD train; `epi3d` states none.
 - **RF layout.** The first TR of the repetition, its shot repeated once per
   slice of the largest packet, with the TR as its period; for the balanced
   steady state, the TR after the half-angle pulse. The TR of a fast spin echo
@@ -623,7 +729,17 @@ repetition from the modules their function is built from.
   a volume. The flip angle is the control of every excitation of the plugins
   with a `flip` entry, which an MPRAGE's inversion is not. The spin-echo
   plugins, `fse3d` among them, have none, and the amplitude of their
-  excitation and refocusing pulses is that of the design.
+  excitation and refocusing pulses is that of the design. The calibration of
+  `epi2d` and `epi3d`, FLEET or gradient echo, repeats at its own shortest TR, which the
+  console's TR does not set, and a scanner costs each sequence of the chain
+  over its own repetition. Where the calibration plays more RF power than a
+  TR, which a slice a long TR apart or a few long 3D shots allow, the layout is
+  its pulses, as many as it plays in a TR, over the TR, with no control: the
+  console then refuses a protocol whose calibration exceeds the RF limits,
+  whatever its TR. The calibration plays the excitation's waveform at
+  `CALIBRATION_FLIP_DEG` of the sequence function, 10 degrees, and the fat
+  saturation of `epi2d` is numbered after the excitation, so the excitation
+  keeps the number the listing gives it with the fat saturation on or off.
 
 ## Logging
 
@@ -637,3 +753,5 @@ request names under `log`, or else to the server's standard error
 
 * {doc}`../explanations/protocol`: resolution, presets, units and precision.
 * {doc}`../api/design`: the scanner-sequence interface and its entries.
+* {doc}`../developer-guide/internals/sequence-definitions`: the definitions a
+  design writes and the services read.

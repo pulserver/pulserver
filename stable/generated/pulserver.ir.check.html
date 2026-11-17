@@ -45,7 +45,7 @@
   <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../_static/documentation_options.js?v=da2c3ea9"></script>
+    <script src="../_static/documentation_options.js?v=47770eee"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -56,7 +56,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.16';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.23';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -68,7 +68,7 @@
     <link rel="search" title="Search" href="../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.4.16" />
+  <meta name="docsearch:version" content="v0.4.23" />
   
     
     <script src="../_static/searchtools.js"></script>
@@ -215,6 +215,7 @@
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/protocol-wire.html">Protocol text blocks</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/reconstruction-proxy.html">Reconstruction proxy</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/sar-ratios.html">SAR ratios against a reference pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/sequence-definitions.html">Sequence definitions</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
@@ -534,6 +535,13 @@ returns them, checked in place of reading the files and rotated in
 place.</p></li>
 <li><p><strong>spl_levels</strong> (<em>Sequence</em><em>[</em><a class="reference internal" href="pulserver.ir.SplLevels.html#pulserver.ir.SplLevels" title="pulserver.ir.SplLevels"><em>SplLevels</em></a><em>]</em><em>, </em><em>default=None</em>) – One per file of the chain, as <a class="reference internal" href="pulserver.ir.spl_levels.html#pulserver.ir.spl_levels" title="pulserver.ir.spl_levels"><code class="xref py py-func docutils literal notranslate"><span class="pre">spl_levels()</span></code></a> returns them for
 <code class="docutils literal notranslate"><span class="pre">rotation</span></code>, held to the limits in place of computing them.</p></li>
+<li><p><strong>readings</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="(in Python v3.15)"><em>dict</em></a><em>, </em><em>default=None</em>) – Filled, where given, with the largest reading over the chain of the
+gradient checks, each as a fraction of its limit: <code class="docutils literal notranslate"><span class="pre">&quot;grad&quot;</span></code> and
+<code class="docutils literal notranslate"><span class="pre">&quot;slew&quot;</span></code>, the gradient amplitude and slew rate on a physical axis;
+<code class="docutils literal notranslate"><span class="pre">&quot;vector_grad&quot;</span></code> and <code class="docutils literal notranslate"><span class="pre">&quot;vector_slew&quot;</span></code>, the same summed over the
+axes, under <code class="docutils literal notranslate"><span class="pre">limits.follows_poses</span></code> for a chain that sets
+<code class="docutils literal notranslate"><span class="pre">EnablePmc</span></code>; and <code class="docutils literal notranslate"><span class="pre">&quot;pns&quot;</span></code>, the nerve response over
+<code class="docutils literal notranslate"><span class="pre">limits.pns_limit</span></code>, where a nerve model is given.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>

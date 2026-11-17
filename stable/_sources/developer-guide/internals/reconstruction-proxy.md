@@ -247,7 +247,10 @@ is applied to the stream as follows.
   none, and for every other counter, the centre is the minimum plus half the
   number of positions between the minimum and the maximum, rounded down.
 - The header's sequence parameters are the TR, TE, TI and flip angles the
-  sequence defines. The TR and TE it does not define are measured by
+  main sequence, the last of the chain, defines, so that a prescan, such as
+  the gradient-echo calibration ahead of an accelerated EPI, does not
+  annotate the images; a parameter the main sequence neither defines nor
+  measures is taken over the whole chain. The TR and TE it does not define are measured by
   pypulseqpp's `Sequence.test_report_dict`: TE from the excitation before the
   closest approach to the k-space centre, and TR between the excitations
   around it. The flip angles it does not define are the distinct values of

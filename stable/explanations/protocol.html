@@ -45,7 +45,7 @@
   <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../_static/documentation_options.js?v=da2c3ea9"></script>
+    <script src="../_static/documentation_options.js?v=47770eee"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -56,7 +56,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.16';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.23';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -70,7 +70,7 @@
     <link rel="prev" title="Architecture" href="architecture.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.4.16" />
+  <meta name="docsearch:version" content="v0.4.23" />
   
     
     <script src="../_static/searchtools.js"></script>
@@ -217,6 +217,7 @@
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/protocol-wire.html">Protocol text blocks</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/reconstruction-proxy.html">Reconstruction proxy</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/sar-ratios.html">SAR ratios against a reference pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/sequence-definitions.html">Sequence definitions</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
@@ -512,7 +513,7 @@
 <p class="admonition-title">TL;DR</p>
 <ul class="simple">
 <li><p>Every edit is answered by your plugin’s <code class="docutils literal notranslate"><span class="pre">evaluate</span></code>; the scanner shows the value the design achieves.</p></li>
-<li><p>The shipped plugins design one repetition and extrapolate the scan time, so a reply takes tens of milliseconds.</p></li>
+<li><p>The shipped plugins design a few repetitions and extrapolate the scan time, so a reply takes tens of milliseconds.</p></li>
 <li><p>A resolved protocol sent back resolves to itself, and so to the same design.</p></li>
 </ul>
 </div>
@@ -550,10 +551,10 @@ writes such a plugin.</p>
 <p>Code: <a class="reference internal" href="../generated/pulserver.design.SequencePlugin.html#pulserver.design.SequencePlugin" title="pulserver.design.SequencePlugin"><code class="xref py py-class docutils literal notranslate"><span class="pre">SequencePlugin</span></code></a>. Tests: <em>every plugin offers its averages unless it declares them</em>; <em>the averages repeat the main sequence and not its prescans</em>; <em>the scan time counts every average</em> (<code class="docutils literal notranslate"><span class="pre">test_sequence_plugin.py</span></code>).</p>
 </li>
 <li><p><strong>Replies, when asked, with the RF layout of one TR.</strong></p>
-<p>Code: <a class="reference internal" href="../generated/pulserver.design.RfLayout.html#pulserver.design.RfLayout" title="pulserver.design.RfLayout"><code class="xref py py-class docutils literal notranslate"><span class="pre">RfLayout</span></code></a>. Tests: <em>a gre layout is one excitation and lists one definition whatever the matrix</em>; <em>a validated amplitude times the listed peak is the peak the instance plays</em>; <em>the rf layout is sent only when asked</em> (<code class="docutils literal notranslate"><span class="pre">test_rf_layout.py</span></code>).</p>
+<p>Code: <a class="reference internal" href="../generated/pulserver.design.RfLayout.html#pulserver.design.RfLayout" title="pulserver.design.RfLayout"><code class="xref py py-class docutils literal notranslate"><span class="pre">RfLayout</span></code></a>. Tests: <em>a gre layout is one excitation and lists one definition whatever the matrix</em>; <em>a validated amplitude times the listed peak is the peak the instance plays</em>; <em>the rf layout is sent only when asked</em> (<code class="docutils literal notranslate"><span class="pre">test_rf_layout.py</span></code>); <em>an epi layout plays the rf power of its calibration</em>; <em>the 2d epi states its excitation by the number the listing gives it</em> (<code class="docutils literal notranslate"><span class="pre">test_zoo_evaluation.py</span></code>).</p>
 </li>
-<li><p><strong>Ships evaluations that design at most two TRs, however large the prescription.</strong></p>
-<p>Code: the shipped plugins, <code class="docutils literal notranslate"><span class="pre">src/pulserver/_zoo/sequences/</span></code>. Tests: <em>a zoo evaluation designs two trs at most however large the prescription</em>; <em>an evaluation states the values and the scan time of the design</em> (<code class="docutils literal notranslate"><span class="pre">test_zoo_evaluation.py</span></code>).</p>
+<li><p><strong>Ships evaluations that design a few TRs, however large the prescription.</strong></p>
+<p>Code: the shipped plugins, <code class="docutils literal notranslate"><span class="pre">src/pulserver/_zoo/sequences/</span></code>. Tests: <em>a zoo evaluation designs a few trs however large the prescription</em>; <em>an evaluation states the values and the scan time of the design</em> (<code class="docutils literal notranslate"><span class="pre">test_zoo_evaluation.py</span></code>).</p>
 </li>
 </ul>
 </div>

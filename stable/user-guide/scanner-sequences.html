@@ -45,7 +45,7 @@
   <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../_static/documentation_options.js?v=da2c3ea9"></script>
+    <script src="../_static/documentation_options.js?v=47770eee"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -58,7 +58,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.16';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.23';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -72,7 +72,7 @@
     <link rel="prev" title="Services" href="running.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.4.16" />
+  <meta name="docsearch:version" content="v0.4.23" />
   
     
     <script src="../_static/searchtools.js"></script>
@@ -219,6 +219,7 @@
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/protocol-wire.html">Protocol text blocks</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/reconstruction-proxy.html">Reconstruction proxy</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/sar-ratios.html">SAR ratios against a reference pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/sequence-definitions.html">Sequence definitions</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
@@ -491,14 +492,14 @@
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#protocol-entries">Protocol entries</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#sequence-functions">Sequence functions</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#protocol-resolution">Protocol resolution</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#protocol-evaluation">Protocol evaluation</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#evaluating-a-protocol">Protocol evaluation</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#exam-cache">Exam cache</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#rf-layout">RF layout</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#rf-phase-convention">RF phase convention</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#stating-the-rf-layout">RF layout</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#transmit-phase-convention">RF phase convention</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#shipped-sequences">Shipped sequences</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#shared-user-entries">Shared user entries</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#console-controls">Console controls</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#options">Options</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#plugin-options">Options</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#diffusion-tables">Diffusion tables</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#protocol-conventions">Protocol conventions</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#shipped-evaluation">Shipped evaluation</a></li>
@@ -752,15 +753,18 @@ first file is <code class="docutils literal notranslate"><span class="pre">seque
 <code class="docutils literal notranslate"><span class="pre">NextSequence</span></code> definition. The <code class="docutils literal notranslate"><span class="pre">generate</span></code> design call then converts the design
 to the IR cache and stores it (<a class="reference internal" href="../explanations/architecture.html"><span class="doc">Architecture</span></a>).</p>
 </section>
-<section id="protocol-evaluation">
-<span id="evaluating-a-protocol"></span><h2>Protocol evaluation<a class="headerlink" href="#protocol-evaluation" title="Link to this heading">#</a></h2>
+<section id="evaluating-a-protocol">
+<span id="protocol-evaluation"></span><h2>Protocol evaluation<a class="headerlink" href="#evaluating-a-protocol" title="Link to this heading">#</a></h2>
 <p>A plugin overrides <a class="reference internal" href="../generated/pulserver.design.SequencePlugin.evaluate.html#pulserver.design.SequencePlugin.evaluate" title="pulserver.design.SequencePlugin.evaluate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">evaluate()</span></code></a> to check a
 protocol and to state what the console shows with it. The hook takes the
 scanner limits and the requested <a class="reference internal" href="../generated/pulserver.design.Protocol.html#pulserver.design.Protocol" title="pulserver.design.Protocol"><code class="xref py py-class docutils literal notranslate"><span class="pre">Protocol</span></code></a>, in the
 units of the sequence function’s arguments, and returns an
 <a class="reference internal" href="../generated/pulserver.design.Evaluation.html#pulserver.design.Evaluation" title="pulserver.design.Evaluation"><code class="xref py py-class docutils literal notranslate"><span class="pre">Evaluation</span></code></a>: the protocol holding the values the
 design achieves, the scan time in seconds, a note shown with the valid protocol
-and, optionally, the RF layout (<a class="reference internal" href="#stating-the-rf-layout"><span class="std std-ref">RF layout</span></a>). Returning <code class="docutils literal notranslate"><span class="pre">None</span></code>
+and, optionally, the RF layout (<a class="reference internal" href="#stating-the-rf-layout"><span class="std std-ref">RF layout</span></a>) and the figures a
+console displays: the echo spacing of a train, the bandwidth of a pixel of an
+oversampled readout and the time one frame of a scan of several takes
+(<a class="reference internal" href="../developer-guide/internals/protocol-wire.html#display-block"><span class="std std-ref">Display figures</span></a>). Returning <code class="docutils literal notranslate"><span class="pre">None</span></code>
 accepts the protocol unchanged. Raising an exception makes the protocol
 invalid:</p>
 <div class="highlight-pycon notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="k">class</span><span class="w"> </span><span class="nc">Timed</span><span class="p">(</span><span class="n">PulseAcquire</span><span class="p">):</span>
@@ -783,6 +787,14 @@ function cannot realize is found only when the sequence is generated, as an
 error of that call, and not while the operator edits the protocol. An
 <code class="docutils literal notranslate"><span class="pre">evaluate</span></code> that builds or checks the design rejects such a protocol when it is
 evaluated.</p>
+<p>The console waits for every evaluation, so <code class="docutils literal notranslate"><span class="pre">evaluate</span></code> is a simplified design
+and not the design: it states the scan time exactly, an upper bound of the RF
+and one repetition whose gradients stand for the scan’s, and leaves to
+<code class="docutils literal notranslate"><span class="pre">generate</span></code> whatever takes a solve, an optimization or the whole scan. Where
+the angles of a train are solved for, the train at their largest angle lasts
+as long and bounds its RF; <code class="docutils literal notranslate"><span class="pre">fse3d</span></code> and <code class="docutils literal notranslate"><span class="pre">fse_pd3d</span></code> design that train, and ask
+the solve only for the effective TE and for whether a train exists, once per
+train under a warm design server.</p>
 <p><code class="docutils literal notranslate"><span class="pre">ValueError</span></code> and <code class="docutils literal notranslate"><span class="pre">AssertionError</span></code>, which pypulseqpp and PyPulseq raise for an
 event or a timing they cannot realize, reject the protocol with the message of
 the error as <code class="docutils literal notranslate"><span class="pre">info</span></code>, and are logged as a warning. Any other exception also
@@ -790,6 +802,17 @@ makes the protocol invalid, but the reply names only its type, as in
 <code class="docutils literal notranslate"><span class="pre">TypeError</span> <span class="pre">in</span> <span class="pre">Timed.evaluate</span></code>, and the exception is logged as an error with its
 traceback. A request that names an entry the protocol does not declare, or an
 option a choice does not offer, is invalid in the same way.</p>
+<p>An evaluation that designs the sequence, or a few repetitions of it, states that
+design as its representative <code class="docutils literal notranslate"><span class="pre">sequence</span></code>: the repetitions whose gradients are
+the largest of the scan, such as the views at the edges of k-space, so that
+what is read on them bounds what the scan plays. The design service checks peripheral
+nerve stimulation and slew rate on it, rotated to the prescription, and
+evaluates the protocol again at a lower slew rate while it exceeds them, as
+<code class="docutils literal notranslate"><span class="pre">generate</span></code> does with the whole design (<a class="reference internal" href="running.html#scanner-limits"><span class="std std-ref">Scanner limits</span></a>); without one,
+the console shows the protocol at the design limits and only <code class="docutils literal notranslate"><span class="pre">generate</span></code> lowers
+the slew rate. A plugin that sets
+<a class="reference internal" href="../generated/pulserver.design.SequencePlugin.strict_limits.html#pulserver.design.SequencePlugin.strict_limits" title="pulserver.design.SequencePlugin.strict_limits"><code class="xref py py-attr docutils literal notranslate"><span class="pre">strict_limits</span></code></a> is never designed again:
+its files set <code class="docutils literal notranslate"><span class="pre">StrictLimits</span></code>, and a design past a limit is refused.</p>
 <p><a class="reference internal" href="../generated/pulserver.design.SequencePlugin.generate.html#pulserver.design.SequencePlugin.generate" title="pulserver.design.SequencePlugin.generate"><code class="xref py py-meth docutils literal notranslate"><span class="pre">generate()</span></code></a> builds the sequence of a
 requested protocol. The default calls the sequence function with the arguments
 of the protocol; a plugin overrides it to return a sequence, or a list of them,
@@ -823,8 +846,8 @@ series that measured them, on their own grid. For such a plugin the files of
 the exam’s cache are part of the design’s identity, so a new map yields a new
 design.</p>
 </section>
-<section id="rf-layout">
-<span id="stating-the-rf-layout"></span><h2>RF layout<a class="headerlink" href="#rf-layout" title="Link to this heading">#</a></h2>
+<section id="stating-the-rf-layout">
+<span id="rf-layout"></span><h2>RF layout<a class="headerlink" href="#stating-the-rf-layout" title="Link to this heading">#</a></h2>
 <p>An evaluation may state the RF its protocol plays, from which a scanner
 estimates the RF of a prescription before the design is generated. The layout
 is one TR: the RF instances that TR plays, with the TR as its <code class="docutils literal notranslate"><span class="pre">period</span></code>.
@@ -862,8 +885,8 @@ value in the evaluated protocol, is invalid. What the scanner checks before the
 scan is the stored design, not the layout. The blocks that carry the layout are
 described in <a class="reference internal" href="../explanations/protocol.html"><span class="doc">Protocol resolution</span></a>.</p>
 </section>
-<section id="rf-phase-convention">
-<span id="transmit-phase-convention"></span><h2>RF phase convention<a class="headerlink" href="#rf-phase-convention" title="Link to this heading">#</a></h2>
+<section id="transmit-phase-convention">
+<span id="rf-phase-convention"></span><h2>RF phase convention<a class="headerlink" href="#transmit-phase-convention" title="Link to this heading">#</a></h2>
 <p>Phases and frequencies keep Pulseq’s units: an RF phase shape holds cycles, RF
 and ADC phase offsets and RF shim phases are in radians, and frequency offsets
 are in hertz. The ppm offsets are resolved to hertz and radians at the
@@ -874,9 +897,7 @@ precess clockwise about the static field, and the part of the field that turns
 them is the conjugate of the drive times the channel’s transmit sensitivity
 <span class="math notranslate nohighlight">\(s^+_c\)</span>, the rotating field of a unit drive:</p>
 <div class="math notranslate nohighlight">
-\[
-b^+(\mathbf{r}, t) = \sum_c \overline{w_c\, b_c(t)}\; s^+_c(\mathbf{r}).
-\]</div>
+\[b^+(\mathbf{r}, t) = \sum_c \overline{w_c\, b_c(t)}\; s^+_c(\mathbf{r}).\]</div>
 <p>A drive of phase <span class="math notranslate nohighlight">\(+\phi\)</span>, on one channel through its shim weight or its
 waveform, or on every channel through the pulse’s phase offset, turns the
 excited magnetization and the reconstructed image by <span class="math notranslate nohighlight">\(-\phi\)</span>; an ADC phase
@@ -935,7 +956,7 @@ scanner’s reconstruction client names one in its config
 <p>Each shipped plugin offers every one of these controls that its sequence
 function takes, at the same user entry in every plugin, each as a
 <code class="docutils literal notranslate"><span class="pre">user&lt;n&gt;_name</span></code> label and a <code class="docutils literal notranslate"><span class="pre">user&lt;n&gt;_value</span></code>; a plugin’s own user entries start at
-<code class="docutils literal notranslate"><span class="pre">user12</span></code>:</p>
+<code class="docutils literal notranslate"><span class="pre">user12</span></code>, and <code class="docutils literal notranslate"><span class="pre">user35</span></code> lies above all of them:</p>
 <div class="pst-scrollable-table-container"><table class="table">
 <thead>
 <tr class="row-odd"><th class="head"><p>User entry</p></th>
@@ -970,11 +991,33 @@ function takes, at the same user entry in every plugin, each as a
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">user10</span></code>, <code class="docutils literal notranslate"><span class="pre">user11</span></code></p></td>
 <td><p>Wave-encoding amplitude, in mT/m, and cycles per readout, shown while the <code class="docutils literal notranslate"><span class="pre">wave</span></code> option is on</p></td>
 </tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">user35</span></code></p></td>
+<td><p>TTL output per volume: 0, the default, off; 1 plays a digital output on trigger channel <code class="docutils literal notranslate"><span class="pre">ext1</span></code>, 1 ms or the excitation if shorter, at the first excitation of every volume of the time series, dummy volumes included, and none in the reference volume or the calibration (<code class="docutils literal notranslate"><span class="pre">epi2d</span></code>, <code class="docutils literal notranslate"><span class="pre">epi3d</span></code>)</p></td>
+</tr>
 </tbody>
 </table>
 </div>
 <p><code class="docutils literal notranslate"><span class="pre">bssfp3d</span></code> takes its number of phase cycles, each a train with its own RF phase
 increment, as <code class="docutils literal notranslate"><span class="pre">user12</span></code>.</p>
+<p><code class="docutils literal notranslate"><span class="pre">bssfp2d</span></code> takes its frames from the console’s number of frames. Ungated, each
+slice’s k-space is acquired that many times back to back, a free-running series
+that keeps its steady state from one frame to the next and is reconstructed as
+one image per frame; under prospective ECG gating they are the cardiac phases of
+each heartbeat, and retrospective gating sets its own from the heart rate.
+Each slice opens with a catalyst, its first dummies ramping the flip angle
+linearly up to the one prescribed, and its default dummies bring the steady
+state within 5 %. Ungated, each slice is two files of the chain, its catalyst
+and dummies and then its frames, and every repetition rests at its ends: the
+scanner plays one repetition per segment, the same segment for every line of
+every frame, and adds its segment start time to every repetition time alike,
+so the played TR, which validation reports, is longer than the designed one
+but the same throughout and the steady state is undisturbed. Under prospective
+gating each slice’s first excitation waits for one trigger, and the slice then
+runs free at the heart rate entered: every gated slice is one train with no rest in it, and repetitions
+that do not acquire fill the trigger delay and each heartbeat after its
+cardiac phases. The train waits for its trigger itself, so the scanner sets
+the whole slice up before the trigger arrives rather than in the time between
+the trigger and the train.</p>
 </section>
 <section id="console-controls">
 <h3>Console controls<a class="headerlink" href="#console-controls" title="Link to this heading">#</a></h3>
@@ -1016,8 +1059,8 @@ give each band’s normal along the physical axes, the distance of its centre
 from the isocentre along that normal, and its thickness, in mm. The
 field-of-view offset and rotation leave a band where it was placed.</p>
 </section>
-<section id="options">
-<span id="plugin-options"></span><h3>Options<a class="headerlink" href="#options" title="Link to this heading">#</a></h3>
+<section id="plugin-options">
+<span id="options"></span><h3>Options<a class="headerlink" href="#plugin-options" title="Link to this heading">#</a></h3>
 <p>Choices that set what a sequence is, rather than a value an operator tunes from
 scan to scan, are options: module constants a plugin declares with
 <a class="reference internal" href="../generated/pulserver.design.option.html#pulserver.design.option" title="pulserver.design.option"><code class="xref py py-func docutils literal notranslate"><span class="pre">option()</span></code></a> at module level, before its class, so that
@@ -1070,8 +1113,8 @@ GE scanner:</p>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">fse_pd3d</span></code></p></td>
 <td><p>PD controls</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">user14</span></code>–<code class="docutils literal notranslate"><span class="pre">user19</span></code>, <code class="docutils literal notranslate"><span class="pre">user22</span></code></p></td>
-<td><p>First/final angles, startup count, explicit centre echo, RF-dead-time overlap, crusher cycles, signal-tail onset fraction</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">user14</span></code>–<code class="docutils literal notranslate"><span class="pre">user17</span></code>, <code class="docutils literal notranslate"><span class="pre">user19</span></code>, <code class="docutils literal notranslate"><span class="pre">user22</span></code></p></td>
+<td><p>First/final angles, startup count, explicit centre echo, crusher cycles, signal-tail onset fraction</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">flip</span></code> gives peak angle; TE is reference contrast-equivalent TE</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">fse_pd3d</span></code></p></td>
@@ -1086,23 +1129,35 @@ GE scanner:</p>
 <td><p>Off: prescribed inverse-EPG train; on: CPU multi-tissue/B1 control fitting</p></td>
 <td><p>Requires the design extra</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">fse3d</span></code>, <code class="docutils literal notranslate"><span class="pre">fse_pd3d</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">fse_pd3d</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">pd_target</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">user26</span></code></p></td>
+<td><p>Off: the signal-shape PD design; on: the target-signal design, inverse EPG of the signal of Buonincontri et al. with every angle at most <code class="docutils literal notranslate"><span class="pre">flip</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">flip</span></code>: largest angle (default 150°); <code class="docutils literal notranslate"><span class="pre">user27</span></code>: first angle; <code class="docutils literal notranslate"><span class="pre">user28</span></code>: plateau signal; <code class="docutils literal notranslate"><span class="pre">user29</span></code>: tail signal over plateau; <code class="docutils literal notranslate"><span class="pre">user30</span></code>: signal-tail onset fraction, in place of <code class="docutils literal notranslate"><span class="pre">user14</span></code>, <code class="docutils literal notranslate"><span class="pre">user15</span></code>, <code class="docutils literal notranslate"><span class="pre">user22</span></code> and <code class="docutils literal notranslate"><span class="pre">user23</span></code>. Under <code class="docutils literal notranslate"><span class="pre">dual_region</span></code>, <code class="docutils literal notranslate"><span class="pre">user31</span></code>–<code class="docutils literal notranslate"><span class="pre">user33</span></code>: the periphery’s plateau signal, tail signal and onset, the rest of its target the fitted peripheral train’s. <code class="docutils literal notranslate"><span class="pre">fit_controls</span></code> has no effect</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">fse3d</span></code>, <code class="docutils literal notranslate"><span class="pre">fse_pd3d</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">ordering</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">user39</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">&quot;radial&quot;</span></code>: PCLO for identical trains, Buonincontri assignment for varying trains; <code class="docutils literal notranslate"><span class="pre">&quot;pclo&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;busse_radial&quot;</span></code> (radius then polar angle, centre echo 0), and <code class="docutils literal notranslate"><span class="pre">&quot;shuffling&quot;</span></code> require identical trains</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">&quot;radial&quot;</span></code>: PCLO for identical trains, Buonincontri assignment for varying trains; <code class="docutils literal notranslate"><span class="pre">&quot;pclo&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;busse_radial&quot;</span></code> (radius then polar angle, centre echo 0), and <code class="docutils literal notranslate"><span class="pre">&quot;shuffling&quot;</span></code> require identical trains; <code class="docutils literal notranslate"><span class="pre">&quot;buonincontri_golden&quot;</span></code> requires varying trains and keeps each shot to one golden-ratio angle</p></td>
 <td><p>None</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">mprage3d</span></code></p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">mprage3d</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">ordering</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">user39</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">&quot;radial&quot;</span></code>, each partition’s lines centre-out, or <code class="docutils literal notranslate"><span class="pre">&quot;shuffling&quot;</span></code>: Poisson-disc lines in random order, for a time-resolved reconstruction</p></td>
 <td><p>None</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">fse3d</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">fse3d</span></code></p></td>
 <td><p>Busse controls</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">user14</span></code>–<code class="docutils literal notranslate"><span class="pre">user19</span></code></p></td>
-<td><p>Minimum angle, centre angle, startup count, acquired centre echo (<code class="docutils literal notranslate"><span class="pre">-1</span></code>: midpoint), RF-dead-time overlap, crusher cycles</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">user14</span></code>–<code class="docutils literal notranslate"><span class="pre">user17</span></code></p></td>
+<td><p>Minimum angle, centre angle, startup count, acquired centre echo (<code class="docutils literal notranslate"><span class="pre">-1</span></code>: midpoint)</p></td>
 <td><p>Busse modes only; <code class="docutils literal notranslate"><span class="pre">flip</span></code> gives the maximum angle</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">fse3d</span></code></p></td>
+<td><p>Crusher cycles</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">user19</span></code></p></td>
+<td><p>Read-axis crusher area in cycles across one readout voxel, default 0.5</p></td>
+<td><p>Every refocusing mode</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">fse3d</span></code>, <code class="docutils literal notranslate"><span class="pre">fse_pd3d</span></code>, <code class="docutils literal notranslate"><span class="pre">mprage3d</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">navigator</span></code></p></td>
@@ -1146,13 +1201,19 @@ GE scanner:</p>
 <td><p>Spokes ordered <code class="docutils literal notranslate"><span class="pre">&quot;spiral&quot;</span></code>, at a constant step across many rings; <code class="docutils literal notranslate"><span class="pre">&quot;meridian&quot;</span></code>; or <code class="docutils literal notranslate"><span class="pre">&quot;quiet&quot;</span></code>, the default: the spiral’s directions in steps about a ring gap long, every other shell played backwards</p></td>
 <td><p>None</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">bssfp2d</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">retrospective</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">user44</span></code></p></td>
-<td><p>ECG gating: off, prospective, each heartbeat triggered and acquired once per cardiac phase; on, retrospective, each segment cycled over a heartbeat and binned into cardiac phases by the reconstruction</p></td>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">epi2d</span></code>, <code class="docutils literal notranslate"><span class="pre">epi3d</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">calibration</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">user12</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">&quot;fleet&quot;</span></code> (0, the default): the central <code class="docutils literal notranslate"><span class="pre">n_acs_y</span></code> lines read by <code class="docutils literal notranslate"><span class="pre">n_shots</span> <span class="pre">*</span> <span class="pre">ry</span></code> interleaved EPI shots with the imaging train’s read lobe, blip, echo spacing and echo time, a slice’s (<code class="docutils literal notranslate"><span class="pre">epi3d</span></code>: a partition’s) shots in rapid succession at 10 degrees, once in each phase-encode polarity, so each polarity of the EPI is unfolded by coil sensitivities distorted as its image is (Polimeni et al., Magn Reson Med 2016); <code class="docutils literal notranslate"><span class="pre">&quot;gre&quot;</span></code> (1): a gradient echo per line, undistorted</p></td>
 <td><p>None</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">gre_spiral2d</span></code>, <code class="docutils literal notranslate"><span class="pre">se_spiral2d</span></code>, <code class="docutils literal notranslate"><span class="pre">gre_stack_of_spirals3d</span></code>, <code class="docutils literal notranslate"><span class="pre">se_stack_of_spirals3d</span></code>, <code class="docutils literal notranslate"><span class="pre">mprage_stack_of_spirals3d</span></code></p></td>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">bssfp2d</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">retrospective</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">user44</span></code></p></td>
+<td><p>ECG gating: off, prospective, each slice triggered once and every heartbeat of the heart rate entered acquired once per cardiac phase; on, retrospective, each segment cycled over a heartbeat and binned into cardiac phases by the reconstruction</p></td>
+<td><p>None</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">gre_spiral2d</span></code>, <code class="docutils literal notranslate"><span class="pre">se_spiral2d</span></code>, <code class="docutils literal notranslate"><span class="pre">gre_stack_of_spirals3d</span></code>, <code class="docutils literal notranslate"><span class="pre">se_stack_of_spirals3d</span></code>, <code class="docutils literal notranslate"><span class="pre">mprage_stack_of_spirals3d</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">variable_density</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">user42</span></code></p></td>
 <td><p>Variable-density spirals</p></td>
@@ -1161,6 +1222,18 @@ GE scanner:</p>
 </tbody>
 </table>
 </div>
+<p>Every 3D FSE train is packed: the read prephaser shares the excitation block
+and each echo’s rewinders end in the next refocusing pulse’s dead time, so the
+train plays as one segment. Where the excitation and prephaser take more than
+half an echo spacing, the first interval alone is longer, and in <code class="docutils literal notranslate"><span class="pre">constant</span></code>
+and optimized modes its refocusing pulse is 180°. A TR or peripheral TR
+shorter than the longest train is refused at evaluation as at generation.
+The console’s RF estimate is the train of the largest RF power, each train
+playing its own number of refocusing pulses in its own TR, the first as
+designed and the rest at the train’s peak angle, which for a Busse or PD
+train is the maximum angle prescribed, every pulse of the estimate playing
+it; the designed sequence is costed at predownload. <code class="docutils literal notranslate"><span class="pre">fse3d</span></code> and <code class="docutils literal notranslate"><span class="pre">fse_pd3d</span></code> ask to be costed under the SAR
+burst limits.</p>
 <p>Busse modes play startup pulses without acquisition and use the same RF widths
 and echo spacing in every shot. All shots retain the longest train layout,
 with zero RF amplitude after each shot’s own ETL. TR, acquired ETL and angle
@@ -1175,9 +1248,16 @@ reference effective TE within 0.1 ms. The achieved value is recorded in
 <code class="docutils literal notranslate"><span class="pre">EffectiveEchoTime</span></code> and reported to the UI and MRD header; <code class="docutils literal notranslate"><span class="pre">TE</span></code> remains the
 physical excitation-to-centre-echo time. This reference contrast annotation
 does not model all tissues, B1 variation or inter-shot steady state. The selected echo must precede the last acquired echo in every
-train. <code class="docutils literal notranslate"><span class="pre">busse_radial</span></code> requires centre echo 0 and identical trains. <code class="docutils literal notranslate"><span class="pre">pclo</span></code>
+train. <code class="docutils literal notranslate"><span class="pre">busse_radial</span></code> requires centre echo 0 and identical trains: the
+evaluation refuses a TE other than Minimum for a constant or optimized train,
+and a centre acquired echo other than 0 for a Busse or PD train, so the
+console refuses such a prescription before it is downloaded. <code class="docutils literal notranslate"><span class="pre">pclo</span></code>
 uses Rydén’s pivot-centre, linear-outer ring permutation for an arbitrary
-centre echo in identical trains. <code class="docutils literal notranslate"><span class="pre">radial</span></code> selects PCLO for identical trains
+centre echo in identical trains, except that a centre echo in the second half
+of the train is not mirrored: the echoes after it take the outer rings in
+order, so a train whose signal is flat up to the centre echo and decays
+after it, as a Busse train’s is, weights k-space flat and then decreasing
+outwards. <code class="docutils literal notranslate"><span class="pre">radial</span></code> selects PCLO for identical trains
 or Buonincontri joint shot/echo assignment for a centre/periphery parameter
 transition. The menu retains the same choice indices across refocusing modes.
 Sampling acceleration and the CAIPI shift are independent of this ordering
@@ -1199,6 +1279,16 @@ PCLO/basic Busse radial; changing endpoint parameters uses Buonincontri joint
 assignment. Default inverse design, listing and evaluation import no Torch.
 First and final angles must not exceed the maximum. The reference signal
 prescription follows <a class="reference external" href="https://cds.ismrm.org/ismrm-1999/PDF6/1631.pdf">Mugler et al., ISMRM 1999, abstract 1631</a>; numerical envelope controls are independently chosen.</p>
+<p>The <code class="docutils literal notranslate"><span class="pre">pd_target</span></code> option designs instead from an explicit target signal: an
+initial exponential decay, a sloped plateau and a power-law tail, its eight
+controls fitted to the centre and peripheral trains of Fig. 1 of
+Buonincontri et al., Proc. ISMRM 2025, abstract 566-05-007
+(<code class="docutils literal notranslate"><span class="pre">PD_CENTRE</span></code> and <code class="docutils literal notranslate"><span class="pre">PD_PERIPHERY</span></code> in pypulseqpp). blochsim’s inverse EPG solves
+each train for its signal with every angle bounded by <code class="docutils literal notranslate"><span class="pre">flip</span></code>; a pulse at the
+bound holds the bound and the train continues from it. Its derivatives with
+respect to the controls are exact, from the forward-mode tangents of the
+solver, and the transition interpolates the controls between the two
+endpoint trains.</p>
 </section>
 <section id="diffusion-tables">
 <h3>Diffusion tables<a class="headerlink" href="#diffusion-tables" title="Link to this heading">#</a></h3>
@@ -1256,10 +1346,11 @@ of <code class="docutils literal notranslate"><span class="pre">zte3d</span></co
 </section>
 <section id="shipped-evaluation">
 <h3>Shipped evaluation<a class="headerlink" href="#shipped-evaluation" title="Link to this heading">#</a></h3>
-<p>Each shipped plugin evaluates a protocol from one repetition of the scan: one
-line, partition, spoke, interleaf, blade line, echo train or inversion shot of
-one slice, without dummy repetitions. Most call the sequence function with the
-arguments that reduce it to that repetition; <code class="docutils literal notranslate"><span class="pre">epi3d</span></code> and <code class="docutils literal notranslate"><span class="pre">zte3d</span></code> build the
+<p>Each shipped plugin evaluates a protocol from a few repetitions of the scan:
+the lines or partitions at the centre and edge of k-space, eight spokes,
+interleaves or blade lines, an echo train or an inversion shot of one slice,
+without dummy repetitions. Most call the sequence function with the
+arguments that reduce it to those repetitions; <code class="docutils literal notranslate"><span class="pre">epi3d</span></code> and <code class="docutils literal notranslate"><span class="pre">zte3d</span></code> build one
 repetition from the modules their function is built from.</p>
 <ul class="simple">
 <li><p><strong>Scan time.</strong> The duration of the repetition times the number of
@@ -1272,9 +1363,35 @@ where the plugin has the entry: the echo time and repetition time in its <code c
 and <code class="docutils literal notranslate"><span class="pre">TR</span></code> definitions (<code class="docutils literal notranslate"><span class="pre">EffectiveEchoTime</span></code> takes precedence where supplied), the receiver bandwidth as the inverse of the dwell time
 of its first ADC event, and the slice thickness in its <code class="docutils literal notranslate"><span class="pre">SliceThickness</span></code>
 definition. A multi-echo sequence lists every echo time, and the <code class="docutils literal notranslate"><span class="pre">TE</span></code> entry
-holds the first.</p></li>
+holds the first. <code class="docutils literal notranslate"><span class="pre">epi2d</span></code> and <code class="docutils literal notranslate"><span class="pre">epi3d</span></code> state in the protocol’s note why the
+bandwidth differs from the one asked: the sampling interval is a multiple
+of the ADC raster. EPI adds samples at that interval to cover the
+gradient-limited acquisition window. Where the receiver’s sample limit
+prevents that count, the interval increases instead. The displayed pixel
+bandwidth uses the achieved ADC window duration.</p></li>
 <li><p><strong>Invalid protocols.</strong> A prescription the design refuses is invalid, with
 the message of its error.</p></li>
+<li><p><strong>Representative sequence.</strong> The repetitions on which the design service
+checks nerve stimulation and slew rate before the scan is designed. A
+Cartesian sequence designs the views at the centre and at the edge of each
+phase-encoding axis, a lattice at half the matrix with no calibration
+region, partial Fourier or CAIPI shift: the largest phase encode of each
+axis, at one edge of k-space. <code class="docutils literal notranslate"><span class="pre">mprage3d</span></code> designs them as short shots beside
+the shot its scan time and RF are read from. A sequence that turns one
+readout about the slice axis, a spoke, a blade or an interleaf, designs
+eight of them, evenly spread in angle. The nerve response read on these is
+the scan’s largest under a nerve model that is the same on every axis, and
+so are the slew rate and the amplitude on an axis-aligned prescription.
+The slew rate on a physical axis of an oblique prescription is not
+bounded: the scan plays the other edge of k-space too, and over random
+rotations it read up to 11 % more than these views (<code class="docutils literal notranslate"><span class="pre">gre3d</span></code>, <code class="docutils literal notranslate"><span class="pre">se3d</span></code>,
+<code class="docutils literal notranslate"><span class="pre">mprage3d</span></code>; <code class="docutils literal notranslate"><span class="pre">fse3d</span></code> 8 %), the nerve response never more. The design
+service holds their readings to 97 % of the limits, which takes up the
+first 3 %; past that the check of the generated design finds the excess
+and <code class="docutils literal notranslate"><span class="pre">generate</span></code> lowers the slew rate again. That of
+<code class="docutils literal notranslate"><span class="pre">fse3d</span></code> and <code class="docutils literal notranslate"><span class="pre">fse_pd3d</span></code> is the packed echo train their evaluation designs,
+as long as the longest train, startup echoes included, at a constant
+refocusing angle: the largest of a Busse or PD train; <code class="docutils literal notranslate"><span class="pre">epi3d</span></code> states none.</p></li>
 <li><p><strong>RF layout.</strong> The first TR of the repetition, its shot repeated once per
 slice of the largest packet, with the TR as its period; for the balanced
 steady state, the TR after the half-angle pulse. The TR of a fast spin echo
@@ -1282,7 +1399,17 @@ holds an echo train, that of an MPRAGE an inversion shot, and that of <code clas
 a volume. The flip angle is the control of every excitation of the plugins
 with a <code class="docutils literal notranslate"><span class="pre">flip</span></code> entry, which an MPRAGE’s inversion is not. The spin-echo
 plugins, <code class="docutils literal notranslate"><span class="pre">fse3d</span></code> among them, have none, and the amplitude of their
-excitation and refocusing pulses is that of the design.</p></li>
+excitation and refocusing pulses is that of the design. The calibration of
+<code class="docutils literal notranslate"><span class="pre">epi2d</span></code> and <code class="docutils literal notranslate"><span class="pre">epi3d</span></code>, FLEET or gradient echo, repeats at its own shortest TR, which the
+console’s TR does not set, and a scanner costs each sequence of the chain
+over its own repetition. Where the calibration plays more RF power than a
+TR, which a slice a long TR apart or a few long 3D shots allow, the layout is
+its pulses, as many as it plays in a TR, over the TR, with no control: the
+console then refuses a protocol whose calibration exceeds the RF limits,
+whatever its TR. The calibration plays the excitation’s waveform at
+<code class="docutils literal notranslate"><span class="pre">CALIBRATION_FLIP_DEG</span></code> of the sequence function, 10 degrees, and the fat
+saturation of <code class="docutils literal notranslate"><span class="pre">epi2d</span></code> is numbered after the excitation, so the excitation
+keeps the number the listing gives it with the fat saturation on or off.</p></li>
 </ul>
 </section>
 </section>
@@ -1299,6 +1426,8 @@ request names under <code class="docutils literal notranslate"><span class="pre"
 <ul class="simple">
 <li><p><a class="reference internal" href="../explanations/protocol.html"><span class="doc">Protocol resolution</span></a>: resolution, presets, units and precision.</p></li>
 <li><p><a class="reference internal" href="../api/design.html"><span class="doc">Scanner sequences</span></a>: the scanner-sequence interface and its entries.</p></li>
+<li><p><a class="reference internal" href="../developer-guide/internals/sequence-definitions.html"><span class="doc">Sequence definitions</span></a>: the definitions a
+design writes and the services read.</p></li>
 </ul>
 </section>
 </section>
@@ -1353,14 +1482,14 @@ request names under <code class="docutils literal notranslate"><span class="pre"
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#protocol-entries">Protocol entries</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#sequence-functions">Sequence functions</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#protocol-resolution">Protocol resolution</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#protocol-evaluation">Protocol evaluation</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#evaluating-a-protocol">Protocol evaluation</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#exam-cache">Exam cache</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#rf-layout">RF layout</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#rf-phase-convention">RF phase convention</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#stating-the-rf-layout">RF layout</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#transmit-phase-convention">RF phase convention</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#shipped-sequences">Shipped sequences</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#shared-user-entries">Shared user entries</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#console-controls">Console controls</a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#options">Options</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#plugin-options">Options</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#diffusion-tables">Diffusion tables</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#protocol-conventions">Protocol conventions</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#shipped-evaluation">Shipped evaluation</a></li>

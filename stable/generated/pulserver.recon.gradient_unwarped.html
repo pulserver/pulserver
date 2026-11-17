@@ -45,7 +45,7 @@
   <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="../_static/documentation_options.js?v=da2c3ea9"></script>
+    <script src="../_static/documentation_options.js?v=47770eee"></script>
     <script src="../_static/doctools.js?v=fd6eb6e6"></script>
     <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="../_static/clipboard.min.js?v=a7894cd8"></script>
@@ -56,7 +56,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.16';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.23';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -68,7 +68,7 @@
     <link rel="search" title="Search" href="../search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.4.16" />
+  <meta name="docsearch:version" content="v0.4.23" />
   
     
     <script src="../_static/searchtools.js"></script>
@@ -215,6 +215,7 @@
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/protocol-wire.html">Protocol text blocks</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/reconstruction-proxy.html">Reconstruction proxy</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/sar-ratios.html">SAR ratios against a reference pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/sequence-definitions.html">Sequence definitions</a></li>
 <li class="toctree-l3"><a class="reference internal" href="../developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
@@ -516,13 +517,18 @@ the slice moves the slice, which resampling cannot undo.</p>
 <li><p><strong>image</strong> (<em>array_like</em>) – <code class="docutils literal notranslate"><span class="pre">(...,</span> <span class="pre">[partitions,]</span> <span class="pre">lines,</span> <span class="pre">columns)</span></code>, NumPy array or Torch tensor.</p></li>
 <li><p><strong>context</strong> (<a class="reference internal" href="pulserver.recon.ReconContext.html#pulserver.recon.ReconContext" title="pulserver.recon.ReconContext"><em>ReconContext</em></a>) – The plugin’s <a class="reference internal" href="pulserver.recon.ReconContext.html#pulserver.recon.ReconContext" title="pulserver.recon.ReconContext"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReconContext</span></code></a>, whose header states the table.</p></li>
 <li><p><strong>data</strong> (<a class="reference internal" href="pulserver.recon.ReconData.html#pulserver.recon.ReconData" title="pulserver.recon.ReconData"><em>ReconData</em></a>) – The plugin’s <a class="reference internal" href="pulserver.recon.ReconData.html#pulserver.recon.ReconData" title="pulserver.recon.ReconData"><code class="xref py py-class docutils literal notranslate"><span class="pre">ReconData</span></code></a>, whose buffer states the geometry.</p></li>
+<li><p><strong>cache</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="(in Python v3.15)"><em>dict</em></a><em>, </em><em>default=None</em>) – Corrections already built for the stream, by the reference
+acquisition’s encoding space, position and orientation; the one this
+unit needs is taken from it or added to it. A stream of several units
+of one geometry, the echoes of a multi-echo scan or the volumes of a
+time series, so builds its correction once.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>The corrected image, of the type and on the device of <code class="docutils literal notranslate"><span class="pre">image</span></code>.
 <code class="docutils literal notranslate"><span class="pre">image</span></code> itself where the header states no table, where the unit has
-no reference acquisition, or where the correction fails; the reason is
-logged and an uncorrected image is sent on.</p>
+no reference acquisition, or where the correction fails; the last two
+are logged as warnings and an uncorrected image is sent on.</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.5)">numpy.ndarray</a> or torch.Tensor</p>

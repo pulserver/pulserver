@@ -44,7 +44,7 @@
   <link rel="preload" as="script" href="_static/scripts/bootstrap.js?digest=90905a2f556bf617f1a9" />
 <link rel="preload" as="script" href="_static/scripts/pydata-sphinx-theme.js?digest=90905a2f556bf617f1a9" />
 
-    <script src="_static/documentation_options.js?v=da2c3ea9"></script>
+    <script src="_static/documentation_options.js?v=47770eee"></script>
     <script src="_static/doctools.js?v=fd6eb6e6"></script>
     <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
     <script src="_static/clipboard.min.js?v=a7894cd8"></script>
@@ -55,7 +55,7 @@
     <script>
         DOCUMENTATION_OPTIONS.theme_version = '0.20.0';
         DOCUMENTATION_OPTIONS.theme_switcher_json_url = 'https://pulserver.github.io/pulserver/versions.json';
-        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.16';
+        DOCUMENTATION_OPTIONS.theme_switcher_version_match = 'v0.4.23';
         DOCUMENTATION_OPTIONS.show_version_warning_banner =
             true;
         </script>
@@ -67,7 +67,7 @@
     <link rel="search" title="Search" href="search.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
-  <meta name="docsearch:version" content="v0.4.16" />
+  <meta name="docsearch:version" content="v0.4.23" />
   
     
     <script src="_static/searchtools.js"></script>
@@ -216,6 +216,7 @@
 <li class="toctree-l3"><a class="reference internal" href="developer-guide/internals/protocol-wire.html">Protocol text blocks</a></li>
 <li class="toctree-l3"><a class="reference internal" href="developer-guide/internals/reconstruction-proxy.html">Reconstruction proxy</a></li>
 <li class="toctree-l3"><a class="reference internal" href="developer-guide/internals/sar-ratios.html">SAR ratios against a reference pulse</a></li>
+<li class="toctree-l3"><a class="reference internal" href="developer-guide/internals/sequence-definitions.html">Sequence definitions</a></li>
 <li class="toctree-l3"><a class="reference internal" href="developer-guide/internals/virtual-scanner.html">Virtual scanner</a></li>
 </ul>
 </details></li>
@@ -478,6 +479,8 @@
       </ul></li>
       <li><a href="generated/pulserver.ir.CheckLimits.adc_gap.html#pulserver.ir.CheckLimits.adc_gap">adc_gap (pulserver.ir.CheckLimits attribute)</a>
 </li>
+      <li><a href="generated/pulserver.ir.SequencerTiming.adc_tail_us.html#pulserver.ir.SequencerTiming.adc_tail_us">adc_tail_us (pulserver.ir.SequencerTiming attribute)</a>
+</li>
       <li><a href="generated/pulserver.recon.ReconBuffer.add.html#pulserver.recon.ReconBuffer.add">add() (pulserver.recon.ReconBuffer method)</a>
 </li>
       <li><a href="generated/pulserver.validate.ChannelAgreement.agrees.html#pulserver.validate.ChannelAgreement.agrees">agrees (pulserver.validate.ChannelAgreement attribute)</a>
@@ -502,6 +505,8 @@
       </ul></li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="generated/pulserver.recon.Corrections.applied.html#pulserver.recon.Corrections.applied">applied() (pulserver.recon.Corrections method)</a>
+</li>
       <li><a href="generated/pulserver.design.BoolParam.argument.html#pulserver.design.BoolParam.argument">argument (pulserver.design.BoolParam attribute)</a>
 
       <ul>
@@ -521,7 +526,11 @@
       <li><a href="generated/pulserver.ir.VendorProfile.as_pairs.html#pulserver.ir.VendorProfile.as_pairs">as_pairs() (pulserver.ir.VendorProfile method)</a>
 </li>
       <li><a href="generated/pulserver.ir.Grouping.as_values.html#pulserver.ir.Grouping.as_values">as_values() (pulserver.ir.Grouping method)</a>
+
+      <ul>
+        <li><a href="generated/pulserver.ir.SequencerTiming.as_values.html#pulserver.ir.SequencerTiming.as_values">(pulserver.ir.SequencerTiming method)</a>
 </li>
+      </ul></li>
       <li><a href="generated/pulserver.recon.AsymmetricEcho.html#pulserver.recon.AsymmetricEcho">AsymmetricEcho (class in pulserver.recon)</a>
 </li>
       <li><a href="generated/pulserver.recon.ReconResult.attributes.html#pulserver.recon.ReconResult.attributes">attributes (pulserver.recon.ReconResult attribute)</a>
@@ -570,12 +579,16 @@
         <li><a href="generated/pulserver.proxy.ReconServer.bind.html#pulserver.proxy.ReconServer.bind">(pulserver.proxy.ReconServer method)</a>
 </li>
       </ul></li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="generated/pulserver.mrd.ReadoutTable.block.html#pulserver.mrd.ReadoutTable.block">block (pulserver.mrd.ReadoutTable attribute)</a>
 </li>
-      <li><a href="generated/pulserver.virtual.FourierPlayer.blocks.html#pulserver.virtual.FourierPlayer.blocks">blocks (pulserver.virtual.FourierPlayer property)</a>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="generated/pulserver.ir.PlayedTime.blocks.html#pulserver.ir.PlayedTime.blocks">blocks (pulserver.ir.PlayedTime attribute)</a>
+
+      <ul>
+        <li><a href="generated/pulserver.virtual.FourierPlayer.blocks.html#pulserver.virtual.FourierPlayer.blocks">(pulserver.virtual.FourierPlayer property)</a>
 </li>
+      </ul></li>
       <li><a href="generated/pulserver.protocol.Kind.html#pulserver.protocol.Kind.BOOL">BOOL (pulserver.protocol.Kind attribute)</a>
 </li>
       <li><a href="generated/pulserver.protocol.BoolKey.html#pulserver.protocol.BoolKey">BoolKey (class in pulserver.protocol)</a>
@@ -746,6 +759,8 @@
       </ul></li>
       <li><a href="generated/pulserver.ir.convert.html#pulserver.ir.convert">convert() (in module pulserver.ir)</a>
 </li>
+      <li><a href="generated/pulserver.recon.Corrections.html#pulserver.recon.Corrections">Corrections (class in pulserver.recon)</a>
+</li>
       <li><a href="generated/pulserver.proxy.SequenceTable.counters.html#pulserver.proxy.SequenceTable.counters">counters (pulserver.proxy.SequenceTable attribute)</a>
 
       <ul>
@@ -824,10 +839,10 @@
 </li>
       <li><a href="generated/pulserver.proxy.DESIGN_PARAMETER.html#pulserver.proxy.DESIGN_PARAMETER">DESIGN_PARAMETER (in module pulserver.proxy)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="generated/pulserver.proxy.DesignCache.html#pulserver.proxy.DesignCache">DesignCache (class in pulserver.proxy)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="generated/pulserver.proxy.DesignIntake.html#pulserver.proxy.DesignIntake">DesignIntake (class in pulserver.proxy)</a>
 </li>
       <li><a href="generated/pulserver.host.DesignStore.html#pulserver.host.DesignStore">DesignStore (class in pulserver.host)</a>
@@ -876,6 +891,10 @@
 </li>
       <li><a href="generated/pulserver.host.DesignStore.discard.html#pulserver.host.DesignStore.discard">discard() (pulserver.host.DesignStore static method)</a>
 </li>
+      <li><a href="generated/pulserver.protocol.Display.html#pulserver.protocol.Display">Display (class in pulserver.protocol)</a>
+</li>
+      <li><a href="generated/pulserver.protocol.Validation.display.html#pulserver.protocol.Validation.display">display (pulserver.protocol.Validation attribute)</a>
+</li>
       <li><a href="generated/pulserver.ir.CheckLimits.drive_per_hz.html#pulserver.ir.CheckLimits.drive_per_hz">drive_per_hz (pulserver.ir.CheckLimits attribute)</a>
 </li>
       <li><a href="generated/pulserver.protocol.InputMode.html#pulserver.protocol.InputMode.DROPDOWN">DROPDOWN (pulserver.protocol.InputMode attribute)</a>
@@ -900,6 +919,12 @@
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="generated/pulserver.protocol.TriggerType.html#pulserver.protocol.TriggerType.ECG">ECG (pulserver.protocol.TriggerType attribute)</a>
 </li>
+      <li><a href="generated/pulserver.design.Evaluation.echo_spacing.html#pulserver.design.Evaluation.echo_spacing">echo_spacing (pulserver.design.Evaluation attribute)</a>
+
+      <ul>
+        <li><a href="generated/pulserver.protocol.Display.echo_spacing.html#pulserver.protocol.Display.echo_spacing">(pulserver.protocol.Display attribute)</a>
+</li>
+      </ul></li>
       <li><a href="generated/pulserver.protocol.Parameter.editable.html#pulserver.protocol.Parameter.editable">editable (pulserver.protocol.Parameter property)</a>
 </li>
       <li><a href="generated/pulserver.virtual.Ellipse.html#pulserver.virtual.Ellipse">Ellipse (class in pulserver.virtual)</a>
@@ -921,6 +946,8 @@
       <li><a href="generated/pulserver.mrd.EncodingSpace.html#pulserver.mrd.EncodingSpace">EncodingSpace (class in pulserver.mrd)</a>
 </li>
       <li><a href="generated/pulserver.validate.PlayedWaveforms.end_time_us.html#pulserver.validate.PlayedWaveforms.end_time_us">end_time_us (pulserver.validate.PlayedWaveforms attribute)</a>
+</li>
+      <li><a href="generated/pulserver.ir.SequencerTiming.ends_early.html#pulserver.ir.SequencerTiming.ends_early">ends_early (pulserver.ir.SequencerTiming property)</a>
 </li>
       <li><a href="generated/pulserver.proxy.enrich_acquisition.html#pulserver.proxy.enrich_acquisition">enrich_acquisition() (in module pulserver.proxy)</a>
 </li>
@@ -970,10 +997,10 @@
 </li>
       <li><a href="generated/pulserver.protocol.FloatKey.html#pulserver.protocol.FloatKey.EXSAT1_NORMAL_Y">EXSAT1_NORMAL_Y (pulserver.protocol.FloatKey attribute)</a>
 </li>
-      <li><a href="generated/pulserver.protocol.FloatKey.html#pulserver.protocol.FloatKey.EXSAT1_NORMAL_Z">EXSAT1_NORMAL_Z (pulserver.protocol.FloatKey attribute)</a>
-</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="generated/pulserver.protocol.FloatKey.html#pulserver.protocol.FloatKey.EXSAT1_NORMAL_Z">EXSAT1_NORMAL_Z (pulserver.protocol.FloatKey attribute)</a>
+</li>
       <li><a href="generated/pulserver.protocol.FloatKey.html#pulserver.protocol.FloatKey.EXSAT1_THICKNESS">EXSAT1_THICKNESS (pulserver.protocol.FloatKey attribute)</a>
 </li>
       <li><a href="generated/pulserver.protocol.FloatKey.html#pulserver.protocol.FloatKey.EXSAT2_LOC">EXSAT2_LOC (pulserver.protocol.FloatKey attribute)</a>
@@ -1044,6 +1071,8 @@
         <li><a href="generated/pulserver.recon.ReconBuffer.extents.html#pulserver.recon.ReconBuffer.extents">(pulserver.recon.ReconBuffer property)</a>
 </li>
       </ul></li>
+      <li><a href="generated/pulserver.ir.PlayedTime.extra.html#pulserver.ir.PlayedTime.extra">extra (pulserver.ir.PlayedTime property)</a>
+</li>
   </ul></td>
 </tr></table>
 
@@ -1056,13 +1085,21 @@
         <li><a href="generated/pulserver.protocol.UIParam.FAT_SAT.html#pulserver.protocol.UIParam.FAT_SAT">(pulserver.protocol.UIParam attribute)</a>
 </li>
       </ul></li>
+      <li><a href="generated/pulserver.recon.fermi_filtered.html#pulserver.recon.fermi_filtered">fermi_filtered() (in module pulserver.recon)</a>
+</li>
       <li><a href="generated/pulserver.mrd.MrdMetadata.field_of_view_mm.html#pulserver.mrd.MrdMetadata.field_of_view_mm">field_of_view_mm() (pulserver.mrd.MrdMetadata method)</a>
 </li>
       <li><a href="generated/pulserver.virtual.BrainWeb.field_ppm.html#pulserver.virtual.BrainWeb.field_ppm">field_ppm (pulserver.virtual.BrainWeb property)</a>
 </li>
       <li><a href="generated/pulserver.recon.figure_rgb.html#pulserver.recon.figure_rgb">figure_rgb() (in module pulserver.recon)</a>
 </li>
-      <li><a href="generated/pulserver.virtual.Girf.filtered.html#pulserver.virtual.Girf.filtered">filtered() (pulserver.virtual.Girf method)</a>
+      <li><a href="generated/pulserver.recon.Corrections.filtered.html#pulserver.recon.Corrections.filtered">filtered() (pulserver.recon.Corrections method)</a>
+
+      <ul>
+        <li><a href="generated/pulserver.virtual.Girf.filtered.html#pulserver.virtual.Girf.filtered">(pulserver.virtual.Girf method)</a>
+</li>
+      </ul></li>
+      <li><a href="generated/pulserver.recon.Corrections.filtered_along.html#pulserver.recon.Corrections.filtered_along">filtered_along() (pulserver.recon.Corrections method)</a>
 </li>
       <li><a href="generated/pulserver.host.DesignStore.find.html#pulserver.host.DesignStore.find">find() (pulserver.host.DesignStore method)</a>
 </li>
@@ -1128,10 +1165,10 @@
 </li>
       <li><a href="generated/pulserver.protocol.format_values.html#pulserver.protocol.format_values">format_values() (in module pulserver.protocol)</a>
 </li>
-      <li><a href="generated/pulserver.virtual.FourierPlayer.html#pulserver.virtual.FourierPlayer">FourierPlayer (class in pulserver.virtual)</a>
-</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="generated/pulserver.virtual.FourierPlayer.html#pulserver.virtual.FourierPlayer">FourierPlayer (class in pulserver.virtual)</a>
+</li>
       <li><a href="generated/pulserver.mrd.SequenceDefinitions.fov.html#pulserver.mrd.SequenceDefinitions.fov">fov (pulserver.mrd.SequenceDefinitions attribute)</a>
 </li>
       <li><a href="generated/pulserver.protocol.FloatKey.html#pulserver.protocol.FloatKey.FOV">FOV (pulserver.protocol.FloatKey attribute)</a>
@@ -1222,6 +1259,12 @@
       </ul></li>
       <li><a href="generated/pulserver.virtual.BrainWeb.fractions.html#pulserver.virtual.BrainWeb.fractions">fractions (pulserver.virtual.BrainWeb property)</a>
 </li>
+      <li><a href="generated/pulserver.design.Evaluation.frame_time.html#pulserver.design.Evaluation.frame_time">frame_time (pulserver.design.Evaluation attribute)</a>
+
+      <ul>
+        <li><a href="generated/pulserver.protocol.Display.frame_time.html#pulserver.protocol.Display.frame_time">(pulserver.protocol.Display attribute)</a>
+</li>
+      </ul></li>
       <li><a href="generated/pulserver.virtual.Tissue.frequency.html#pulserver.virtual.Tissue.frequency">frequency (pulserver.virtual.Tissue attribute)</a>
 </li>
       <li><a href="generated/pulserver.mrd.AcquisitionBucket.from_arrays.html#pulserver.mrd.AcquisitionBucket.from_arrays">from_arrays() (pulserver.mrd.AcquisitionBucket class method)</a>
@@ -1246,6 +1289,8 @@
 </li>
       <li><a href="generated/pulserver.recon.ReconPlugin.gadget.html#pulserver.recon.ReconPlugin.gadget">gadget() (pulserver.recon.ReconPlugin method)</a>
 </li>
+      <li><a href="generated/pulserver.ir.SequencerTiming.gap_us.html#pulserver.ir.SequencerTiming.gap_us">gap_us (pulserver.ir.SequencerTiming attribute)</a>
+</li>
       <li><a href="generated/pulserver.design.ScannerSequence.generate.html#pulserver.design.ScannerSequence.generate">generate() (pulserver.design.ScannerSequence method)</a>
 
       <ul>
@@ -1268,10 +1313,10 @@
       </ul></li>
       <li><a href="generated/pulserver.recon.ExamCache.get_or_create.html#pulserver.recon.ExamCache.get_or_create">get_or_create() (pulserver.recon.ExamCache method)</a>
 </li>
-      <li><a href="generated/pulserver.virtual.Girf.html#pulserver.virtual.Girf">Girf (class in pulserver.virtual)</a>
-</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="generated/pulserver.virtual.Girf.html#pulserver.virtual.Girf">Girf (class in pulserver.virtual)</a>
+</li>
       <li><a href="generated/pulserver.ir.SarRatio.global_sar.html#pulserver.ir.SarRatio.global_sar">global_sar (pulserver.ir.SarRatio attribute)</a>
 </li>
       <li><a href="generated/pulserver.ir.VendorProfile.grad_amplitude.html#pulserver.ir.VendorProfile.grad_amplitude">grad_amplitude (pulserver.ir.VendorProfile attribute)</a>
@@ -1370,9 +1415,13 @@
 </li>
       <li><a href="generated/pulserver.ir.Format.html#pulserver.ir.Format.INT32">INT32 (pulserver.ir.Format attribute)</a>
 </li>
+      <li><a href="generated/pulserver.virtual.Ellipse.intensity.html#pulserver.virtual.Ellipse.intensity">intensity (pulserver.virtual.Ellipse attribute)</a>
+</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
-      <li><a href="generated/pulserver.virtual.Ellipse.intensity.html#pulserver.virtual.Ellipse.intensity">intensity (pulserver.virtual.Ellipse attribute)</a>
+      <li><a href="generated/pulserver.recon.Corrections.intensity_corrected.html#pulserver.recon.Corrections.intensity_corrected">intensity_corrected() (pulserver.recon.Corrections method)</a>
+</li>
+      <li><a href="generated/pulserver.recon.IntensityCorrection.html#pulserver.recon.IntensityCorrection">IntensityCorrection (class in pulserver.recon)</a>
 </li>
       <li><a href="generated/pulserver.protocol.IntKey.html#pulserver.protocol.IntKey">IntKey (class in pulserver.protocol)</a>
 </li>
@@ -1415,6 +1464,10 @@
 
 <h2 id="J">J</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="generated/pulserver.ir.Grouping.join_trailing_delay_us.html#pulserver.ir.Grouping.join_trailing_delay_us">join_trailing_delay_us (pulserver.ir.Grouping attribute)</a>
+</li>
+  </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="generated/pulserver.virtual.RigidMotion.jumps.html#pulserver.virtual.RigidMotion.jumps">jumps() (pulserver.virtual.RigidMotion class method)</a>
 </li>
@@ -1543,6 +1596,8 @@
       <li><a href="generated/pulserver.recon.CoilSensitivities.method.html#pulserver.recon.CoilSensitivities.method">method (pulserver.recon.CoilSensitivities attribute)</a>
 </li>
       <li><a href="generated/pulserver.protocol.TEPreset.html#pulserver.protocol.TEPreset.MIN_FULL">MIN_FULL (pulserver.protocol.TEPreset attribute)</a>
+</li>
+      <li><a href="generated/pulserver.ir.SequencerTiming.min_wait_us.html#pulserver.ir.SequencerTiming.min_wait_us">min_wait_us (pulserver.ir.SequencerTiming attribute)</a>
 </li>
       <li><a href="generated/pulserver.protocol.TEPreset.html#pulserver.protocol.TEPreset.MINIMUM">MINIMUM (pulserver.protocol.TEPreset attribute)</a>
 
@@ -1708,6 +1763,8 @@
 </li>
       <li><a href="generated/pulserver.protocol.Parameter.html#pulserver.protocol.Parameter">Parameter (class in pulserver.protocol)</a>
 </li>
+      <li><a href="generated/pulserver.protocol.parse_display.html#pulserver.protocol.parse_display">parse_display() (in module pulserver.protocol)</a>
+</li>
       <li><a href="generated/pulserver.protocol.parse_listing.html#pulserver.protocol.parse_listing">parse_listing() (in module pulserver.protocol)</a>
 </li>
       <li><a href="generated/pulserver.protocol.parse_prescription.html#pulserver.protocol.parse_prescription">parse_prescription() (in module pulserver.protocol)</a>
@@ -1752,11 +1809,23 @@
       </ul></li>
       <li><a href="generated/pulserver.validate.PlayedWaveforms.phase_rad.html#pulserver.validate.PlayedWaveforms.phase_rad">phase_rad() (pulserver.validate.PlayedWaveforms method)</a>
 </li>
+      <li><a href="generated/pulserver.design.Evaluation.pixel_bandwidth.html#pulserver.design.Evaluation.pixel_bandwidth">pixel_bandwidth (pulserver.design.Evaluation attribute)</a>
+
+      <ul>
+        <li><a href="generated/pulserver.protocol.Display.pixel_bandwidth.html#pulserver.protocol.Display.pixel_bandwidth">(pulserver.protocol.Display attribute)</a>
+</li>
+      </ul></li>
       <li><a href="generated/pulserver.ir.plan_waves.html#pulserver.ir.plan_waves">plan_waves() (in module pulserver.ir)</a>
 </li>
       <li><a href="generated/pulserver.ir.play.html#pulserver.ir.play">play() (in module pulserver.ir)</a>
 </li>
+      <li><a href="generated/pulserver.ir.PlayedTime.played.html#pulserver.ir.PlayedTime.played">played (pulserver.ir.PlayedTime attribute)</a>
+</li>
       <li><a href="generated/pulserver.ir.played_rf.html#pulserver.ir.played_rf">played_rf() (in module pulserver.ir)</a>
+</li>
+      <li><a href="generated/pulserver.ir.played_time.html#pulserver.ir.played_time">played_time() (in module pulserver.ir)</a>
+</li>
+      <li><a href="generated/pulserver.ir.PlayedTime.html#pulserver.ir.PlayedTime">PlayedTime (class in pulserver.ir)</a>
 </li>
       <li><a href="generated/pulserver.validate.PlayedWaveforms.html#pulserver.validate.PlayedWaveforms">PlayedWaveforms (class in pulserver.validate)</a>
 </li>
@@ -1766,14 +1835,14 @@
 </li>
       <li><a href="generated/pulserver.ir.CheckLimits.pns.html#pulserver.ir.CheckLimits.pns">pns (pulserver.ir.CheckLimits attribute)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="generated/pulserver.ir.CheckLimits.pns_limit.html#pulserver.ir.CheckLimits.pns_limit">pns_limit (pulserver.ir.CheckLimits attribute)</a>
 </li>
       <li><a href="generated/pulserver.recon.ReconBuffer.points.html#pulserver.recon.ReconBuffer.points">points() (pulserver.recon.ReconBuffer method)</a>
 </li>
       <li><a href="generated/pulserver.recon.ExamCache.pop.html#pulserver.recon.ExamCache.pop">pop() (pulserver.recon.ExamCache method)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="generated/pulserver.recon.ExamCache.popitem.html#pulserver.recon.ExamCache.popitem">popitem() (pulserver.recon.ExamCache method)</a>
 </li>
       <li><a href="generated/pulserver.proxy.DesignIntake.port.html#pulserver.proxy.DesignIntake.port">port (pulserver.proxy.DesignIntake property)</a>
@@ -1859,12 +1928,18 @@
       <li><a href="generated/pulserver.ir.Quantity.html#pulserver.ir.Quantity">Quantity (class in pulserver.ir)</a>
 </li>
   </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="generated/pulserver.ir.SequencerTiming.quiet_margin_us.html#pulserver.ir.SequencerTiming.quiet_margin_us">quiet_margin_us (pulserver.ir.SequencerTiming attribute)</a>
+</li>
+  </ul></td>
 </tr></table>
 
 <h2 id="R">R</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="generated/pulserver.proxy.TableSpace.ramp_sampled.html#pulserver.proxy.TableSpace.ramp_sampled">ramp_sampled (pulserver.proxy.TableSpace attribute)</a>
+</li>
+      <li><a href="generated/pulserver.recon.Corrections.ran.html#pulserver.recon.Corrections.ran">ran() (pulserver.recon.Corrections method)</a>
 </li>
       <li><a href="generated/pulserver.design.FloatParam.range_incr.html#pulserver.design.FloatParam.range_incr">range_incr (pulserver.design.FloatParam attribute)</a>
 
@@ -1898,8 +1973,12 @@
         <li><a href="generated/pulserver.protocol.Parameter.range_min.html#pulserver.protocol.Parameter.range_min">(pulserver.protocol.Parameter attribute)</a>
 </li>
       </ul></li>
-      <li><a href="generated/pulserver.ir.WaveBudget.raster_us.html#pulserver.ir.WaveBudget.raster_us">raster_us (pulserver.ir.WaveBudget attribute)</a>
+      <li><a href="generated/pulserver.ir.SequencerTiming.raster_us.html#pulserver.ir.SequencerTiming.raster_us">raster_us (pulserver.ir.SequencerTiming attribute)</a>
+
+      <ul>
+        <li><a href="generated/pulserver.ir.WaveBudget.raster_us.html#pulserver.ir.WaveBudget.raster_us">(pulserver.ir.WaveBudget attribute)</a>
 </li>
+      </ul></li>
       <li><a href="generated/pulserver.proxy.DesignCache.read.html#pulserver.proxy.DesignCache.read">read() (pulserver.proxy.DesignCache method)</a>
 
       <ul>
@@ -2078,6 +2157,8 @@
         <li><a href="generated/pulserver.protocol.UIParam.RF_SPOILING.html#pulserver.protocol.UIParam.RF_SPOILING">(pulserver.protocol.UIParam attribute)</a>
 </li>
       </ul></li>
+      <li><a href="generated/pulserver.ir.SequencerTiming.rf_tail_us.html#pulserver.ir.SequencerTiming.rf_tail_us">rf_tail_us (pulserver.ir.SequencerTiming attribute)</a>
+</li>
       <li><a href="generated/pulserver.design.RfControl.html#pulserver.design.RfControl">RfControl (in module pulserver.design)</a>
 </li>
       <li><a href="generated/pulserver.protocol.RfDefinitionRecord.html#pulserver.protocol.RfDefinitionRecord">RfDefinitionRecord (class in pulserver.protocol)</a>
@@ -2134,11 +2215,15 @@
 </li>
       <li><a href="generated/pulserver.mrd.AcquisitionBucketStats.segment.html#pulserver.mrd.AcquisitionBucketStats.segment">segment (pulserver.mrd.AcquisitionBucketStats attribute)</a>
 </li>
+      <li><a href="generated/pulserver.ir.PlayedTime.segment_starts.html#pulserver.ir.PlayedTime.segment_starts">segment_starts (pulserver.ir.PlayedTime attribute)</a>
+</li>
       <li><a href="generated/pulserver.recon.ReconBuffer.select.html#pulserver.recon.ReconBuffer.select">select() (pulserver.recon.ReconBuffer method)</a>
 </li>
       <li><a href="generated/pulserver.virtual.Ellipse.semi_axes.html#pulserver.virtual.Ellipse.semi_axes">semi_axes (pulserver.virtual.Ellipse attribute)</a>
 </li>
       <li><a href="generated/pulserver.virtual.send.html#pulserver.virtual.send">send() (in module pulserver.virtual)</a>
+</li>
+      <li><a href="generated/pulserver.design.Evaluation.sequence.html#pulserver.design.Evaluation.sequence">sequence (pulserver.design.Evaluation attribute)</a>
 </li>
       <li><a href="generated/pulserver.proxy.SequenceTable.sequence_parameters.html#pulserver.proxy.SequenceTable.sequence_parameters">sequence_parameters (pulserver.proxy.SequenceTable attribute)</a>
 </li>
@@ -2151,6 +2236,10 @@
       <li><a href="generated/pulserver.mrd.SequenceDefinitions.html#pulserver.mrd.SequenceDefinitions">SequenceDefinitions (class in pulserver.mrd)</a>
 </li>
       <li><a href="generated/pulserver.design.SequencePlugin.html#pulserver.design.SequencePlugin">SequencePlugin (class in pulserver.design)</a>
+</li>
+      <li><a href="generated/pulserver.ir.CheckLimits.sequencer_timing.html#pulserver.ir.CheckLimits.sequencer_timing">sequencer_timing (pulserver.ir.CheckLimits attribute)</a>
+</li>
+      <li><a href="generated/pulserver.ir.SequencerTiming.html#pulserver.ir.SequencerTiming">SequencerTiming (class in pulserver.ir)</a>
 </li>
       <li><a href="generated/pulserver.proxy.SequenceTable.html#pulserver.proxy.SequenceTable">SequenceTable (class in pulserver.proxy)</a>
 </li>
@@ -2198,14 +2287,14 @@
       </ul></li>
       <li><a href="generated/pulserver.mrd.SequenceDefinitions.slice_thickness.html#pulserver.mrd.SequenceDefinitions.slice_thickness">slice_thickness (pulserver.mrd.SequenceDefinitions attribute)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="generated/pulserver.protocol.FloatKey.html#pulserver.protocol.FloatKey.SLICE_THICKNESS">SLICE_THICKNESS (pulserver.protocol.FloatKey attribute)</a>
 
       <ul>
         <li><a href="generated/pulserver.protocol.UIParam.SLICE_THICKNESS.html#pulserver.protocol.UIParam.SLICE_THICKNESS">(pulserver.protocol.UIParam attribute)</a>
 </li>
       </ul></li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="generated/pulserver.ir.WaveBudget.slots.html#pulserver.ir.WaveBudget.slots">slots (pulserver.ir.WaveBudget attribute)</a>
 </li>
       <li><a href="generated/pulserver.virtual.Chunk.sound.html#pulserver.virtual.Chunk.sound">sound (pulserver.virtual.Chunk attribute)</a>
@@ -2280,6 +2369,12 @@
       </ul></li>
       <li><a href="generated/pulserver.proxy.DicomReceiver.store.html#pulserver.proxy.DicomReceiver.store">store() (pulserver.proxy.DicomReceiver method)</a>
 </li>
+      <li><a href="generated/pulserver.design.ScannerSequence.strict_limits.html#pulserver.design.ScannerSequence.strict_limits">strict_limits (pulserver.design.ScannerSequence attribute)</a>
+
+      <ul>
+        <li><a href="generated/pulserver.design.SequencePlugin.strict_limits.html#pulserver.design.SequencePlugin.strict_limits">(pulserver.design.SequencePlugin attribute)</a>
+</li>
+      </ul></li>
       <li><a href="generated/pulserver.protocol.Kind.html#pulserver.protocol.Kind.STRINGLIST">STRINGLIST (pulserver.protocol.Kind attribute)</a>
 </li>
       <li><a href="generated/pulserver.design.StringListParam.html#pulserver.design.StringListParam">StringListParam() (in module pulserver.design)</a>
@@ -2334,6 +2429,8 @@
 </li>
       <li><a href="generated/pulserver.proxy.TableSpace.html#pulserver.proxy.TableSpace">TableSpace (class in pulserver.proxy)</a>
 </li>
+      <li><a href="generated/pulserver.ir.SequencerTiming.tail_us.html#pulserver.ir.SequencerTiming.tail_us">tail_us (pulserver.ir.SequencerTiming attribute)</a>
+</li>
       <li><a href="generated/pulserver.mrd.SequenceDefinitions.te.html#pulserver.mrd.SequenceDefinitions.te">te (pulserver.mrd.SequenceDefinitions attribute)</a>
 </li>
       <li><a href="generated/pulserver.protocol.FloatKey.html#pulserver.protocol.FloatKey.TE">TE (pulserver.protocol.FloatKey attribute)</a>
@@ -2370,10 +2467,10 @@
         <li><a href="generated/pulserver.virtual.Phantom.tissue.html#pulserver.virtual.Phantom.tissue">(pulserver.virtual.Phantom method)</a>
 </li>
       </ul></li>
-      <li><a href="generated/pulserver.proxy.DicomReceiver.title.html#pulserver.proxy.DicomReceiver.title">title (pulserver.proxy.DicomReceiver attribute)</a>
-</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="generated/pulserver.proxy.DicomReceiver.title.html#pulserver.proxy.DicomReceiver.title">title (pulserver.proxy.DicomReceiver attribute)</a>
+</li>
       <li><a href="generated/pulserver.validate.PlayedWaveforms.titles.html#pulserver.validate.PlayedWaveforms.titles">titles (pulserver.validate.PlayedWaveforms attribute)</a>
 </li>
       <li><a href="generated/pulserver.design.Protocol.to_wire.html#pulserver.design.Protocol.to_wire">to_wire() (pulserver.design.Protocol method)</a>
@@ -2456,6 +2553,8 @@
         <li><a href="generated/pulserver.protocol.Parameter.unit.html#pulserver.protocol.Parameter.unit">(pulserver.protocol.Parameter attribute)</a>
 </li>
       </ul></li>
+      <li><a href="generated/pulserver.recon.Corrections.unwarped.html#pulserver.recon.Corrections.unwarped">unwarped() (pulserver.recon.Corrections method)</a>
+</li>
       <li><a href="generated/pulserver.recon.ExamCache.update.html#pulserver.recon.ExamCache.update">update() (pulserver.recon.ExamCache method)</a>
 </li>
       <li><a href="generated/pulserver.protocol.RfDefinitionRecord.use.html#pulserver.protocol.RfDefinitionRecord.use">use (pulserver.protocol.RfDefinitionRecord attribute)</a>

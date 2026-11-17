@@ -37,7 +37,7 @@ directory name, not starting with `.`.
 | Call | Reply |
 | --- | --- |
 | `list` | `PROTOCOL` and the plugin's listing block at the options of the value block in `--values` ({ref}`plugin-options`); with `--rf-definitions`, the `[RfDefinitions]` block |
-| `validate` | `VALID <seconds>` or `INVALID`, an `INFO` line and the value block of the resolved protocol; with `--rf-layout`, a valid reply ends with the `[RfLayout]` block |
+| `validate` | `VALID <seconds>` or `INVALID`, an `INFO` line and the value block of the resolved protocol; with `--rf-layout`, a valid reply continues with the `[RfLayout]` block; a valid reply whose evaluation states display figures ends with the `[Display]` block |
 | `generate` | `GENERATED <id>`, the identifier of the design in the scan's directory |
 | `import` | `IMPORTED <id>` |
 | `push` | `PUSHED <count>`: the designs sent, not counting those the intake already holds |
@@ -131,14 +131,14 @@ pulses are designed as given.
 checks hold every physical axis. Logical axes played together add on one
 physical axis, so under an oblique prescription a design held to `max_grad` and
 `max_slew` per logical axis can exceed them on a physical one and is refused.
-Two design limits cap what each logical axis is designed under, derated by the
-scanner for the prescription's rotation:
+Two design limits cap what each logical axis is designed under, the scanner's
+limits for the prescription's rotation:
 
 | Limit | Meaning |
 | --- | --- |
-| `design_max_grad` | Gradient amplitude each logical axis is designed under, in the `grad_unit` of `max_grad` |
-| `design_max_slew` | Slew rate each logical axis is designed under, in the `slew_unit` of `max_slew` |
-| `design_max_grad_any_rotation`, `design_max_slew_any_rotation` | The same for a design that must hold under any rotation: one whose scan follows motion-correction poses |
+| `design_max_grad` | Gradient amplitude each logical axis is designed under, in the `grad_unit` of `max_grad`: the coil's per-axis limit, scaled by the share the prescription's rotation leaves each logical axis with all three active |
+| `design_max_slew` | Slew rate each logical axis is designed under, in the `slew_unit` of `max_slew`, the coil's per-axis slew rate scaled by the same share |
+| `design_max_grad_any_rotation`, `design_max_slew_any_rotation` | The same for a design that must hold under any rotation, one whose scan follows motion-correction poses: limits derated by the scanner so that no rotation puts more than the per-axis limit on a physical axis |
 | `pmc_enable` | `1` when the scan follows the poses its reconstruction publishes, `0` otherwise |
 | `design_rf_dead_time` | Least delay of an RF pulse in its block, in s |
 | `design_rf_ringdown_time` | Least time from the end of an RF pulse to the end of its block, in s |
@@ -153,6 +153,37 @@ axes to `max_grad` and `max_slew`, since a rotation can put the whole vector
 on one physical axis. A sequence without `EnablePmc`, or a scan with
 `pmc_enable` `0`, is designed under `design_max_grad` and `design_max_slew`.
 The manifest's `design_rotation` records which, `any` or `prescribed`.
+
+A design at these limits can stimulate peripheral nerves past `pns_limit`, or,
+for a scan following poses, sum to a slew rate past `max_slew` over the axes.
+`generate` then designs it again at a lower slew rate, modelled on the
+response it measured, at most three times, lowering it further where the
+plugin cannot lay the design out at that rate, and checks every problem again
+on each new design; `validate` does the same on the representative sequence a
+plugin's evaluation states ({ref}`evaluating-a-protocol`), so the console
+shows what `generate` designs. It models each step on the readings it has:
+the first on one reading, with the nerve response the plugin's last search
+found or else that of one ramp under the nerve model, so a request past a
+limit is mostly evaluated twice. It holds a reading to 97 % of its limit:
+the representative sequence bounds the nerve response of the scan, but on an
+oblique prescription the scan can read up to about 11 % more slew rate on a
+physical axis, which the check of the generated design then finds, and
+`generate` lowers the slew rate again. A request still past 97 % of a limit
+after the last pass is refused. The slew rate a request ends at is remembered:
+`generate` starts there, the same request validated again is evaluated there
+once, and the plugin's next request under the same limits is tried first
+where the readings of this one reach their target, kept where its own
+readings are within their limits and near them, and raised or lowered once,
+as modelled, where they are not. A request no `validate` searched is searched by `generate` the same
+way before it designs the scan. A design past a gradient amplitude limit is
+refused, since no slew rate brings it down. Each file of a design records the
+slew rate it was designed under, per logical axis, in its `DesignMaxSlew`
+definition, and the manifest records it as `design_max_slew_t_per_m_per_s`,
+with the passes as `slew_passes`. A strict plugin
+({attr}`~pulserver.design.SequencePlugin.strict_limits`), whose files set
+`StrictLimits`, or a design whose sequence sets `StrictLimits` itself, is
+refused as designed; the manifest's `strict_limits` records which. An imported
+chain is never designed again.
 
 A design limit above the scanner's leaves the scanner's, and one left out is the
 scanner's; a design dead time below the scanner's leaves the scanner's. The
@@ -208,6 +239,20 @@ gradient heating from it.
 | `vop_coil` | Transmit configuration the scanner reports; the VOP file's `transmit` metadata must name the same one |
 | `acoustic_file` | HDF5 file of the gradient coil's acoustic transfer function, at a path the design calls can read; the peak and A-weighted average sound pressure levels are held to the limits of IEC 60601-2-33 and written into the cache |
 | `acoustic_interval_us` | Sampling interval in µs that the bins of `acoustic_file` refer to; given with it |
+| `segment_gap_us`, `segment_tail_us`, `segment_min_wait_us`, `segment_raster_us` | How the scanner's sequencer plays segments ({class}`~pulserver.ir.SequencerTiming`), in µs: the time it takes after every segment, how far an active segment plays past its blocks, the shortest wait a pure delay plays, and the raster a wait is played on. `segment_gap_us` is given with any of them |
+| `segment_quiet_margin_us`, `segment_rf_tail_us`, `segment_adc_tail_us` | Whether and how the sequencer ends an active segment early, inside the silence it ends on, in µs: the silence it keeps, negative or left out for a sequencer that does not; and how long the playout stays busy after an RF pulse and after a readout, which counts as part of them. Given 0 or more, a single wait a segment ends on, shorter than the gap plus the least wait, stays in that segment as its quiet tail |
+
+With the sequencer's timing, a design's manifest records the time the scan
+plays, `played_time_s`, beside the time its blocks take, `blocks_time_s`
+({func}`~pulserver.ir.played_time`). A pure delay gives the time between
+segments back, so a scan whose repetitions end in a wait of more than about a
+millisecond plays the time its file states; one whose segments follow each
+other without a delay plays longer by that time per segment. A sequencer that
+ends a segment early takes that time out of the silence the segment ends on:
+leave at least the gap and tail plus the margins of silence after a segment's
+last gradient, RF pulse or readout, and the segment plays the time its file
+states, to the raster. A validation states the TR the scanner plays where each
+repetition is a segment that does not end on enough silence.
 
 A call refuses limits it cannot read. A design is identified by the contents
 of the VOP, vendor and acoustic files as well as by their paths.
@@ -230,7 +275,8 @@ status, reply = call("generate", plugins="sequences", plugin="gre2d",
                      store=DesignStore("designs", "scan"))
 ```
 
-A plugin file is imported again when its modification time changes.
+A plugin file is imported again when its modification time changes or it
+holds another plugin, whatever modification time it shows.
 
 ### Design store
 
@@ -274,10 +320,44 @@ sequence of its own, imports blochsim and PyTorch without designing a
 refocusing train with them, since a forked child cannot differentiate after its
 parent has, and imports every plugin of its `--plugins` directories.
 It answers each call forwarded to its socket in a child process forked from
-it, so nothing a call does outlives the call, and a plugin that ends its
-process fails only its own call, with
+it, so a plugin that ends its process fails only its own call, with
 `ERROR the design call ended with exit status N`. Calls run concurrently, one
 child each.
+
+A child ends with its call, and what it worked out in memory with it. The
+server therefore keeps, in a directory it makes under the system's temporary
+directory when it starts serving and removes when it stops, what the calls
+after it would work out again:
+
+- the reply of each `list` and `validate` call, replied again to the same
+  call while the plugin file, what it holds and the files the limits name
+  are unchanged. A `validate` reply is also dropped when a `generate` lowers the
+  slew rate of its request further, and, for a plugin whose hooks take
+  `exam`, when the files of the exam's cache change;
+- the RF definitions a plugin lists under given limits, which `validate`
+  states its `[RfLayout]` amplitudes over, so the plugin's default protocol
+  is evaluated once and not on every call;
+- the slew rate each request was lowered to, so the `generate` of a request
+  starts where its `validate` ended, and the one the plugin's last request
+  ended at, where its next request is evaluated first;
+- the effective TE of each Busse or PD echo train `fse3d` and `fse_pd3d`
+  evaluated, or why no train realizes it, so the inverse solve that finds it
+  runs once per train and limits;
+- the SLR pulses pypulseqpp designs, which it caches only in the process
+  that designed them: a selective spin echo, a saturation band or a fat
+  saturation is designed by the first call that plays it and read by the
+  calls after it.
+
+The replies, the listed RF and the slew rates kept for a plugin are kept
+under what its file holds as well as its path, the replies and listed RF also
+under its modification time: another plugin staged at the same slot, or a slot
+linked to another plugin file, starts from none of these, even where the
+installer gave both files the same modification time, and a file replaced by
+an identical copy keeps its slew rate. The solved trains and pulses are keyed
+on their own arguments and shared by every plugin that asks for them.
+
+Nothing kept outlives the server, which is restarted to take up a changed
+package in any case. A call answered in its own process keeps nothing.
 
 `list`, `validate`, `generate` and `import` are forwarded when `--socket`, or
 the `PULSERVER_DESIGN_SOCKET` environment variable, names the socket of a
@@ -288,7 +368,7 @@ socket is neither authenticated nor encrypted: its file permissions decide who
 may call.
 
 The server logs one line per call to standard error, naming the call, its
-plugin, its exit status and its duration. A request sent to the socket whose
+plugin, its exit status, its duration and the processor time it took. A request sent to the socket whose
 JSON carries `log`, a file path, has its child append everything else it logs
 and prints to that file, so an interpreter can keep the design calls of one
 scan beside the rest of that scan's log.
