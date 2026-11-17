@@ -8,6 +8,7 @@ from pathlib import Path
 import numpy as np
 import pypulseqpp as pp
 import pytest
+from _synthetic import write_swept_spokes
 from conftest import LABELS, VENDOR
 from pypulseqpp import sequences
 
@@ -582,11 +583,21 @@ def _vendor_cache(seq, budget):
     )
 
 
-@pytest.mark.parametrize("max_samples", [10**6, 3000])
+def _swept(directory, mode):
+    """Spokes whose waves memory holds at once, or must stream, and that memory."""
+    seq = directory / "swept_spokes.seq"
+    write_swept_spokes(seq, SYSTEM)
+    convert(seq, SYSTEM)
+    plan = ir.plan_waves(seq, ir.WaveBudget(10**6, 4.0))
+    budget = 10**6 if mode == "resident" else max(plan["streamed_samples"])
+    return seq, budget
+
+
+@pytest.mark.parametrize("mode", ["resident", "streamed"])
 def test_the_scanner_reader_reads_the_layout_the_host_gave_the_waves(
-    max_samples, tmp_path, scanner_reader
+    mode, tmp_path, scanner_reader
 ):
-    seq = _copy("zte_3d.seq", tmp_path)
+    seq, max_samples = _swept(tmp_path, mode)
     cache = _vendor_cache(seq, ir.WaveBudget(max_samples, 4.0))
     printed = subprocess.run(
         [
@@ -605,7 +616,7 @@ def test_the_scanner_reader_reads_the_layout_the_host_gave_the_waves(
     # This build loads vendor-neutral caches alone.
     convert(seq, SYSTEM)
     plan = ir.plan_waves(seq, ir.WaveBudget(max_samples, 4.0))
-    assert plan["mode"] == ("resident" if max_samples == 10**6 else "streamed")
+    assert plan["mode"] == mode
     assert printed[first:last] == _plan_lines(plan)
 
 
@@ -637,11 +648,11 @@ def _playout_lines(record):
     return lines
 
 
-@pytest.mark.parametrize("max_samples", [10**6, 3000])
+@pytest.mark.parametrize("mode", ["resident", "streamed"])
 def test_the_scanner_reader_plays_the_waves_as_the_host_records_them(
-    max_samples, tmp_path, scanner_reader
+    mode, tmp_path, scanner_reader
 ):
-    seq = _copy("zte_3d.seq", tmp_path)
+    seq, max_samples = _swept(tmp_path, mode)
     cache = _vendor_cache(seq, ir.WaveBudget(max_samples, 4.0))
     printed = subprocess.run(
         [
@@ -659,7 +670,7 @@ def test_the_scanner_reader_plays_the_waves_as_the_host_records_them(
     # This build loads vendor-neutral caches alone.
     convert(seq, SYSTEM)
     record = ir.playout(seq, ir.WaveBudget(max_samples, 4.0))
-    assert record["mode"] == ("resident" if max_samples == 10**6 else "streamed")
+    assert record["mode"] == mode
     assert printed[first:] == _playout_lines(record)
 
 

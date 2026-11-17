@@ -1,12 +1,12 @@
 """The two stages of a segmented playout, recorded, against what the cursor plays."""
 
-import math
 import shutil
 from pathlib import Path
 
 import numpy as np
 import pypulseqpp as pp
 import pytest
+from _synthetic import write_swept_spokes
 
 from pulserver import ir
 from pulserver.ir import Prescan, WaveBudget
@@ -26,40 +26,17 @@ SYSTEM = pp.Opts(
 # A playout raster other than the files', as a scanner's may be.
 RASTER_US = 4.0
 LOTS = 10**6
-#: A sequence written by :func:`_swept_spokes` rather than read from the fixtures.
+#: A sequence written by :func:`write_swept_spokes` rather than read from the fixtures.
 SWEPT = "swept_spokes.seq"
 #: Sequences whose waves a smaller memory streams.
 WAVED = [SWEPT, "mprage_stack_of_spirals_3d.seq"]
 NAMES = ["gre_2d_3sl.seq", "epi_2d_main.seq", "zte_3d.seq", *WAVED]
 
 
-def _swept_spokes(path, spokes=16):
-    """Spokes turned about z, each with a y lobe of another shape under its x lobe.
-
-    Each turn mixes two shapes on each board, so every repetition plays a
-    waveform of its own there, and two slots per position hold less than all of
-    them.
-    """
-    gx = pp.make_trapezoid("x", flat_area=64 / 0.22, flat_time=3.2e-3, system=SYSTEM)
-    gy = pp.make_trapezoid(
-        "y", area=gx.area / 8, duration=pp.calc_duration(gx), system=SYSTEM
-    )
-    adc = pp.make_adc(64, duration=3.2e-3, delay=gx.rise_time, system=SYSTEM)
-    pulse = pp.make_block_pulse(
-        math.pi / 12, duration=1e-3, use="excitation", system=SYSTEM
-    )
-    seq = pp.Sequence(SYSTEM)
-    for spoke in range(spokes):
-        seq.add_block(pulse)
-        seq.add_block(gx, gy, adc, pp.make_rotation(math.pi * (spoke + 0.5) / spokes))
-        seq.add_block(pp.make_delay(2e-3))
-    seq.write(str(path))
-
-
 def _converted(name, directory):
     shutil.copytree(FIXTURES, directory, dirs_exist_ok=True)
     if name == SWEPT:
-        _swept_spokes(directory / name)
+        write_swept_spokes(directory / name, SYSTEM)
     ir.convert(directory / name, SYSTEM)
     return directory / name
 
