@@ -6,6 +6,7 @@ from pathlib import Path
 import numpy as np
 import pypulseqpp as pp
 import pytest
+from _synthetic import write_swept_spokes
 
 from pulserver import ir
 from pulserver.ir import Prescan, WaveBudget
@@ -25,13 +26,17 @@ SYSTEM = pp.Opts(
 # A playout raster other than the files', as a scanner's may be.
 RASTER_US = 4.0
 LOTS = 10**6
-#: Fixtures whose waves a smaller memory streams.
-WAVED = ["zte_3d.seq", "mprage_stack_of_spirals_3d.seq"]
-NAMES = ["gre_2d_3sl.seq", "epi_2d_main.seq", *WAVED]
+#: A sequence written by :func:`write_swept_spokes` rather than read from the fixtures.
+SWEPT = "swept_spokes.seq"
+#: Sequences whose waves a smaller memory streams.
+WAVED = [SWEPT, "mprage_stack_of_spirals_3d.seq"]
+NAMES = ["gre_2d_3sl.seq", "epi_2d_main.seq", "zte_3d.seq", *WAVED]
 
 
 def _converted(name, directory):
     shutil.copytree(FIXTURES, directory, dirs_exist_ok=True)
+    if name == SWEPT:
+        write_swept_spokes(directory / name, SYSTEM)
     ir.convert(directory / name, SYSTEM)
     return directory / name
 
@@ -200,9 +205,7 @@ def test_nothing_is_read_before_it_is_loaded_or_loaded_over_what_plays(played):
 
 # Three slots per position of the stack of spirals take more memory than
 # every wave at once, which is then how a playout holds them.
-@pytest.mark.parametrize(
-    ("name", "ring"), [(name, 2) for name in WAVED] + [("zte_3d.seq", 3)]
-)
+@pytest.mark.parametrize(("name", "ring"), [(name, 2) for name in WAVED] + [(SWEPT, 3)])
 def test_the_instances_of_a_segment_play_the_slots_of_its_ring_in_turn(
     name, ring, tmp_path
 ):
@@ -235,7 +238,7 @@ def test_the_instances_of_a_segment_play_the_slots_of_its_ring_in_turn(
 def test_without_a_budget_the_playout_holds_the_waves_as_the_cache_lays_them_out(
     tmp_path,
 ):
-    seq = _converted("zte_3d.seq", tmp_path)
+    seq = _converted(SWEPT, tmp_path)
     budget = _budgets(seq, 3)["streamed"]
     ir.convert(seq, SYSTEM, wave_budget=budget)
     stored = ir.playout(seq)
@@ -401,7 +404,7 @@ def test_the_prescan_waits_for_no_trigger_and_pulses_no_output(tmp_path):
 def test_waves_that_cannot_be_loaded_in_time_are_refused_before_anything_plays(
     tmp_path,
 ):
-    seq = _converted("zte_3d.seq", tmp_path)
+    seq = _converted(SWEPT, tmp_path)
     streamed = _budgets(seq)["streamed"]
     slow = WaveBudget(streamed.max_samples, RASTER_US, load_us_per_sample=1e3)
     with pytest.raises(ValueError, match="loading"):

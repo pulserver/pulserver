@@ -119,23 +119,33 @@ makes the prepared event play them. At both, a block plays one waveform per
 axis from waveform memory: a wave. Logical axis $o$ plays
 
 $$
-g_o(t) = \sum_d R_{od}\, a_d\, w_d(t) = m \sum_d R_{od}\, \frac{a_d}{m}\, w_d(t),
+g_o(t) = \sum_d c_{od}\, w_d(t), \qquad c_{od} = R_{od}\, a_d,
 $$
 
 with $R$ the block's rotation, the identity for a block without one, $a_d$ the
-amplitude of the event on axis $d$, $w_d$ its waveform normalised to a largest
-magnitude of one, and $m$ the $a_d$ of largest magnitude, sign included. The
-sum on the right is fixed by the events' definitions and shapes, the rotation
-and the amplitude ratios $a_d/m$; an instance only scales it by $m$. The
-conversion keeps each distinct sum once per subsequence, with ratios that
-round to the same multiple of $10^{-4}$ taken as equal, normalised on each
-axis to a largest magnitude of one. Blocks that differ in amplitude or
-polarity alone share one wave.
+amplitude of the event on axis $d$, and $w_d$ its waveform normalised to a
+largest magnitude of one. Each axis plays on its own gradient board at its own
+amplitude, so two blocks play the same waveform on axis $o$ whenever their
+weights $c_{o\cdot}$ are proportional, the factor carrying the polarity. The
+conversion keeps one wave per subsequence for each distinct set of event
+definitions and shapes and, on each axis, the direction of $c_{o\cdot}$
+scaled to one on its largest entry, with directions whose entries round to the
+same multiple of $10^{-4}$ taken as equal. The wave is normalised on each axis
+to a largest magnitude of one.
+
+A spoke turned in the plane therefore plays one wave at every angle: on each
+axis only one logical axis reaches it, and the turn moves into the
+amplitudes. A partition lobe scaled per partition plays one wave on its axis.
+An interleaf that drives two logical axes with different shapes, turned in
+the plane, mixes them in a ratio that changes with the angle, and plays a wave
+per angle.
 
 At every segment position where an instance carries a rotation other than
 the identity, or plays a gradient the position's events are not prepared
-with, each block with a gradient event plays its wave on each axis, at $m$
-times the wave's largest magnitude there, and the scanner applies the
+with, each block with a gradient event plays its wave on each axis at its own
+amplitude there, $c_{ok}/c'_{ok}$ times the wave's largest magnitude, with
+$c'$ the weights the wave was laid down with and $k$ their largest entry on
+that axis, and the scanner applies the
 prescription's rotation alone, or no rotation under `NOROT`. Each such
 position records the number of points of the longest wave it plays, and the
 span of time the waves cover. Every wave a position plays, and every position

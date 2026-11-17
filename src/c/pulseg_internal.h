@@ -358,18 +358,25 @@ typedef struct pulseg_block_initial_state
  * definition or shape the position's prepared events do not hold.
  *
  * A rotation extension turns a block's gradients within the logical frame, so
- * output axis o plays sum_d rotation[o][d] * a_d * w_d(t): the block's three
- * normalised waveforms w_d, combined, with the identity for a block without
- * one.  With m the a_d of largest magnitude,
- * sign included, and ratio[d] = a_d / m, that is
- * m * sum_d rotation[o][d] * ratio[d] * w_d(t), so the combination is fixed by
- * the definitions, the shapes, the rotation and the ratios, and an instance
- * only scales it, its polarity included.  A playout loads the combination
- * normalised to unit peak and plays it at m * peak[o].
+ * output axis o plays sum_d c[o][d] * w_d(t), with c[o][d] = rotation[o][d] *
+ * a_d: the block's three normalised waveforms w_d, weighted, with the
+ * identity for a block without a rotation.  Each output axis plays on its own
+ * gradient board at its own amplitude, so two blocks share an output axis's
+ * waveform whenever their weights c[o][.] are proportional, the factor
+ * carrying the polarity.  A spoke turned in the plane thus plays one waveform
+ * at every angle, cos and sin moving into the amplitudes, and a partition
+ * wave scaled per partition plays one waveform on its axis.
  *
- * One record per distinct (definitions, shapes, rotation, ratios), ratios
- * compared to PULSEG_WAVE_RATIO_STEP.  Every field is 4 bytes, so the records
- * serialize as a packed word array. */
+ * The record keeps the weights of the first block that plays it, as the
+ * rotation and ratio[d] = a_d / m with m the a_d of largest magnitude, sign
+ * included.  A playout loads each output axis normalised to unit peak, and a
+ * block plays output axis o at its own c[o][k] / (rotation[o][k] * ratio[k])
+ * times peak[o], k the axis of largest weight on o in the record
+ * (pulseg__wave_board_axis).
+ *
+ * One record per distinct (definitions, shapes, per-output-axis weight
+ * directions), the directions compared to PULSEG_WAVE_RATIO_STEP.  Every field
+ * is 4 bytes, so the records serialize as a packed word array. */
 typedef struct pulseg_wave
 {
     int grad_def[3];   /* per logical axis; -1 = not driven               */
@@ -384,7 +391,7 @@ typedef struct pulseg_wave
 } pulseg_wave;
 
 #define PULSEG_WAVE_WORDS 25
-/* Amplitude ratios this close are one wave. */
+/* Weight directions this close are one wave. */
 #define PULSEG_WAVE_RATIO_STEP 1.0e-4f
 
 /* ================================================================== */
@@ -885,8 +892,13 @@ int pulseg__block_gradients(
     float *gradient[3],
     int *n);
 
+/* The logical axis that weighs most on output axis @p out_axis of @p wave,
+ * and the direction of the weights there scaled to 1 on that axis, in
+ * @p direction; -1 and zeros where no driven axis reaches @p out_axis. */
+int pulseg__wave_board_axis(const pulseg_wave *wave, int out_axis, float direction[3]);
+
 /* The wave block-table entry @p block_idx plays and the amplitude it plays
- * each axis at: -1 and zeros where it plays none. */
+ * each output axis at: -1 and zeros where it plays none. */
 void pulseg__block_wave(
     const pulseg_sequence_descriptor *desc,
     int block_idx,
