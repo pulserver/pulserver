@@ -578,9 +578,11 @@ typedef struct pulseg_block_instance
      * waves -- one whose blocks carry a rotation, or play a gradient shape the
      * position's prepared events do not hold -- the gradients play as one
      * wave per axis, pulseg_materialize_wave(wave_id), each at
-     * wave_amp_hz_per_m: the block's logical amplitude of largest magnitude,
-     * with its sign, times the wave's peak on that axis.  The rotation matrix
-     * above is then already in the wave.  wave_id is -1 elsewhere, and the
+     * wave_amp_hz_per_m: the block's own amplitude on that output axis, its
+     * rotation and logical amplitudes included, with its sign.  Blocks whose
+     * weights on an output axis differ only by a factor share that axis's
+     * waveform, so a turn in the plane changes these amplitudes and not the
+     * wave.  The rotation matrix above is then already in the wave.  wave_id is -1 elsewhere, and the
      * amplitudes 0: the block plays its position's events at the
      * g*_amp_hz_per_m above. */
     int wave_id;

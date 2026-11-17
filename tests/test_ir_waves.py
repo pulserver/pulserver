@@ -17,20 +17,35 @@ SPOKES = 8
 LOTS = 10**6
 
 
-def _radial(path, spokes=SPOKES, rotate=True):
-    """A spoke per repetition, turned about z by its own angle."""
+def _radial(path, spokes=SPOKES, rotate=True, sweep=True):
+    """A spoke per repetition, turned about z by its own angle.
+
+    With ``sweep``, a y lobe of another shape plays under the x lobe of each
+    block, so every turn mixes two shapes on each board and plays a waveform
+    of its own there.
+    """
     gx = pp.make_trapezoid("x", flat_area=64 / 0.22, flat_time=3.2e-3, system=SYSTEM)
     prephaser = pp.make_trapezoid("x", area=-gx.area / 2, duration=1e-3, system=SYSTEM)
     adc = pp.make_adc(64, duration=3.2e-3, delay=gx.rise_time, system=SYSTEM)
     pulse = pp.make_block_pulse(
         math.pi / 12, duration=1e-3, use="excitation", system=SYSTEM
     )
+    swept = [[], []]
+    if sweep:
+        swept = [
+            [
+                pp.make_trapezoid(
+                    "y", area=area, duration=pp.calc_duration(lobe), system=SYSTEM
+                )
+            ]
+            for area, lobe in ((-gx.area / 8, prephaser), (gx.area / 8, gx))
+        ]
     seq = pp.Sequence(SYSTEM)
     for spoke in range(spokes):
         turn = [pp.make_rotation(math.pi * (spoke + 0.5) / spokes)] if rotate else []
         seq.add_block(pulse)
-        seq.add_block(prephaser, *turn)
-        seq.add_block(gx, adc, *turn)
+        seq.add_block(prephaser, *swept[0], *turn)
+        seq.add_block(gx, *swept[1], adc, *turn)
         seq.add_block(pp.make_delay(2e-3))
     seq.write(str(path))
     ir.convert(path, SYSTEM)
@@ -62,6 +77,78 @@ def test_a_scan_without_rotations_holds_no_waves(tmp_path):
     plan = _plan(path, max_samples=0)
     assert plan["mode"] == "none"
     assert plan["samples"] == (0, 0, 0)
+
+
+def test_a_spoke_turned_in_the_plane_plays_one_wave_at_every_angle(tmp_path):
+    """The turn only rescales each board, so it moves into the amplitudes."""
+    path = _radial(tmp_path / "spokes.seq", sweep=False)
+    (waves,) = _plan(path)["waves"]
+    assert len(waves) == 2
+    played = ir.play(path)
+    waved = played["wave"] >= 0
+    angles = np.pi * (np.arange(SPOKES) + 0.5) / SPOKES
+    readout = played["gradient_hz_per_m"][waved][1::2]
+    np.testing.assert_allclose(
+        readout[:, 1] / readout[:, 0], np.tan(angles), rtol=1e-4, atol=1e-6
+    )
+
+
+def test_a_partition_lobe_scaled_per_partition_plays_one_wave(tmp_path):
+    """The z board is reached by z alone, so each partition only rescales it."""
+    gx = pp.make_trapezoid("x", flat_area=64 / 0.22, flat_time=3.2e-3, system=SYSTEM)
+    gz = pp.make_trapezoid(
+        "z", area=100.0, duration=pp.calc_duration(gx), system=SYSTEM
+    )
+    adc = pp.make_adc(64, duration=3.2e-3, delay=gx.rise_time, system=SYSTEM)
+    seq = pp.Sequence(SYSTEM)
+    for spoke, kz in itertools.product(range(4), (-1.0, -0.5, 0.25, 1.0)):
+        turn = pp.make_rotation(math.pi * (spoke + 0.5) / 4)
+        seq.add_block(gx, pp.scale_grad(gz, kz), adc, turn)
+        seq.add_block(pp.make_delay(2e-3))
+    path = tmp_path / "stack.seq"
+    seq.write(str(path))
+    ir.convert(path, SYSTEM)
+    (waves,) = _plan(path)["waves"]
+    assert len(waves) == 1
+    played = ir.play(path)
+    waved = played["wave"] >= 0
+    traced = ir.play(path, waveforms=True)
+    times = np.linspace(0.0, pp.calc_duration(gx) * 1e6, 201)
+
+    def lobe(trapezoid):
+        corners = np.cumsum(
+            [0.0, trapezoid.rise_time, trapezoid.flat_time, trapezoid.fall_time]
+        )
+        values = [0.0, trapezoid.amplitude, trapezoid.amplitude, 0.0]
+        return np.interp(times, corners * 1e6, values)
+
+    for block, (spoke, kz) in zip(
+        np.flatnonzero(waved),
+        itertools.product(range(4), (-1.0, -0.5, 0.25, 1.0)),
+        strict=True,
+    ):
+        angle = math.pi * (spoke + 0.5) / 4
+        expected = [
+            math.cos(angle) * lobe(gx),
+            math.sin(angle) * lobe(gx),
+            kz * lobe(gz),
+        ]
+        for axis in range(3):
+            start, stop = traced["gradient_span"][block, axis]
+            got = np.interp(
+                times,
+                traced["gradient_time_us"][start:stop],
+                traced["gradient_waveform_hz_per_m"][start:stop],
+                left=0.0,
+                right=0.0,
+            )
+            np.testing.assert_allclose(
+                got, expected[axis], atol=1e-3 * gx.amplitude, err_msg=f"{block} {axis}"
+            )
+    # Amplitudes are on the wave as the first partition laid it down.
+    z = played["gradient_hz_per_m"][waved][:, 2]
+    np.testing.assert_allclose(z / z[0], np.tile([1.0, 0.5, -0.25, -1.0], 4), rtol=1e-5)
+    assert abs(z[0]) == pytest.approx(abs(gz.amplitude), rel=1e-5)
 
 
 def test_every_wave_is_held_at_once_where_the_memory_affords_it(radial):

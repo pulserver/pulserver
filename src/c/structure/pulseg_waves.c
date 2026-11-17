@@ -180,24 +180,6 @@ static float axis_value_at(const axis_corners *c, float x)
     return pulseg__linear_at(c->t, c->v, c->n, x);
 }
 
-/* 1 when one driven axis is an arbitrary gradient on the raster: its samples
- * are known only at raster centres, so the combination is too. */
-static int wave_on_raster_centres(const pulseg_sequence_descriptor *desc, const pulseg_wave *wave)
-{
-    const pulseg_grad_definition *gd;
-    int d;
-
-    for (d = 0; d < 3; ++d)
-    {
-        if (wave->grad_def[d] < 0 || wave->grad_def[d] >= desc->num_unique_grads)
-            continue;
-        gd = &desc->grad_definitions[wave->grad_def[d]];
-        if (gd->type != 0 && gd->unused_or_time_shape_id <= 0)
-            return 1;
-    }
-    return 0;
-}
-
 static int float_cmp(const void *a, const void *b)
 {
     float fa = *(const float *)a;
@@ -211,7 +193,6 @@ typedef struct wave_grid
     axis_corners axis[3];
     float *t;
     int n;
-    int centred; /* raster centres between two held edges */
 } wave_grid;
 
 static void wave_grid_free(wave_grid *g)
@@ -224,49 +205,6 @@ static void wave_grid_free(wave_grid *g)
         PULSEG_FREE(g->t);
     g->t = NULL;
     g->n = 0;
-}
-
-/* 1 and the earliest start and latest end of the driven axes; 0 when none is. */
-static int axes_span(const axis_corners axis[3], float *lo, float *hi)
-{
-    int d, have = 0;
-
-    for (d = 0; d < 3; ++d)
-    {
-        if (axis[d].n < 1)
-            continue;
-        if (!have || axis[d].t[0] < *lo)
-            *lo = axis[d].t[0];
-        if (!have || axis[d].t[axis[d].n - 1] > *hi)
-            *hi = axis[d].t[axis[d].n - 1];
-        have = 1;
-    }
-    return have;
-}
-
-/* The centres of the raster from the earliest start, rounded down onto it,
- * to the latest end, and the two edges the wave holds its end values to. */
-static int centre_grid(wave_grid *g, float raster)
-{
-    float lo = 0.0f;
-    float hi = 0.0f;
-    int i, m;
-
-    if (!axes_span(g->axis, &lo, &hi) || hi <= lo || raster <= 0.0f)
-        return PULSEG_SUCCESS;
-    lo = (float)floor((double)(lo / raster) + 1e-6) * raster;
-    m = (int)ceil((double)((hi - lo) / raster) - 1e-6);
-    if (m < 1)
-        m = 1;
-    g->t = (float *)PULSEG_ALLOC((size_t)(m + 2) * sizeof(float));
-    if (!g->t)
-        return PULSEG_ERR_ALLOC_FAILED;
-    g->t[0] = lo;
-    for (i = 0; i < m; ++i)
-        g->t[i + 1] = lo + ((float)i + 0.5f) * raster;
-    g->t[m + 1] = lo + (float)m * raster;
-    g->n = m + 2;
-    return PULSEG_SUCCESS;
 }
 
 /* Each axis is linear between its corners, so the union of the corner times
@@ -307,27 +245,19 @@ static int wave_grid_build(
         if (!axis_corners_build(desc, wave->grad_def[d], wave->shape_id[d], &g->axis[d]))
             rc = PULSEG_ERR_ALLOC_FAILED;
     if (PULSEG_SUCCEEDED(rc))
-    {
-        g->centred = wave_on_raster_centres(desc, wave);
-        rc = g->centred ? centre_grid(g, desc->grad_raster_us) : corner_grid(g);
-    }
+        rc = corner_grid(g);
     if (PULSEG_FAILED(rc))
         wave_grid_free(g);
     return rc;
 }
 
-/* The combination on output axis @p out_axis at point @p i; on raster
- * centres the edges hold the first and last centres. */
+/* The combination on output axis @p out_axis at point @p i. */
 static float wave_grid_value(const pulseg_wave *wave, const wave_grid *g, int out_axis, int i)
 {
-    float x = g->t[i];
+    const float x = g->t[i];
     float v = 0.0f;
     int d;
 
-    if (g->centred && i == 0)
-        x = g->t[1];
-    else if (g->centred && i == g->n - 1)
-        x = g->t[g->n - 2];
     for (d = 0; d < 3; ++d)
         v += wave->rotation[out_axis * 3 + d] * wave->ratio[d] * axis_value_at(&g->axis[d], x);
     return v;
@@ -656,6 +586,30 @@ int pulseg__block_combination(
     return 1;
 }
 
+int pulseg__wave_board_axis(const pulseg_wave *wave, int out_axis, float direction[3])
+{
+    float weight[3];
+    float largest = 0.0f;
+    int axis = -1;
+    int d;
+
+    for (d = 0; d < 3; ++d)
+    {
+        weight[d] = wave->rotation[out_axis * 3 + d] * wave->ratio[d];
+        direction[d] = 0.0f;
+        if ((float)fabs((double)weight[d]) > largest)
+        {
+            largest = (float)fabs((double)weight[d]);
+            axis = d;
+        }
+    }
+    if (axis < 0)
+        return -1;
+    for (d = 0; d < 3; ++d)
+        direction[d] = weight[d] / weight[axis];
+    return axis;
+}
+
 /* The wave block-table entry @p block_idx plays, -1 where it plays none. */
 static int block_wave_index(const pulseg_sequence_descriptor *desc, int block_idx)
 {
@@ -673,9 +627,12 @@ void pulseg__block_wave(
     int *wave_id,
     float amp_hz_per_m[3])
 {
+    const pulseg_block_table_element *bte;
     const pulseg_wave *wave;
+    pulseg_wave played;
+    float direction[3];
     float scale;
-    int d, w;
+    int o, k, w;
 
     *wave_id = -1;
     amp_hz_per_m[0] = 0.0f;
@@ -685,10 +642,19 @@ void pulseg__block_wave(
     if (w < 0)
         return;
 
-    scale = wave_scale(desc, &desc->block_table[block_idx]);
+    bte = &desc->block_table[block_idx];
     wave = &desc->waves[w];
-    for (d = 0; d < 3; ++d)
-        amp_hz_per_m[d] = scale * wave->peak[d];
+    if (!pulseg__block_combination(desc, bte, &played))
+        return;
+    scale = wave_scale(desc, bte);
+    for (o = 0; o < 3; ++o)
+    {
+        k = pulseg__wave_board_axis(wave, o, direction);
+        if (k < 0)
+            continue;
+        amp_hz_per_m[o] = scale * played.rotation[o * 3 + k] * played.ratio[k] /
+            (wave->rotation[o * 3 + k] * wave->ratio[k]) * wave->peak[o];
+    }
     *wave_id = w;
 }
 

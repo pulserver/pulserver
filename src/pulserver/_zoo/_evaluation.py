@@ -347,6 +347,7 @@ def packets(
     one shot of ``shot`` seconds each, form a packet, the slices are dealt
     round-robin into packets, and the last shot of a packet is padded to the
     cycle on the block raster. Without a cycle one packet holds every slice.
+    Each cycle is a whole number of block rasters.
     """
     per_packet = n_slices if cycle is None else max(1, int(cycle / shot + 1e-9))
     count = -(-n_slices // per_packet)
@@ -354,7 +355,10 @@ def packets(
     if cycle is None:
         cycle = max(sizes) * shot
     return sizes, [
-        size * shot + pp.round_to_raster(cycle - size * shot, raster) for size in sizes
+        pp.round_to_raster(
+            size * shot + pp.round_to_raster(cycle - size * shot, raster), raster
+        )
+        for size in sizes
     ]
 
 

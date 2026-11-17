@@ -24,11 +24,13 @@ namespace
 {
 
 /* What makes two blocks play the same wave: the definitions and shapes of
- * their three axes, their rotation, and their amplitude ratios to
- * PULSEG_WAVE_RATIO_STEP. */
+ * their three axes and, on each output axis, the direction of the weights
+ * the logical axes reach it with, to PULSEG_WAVE_RATIO_STEP.  The rotation
+ * itself is not part of it: a turn that only rescales an output axis plays
+ * the same waveform there at another amplitude. */
 struct WaveKey
 {
-    int v[10];
+    int v[15];
     bool operator==(const WaveKey &other) const
     {
         return std::memcmp(v, other.v, sizeof(v)) == 0;
@@ -40,7 +42,7 @@ struct WaveKeyHash
     std::size_t operator()(const WaveKey &key) const
     {
         std::size_t h = 1469598103934665603ull;
-        for (int i = 0; i < 10; ++i)
+        for (int i = 0; i < 15; ++i)
         {
             h ^= static_cast<std::size_t>(static_cast<unsigned>(key.v[i]));
             h *= 1099511628211ull;
@@ -63,9 +65,15 @@ bool wave_of_block(
     {
         key.v[d] = wave.grad_def[d];
         key.v[3 + d] = wave.shape_id[d];
-        key.v[7 + d] = static_cast<int>(std::lround(wave.ratio[d] / PULSEG_WAVE_RATIO_STEP));
     }
-    key.v[6] = wave.rotation_id;
+    for (int o = 0; o < 3; ++o)
+    {
+        float direction[3];
+        pulseg__wave_board_axis(&wave, o, direction);
+        for (int d = 0; d < 3; ++d)
+            key.v[6 + 3 * o + d] =
+                static_cast<int>(std::lround(direction[d] / PULSEG_WAVE_RATIO_STEP));
+    }
     return true;
 }
 
