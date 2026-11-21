@@ -97,6 +97,44 @@ if waved:
         print("wave calibration scale", np.round(sc_, 4), "delay", np.round(dl_, 3))
         psf = linop.wave_psf(k_, (nz, ny, nx), (fov_z, fov_y), scale=sc_, delay=dl_, centred=True).numpy()
         print("psf vs nominal phase agreement", float(np.abs(np.vdot(psf, np.exp(sign * 2j * np.pi * (wy[None, None, :] * yy[None, :, None] + wz[None, None, :] * zz[:, None, None])))) / psf.size))
+    if os.environ.get("SUBCAL"):
+        # Fit wave scale and delay against the subspace model: a low-resolution image from the
+        # wave-free calibration lines predicts the wave lines whose wave excursion stays in the region.
+        from scipy.ndimage import binary_erosion
+        from scipy.optimize import least_squares
+        t0 = time.perf_counter()
+        def packed(rs):
+            per = [[r for r in rs if r["con"] == f] for f in range(frames)]
+            sh = max(1, max(len(b) for b in per))
+            p_ = -np.ones((frames, sh, 2), np.int64); d_ = np.zeros((VC, frames, sh, nro), np.complex64)
+            for f, b in enumerate(per):
+                for i, r in enumerate(b):
+                    p_[f, i] = (r["e2"], r["e1"]); d_[:, f, i] = comp(r["data"])
+            return torch.from_numpy(p_), torch.from_numpy(d_)
+        k_ = np.stack([wz, wy], -1)
+        region = np.zeros((nz, ny), bool)
+        for r in flat: region[r["e2"], r["e1"]] = True
+        margin = [int(np.ceil(np.abs(k_[:, a]).max() * (fov_z, fov_y)[a])) for a in range(2)]
+        inner = binary_erosion(region, np.ones([2 * m + 1 for m in margin], bool), border_value=0)
+        targets = [r for r in waved if inner[r["e2"], r["e1"]]]
+        pf, yf = packed(flat); pt, yt = packed(targets)
+        ones = torch.ones(nz, ny, nro, dtype=torch.complex64)
+        crank = int(os.environ.get("SUBCAL_RANK", rank)); cbasis = basis[:crank].contiguous()
+        Af = linop.WaveSense(maps.to(torch.complex64), (crank, nz, ny, nx), nro, positions=pf, basis=cbasis, centred=True, psf=ones)
+        sf = optim.data_scaling(yf, A=Af) or 1.0
+        xc = optim.CG(float(os.environ.get('SUBCAL_LAM', 1e-3)), maxiter=int(os.environ.get('SUBCAL_IT', 30)))(yf / sf, Af) * sf
+        print("calibration-image misfit on the wave-free lines", float(torch.linalg.vector_norm(Af(xc) - yf) / torch.linalg.vector_norm(yf)))
+        norm = float(torch.linalg.vector_norm(yt))
+        def resid(p):
+            ps = linop.wave_psf(k_, (nz, ny, nx), (fov_z, fov_y), scale=tuple(p[:2]), delay=tuple(p[2:]), centred=True)
+            At = linop.WaveSense(maps.to(torch.complex64), (crank, nz, ny, nx), nro, positions=pt, basis=cbasis, centred=True, psf=ps.to(torch.complex64))
+            r = ((At(xc) - yt) / norm).numpy().ravel()
+            return np.concatenate([r.real, r.imag])
+        r0 = float(np.linalg.norm(resid(np.r_[1.0, 1.0, 0.0, 0.0])))
+        fit = least_squares(resid, np.r_[1.0, 1.0, 0.0, 0.0], diff_step=1e-3)
+        sc_, dl_ = tuple(fit.x[:2]), tuple(fit.x[2:])
+        print(f"subspace calibration: {len(targets)} wave lines, margin {margin}, misfit {r0:.4f} -> {float(np.linalg.norm(fit.fun)):.4f}, scale {np.round(sc_, 4)} delay {np.round(dl_, 3)} in {time.perf_counter() - t0:.1f} s ({fit.nfev} evaluations)")
+        psf = linop.wave_psf(k_, (nz, ny, nx), (fov_z, fov_y), scale=sc_, delay=dl_, centred=True).numpy()
     if os.environ.get("PSFDELAY"):
         dl_ = tuple(float(v) for v in os.environ["PSFDELAY"].split(",")); sc_ = tuple(float(v) for v in os.environ.get("PSFSCALE", "1,1").split(","))
         psf = linop.wave_psf(np.stack([wz, wy], -1), (nz, ny, nx), (fov_z, fov_y), scale=sc_, delay=dl_, centred=True).numpy()
@@ -104,6 +142,24 @@ if waved:
     kwargs["psf"] = torch.from_numpy(psf.astype(np.complex64))
 else:
     kwargs["psf"] = torch.ones(nz, ny, nro, dtype=torch.complex64)
+if waved and os.environ.get("JOINT"):
+    # Fit wave scale and delay to all wave lines against an image reconstructed with the nominal wave.
+    from scipy.optimize import least_squares
+    t0 = time.perf_counter(); k_ = np.stack([wz, wy], -1); m64 = maps.to(torch.complex64)
+    yd = torch.from_numpy(y); norm = float(torch.linalg.vector_norm(yd))
+    A0 = linop.WaveSense(m64, (rank, nz, ny, nx), nro, **kwargs)
+    s0 = optim.data_scaling(yd, A=A0) or 1.0
+    x0 = optim.FISTA(priors.LocallyLowRank((-3, -2, -1), lam, joint_axes=(0,), block=8), maxiter=int(os.environ.get("JOINT_IT", 30)), eigen=True)(yd / s0, A0) * s0
+    def resid(p):
+        ps = linop.wave_psf(k_, (nz, ny, nx), (fov_z, fov_y), scale=tuple(p[:2]), delay=tuple(p[2:]), centred=True).to(torch.complex64)
+        At = linop.WaveSense(m64, (rank, nz, ny, nx), nro, positions=kwargs["positions"], basis=basis, centred=True, psf=ps)
+        r = ((At(x0) - yd) / norm).numpy().ravel()
+        return np.concatenate([r.real, r.imag])
+    r0 = float(np.linalg.norm(resid(np.r_[1.0, 1.0, 0.0, 0.0])))
+    fit = least_squares(resid, np.r_[1.0, 1.0, 0.0, 0.0], diff_step=1e-3)
+    sc_, dl_ = tuple(fit.x[:2]), tuple(fit.x[2:])
+    print(f"joint calibration: misfit {r0:.4f} -> {float(np.linalg.norm(fit.fun)):.4f}, scale {np.round(sc_, 4)} delay {np.round(dl_, 3)} in {time.perf_counter() - t0:.1f} s ({fit.nfev} evaluations)")
+    kwargs["psf"] = linop.wave_psf(k_, (nz, ny, nx), (fov_z, fov_y), scale=sc_, delay=dl_, centred=True).to(torch.complex64)
 DEVICE = os.environ.get("DEVICE")
 if DEVICE and DEVICE.startswith("cuda"):
     torch.cuda.reset_peak_memory_stats()

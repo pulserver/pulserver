@@ -1,4 +1,5 @@
 """mprage3d loaded with wave-shuffling options."""
+
 from pathlib import Path as _Path
 
 from pulserver.design._options import loading_options as _loading
