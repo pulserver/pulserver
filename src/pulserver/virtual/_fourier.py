@@ -486,8 +486,6 @@ class FourierPlayer:
 
     def _acquired(self, first: int, last: int) -> np.ndarray:
         """Return the samples of the readouts from ``first`` to before ``last``, ``(coils, samples)``."""
-        from bartorch import linop
-
         timeline, device = self._timeline, self.device
         times, k, receiver = timeline._kspace(first, last)
         firsts = timeline.readouts.first
@@ -498,52 +496,81 @@ class FourierPlayer:
         )
         stations = self._station_of[readout]
         for index, station in enumerate(self._stations):
-            chosen = np.flatnonzero(stations == station)
-            if not chosen.size:
+            every = np.flatnonzero(stations == station)
+            if not every.size:
                 continue
             grid, basis = self._grids[index], self._bases[index]
             if grid is None:
                 continue
-            where = torch.as_tensor(chosen, device=device)
-            position = np.searchsorted(basis.readouts, readout[chosen])
-            temporal = basis.temporal[
-                :, basis.column[torch.as_tensor(position, device=device)]
-            ]
-            within = firsts[first] + chosen - firsts[readout[chosen]]
-            across = self._readout.basis(readout[chosen], within)
-            weights = grid.mix @ (temporal[:, None, :] * across[None, :, :]).reshape(
-                -1, chosen.size
+            # The signal weights hold a row per pair of temporal and readout
+            # terms and the transforms a row per coil and image term, for
+            # every sample: the samples are taken in batches that fit the budget.
+            rows = max(
+                basis.temporal.shape[0] * self._readout.terms,
+                grid.images.shape[0] * grid.sensitivities.shape[0],
             )
-            at = k[where]
-            phase = receiver[where] - echo_phase[where]
-            if self._poses is not None:
-                turns, shifts = self._poses
-                moved = torch.as_tensor(readout[chosen], device=device)
-                phase = phase - 2.0 * math.pi * (at * shifts[moved]).sum(dim=1)
-                at = torch.einsum("nij,nj->ni", turns[moved], at)
-            centre = torch.as_tensor(grid.centre, dtype=at.dtype, device=device)
-            phase = phase - 2.0 * math.pi * (at * centre).sum(dim=1)
-            factor = (
-                math.sqrt(grid.points) * grid.spectrum(at) * torch.exp(1j * phase)
-            ).to(torch.complex64)
-            traj = grid.trajectory(at).to(torch.float32)[None]
-            terms = grid.images.shape[0]
-            coils = grid.sensitivities.shape[0]
-            per_coil = max(1, min(coils, _BUDGET // (8 * grid.points * terms)))
-            nufft = linop.NUFFT(traj, (per_coil * terms, *grid.shape), toeplitz=False)
-            for c0 in range(0, coils, per_coil):
-                c1 = min(c0 + per_coil, coils)
-                held = torch.zeros(
-                    (per_coil, terms, *grid.shape), dtype=torch.complex64, device=device
-                )
-                held[: c1 - c0] = grid.sensitivity(c0, c1)[:, None] * grid.images[None]
-                transformed = nufft(held.reshape(-1, *grid.shape)).reshape(
-                    per_coil, terms, -1
-                )[: c1 - c0]
-                out[c0:c1, where] = (
-                    torch.einsum("ctn,tn->cn", transformed, weights) * factor
+            step = max(1, _BUDGET // (8 * rows))
+            for begin in range(0, every.size, step):
+                self._acquire_station(
+                    out,
+                    every[begin : begin + step],
+                    readout,
+                    grid,
+                    basis,
+                    firsts,
+                    first,
+                    k,
+                    receiver,
+                    echo_phase,
                 )
         return out.cpu().numpy()
+
+    def _acquire_station(
+        self, out, chosen, readout, grid, basis, firsts, first, k, receiver, echo_phase
+    ) -> None:
+        """Add to ``out`` the samples ``chosen`` of one station, ``(coils, samples)``."""
+        from bartorch import linop
+
+        device = self.device
+        where = torch.as_tensor(chosen, device=device)
+        position = np.searchsorted(basis.readouts, readout[chosen])
+        temporal = basis.temporal[
+            :, basis.column[torch.as_tensor(position, device=device)]
+        ]
+        within = firsts[first] + chosen - firsts[readout[chosen]]
+        across = self._readout.basis(readout[chosen], within)
+        weights = grid.mix @ (temporal[:, None, :] * across[None, :, :]).reshape(
+            -1, chosen.size
+        )
+        at = k[where]
+        phase = receiver[where] - echo_phase[where]
+        if self._poses is not None:
+            turns, shifts = self._poses
+            moved = torch.as_tensor(readout[chosen], device=device)
+            phase = phase - 2.0 * math.pi * (at * shifts[moved]).sum(dim=1)
+            at = torch.einsum("nij,nj->ni", turns[moved], at)
+        centre = torch.as_tensor(grid.centre, dtype=at.dtype, device=device)
+        phase = phase - 2.0 * math.pi * (at * centre).sum(dim=1)
+        factor = (
+            math.sqrt(grid.points) * grid.spectrum(at) * torch.exp(1j * phase)
+        ).to(torch.complex64)
+        traj = grid.trajectory(at).to(torch.float32)[None]
+        terms = grid.images.shape[0]
+        coils = grid.sensitivities.shape[0]
+        per_coil = max(1, min(coils, _BUDGET // (8 * grid.points * terms)))
+        nufft = linop.NUFFT(traj, (per_coil * terms, *grid.shape), toeplitz=False)
+        for c0 in range(0, coils, per_coil):
+            c1 = min(c0 + per_coil, coils)
+            held = torch.zeros(
+                (per_coil, terms, *grid.shape), dtype=torch.complex64, device=device
+            )
+            held[: c1 - c0] = grid.sensitivity(c0, c1)[:, None] * grid.images[None]
+            transformed = nufft(held.reshape(-1, *grid.shape)).reshape(
+                per_coil, terms, -1
+            )[: c1 - c0]
+            out[c0:c1, where] = (
+                torch.einsum("ctn,tn->cn", transformed, weights) * factor
+            )
 
     def _span_ends(self) -> np.ndarray:
         """Return the blocks at which spans may end: after at least :data:`_SPAN_SAMPLES` samples, and the scan's end."""

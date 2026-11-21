@@ -532,6 +532,25 @@ def test_a_scan_read_span_by_span_reads_what_it_reads_whole(
         np.testing.assert_allclose(span, readout, rtol=0, atol=1e-5 * scale)
 
 
+def test_a_scan_acquired_in_batches_under_a_small_budget_reads_what_it_reads_whole(
+    tmp_path, device, monkeypatch
+):
+    sequence = _steady("fid", tmp_path / "fid.seq", selective=False)
+    tissue = virtual.Phantom(
+        [virtual.Ellipse((0.0, 0.0, 0.0), (0.03, 0.03), t1=0.8, t2=0.08)], coils=2
+    ).tissue(2e-3, field_t=3.0)
+    reference = virtual.FourierPlayer(sequence, tissue, device=device)
+    whole = list(reference.readouts(0, reference.blocks))
+    monkeypatch.setattr(_fourier, "_BUDGET", 1 << 12)
+    player = virtual.FourierPlayer(sequence, tissue, device=device)
+    batched = list(player.readouts(0, player.blocks))
+
+    assert len(batched) == len(whole) > 2
+    scale = max(np.abs(readout).max() for readout in whole)
+    for part, readout in zip(batched, whole, strict=True):
+        np.testing.assert_allclose(part, readout, rtol=0, atol=1e-5 * scale)
+
+
 def test_a_rare_group_of_flip_angles_joins_the_nearest_one_the_same_pulses_turn(
     device,
 ):

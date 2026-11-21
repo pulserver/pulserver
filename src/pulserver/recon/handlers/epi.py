@@ -410,7 +410,8 @@ class EpiRecon(PicsRecon):
     wavelet-regularised ``pics`` solve of
     :class:`~pulserver.recon.handlers.pics.PicsRecon` at its ``wavelet`` on
     maps carrying the smooth phase (:func:`smooth_phase`) of its
-    ``iterations``-step conjugate-gradient image, so the prior acts on a near-real image, or
+    ``iterations``-step conjugate-gradient image, so the prior acts on a
+    near-real image, started from that image, or
     with ``wavelet`` zero the solution of ``min |P F S x - y|^2`` by
     ``iterations`` conjugate-gradient steps (:class:`bartorch.optim.CG`). A
     partial-Fourier phase encode is completed by ``pocs_iterations`` of POCS
@@ -619,9 +620,8 @@ class EpiRecon(PicsRecon):
         if _fills_acquired_range(sampled.numpy()):
             image = sense_combined(volume, maps)
         elif self._wavelet(volume) > 0:
-            phase = smooth_phase(
-                cg_sense(volume, maps, sampled, self.iterations, context.device)
-            )
+            start = cg_sense(volume, maps, sampled, self.iterations, context.device)
+            phase = smooth_phase(start)
             image = phase * pics_image(
                 volume,
                 maps * phase,
@@ -629,6 +629,7 @@ class EpiRecon(PicsRecon):
                 self._wavelet(volume),
                 self.iterations,
                 context.device,
+                x0=start * phase.conj(),
             )
         else:
             image = cg_sense(
