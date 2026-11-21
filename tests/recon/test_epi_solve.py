@@ -238,6 +238,35 @@ def test_split_slice_grappa_returns_each_caipi_band_of_a_multiband_unit_as_its_o
     assert error < 0.1
 
 
+def test_split_slice_grappa_kernels_are_trained_once_for_every_group_of_one_calibration(
+    device, monkeypatch
+):
+    from bartorch import tools
+
+    from pulserver import recon
+    from pulserver.recon.handlers.epi import slice_grappa_bands
+
+    calls = []
+    train = tools.slice_grappa_kernel
+
+    def counted(*args, **kwargs):
+        calls.append(None)
+        return train(*args, **kwargs)
+
+    monkeypatch.setattr(tools, "slice_grappa_kernel", counted)
+    singles, volume = _multiband(device)
+    context = recon.ReconContext.offline()
+
+    def memo(key, compute):
+        return context.memoized(key, compute)
+
+    first = slice_grappa_bands(volume, singles, memo=memo)
+    second = slice_grappa_bands(2 * volume, singles, memo=memo)
+
+    assert len(calls) == 1
+    torch.testing.assert_close(second, 2 * first)
+
+
 def test_split_slice_grappa_declines_a_unit_with_fewer_calibrated_lines_than_the_kernel():
     from pulserver.recon.handlers.epi import slice_grappa_bands
 

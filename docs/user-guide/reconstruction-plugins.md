@@ -264,8 +264,14 @@ coil_images = nufft.adjoint(torch.from_numpy(buffer.kspace))
 ```
 
 The partitions of a stack of spokes or spirals are placed by their
-`kspace_encode_step_2` counter and carry no kz: transform the partition axis
-with an FFT before the in-plane NUFFT.
+`kspace_encode_step_2` counter and carry no kz. Partition `p` of `n` is the kz
+encode `p - n // 2` on the image grid: give the stack's trajectory that kz and
+it is one three-dimensional encoding, which `bartorch.linop.NoncartesianSense`
+decouples into in-plane transforms by an FFT along the partitions wherever
+every partition shares the in-plane trajectory and its weights. The `nufft`
+plugin reconstructs a stack so: one fit of the maps to the low-resolution
+centre of the stack's k-space in three dimensions, and one solve of the
+volume.
 
 ## Coil sensitivities, noise and compression
 
@@ -326,6 +332,32 @@ holds the leading calibration readouts until the first imaging-only readout,
 estimates the basis from those of the first contrast, and gives them on
 projected; a scan whose first readout is not calibration passes it unchanged,
 and a `CoilCompression` step in `recon` then compresses each unit.
+`CompressChannels(n, train_readouts=m)` holds the first `m` readouts of such a
+scan instead and takes the basis from them, as a non-Cartesian scan, every
+shot of which crosses the k-space centre, does in the `nufft` plugin.
+
+## Calibration computed once per series
+
+What a series computes from its first units and reuses for the rest, the coil
+maps of a slice, a trajectory's density compensation, the largest eigenvalue
+of an encoding, the kernels of split-slice GRAPPA, is kept with
+{meth}`~pulserver.recon.ReconContext.memoized`: the value is computed the first
+time its key is asked for and returned from then on, for that stream only. The
+key names what the value depends on, an array by a digest of its bytes:
+
+```python
+def recon(self, context, branch, data):
+    location = (data.counters.get("slice", 0), data.counters.get("set", 0))
+    maps = context.memoized(
+        ("maps", *location), lambda: estimate(data), what="coil maps"
+    )
+```
+
+With `what`, the computation is logged once at `INFO` with the time it took.
+The shipped handlers keep coil sensitivities as their k-space kernels on the
+grid they were fitted on, the low-resolution centre, rather than zero-filled
+maps on the image grid, and apply them with `kernels=True`
+(`bartorch.maps_to_kernels`).
 
 `apps.pics` computes where the maps are, here the host. An encoding built with
 `device=context.device`, such as {func}`bartorch.linop.CartesianSense`, computes
@@ -333,7 +365,8 @@ on the GPU and takes the k-space, the maps and the solver's vectors from the
 host a coil at a time, so the GPU never holds a whole multi-coil volume; the
 `pics` plugin solves so. Off the grid, `apps.pics` builds its encoding where the
 trajectory is, so a trajectory on `context.device` with the rest on the host
-does the same; the `nufft` plugin solves so.
+does the same; the `nufft` plugin builds its encoding,
+`bartorch.linop.NoncartesianSense`, so.
 
 The `pics` and `nufft` handlers fit the maps with
 `apps.nlinv_maps(kspace, phase_pole=0)`, `bart nlinv --phase-pole 0`, on a grid

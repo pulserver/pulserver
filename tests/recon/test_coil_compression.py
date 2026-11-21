@@ -441,3 +441,39 @@ def test_a_unit_of_streamed_readouts_holds_the_virtual_channels_in_arrival_order
     assert unit.data.coils == 4
     assert unit.acquisitions == acquisitions
     assert unit.data.mask.all()
+
+
+def test_a_stream_led_by_imaging_readouts_is_compressed_by_the_basis_its_first_train_readouts_give():
+    _, _, kspace = coil_phantom(8, MATRIX)
+    context = streaming_context()
+    gadget = started(recon.CompressChannels(4, train_readouts=5), context)
+    acquisitions = acs_readouts(kspace, acs=ACS)
+
+    held = [gadget(a, np.asarray(a.data)) for a in acquisitions[:4]]
+    given = gadget(acquisitions[4], np.asarray(acquisitions[4].data))
+
+    assert held == [None] * 4
+    assert [acquisition for acquisition, _ in given] == acquisitions[:5]
+    samples = np.concatenate([np.asarray(a.data) for a in acquisitions[:5]], axis=1)
+    expected = recon.gadgets.basis_of(samples, 4).matrix
+    np.testing.assert_allclose(
+        np.abs(context.coil_compression.matrix[:4] @ expected[:4].conj().T),
+        np.eye(4),
+        atol=1e-4,
+    )
+    later = acquisitions[5]
+    assert gadget(later, np.asarray(later.data)).shape == (4, MATRIX)
+
+
+def test_readouts_held_for_training_when_the_stream_ends_are_given_on_projected():
+    _, _, kspace = coil_phantom(8, MATRIX)
+    context = streaming_context()
+    gadget = started(recon.CompressChannels(4, train_readouts=1000), context)
+    acquisitions = acs_readouts(kspace, acs=ACS)[:3]
+
+    for acquisition in acquisitions:
+        assert gadget(acquisition, np.asarray(acquisition.data)) is None
+    released = gadget.release()
+
+    assert [acquisition for acquisition, _ in released] == acquisitions
+    assert all(readout.shape == (4, MATRIX) for _, readout in released)

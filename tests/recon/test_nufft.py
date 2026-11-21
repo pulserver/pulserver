@@ -14,7 +14,6 @@ import numpy as np
 import pytest
 
 from pulserver import recon
-from pulserver.recon._correct import fermi_profile
 from pulserver.recon.handlers.nufft import NufftRecon, _within
 
 MATRIX, FOV_MM, COILS, SAMPLES, LINES = 16, 220.0, 2, 24, 4
@@ -27,7 +26,7 @@ class Solves(NufftRecon):
         super().__init__(kspace_filter=kspace_filter)
         self.solved = []
 
-    def _solved(self, samples, points, device, volume=None):
+    def _solved(self, samples, points, device, volume=None, partitions=1):
         self.solved.append((samples, points))
         return np.zeros(volume or (MATRIX, MATRIX), dtype=np.float32)
 
@@ -244,17 +243,15 @@ def test_averages_are_summed_and_the_trajectory_of_the_first_stands_for_them():
     )
 
 
-def test_a_stack_of_segments_is_solved_partition_by_partition_over_all_its_shots():
+def test_a_stack_of_segments_is_one_solve_its_partitions_the_kz_encodes_of_its_shots():
     segments, partitions = 2, 3
     points = blades(segments)
-    # The same shots at every partition: the transform along them leaves them
-    # at the centre partition alone.
-    data = noise(segments, LINES, COILS, SAMPLES)
+    data = noise(partitions, segments, LINES, COILS, SAMPLES)
     acquisitions = []
     for partition in range(partitions):
         for segment, line in np.ndindex(segments, LINES):
             acquisition = readout(
-                data[segment, line],
+                data[partition, segment, line],
                 points[segment, line],
                 segment=segment,
                 line=line,
@@ -270,53 +267,76 @@ def test_a_stack_of_segments_is_solved_partition_by_partition_over_all_its_shots
         acquisitions,
     )
 
-    assert len(plugin.solved) == partitions
-    expected = data.reshape(-1, COILS, SAMPLES).transpose(1, 0, 2)
-    for index, (samples, trajectory) in enumerate(plugin.solved):
-        assert samples.shape == (COILS, segments * LINES, SAMPLES)
-        assert trajectory.shape == (segments * LINES, SAMPLES, 3)
-        centre = index == partitions // 2
-        np.testing.assert_allclose(samples, expected if centre else 0, atol=1e-6)
+    ((samples, trajectory),) = plugin.solved
+    shots = segments * LINES
+    assert samples.shape == (COILS, partitions * shots, SAMPLES)
+    assert trajectory.shape == (partitions * shots, SAMPLES, 3)
+    expected = data.reshape(partitions * shots, COILS, SAMPLES).transpose(1, 0, 2)
+    np.testing.assert_allclose(samples, expected, atol=1e-6)
+    kz = trajectory[:, 0, 2].reshape(partitions, shots)
+    np.testing.assert_array_equal(
+        kz, np.broadcast_to(np.arange(partitions)[:, None] - partitions // 2, kz.shape)
+    )
+    in_plane = trajectory[..., :2].reshape(partitions, shots, SAMPLES, 2)
+    for partition in range(partitions):
+        np.testing.assert_allclose(
+            in_plane[partition], points.reshape(shots, SAMPLES, 2), atol=1e-5
+        )
     (_, image) = closed[-1]
     assert image.data.shape == (partitions, MATRIX, MATRIX)
 
 
-def test_a_stacks_partitions_are_fermi_filtered_before_they_are_transformed():
+def stack_phantom(partitions, points):
+    """The samples ``(partitions, shots, coils, samples)`` of a stack of ``points`` ``(shots, samples, 2)`` through three blobs on its centre partition and one beside it, with the object."""
+    axis = np.arange(MATRIX) - MATRIX // 2
+    y, x = np.meshgrid(axis, axis, indexing="ij")
+    obj = np.zeros((partitions, MATRIX, MATRIX))
+    for shift in (-3.0, 0.0, 3.0):
+        obj[partitions // 2] += np.exp(-((x - shift) ** 2 + (y - shift) ** 2) / 4.0)
+    obj[partitions // 2 + 1] = np.exp(-(x**2 + (y + 4) ** 2) / 6.0)
+    maps = np.stack([1.0 + 0.04 * x, 1.0 + 0.04 * y])
+    z = np.arange(partitions) - partitions // 2
+    kz = z
+    phase_z = np.exp(-2j * np.pi * np.outer(kz, z) / partitions)
+    phase = np.exp(
+        -2j
+        * np.pi
+        * (points[..., 0, None] * x.ravel() + points[..., 1, None] * y.ravel())
+        / MATRIX
+    )
+    coil_images = (maps[:, None] * obj[None]).reshape(COILS, partitions, -1)
+    hybrid = np.einsum("kz,czv->ckv", phase_z, coil_images)
+    samples = np.einsum("lsv,ckv->klcs", phase, hybrid)
+    return obj, samples.astype(np.complex64)
+
+
+def test_the_image_of_a_stack_of_blades_is_the_object_it_samples_partition_by_partition():
+    pytest.importorskip("bartorch")
     partitions = 8
-    points = blades(1)
-    data = noise(1, LINES, COILS, SAMPLES)
+    points = blades(4).reshape(-1, SAMPLES, 2)
+    obj, data = stack_phantom(partitions, points)
     acquisitions = []
     for partition in range(partitions):
-        for line in range(LINES):
+        for line in range(points.shape[0]):
             acquisitions.append(
                 readout(
-                    data[0, line],
-                    points[0, line],
+                    data[partition, line],
+                    points[line],
                     segment=0,
                     line=line,
                     kspace_encode_step_2=partition,
                 )
             )
     acquisitions[-1].setFlag(ismrmrd.ACQ_LAST_IN_MEASUREMENT)
-    plain, filtered = Solves(), Solves(kspace_filter=True)
-    stack = header(depth=partitions, partitions=partitions)
+    stack = header(depth=partitions, partitions=partitions, lines=points.shape[0])
 
-    play(plain, stack, acquisitions)
-    play(filtered, stack, acquisitions)
+    ((_, result),) = play(NufftRecon(kspace_filter=False), stack, acquisitions)
 
-    def along_partitions(plugin):
-        planes = np.stack([samples for samples, _ in plugin.solved], axis=1)
-        return np.fft.fftshift(
-            np.fft.fft(np.fft.ifftshift(planes, axes=1), axis=1), axes=1
-        )
-
-    profile = fermi_profile((partitions, MATRIX, MATRIX), 0)
-    np.testing.assert_allclose(
-        along_partitions(filtered),
-        along_partitions(plain) * profile[None, :, None, None],
-        atol=1e-5,
-    )
-    assert profile[0] == pytest.approx(0.5, abs=1e-3)
+    image = np.asarray(result.data, dtype=float)
+    assert image.shape == (partitions, MATRIX, MATRIX)
+    for plane in (partitions // 2, partitions // 2 + 1):
+        correlation = np.corrcoef(image[plane].ravel(), obj[plane].ravel())[0, 1]
+        assert correlation > 0.9
 
 
 def test_slices_counted_as_partitions_by_the_header_are_not_a_stack():
@@ -563,11 +583,11 @@ def test_the_maps_of_one_coil_over_a_volume_are_unity_on_its_matrix():
     assert torch.equal(maps, torch.ones_like(maps))
 
 
-def test_the_solve_keeps_its_samples_maps_and_weights_on_the_host_and_the_trajectory_on_the_device(
+def test_the_solve_keeps_its_samples_kernels_and_weights_on_the_host_and_the_trajectory_on_the_device(
     device, monkeypatch
 ):
     pytest.importorskip("bartorch")
-    from bartorch import apps
+    from bartorch import linop
 
     points = blades(4)
     _, data = phantom(points)
@@ -575,20 +595,104 @@ def test_the_solve_keeps_its_samples_maps_and_weights_on_the_host_and_the_trajec
     flat = np.zeros((*points.shape[:-1], 3))
     flat[..., :2] = points
     traj = flat.reshape(-1, SAMPLES, 3)
-    solve = apps.pics
+    build = linop.NoncartesianSense
     given = {}
 
-    def recorded(kspace, maps, **kwargs):
+    def recorded(sensitivities, shape, **kwargs):
         given.update(
-            kspace=kspace.device.type,
-            maps=maps.device.type,
-            pattern=kwargs["pattern"].device.type,
+            kernels=(sensitivities.device.type, kwargs["kernels"]),
+            weights=kwargs["weights"].device.type,
             traj=kwargs["traj"].device.type,
         )
-        return solve(kspace, maps, **kwargs)
+        return build(sensitivities, shape, **kwargs)
 
-    monkeypatch.setattr(apps, "pics", recorded)
+    monkeypatch.setattr(linop, "NoncartesianSense", recorded)
     image = NufftRecon()._solved(samples, traj, device, (MATRIX, MATRIX))
 
-    assert given == {"kspace": "cpu", "maps": "cpu", "pattern": "cpu", "traj": device}
+    assert given == {"kernels": ("cpu", True), "weights": "cpu", "traj": device}
     assert image.shape == (MATRIX, MATRIX)
+
+
+def counting(monkeypatch, module, name):
+    """Replace ``module.name`` by a wrapper counting its calls; return the list of calls."""
+    calls = []
+    original = getattr(module, name)
+
+    def counted(*args, **kwargs):
+        calls.append(args)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(module, name, counted)
+    return calls
+
+
+def test_the_maps_density_and_eigenvalue_of_a_slice_are_computed_once_for_all_its_repetitions(
+    monkeypatch,
+):
+    bartorch = pytest.importorskip("bartorch")
+    from bartorch import optim
+
+    from pulserver.recon.handlers import nufft
+
+    maps = counting(monkeypatch, nufft, "nlinv_estimate")
+    density = counting(monkeypatch, bartorch, "estimate_density")
+    eigenvalue = counting(monkeypatch, optim, "maxeigen")
+    segments = 4
+    points = blades(segments)
+    blob, data = phantom(points)
+    acquisitions = [
+        *stream(data, points, repetition=0),
+        *stream(data, points, repetition=1),
+        *stream(data, points, repetition=2),
+    ]
+
+    images = play(NufftRecon(), header(segments=segments), acquisitions)
+
+    assert len(images) == 3
+    assert (len(maps), len(density), len(eigenvalue)) == (1, 1, 1)
+    for _, result in images:
+        image = np.asarray(result.data, dtype=float)
+        assert np.corrcoef(image.ravel(), blob.ravel())[0, 1] > 0.9
+
+
+def test_each_slice_is_fitted_maps_of_its_own_and_shares_the_density_of_its_trajectory(
+    monkeypatch,
+):
+    bartorch = pytest.importorskip("bartorch")
+
+    from pulserver.recon.handlers import nufft
+
+    maps = counting(monkeypatch, nufft, "nlinv_estimate")
+    density = counting(monkeypatch, bartorch, "estimate_density")
+    segments = 4
+    points = blades(segments)
+    _, data = phantom(points)
+    acquisitions = [
+        *stream(data, points, slice=0),
+        *stream(data, points, slice=1),
+    ]
+
+    images = play(NufftRecon(), header(segments=segments), acquisitions)
+
+    assert len(images) == 2
+    assert (len(maps), len(density)) == (2, 1)
+
+
+def test_a_stacks_corners_are_kept_and_its_shots_stay_one_per_partition_where_blades_reach_past_the_matrix():
+    partitions = 4
+    shots = blades(2).reshape(-1, SAMPLES, 2)
+    points = np.zeros((partitions, *shots.shape[:-1], 3), dtype=np.float32)
+    points[..., :2] = shots
+    points[..., 2] = (np.arange(partitions) - partitions // 2)[:, None, None]
+    points = points.reshape(-1, SAMPLES, 3)
+    data = noise(COILS, points.shape[0], SAMPLES)
+
+    samples, kept = _within(data, points, (partitions, MATRIX, MATRIX), partitions)
+
+    inside = np.square(shots / (MATRIX / 2)).sum(axis=-1) <= 1.0 + 1e-6
+    assert not inside.all()
+    assert kept.shape == (partitions, int(inside.sum()), 3)
+    assert samples.shape == (COILS, partitions, int(inside.sum()))
+    np.testing.assert_array_equal(
+        kept[:, 0, 2], np.arange(partitions) - partitions // 2
+    )
