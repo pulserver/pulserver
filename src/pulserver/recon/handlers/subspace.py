@@ -10,7 +10,9 @@ __all__ = [
     "SubspaceRecon",
 ]
 
+import contextlib
 import dataclasses
+from types import SimpleNamespace
 from typing import Any
 
 import numpy as np
@@ -20,7 +22,7 @@ from .._buffers import ReconBuffer, ReconData
 from .._calibration import MissingCalibration, coil_maps
 from ..gadgets import AsymmetricEcho, Prewhiten, RemoveReadoutOversampling
 from ..plugin import ReconContext, ReconResult
-from .pics import PicsRecon, _volume, compressed, nlinv_estimate
+from .pics import PicsRecon, _volume, _wave_trajectory, compressed, nlinv_estimate
 
 #: Temporal basis functions kept: the leading singular vectors of the dictionary.
 RANK = 4
@@ -67,8 +69,11 @@ class SubspaceRecon(PicsRecon):
     unit closes, as :class:`~pulserver.recon.handlers.pics_train.PicsTrainRecon`
     compresses them. The coil maps of a Cartesian scan are those
     :class:`~pulserver.recon.handlers.pics.PicsRecon` takes; those of a
-    wave-encoded scan are fitted to its wave-free calibration readouts. The
-    wave is each readout's trajectory along the phase encodes less its mean.
+    wave-encoded scan are fitted to its wave-free calibration readouts, and
+    its wave point-spread function is that of :func:`_wave_psf`. A sequence
+    that labels its echoes as contrasts (``axes=("contrast",)``) is laid out
+    by contrast; one that fills each line at one echo of its train is laid
+    out by line, with the echo of each line read from its contrast counter.
 
     The echo images, at the reconstruction matrix, are series 0, the echoes
     in train order, each a volume.
@@ -200,26 +205,34 @@ class SubspaceRecon(PicsRecon):
 
         buffer = data.data
         volume = ("coil", "partition", "phase_encode", "readout")
-        if buffer.axes != volume:
+        by_contrast = buffer.axes == (volume[0], "contrast", *volume[1:])
+        if buffer.axes != volume and not by_contrast:
             raise ValueError(
-                f"subspace reconstruction takes one volume {volume}; encoding "
-                f"space {buffer.space.index} holds {buffer.axes}"
+                f"subspace reconstruction takes one volume {volume}, or one per "
+                f"contrast; encoding space {buffer.space.index} holds {buffer.axes}"
             )
         basis = self.basis(context, self._described)
         frames = basis.shape[1]
-        echo_of = _echoes(buffer, data.acquisitions)
-        if echo_of.max() >= frames:
-            raise ValueError(
-                f"a readout lies at echo {int(echo_of.max())} of trains of "
-                f"{frames} echoes"
-            )
-        positions, kspace = _by_echo(buffer, echo_of, frames)
+        if by_contrast:
+            if buffer.mask.shape[0] > frames:
+                raise ValueError(
+                    f"{buffer.mask.shape[0]} contrasts for trains of {frames} echoes"
+                )
+            positions, kspace = _by_contrast(buffer, frames)
+        else:
+            echo_of = _echoes(buffer, data.acquisitions)
+            if echo_of.max() >= frames:
+                raise ValueError(
+                    f"a readout lies at echo {int(echo_of.max())} of trains of "
+                    f"{frames} echoes"
+                )
+            positions, kspace = _by_echo(buffer, echo_of, frames)
         shape = buffer.image_shape
         cartesian = buffer.space.cartesian
         if cartesian:
             maps = self._maps(context, data, buffer)
         else:
-            reference = _volume(data.ref, shape)
+            reference = _volume(_first_contrast(data.ref), shape)
             maps = center_crop(
                 nlinv_estimate(torch.from_numpy(reference.astype(np.complex64))),
                 shape[-1:],
@@ -238,7 +251,7 @@ class SubspaceRecon(PicsRecon):
                 image_shape,
                 kspace.shape[-1],
                 centred=True,
-                psf=torch.from_numpy(_wave_psf(buffer, shape)),
+                psf=_wave_psf(data, shape).to(torch.complex64),
                 **common,
             )
         measured = torch.from_numpy(kspace)
@@ -352,6 +365,8 @@ class MegreSubspaceRecon(SubspaceRecon):
 
     def __init__(self, *args: Any, frequency_hz: float = 150.0, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
+        self.merge = ()
+        self.axes = ("contrast",)
         self.frequency_hz = frequency_hz
 
     def interpret(self, description: Any) -> Any:
@@ -425,25 +440,57 @@ def _by_echo(
     return positions, kspace
 
 
-def _wave_psf(buffer: ReconBuffer, shape: tuple[int, ...]) -> np.ndarray:
-    """Return the wave point-spread function ``(z, y, readout)`` of a wave-encoded buffer.
-
-    The wave is the trajectory of an acquired readout along the partition and
-    phase encodes, in 1/m, less its mean over the readout, which is its line;
-    it is the same for every line.
-    """
-    z, y = np.argwhere(buffer.mask.any(axis=-1))[0]
-    wave = buffer.trajectory[1:3, z, y]
-    wave = wave - wave.mean(axis=-1, keepdims=True)
-    fov_z, fov_y = buffer.space.recon_fov[:2]
-    ny, nz = shape[1], shape[0]
-    yy = (np.arange(ny) - ny // 2) * fov_y / ny
-    zz = (np.arange(nz) - nz // 2) * fov_z / nz
-    phase = (
-        wave[0][None, None, :] * yy[None, :, None]
-        + wave[1][None, None, :] * zz[:, None, None]
+def _by_contrast(buffer: ReconBuffer, frames: int) -> tuple[np.ndarray, np.ndarray]:
+    """Return the phase encodes ``(frames, shots, 2)`` of each contrast of a buffer laid out by contrast, -1 padded, and their readouts ``(coils, frames, shots, readout)``."""
+    lines = [np.argwhere(placed.any(axis=-1)) for placed in buffer.mask]
+    shots = max(1, max(len(line) for line in lines))
+    positions = np.full((frames, shots, 2), -1, np.int64)
+    kspace = np.zeros(
+        (buffer.kspace.shape[0], frames, shots, buffer.kspace.shape[-1]), np.complex64
     )
-    return np.exp(-2j * np.pi * phase).astype(np.complex64)
+    for frame, line in enumerate(lines):
+        positions[frame, : len(line)] = line
+        kspace[:, frame, : len(line)] = buffer.kspace[:, frame, line[:, 0], line[:, 1]]
+    return positions, kspace
+
+
+def _first_contrast(buffer: ReconBuffer) -> Any:
+    """Return ``buffer``, or its first contrast where it is laid out by contrast, as one volume."""
+    if "contrast" not in buffer.axes:
+        return buffer
+    axis = buffer.axes.index("contrast")
+    trajectory = buffer.trajectory
+    return SimpleNamespace(
+        kspace=np.take(buffer.kspace, 0, axis=axis),
+        mask=np.take(buffer.mask, 0, axis=axis - 1),
+        trajectory=None if trajectory is None else np.take(trajectory, 0, axis=axis),
+        origin={k: v for k, v in buffer.origin.items() if k != "contrast"},
+    )
+
+
+def _wave_psf(data: ReconData, shape: tuple[int, ...]) -> Any:
+    """Return the wave point-spread function ``(z, y, readout)`` of a wave-encoded unit.
+
+    The wave is a wave-encoded readout's trajectory along the partition and
+    phase encodes less that of the wave-free readout of its line. Where the
+    unit is laid out by contrast, the gradient scale and delay are fitted to
+    the first contrast's calibration region
+    (:func:`bartorch.linop.wave_calibrate`); a train that reads the region one
+    line per echo, or a region narrower than the wave's excursion, keeps the
+    nominal wave.
+    """
+    from bartorch import linop
+
+    wave, ref = _first_contrast(data.data), _first_contrast(data.ref)
+    k = _wave_trajectory(wave, ref)
+    fov = data.data.space.recon_fov[:2]
+    scale, delay = (1.0, 1.0), (0.0, 0.0)
+    if "contrast" in data.data.axes:
+        with contextlib.suppress(ValueError):
+            scale, delay = linop.wave_calibrate(
+                _volume(ref, shape), _volume(wave, shape), k, fov
+            )
+    return linop.wave_psf(k, shape, fov, scale=scale, delay=delay, centred=True)
 
 
 PLUGIN = FseSubspaceRecon()

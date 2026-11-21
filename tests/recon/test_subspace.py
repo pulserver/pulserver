@@ -16,6 +16,7 @@ from pulserver.proxy._seqdesc import describe, waveforms  # noqa: E402
 from pulserver.recon import ExamCache, ReconContext  # noqa: E402
 from pulserver.recon.handlers.subspace import (  # noqa: E402
     FseSubspaceRecon,
+    _by_contrast,
     _by_echo,
     _echoes,
 )
@@ -117,3 +118,24 @@ def test_each_line_is_solved_in_the_frame_of_the_echo_it_was_read_at():
         for shot, (z, y) in enumerate(positions[frame].tolist()):
             if z >= 0:
                 np.testing.assert_array_equal(samples[:, frame, shot], kspace[:, z, y])
+
+
+def test_a_buffer_laid_out_by_contrast_is_solved_one_frame_per_contrast():
+    kspace = np.arange(2 * 3 * 2 * 4 * 5, dtype=np.complex64).reshape(2, 3, 2, 4, 5)
+    mask = np.zeros(kspace.shape[1:], bool)
+    mask[0, 1, 2] = mask[0, 0, 3] = mask[2, 1, 0] = True
+    buffer = SimpleNamespace(kspace=kspace, mask=mask)
+
+    positions, samples = _by_contrast(buffer, frames=4)
+
+    assert positions.shape == (4, 2, 2)
+    assert sorted(map(tuple, positions[0].tolist())) == [(0, 3), (1, 2)]
+    assert positions[1].tolist() == [[-1, -1], [-1, -1]]
+    assert positions[2, 0].tolist() == [1, 0]
+    assert positions[3].tolist() == [[-1, -1], [-1, -1]]
+    for frame in range(3):
+        for shot, (z, y) in enumerate(positions[frame].tolist()):
+            if z >= 0:
+                np.testing.assert_array_equal(
+                    samples[:, frame, shot], kspace[:, frame, z, y]
+                )
