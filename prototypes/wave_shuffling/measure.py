@@ -7,6 +7,12 @@ import time
 import torch
 
 from pulserver._cli import main
+import os
+if os.environ.get("DEVICE"):
+    # Offline replay has no proxy to hand out a GPU: give the series the one named.
+    import pulserver.recon._runtime.offline as _offline
+    _context = _offline.ReconContext
+    _offline.ReconContext = lambda *a, **k: _context(*a, device=os.environ["DEVICE"], **k)
 
 raw, plugin, store, out = sys.argv[1:5]
 if torch.cuda.is_available():
