@@ -1,4 +1,5 @@
 """Prototype wave-shuffling subspace recon from a label dump: proto.py CASE RANK LAMBDA ITERS [nowave]."""
+import os
 import pickle
 import sys
 import time
@@ -14,9 +15,10 @@ rows = pickle.load(open(f"{case}/dump.pkl", "rb"))
 for r_ in rows:
     if r_["traj"].size == 0:
         n_ = r_["data"].shape[-1]
-        r_["traj"] = np.stack([(np.arange(n_) - n_ // 2) / 0.32, np.full(n_, (r_["e1"] - 32) / 0.16), np.full(n_, (r_["e2"] - 24) / 0.032)], -1)
+        fx_, fy_, fz_ = (float(v) for v in os.environ.get("FOV", "0.32,0.16,0.032").split(","))
+        r_["traj"] = np.stack([(np.arange(n_) - n_ // 2) / fx_, np.full(n_, (r_["e1"] - 32) / fy_), np.full(n_, (r_["e2"] - 24) / fz_)], -1)
 basis_full = torch.load(sys.argv[5]) if len(sys.argv) > 5 else torch.load(f"{case}/basis.pt")
-VC = 8
+VC = int(os.environ.get("VC", 8))
 
 flat = [r for r in rows if np.ptp(r["traj"][:, 1]) < 1e-3 and np.ptp(r["traj"][:, 2]) < 1e-3]
 waved = [r for r in rows if r not in flat] if len(flat) < len(rows) else []

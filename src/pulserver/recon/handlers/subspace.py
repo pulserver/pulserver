@@ -1,0 +1,327 @@
+"""Echo-resolved reconstruction of shuffled train scans in a temporal subspace, as BART's ``pics -B`` (T2 shuffling) and ``wshfl`` (wave-shuffling)."""
+
+from __future__ import annotations
+
+__all__ = ["PLUGIN", "FseSubspaceRecon", "SubspaceRecon"]
+
+import dataclasses
+from typing import Any
+
+import numpy as np
+
+from ...mrd._images import center_crop
+from .._buffers import ReconBuffer, ReconData
+from .._calibration import MissingCalibration, coil_maps
+from ..gadgets import AsymmetricEcho, Prewhiten, RemoveReadoutOversampling
+from ..plugin import ReconContext, ReconResult
+from .pics import PicsRecon, _volume, compressed, nlinv_estimate
+
+#: Temporal basis functions kept: the leading singular vectors of the dictionary.
+RANK = 4
+
+#: Edge, in voxels, of the blocks of the locally low-rank penalty.
+BLOCK = 8
+
+#: T1 values of the dictionary, in ms: white matter to CSF at 3 T and 7 T.
+T1_MS = (400.0, 800.0, 1200.0, 1600.0, 2000.0, 2800.0, 4400.0)
+
+#: Fewest and most T2, in ms, and how many log-spaced between them.
+T2_MS = (20.0, 2000.0, 48)
+
+#: Lowest and highest transmit field relative to nominal, and how many between
+#: them: the range a head sees at 7 T.
+B1 = (0.25, 1.25, 21)
+
+#: TRs simulated before the train the basis is taken from, so the basis is of
+#: the steady state the scan reaches.
+REPETITIONS = 3
+
+
+class SubspaceRecon(PicsRecon):
+    """Echo images of a 3D train scan whose phase encodes are shuffled across the echoes of its trains.
+
+    Each readout's ``contrast`` counter is its echo in the train. The images
+    of all echoes are spanned by ``rank`` temporal basis functions, the
+    leading singular vectors of a dictionary of echo trains that blochsim
+    simulates over T1, T2 and the transmit field from the sequence
+    description the stream carries (:func:`blochsim.description_from_waveforms`)
+    as :meth:`interpret` reads it. The image coefficients minimise
+
+    ``sum_t |P_t F Psi S sum_a Phi[a, t] x_a - y_t|^2 + lambda sum_b |X_b|_*``
+
+    ``P_t`` the phase encodes acquired at echo ``t``, ``Psi`` the wave
+    point-spread function of a wave-encoded scan and the identity otherwise,
+    ``S`` the coil maps and ``X_b`` the coefficients of a block of ``block``
+    voxels an edge, as a matrix of voxels by coefficients
+    (:class:`bartorch.priors.LocallyLowRank`). The operator applies its normal
+    in closed form (:class:`bartorch.linop.CartesianSense`,
+    :class:`bartorch.linop.WaveSense`) and the solve is FISTA.
+
+    Readouts are whitened and compressed to ``virtual_coils`` channels as the
+    unit closes, as :class:`~pulserver.recon.handlers.pics_train.PicsTrainRecon`
+    compresses them. The coil maps of a Cartesian scan are those
+    :class:`~pulserver.recon.handlers.pics.PicsRecon` takes; those of a
+    wave-encoded scan are fitted to its wave-free calibration readouts. The
+    wave is each readout's trajectory along the phase encodes less its mean.
+
+    The echo images, at the reconstruction matrix, are series 0, the echoes
+    in train order, each a volume.
+
+    Parameters
+    ----------
+    rank : int, default=RANK
+        Temporal basis functions.
+    llr : float, default=0.005
+        ``lambda``, relative to the data scaling.
+    iterations : int, default=100
+        FISTA iterations.
+    virtual_coils : int | None, default=8
+        Receive channels beyond this many are compressed to it.
+    block : int, default=BLOCK
+        Block edge of the locally low-rank penalty.
+    kspace_filter, gradient_unwarp, intensity_correction : bool, default=True
+        As :class:`~pulserver.recon.handlers.pics.PicsRecon`.
+    """
+
+    def __init__(
+        self,
+        rank: int = RANK,
+        llr: float = 0.005,
+        iterations: int = 100,
+        virtual_coils: int | None = 8,
+        block: int = BLOCK,
+        *,
+        kspace_filter: bool = True,
+        gradient_unwarp: bool = True,
+        intensity_correction: bool = True,
+    ) -> None:
+        super().__init__(
+            llr,
+            iterations,
+            virtual_coils,
+            kspace_filter=kspace_filter,
+            gradient_unwarp=gradient_unwarp,
+            intensity_correction=intensity_correction,
+        )
+        self.merge = ("contrast",)
+        self.gadgets = (Prewhiten(), AsymmetricEcho(), RemoveReadoutOversampling())
+        self.rank = rank
+        self.block = block
+        self._described: tuple[Any, ...] = ()
+
+    def interpret(self, description: Any) -> Any:
+        """Return the sequence description with the gradient events the signal model of this sequence needs.
+
+        The stream's description carries the RF pulses, readouts and their
+        timing alone; what the gradients between them do to the
+        magnetization is the reconstruction's model of the sequence.
+        """
+        raise NotImplementedError
+
+    def tissue(self) -> Any:
+        """Return the :class:`blochsim.sequence.TissueProperties` the dictionary spans."""
+        import torch
+        from blochsim.sequence import TissueProperties
+
+        t2 = torch.logspace(np.log10(T2_MS[0]), np.log10(T2_MS[1]), T2_MS[2])
+        t1, t2, b1 = torch.meshgrid(
+            torch.tensor(T1_MS), t2, torch.linspace(*B1), indexing="ij"
+        )
+        return TissueProperties(
+            t1_ms=t1.reshape(-1), t2_ms=t2.reshape(-1), b1=b1.reshape(-1)
+        )
+
+    def basis(self, context: ReconContext, waveforms: tuple[Any, ...]) -> Any:
+        """Return the temporal basis ``(rank, echoes)`` of the sequence the waveforms describe.
+
+        Raises
+        ------
+        ValueError
+            If the waveforms carry no sequence description.
+        """
+        import blochsim
+        from blochsim.sequence import simulate_subspace
+
+        def simulated() -> Any:
+            descriptions = blochsim.description_from_waveforms(waveforms)
+            if not descriptions:
+                raise ValueError(
+                    "the stream carries no sequence description, which the "
+                    "temporal basis of a subspace reconstruction is simulated from"
+                )
+            subspace = simulate_subspace(
+                self.interpret(descriptions[0]),
+                self.tissue(),
+                rank=self.rank,
+                repetitions=REPETITIONS,
+            )
+            return subspace.basis[:, : self.rank].T.contiguous()
+
+        key = ("subspace basis", type(self).__name__, self.rank, len(waveforms))
+        return context.memoized(key, simulated)
+
+    def recon(
+        self, context: ReconContext, branch: str, data: ReconData
+    ) -> list[ReconResult] | None:
+        del branch
+        if data.waveforms:
+            self._described = data.waveforms
+        data = compressed(context, data, self.virtual_coils)
+        if data.data is None:
+            if data.ref is not None:
+                coil_maps(context, data, estimate=nlinv_estimate)
+            return None
+        echoes = self.echo_images(context, data)
+        attributes = {"ImageProcessingHistory": ["PULSERVER", "PYTHON", "SUBSPACE"]}
+        return [
+            ReconResult(np.abs(image), attributes={**attributes, "EchoNumber": echo + 1})
+            for echo, image in enumerate(echoes)
+        ]
+
+    def echo_images(self, context: ReconContext, data: ReconData) -> np.ndarray:
+        """Return the complex echo images ``(echoes, z, y, x)`` of a unit.
+
+        Raises
+        ------
+        ValueError
+            If the unit is not one volume, or a readout's echo lies outside
+            the trains the description simulates.
+        """
+        import torch
+        from bartorch import linop, optim, priors
+
+        buffer = data.data
+        volume = ("coil", "partition", "phase_encode", "readout")
+        if buffer.axes != volume:
+            raise ValueError(
+                f"subspace reconstruction takes one volume {volume}; encoding "
+                f"space {buffer.space.index} holds {buffer.axes}"
+            )
+        basis = self.basis(context, self._described)
+        frames = basis.shape[1]
+        echo_of = _echoes(buffer, data.acquisitions)
+        if echo_of.max() >= frames:
+            raise ValueError(
+                f"a readout lies at echo {int(echo_of.max())} of trains of "
+                f"{frames} echoes"
+            )
+        positions, kspace = _by_echo(buffer, echo_of, frames)
+        shape = buffer.image_shape
+        cartesian = buffer.space.cartesian
+        if cartesian:
+            maps = self._maps(context, data, buffer)
+        else:
+            reference = _volume(data.ref, shape)
+            maps = center_crop(
+                nlinv_estimate(torch.from_numpy(reference.astype(np.complex64))),
+                shape[-1:],
+            )
+        image_shape = (self.rank, *maps.shape[1:])
+        common = {
+            "positions": torch.from_numpy(positions),
+            "basis": basis.to(torch.complex64),
+            "device": context.device,
+        }
+        if cartesian:
+            encoding = linop.CartesianSense(maps.contiguous(), image_shape, **common)
+        else:
+            encoding = linop.WaveSense(
+                maps.contiguous(),
+                image_shape,
+                kspace.shape[-1],
+                centred=True,
+                psf=torch.from_numpy(_wave_psf(buffer, shape)),
+                **common,
+            )
+        measured = torch.from_numpy(kspace)
+        scaling = optim.data_scaling(measured, A=encoding) or 1.0
+        prior = priors.LocallyLowRank(
+            (-3, -2, -1), self.wavelet, joint_axes=(0,), block=self.block
+        )
+        solve = optim.FISTA(prior, maxiter=self.iterations)
+        coefficients = scaling * solve(measured * (1.0 / scaling), encoding)
+        echoes = torch.einsum("kf,kzyx->fzyx", basis.to(coefficients.dtype), coefficients)
+        return np.stack([self._filtered(e) for e in echoes.numpy()])
+
+    def _maps(self, context: ReconContext, data: ReconData, buffer: ReconBuffer) -> Any:
+        """Return the coil maps of a Cartesian unit, fitted to its own k-space centre where the stream stored none."""
+        import torch
+
+        try:
+            return coil_maps(context, data, estimate=nlinv_estimate).reshape(
+                buffer.kspace.shape
+            )
+        except MissingCalibration as missing:
+            self._self_calibrated(context, data, missing)
+            return nlinv_estimate(torch.from_numpy(np.ascontiguousarray(buffer.kspace)))
+
+
+class FseSubspaceRecon(SubspaceRecon):
+    """Echo images of a shuffled 3D fast spin echo (T2 shuffling, wave-shuffling) by :class:`SubspaceRecon`.
+
+    Every refocusing pulse sits between two crushers: the train is a CPMG
+    train whose configuration states shift by one order on each side of each
+    refocusing pulse.
+    """
+
+    def interpret(self, description: Any) -> Any:
+        from blochsim.sequence import EventAction, EventType, RfUse
+
+        crushed = EventAction.CRUSH_BEFORE | EventAction.CRUSH_AFTER
+        events = tuple(
+            dataclasses.replace(event, action=crushed)
+            if event.type == EventType.RF and event.params[1] == RfUse.REFOCUSING
+            else event
+            for event in description.events
+        )
+        return dataclasses.replace(description, events=events)
+
+
+def _echoes(buffer: ReconBuffer, acquisitions: list[Any]) -> np.ndarray:
+    """Return the echo of each phase encode ``(z, y)`` of ``buffer``, -1 where none was placed."""
+    echo_of = np.full(buffer.mask.shape[:2], -1, np.int64)
+    for acquisition in acquisitions:
+        try:
+            z, y = buffer.position(acquisition)
+        except ValueError:
+            continue
+        if buffer.mask[z, y].any():
+            echo_of[z, y] = int(acquisition.idx.contrast)
+    return echo_of
+
+
+def _by_echo(
+    buffer: ReconBuffer, echo_of: np.ndarray, frames: int
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return the phase encodes ``(frames, shots, 2)`` of each echo, -1 padded, and their readouts ``(coils, frames, shots, readout)``."""
+    lines = [np.argwhere(echo_of == frame) for frame in range(frames)]
+    shots = max(1, max(len(line) for line in lines))
+    positions = np.full((frames, shots, 2), -1, np.int64)
+    kspace = np.zeros(
+        (buffer.kspace.shape[0], frames, shots, buffer.kspace.shape[-1]), np.complex64
+    )
+    for frame, line in enumerate(lines):
+        positions[frame, : len(line)] = line
+        kspace[:, frame, : len(line)] = buffer.kspace[:, line[:, 0], line[:, 1]]
+    return positions, kspace
+
+
+def _wave_psf(buffer: ReconBuffer, shape: tuple[int, ...]) -> np.ndarray:
+    """Return the wave point-spread function ``(z, y, readout)`` of a wave-encoded buffer.
+
+    The wave is the trajectory of an acquired readout along the partition and
+    phase encodes, in 1/m, less its mean over the readout, which is its line;
+    it is the same for every line.
+    """
+    z, y = np.argwhere(buffer.mask.any(axis=-1))[0]
+    wave = buffer.trajectory[1:3, z, y]
+    wave = wave - wave.mean(axis=-1, keepdims=True)
+    fov_z, fov_y = buffer.space.recon_fov[:2]
+    ny, nz = shape[1], shape[0]
+    yy = (np.arange(ny) - ny // 2) * fov_y / ny
+    zz = (np.arange(nz) - nz // 2) * fov_z / nz
+    phase = wave[0][None, None, :] * yy[None, :, None] + wave[1][None, None, :] * zz[:, None, None]
+    return np.exp(-2j * np.pi * phase).astype(np.complex64)
+
+
+PLUGIN = FseSubspaceRecon()
