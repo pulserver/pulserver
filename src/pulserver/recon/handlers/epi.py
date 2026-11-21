@@ -15,8 +15,10 @@ from ...mrd._metadata import acquisition_label, has_acquisition_flag
 from .._buffers import ReconData, discards, echo_centre
 from .._calibration import (
     MissingCalibration,
+    _id,
     _zero_filled,
     coil_maps,
+    digest,
 )
 from ..gadgets import AsymmetricEcho, Prewhiten, RemoveReadoutOversampling
 from ..plugin import Gadget, ReconContext, ReconResult
@@ -137,7 +139,7 @@ class RampSampling(Gadget):
                     torch.from_numpy(positions), torch.from_numpy(grid.copy()), columns
                 )
                 .numpy()
-                .T
+                .T.astype(np.complex64)
             )
         acquisition.center_sample = (
             columns - 1 - columns // 2 if positions[-1] < positions[0] else columns // 2
@@ -490,7 +492,6 @@ class EpiRecon(PicsRecon):
         self.gadget(EpiPhaseCorrection).ramp = self.gadget(RampSampling)
         self.calibrations = {}
         self.slice_calibrations = []
-        self.own_maps = {}
         self.references = {}
         self.field = None
         self.held = []
@@ -525,7 +526,13 @@ class EpiRecon(PicsRecon):
         if volume.shape[1] > 1:
             training = band_calibration(self.slice_calibrations, data, volume.shape)
             if training is not None:
-                bands = slice_grappa_bands(volume, torch.from_numpy(training))
+                bands = slice_grappa_bands(
+                    volume,
+                    torch.from_numpy(training),
+                    memo=lambda key, train: context.memoized(
+                        key, train, what="split-slice GRAPPA kernels of a group"
+                    ),
+                )
         if bands is None:
             image = self._solved(volume, maps, context)
         else:
@@ -595,11 +602,20 @@ class EpiRecon(PicsRecon):
             bands = band_maps(context, data, volume.shape)
             if bands is not None:
                 return bands
-            key = (int(data.counters.get("slice", 0)), int(data.counters.get("set", 0)))
-            if key not in self.own_maps:
-                self._self_calibrated(context, data, missing)
-                self.own_maps[key] = epi_nlinv_estimate(volume)
-            return self.own_maps[key]
+            key = (
+                "epi own maps",
+                int(data.counters.get("slice", 0)),
+                int(data.counters.get("set", 0)),
+                _id(context.noise),
+                _id(context.coil_compression),
+            )
+            reason = missing
+
+            def fitted():
+                self._self_calibrated(context, data, reason)
+                return epi_nlinv_estimate(volume)
+
+            return context.memoized(key, fitted)
 
     def recon(self, context: ReconContext, branch: str, data: ReconData):
         del branch
@@ -885,7 +901,7 @@ def _band_planes(stored, data, shape):
     return np.ascontiguousarray(np.stack(planes, axis=1))
 
 
-def slice_grappa_bands(volume, training, size=(3, 5)):
+def slice_grappa_bands(volume, training, size=(3, 5), *, memo=None):
     """Return the bands of multiband k-space separated by split-slice GRAPPA, ``(coils, bands, y, x)``; ``None`` where the calibration cannot train the kernels.
 
     Each acquired line of ``volume`` holds one partition encode, its
@@ -908,6 +924,13 @@ def slice_grappa_bands(volume, training, size=(3, 5)):
         slice, zero outside its calibration lines.
     size : tuple of int, default=(3, 5)
         Kernel extent along lines and readout.
+    memo : callable, default=None
+        ``memo(key, train)``, returning the kernels trained for ``key`` the
+        first time and reused after, as
+        :meth:`~pulserver.recon.ReconContext.memoized` does; ``None`` trains
+        them on every call. The key names the calibration, the acquired lines
+        and their encodes, so every group of a series with the same bands and
+        sampling reuses one training.
 
     Returns
     -------
@@ -931,9 +954,25 @@ def slice_grappa_bands(volume, training, size=(3, 5)):
     ):
         return None
     window = slice(int(taught[0]), int(taught[-1]) + 1)
-    kernels = tools.slice_grappa_kernel(
-        training[:, :, acquired[window]].to(torch.complex64), weights[:, window], size
-    )
+
+    def train():
+        return tools.slice_grappa_kernel(
+            training[:, :, acquired[window]].to(torch.complex64),
+            weights[:, window],
+            size,
+        )
+
+    if memo is None:
+        kernels = train()
+    else:
+        key = (
+            "split-slice GRAPPA kernels",
+            digest(training.cpu().numpy()),
+            tuple(acquired.tolist()),
+            tuple(encode.tolist()),
+            tuple(size),
+        )
+        kernels = memo(key, train)
     collapsed = volume.sum(dim=1)[:, acquired]
     separated = tools.slice_grappa(collapsed, kernels, size) / weights[:, None, :, None]
     bands = torch.zeros_like(volume)

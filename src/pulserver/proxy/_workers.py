@@ -21,6 +21,7 @@ from multiprocessing.context import SpawnProcess
 from pathlib import Path
 
 from .._logs import configure
+from .._threads import serial_blas
 from ..recon import ExamCache, ReconContext, load_plugin
 from ..recon._runtime.application import run_application
 from ..recon._runtime.connection import Connection
@@ -41,6 +42,8 @@ class WorkerPool:
     Workers are not daemonic, so a reconstruction may start processes of its
     own; :meth:`close` terminates the workers still running.
 
+    Workers start with numpy's BLAS on one thread (:func:`pulserver._threads.serial_blas`).
+
     Parameters
     ----------
     spares : int, default=1
@@ -49,6 +52,7 @@ class WorkerPool:
     """
 
     def __init__(self, *, spares: int = 1) -> None:
+        serial_blas()
         self._context = multiprocessing.get_context("spawn")
         self._condition = threading.Condition()
         self._spares: list[_Spare] = []
