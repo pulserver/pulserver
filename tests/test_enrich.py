@@ -805,3 +805,40 @@ def test_a_navigator_without_geometry_of_its_own_is_on_the_grid_of_the_lines_it_
         table.grid_offset_m(navigator), table.grid_offset_m(imaging)
     )
     assert table.grid_offset_m(imaging).any()
+
+
+def test_a_multiband_group_is_a_partition_volume_one_band_gap_deep_per_band_centred_on_its_bands(
+    tmp_path,
+):
+    *_, seq = sequences.epi2D_sequence(
+        n_x=32, n_y=16, n_slices=4, multiband=2, n_dummy=0, slice_spacing=1e-3
+    )
+    table = written(seq, tmp_path)
+    positions = np.asarray(seq.get_definition("SlicePositions"), dtype=float)
+    groups = positions.size // 2
+    gap = abs(positions[groups] - positions[0])
+    imaging = np.flatnonzero(
+        (table.encoding_space == 0)
+        & ~(table.flags & np.uint64(AcquisitionFlag.IS_NAVIGATION_DATA.value)).astype(
+            bool
+        )
+    )
+    space = table.spaces[0]
+    centres = positions.reshape(2, groups).mean(axis=0)
+    slices = table.counters["SLC"][imaging]
+
+    assert space.matrix[2] == 2
+    assert space.fov_mm[2] == pytest.approx(1e3 * 2 * gap)
+    np.testing.assert_allclose(table.slice_offset_m[imaging], centres[slices])
+
+
+def test_a_stack_excited_one_slice_at_a_time_keeps_one_slice_per_space(tmp_path):
+    *_, seq = sequences.epi2D_sequence(n_x=32, n_y=16, n_slices=4, n_dummy=0)
+    table = written(seq, tmp_path)
+    imaging = np.flatnonzero(table.encoding_space == 0)
+    positions = np.asarray(seq.get_definition("SlicePositions"), dtype=float)
+
+    assert table.spaces[0].matrix[2] == 1
+    np.testing.assert_allclose(
+        table.slice_offset_m[imaging], positions[table.counters["SLC"][imaging]]
+    )
