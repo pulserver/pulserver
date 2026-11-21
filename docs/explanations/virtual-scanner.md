@@ -40,9 +40,9 @@ browser build of its console is at <https://pulserver.github.io/MaRGE/>.
 - **Receives with the scanner's coils, the body coil or BART's head-array models, with the default shim on transmit.**
 
   Code: {obj}`~pulserver.virtual.COILS`. Tests: *the body coil is one channel of unit sensitivity each way*; *receive sensitivities have a root sum of squares of one at the isocentre*; *a pulse without an rf shim plays its amplitude at the isocentre through the default shim* (`test_virtual_coils.py`).
-- **Scans BrainWeb's head, with relaxation at the field and the field its susceptibility adds.**
+- **Scans BrainWeb's head, with in vivo relaxation at the field and the field its susceptibility adds.**
 
-  Code: {class}`~pulserver.virtual.Phantom`. Tests: *each tissue relaxes at 1 5 t as brainweb s simulator gives it*; *each entry precesses at the mean field its head adds over its cube* (`test_virtual_brainweb.py`).
+  Code: {class}`~pulserver.virtual.Phantom`. Tests: *brain t1 follows rooney s fits and csf s holds at 4 3 s*; *brain t2 matches cox and gowland at the fields they measured*; *each entry precesses at the mean field its head adds over its cube* (`test_virtual_brainweb.py`).
 - **Adds diffusion, rigid motion and a gradient impulse response.**
 
   Code: {class}`~pulserver.virtual.RigidMotion`, {class}`~pulserver.virtual.Girf`. Tests: *a diffusing tissue loses exp minus b d of its echo to the lobes*; *a subject held in a pose acquires what a phantom placed in it does*; *a delaying girf plays the moment its delay later* (`test_virtual_fourier.py`).

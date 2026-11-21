@@ -49,9 +49,9 @@ def test_each_tissue_of_a_voxel_is_an_entry_where_a_head_first_supine_head_puts_
         brain.positions, 1e-3 * np.array([[left, posterior, superior]] * 2)
     )
     np.testing.assert_allclose(brain.density, [0.86 * 0.25e-9, 0.77 * 0.75e-9])
-    # BrainWeb's T1 at 1.5 T, scaled to 3 T by the power laws of grey and white matter.
-    np.testing.assert_allclose(brain.t1, [0.833 * 2**0.376, 0.5 * 2**0.382])
-    np.testing.assert_allclose(brain.t2, [0.083, 0.07])
+    # Rooney et al.'s T1 and Cox and Gowland's T2 of grey and white matter at 3 T.
+    np.testing.assert_allclose(brain.t1, [0.857 * 3.0**0.376, 0.583 * 3.0**0.382])
+    np.testing.assert_allclose(brain.t2, [0.076, 0.071])
     np.testing.assert_allclose(brain.frequency, 0.0)
     assert brain.receive(brain.positions) is None
 
@@ -191,33 +191,69 @@ def test_a_tissue_class_relaxes_with_the_t2_prime_it_is_given(model):
     )
 
 
-def test_each_tissue_relaxes_at_1_5_t_as_brainweb_s_simulator_gives_it():
+def test_tissues_without_in_vivo_fits_keep_brainweb_s_relaxation_at_1_5_t():
     relaxed = virtual.BrainWeb().relaxation(1.5)
 
-    for name, (t1, t2, *_) in _brainweb.TISSUES.items():
-        assert relaxed[name][:2] == (t1, t2)
+    for name in ("fat", "muscle and skin", "background", "skull"):
+        assert relaxed[name][:2] == _brainweb.TISSUES[name][:2]
+    assert relaxed["CSF"][1] == _brainweb.TISSUES["CSF"][1]
     # R2' = R2* - R2 at BrainWeb's T2 and T2*, 83 ms and 69 ms for grey matter.
     assert relaxed["grey matter"][2] == pytest.approx(1.0 / (1.0 / 0.069 - 1.0 / 0.083))
     assert relaxed["CSF"][2] == pytest.approx(1.0 / (1.0 / 0.058 - 1.0 / 0.329))
     assert relaxed["skull"][2] == math.inf
 
 
-def test_t1_follows_its_power_law_and_r2_prime_the_field_while_t2_and_csf_s_t1_hold():
+@pytest.mark.parametrize("field_t", [0.2, 1.5, 3.0, 7.0])
+def test_brain_t1_follows_rooney_s_fits_and_csf_s_holds_at_4_3_s(field_t):
+    relaxed = virtual.BrainWeb().relaxation(field_t)
+
+    assert relaxed["white matter"][0] == pytest.approx(0.583 * field_t**0.382)
+    assert relaxed["connective tissue"][0] == relaxed["white matter"][0]
+    assert relaxed["grey matter"][0] == pytest.approx(0.857 * field_t**0.376)
+    assert relaxed["glial matter"][0] == relaxed["grey matter"][0]
+    assert relaxed["CSF"][0] == relaxed["skin"][0] == 4.3
+
+
+def test_csf_takes_twice_grey_matter_s_t1_at_7_t():
+    relaxed = virtual.BrainWeb().relaxation(7.0)
+
+    assert relaxed["CSF"][0] > 2 * relaxed["grey matter"][0]
+    assert relaxed["grey matter"][0] > relaxed["white matter"][0] > 1.0
+
+
+@pytest.mark.parametrize(
+    ("field_t", "grey", "white"),
+    [(1.5, 0.087, 0.080), (3.0, 0.076, 0.071), (7.0, 0.047, 0.047)],
+)
+def test_brain_t2_matches_cox_and_gowland_at_the_fields_they_measured(
+    field_t, grey, white
+):
+    relaxed = virtual.BrainWeb().relaxation(field_t)
+
+    assert relaxed["grey matter"][1] == pytest.approx(grey)
+    assert relaxed["white matter"][1] == pytest.approx(white)
+
+
+def test_brain_t2_falls_linearly_between_measured_fields_and_holds_outside():
+    brain = virtual.BrainWeb()
+
+    assert brain.relaxation(5.0)["grey matter"][1] == pytest.approx(
+        0.076 + (0.047 - 0.076) * (5.0 - 3.0) / 4.0
+    )
+    assert brain.relaxation(9.4)["white matter"][1] == pytest.approx(0.047)
+    assert brain.relaxation(0.5)["white matter"][1] == pytest.approx(0.080)
+
+
+def test_muscle_and_fat_t1_follow_their_power_laws_and_r2_prime_the_field():
     brain = virtual.BrainWeb(t2_prime={"white matter": 0.2})
     low, high = brain.relaxation(1.5), brain.relaxation(7.0)
 
     ratio = 7.0 / 1.5
-    assert high["grey matter"][0] == pytest.approx(low["grey matter"][0] * ratio**0.376)
-    assert high["connective tissue"][0] == pytest.approx(
-        low["connective tissue"][0] * ratio**0.382
-    )
-    assert high["CSF"][0] == low["CSF"][0]
-    assert high["skin"][0] == low["skin"][0]
     assert high["muscle and skin"][0] == pytest.approx(
         low["muscle and skin"][0] * ratio**0.4203
     )
     assert high["fat"][0] == pytest.approx(low["fat"][0] * ratio**0.1743)
-    assert all(high[name][1] == low[name][1] for name in _brainweb.TISSUES)
+    assert high["fat"][1] == low["fat"][1]
     assert high["grey matter"][2] == pytest.approx(low["grey matter"][2] / ratio)
     assert high["white matter"][2] == low["white matter"][2] == 0.2
     with pytest.raises(ValueError, match="above zero"):
