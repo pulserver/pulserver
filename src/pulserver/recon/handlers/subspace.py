@@ -2,7 +2,13 @@
 
 from __future__ import annotations
 
-__all__ = ["PLUGIN", "FseSubspaceRecon", "SubspaceRecon"]
+__all__ = [
+    "PLUGIN",
+    "FseSubspaceRecon",
+    "MegreSubspaceRecon",
+    "MprageSubspaceRecon",
+    "SubspaceRecon",
+]
 
 import dataclasses
 from typing import Any
@@ -279,6 +285,100 @@ class FseSubspaceRecon(SubspaceRecon):
             for event in description.events
         )
         return dataclasses.replace(description, events=events)
+
+
+def _with_actions(description: Any, action_of: Any) -> Any:
+    """Return ``description`` with each event's action replaced by ``action_of(index, event)``; ``None`` keeps it."""
+    events = []
+    for index, event in enumerate(description.events):
+        action = action_of(index, event)
+        events.append(
+            event if action is None else dataclasses.replace(event, action=action)
+        )
+    return dataclasses.replace(description, events=tuple(events))
+
+
+class MprageSubspaceRecon(SubspaceRecon):
+    """Images of each excitation of a shuffled 3D MPRAGE shot (T1 shuffling) by :class:`SubspaceRecon`.
+
+    Each readout is spoiled ideally: the transverse magnetization is gone
+    before the next excitation, as RF spoiling with a gradient spoiler leaves
+    it. The dictionary spans T1 and the transmit field, which sets both the
+    inversion and the excitation flip.
+    """
+
+    def interpret(self, description: Any) -> Any:
+        from blochsim.sequence import EventAction, EventType
+
+        return _with_actions(
+            description,
+            lambda _, event: (
+                EventAction.SPOIL_AFTER if event.type == EventType.ADC else None
+            ),
+        )
+
+
+class MegreSubspaceRecon(SubspaceRecon):
+    """Echo images of a 3D multi-echo spoiled gradient echo by :class:`SubspaceRecon`.
+
+    The echoes of one excitation share its transverse magnetization, which
+    decays with T2 and T2' and precesses at the voxel's frequency; the last
+    readout of each excitation is spoiled ideally. The dictionary spans T2*,
+    through T2', and the frequency, from ``-frequency_hz`` to
+    ``frequency_hz``.
+
+    Parameters
+    ----------
+    frequency_hz : float, default=150.0
+        Largest off-resonance the dictionary spans, in Hz.
+    **kwargs
+        As :class:`SubspaceRecon`.
+    """
+
+    def __init__(self, *args: Any, frequency_hz: float = 150.0, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.frequency_hz = frequency_hz
+
+    def interpret(self, description: Any) -> Any:
+        from blochsim.sequence import EventAction, EventType
+
+        readouts = [
+            i for i, e in enumerate(description.events) if e.type == EventType.ADC
+        ]
+        excitations = [
+            i for i, e in enumerate(description.events) if e.type == EventType.RF
+        ]
+        last = {
+            max(
+                (
+                    r
+                    for r in readouts
+                    if r > x and all(not (x < y < r) for y in excitations)
+                ),
+                default=None,
+            )
+            for x in excitations
+        } - {None}
+        return _with_actions(
+            description,
+            lambda index, _: EventAction.SPOIL_AFTER if index in last else None,
+        )
+
+    def tissue(self) -> Any:
+        import torch
+        from blochsim.sequence import TissueProperties
+
+        t2_prime = torch.logspace(np.log10(5.0), np.log10(500.0), 24)
+        frequency = torch.linspace(-self.frequency_hz, self.frequency_hz, 31)
+        t1, t2p, b0 = torch.meshgrid(
+            torch.tensor((1200.0, 2000.0, 4400.0)), t2_prime, frequency, indexing="ij"
+        )
+        return TissueProperties(
+            t1_ms=t1.reshape(-1),
+            t2_ms=torch.full((t1.numel(),), 45.0),
+            t2_prime_ms=t2p.reshape(-1),
+            b0_hz=b0.reshape(-1),
+        )
 
 
 def _echoes(buffer: ReconBuffer, acquisitions: list[Any]) -> np.ndarray:
