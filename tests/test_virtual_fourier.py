@@ -551,6 +551,28 @@ def test_a_scan_acquired_in_batches_under_a_small_budget_reads_what_it_reads_who
         np.testing.assert_allclose(part, readout, rtol=0, atol=1e-5 * scale)
 
 
+def test_a_3d_image_sampled_only_on_its_kz_zero_plane_transforms_as_in_3d(device):
+    from bartorch import linop
+
+    generator = torch.Generator().manual_seed(0)
+    images = torch.randn(3, 6, 8, 10, dtype=torch.complex64, generator=generator)
+    planar = torch.zeros(1, 50, 3)
+    planar[..., :2] = (torch.rand(1, 50, 2, generator=generator) - 0.5) * 8
+    tilted = planar.clone()
+    tilted[..., 2] = 1e-6
+    images, planar, tilted = images.to(device), planar.to(device), tilted.to(device)
+
+    flat = _fourier._transform(planar, tuple(images.shape))(images)
+    whole = linop.NUFFT(tilted, tuple(images.shape), toeplitz=False)(images)
+
+    np.testing.assert_allclose(
+        flat.reshape(3, -1).cpu().numpy(),
+        whole.reshape(3, -1).cpu().numpy(),
+        rtol=0,
+        atol=1e-2 * float(whole.abs().max()),
+    )
+
+
 def test_a_rare_group_of_flip_angles_joins_the_nearest_one_the_same_pulses_turn(
     device,
 ):

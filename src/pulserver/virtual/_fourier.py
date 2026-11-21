@@ -529,8 +529,6 @@ class FourierPlayer:
         self, out, chosen, readout, grid, basis, firsts, first, k, receiver, echo_phase
     ) -> None:
         """Add to ``out`` the samples ``chosen`` of one station, ``(coils, samples)``."""
-        from bartorch import linop
-
         device = self.device
         where = torch.as_tensor(chosen, device=device)
         position = np.searchsorted(basis.readouts, readout[chosen])
@@ -558,14 +556,14 @@ class FourierPlayer:
         terms = grid.images.shape[0]
         coils = grid.sensitivities.shape[0]
         per_coil = max(1, min(coils, _BUDGET // (8 * grid.points * terms)))
-        nufft = linop.NUFFT(traj, (per_coil * terms, *grid.shape), toeplitz=False)
+        transform = _transform(traj, (per_coil * terms, *grid.shape))
         for c0 in range(0, coils, per_coil):
             c1 = min(c0 + per_coil, coils)
             held = torch.zeros(
                 (per_coil, terms, *grid.shape), dtype=torch.complex64, device=device
             )
             held[: c1 - c0] = grid.sensitivity(c0, c1)[:, None] * grid.images[None]
-            transformed = nufft(held.reshape(-1, *grid.shape)).reshape(
+            transformed = transform(held.reshape(-1, *grid.shape)).reshape(
                 per_coil, terms, -1
             )[: c1 - c0]
             out[c0:c1, where] = (
@@ -580,6 +578,25 @@ class FourierPlayer:
         marks = np.arange(_SPAN_SAMPLES, int(total[-1]) + 1, _SPAN_SAMPLES)
         ends = np.searchsorted(total, marks) + 1
         return np.unique(np.concatenate([ends[ends < self.blocks], [self.blocks]]))
+
+
+def _transform(traj: torch.Tensor, image_shape: tuple[int, ...]):
+    """Return the NUFFT of images ``image_shape`` at ``traj`` ``(1, samples, axes)``, as a callable.
+
+    bartorch transforms a trajectory whose kz is zero everywhere in 2D. A 3D
+    image's transform on its kz = 0 plane is the 2D transform of its sum along
+    z, scaled by one over the square root of the z points, which this returns
+    for such a trajectory.
+    """
+    from bartorch import linop
+
+    if len(image_shape) < 4 or traj.shape[-1] < 3 or bool(torch.any(traj[..., 2] != 0)):
+        return linop.NUFFT(traj, image_shape, toeplitz=False)
+    depth = image_shape[-3]
+    flat = linop.NUFFT(
+        traj[..., :2], (image_shape[0], *image_shape[-2:]), toeplitz=False
+    )
+    return lambda images: flat(images.sum(dim=-3) / math.sqrt(depth))
 
 
 def simulate(
