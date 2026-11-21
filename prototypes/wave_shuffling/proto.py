@@ -31,7 +31,7 @@ e1 = np.array([r["e1"] for r in rows]); e2 = np.array([r["e2"] for r in rows])
 ky = np.array([r["traj"][:, 1].mean() for r in rows]); kz = np.array([r["traj"][:, 2].mean() for r in rows])
 dky = np.polyfit(e1, ky, 1)[0]; dkz = np.polyfit(e2, kz, 1)[0]
 kx = rows[0]["traj"][:, 0]; dkx = np.median(np.diff(kx)); nro = kx.size
-ny, nz = e1.max() + 1, e2.max() + 1
+ny, nz = int(os.environ.get("NY", e1.max() + 1)), int(os.environ.get("NZ", e2.max() + 1))
 fov_y, fov_z, fov_xos = 1 / abs(dky), 1 / abs(dkz), 1 / abs(dkx)
 nx = nro // 2
 print(f"grid z{nz} y{ny} x{nx} (readout {nro}), FOV y {fov_y*1e3:.0f} z {fov_z*1e3:.0f} xos {fov_xos*1e3:.0f} mm")

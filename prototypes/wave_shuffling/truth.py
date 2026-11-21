@@ -41,7 +41,7 @@ T1 = torch.tensor(np.repeat(classes[:, 0] * 1e3, grid.size), dtype=torch.float32
 T2 = torch.tensor(np.repeat(classes[:, 1] * 1e3, grid.size), dtype=torch.float32)
 B = torch.tensor(np.tile(grid, len(classes)), dtype=torch.float32)
 T2P = torch.tensor(np.repeat(classes[:, 2] * 1e3, grid.size), dtype=torch.float32)
-D = S.simulate_subspace(desc, S.TissueProperties(t1_ms=T1, t2_ms=T2, b1=B, t2_prime_ms=T2P), rank=1, repetitions=3).dictionary.numpy()
+D = S.simulate_subspace(desc, S.TissueProperties(t1_ms=T1, t2_ms=T2, b1=B, t2_prime_ms=T2P), rank=1, repetitions=400 if kind == "megre" else 3).dictionary.numpy()
 D = D.reshape(len(classes), grid.size, -1)
 print("dictionary", D.shape, f"{time.perf_counter()-t:.1f} s")
 _, cls = np.unique(np.stack([tissue.t1, tissue.t2, t2p], 1), axis=0, return_inverse=True); cls = cls.reshape(-1)
