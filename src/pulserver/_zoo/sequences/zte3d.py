@@ -10,6 +10,7 @@ from pypulseqpp.sequences.sequence.zte3D_sequence import (
     HARD_PULSE_DURATION,
     MAX_GRAD,
     MAX_SLEW,
+    shell_timing,
     zte3d,
 )
 
@@ -78,19 +79,32 @@ class Zte3D(SequencePlugin):
         pulse = sequences.NonSelectiveExcitation(
             system, a["flip_angle_deg"], duration_s=HARD_PULSE_DURATION
         )
-        turn = sequences.ZteReadout(
-            system,
-            pulse.rf,
-            fov=a["fov"],
-            matrix=a["n"],
-            directions=directions[widest : widest + 2],
-            oversampling=a["readout_oversampling"],
-            readout_bandwidth_hz=a["readout_bandwidth_hz"],
-            tr=a["tr"],
-        )
+        timing = shell_timing(a["scheme"], a["turn"], a["ramp_duration_s"])
+
+        def design(ramp_duration_s):
+            return sequences.ZteReadout(
+                system,
+                pulse.rf,
+                fov=a["fov"],
+                matrix=a["n"],
+                directions=directions[widest : widest + 2],
+                oversampling=a["readout_oversampling"],
+                readout_bandwidth_hz=a["readout_bandwidth_hz"],
+                tr=a["tr"],
+                turn=timing["turn"],
+                ramp_duration_s=ramp_duration_s,
+            )
+
+        # The layout is the last TR of the design, so it is read from the
+        # turn with its ramps as fast as the slew allows; the shell lasts as
+        # long as its ramps are asked to.
+        turn = design(None)
         main = turn.seq
         main.set_definition(key="TR", value=turn.tr)
-        shell = main.duration()[0] + (n_views - 2) * turn.tr
+        shell = (
+            design(timing["ramp_duration_s"]).seq.duration()[0]
+            + (n_views - 2) * turn.tr
+        )
         n_dummy = a["n_dummy"]
         if n_dummy is None:
             repetitions = sequences.steady_state_dummies(turn.tr, a["flip_angle_deg"])
