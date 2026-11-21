@@ -428,7 +428,7 @@ class EpiRecon(PicsRecon):
     wavelet : float, default=0.0
         ``lambda`` of a wavelet ``pics`` solve of undersampled units; zero
         solves them by conjugate gradients.
-    iterations : int, default=10
+    iterations : int, default=30
         Conjugate-gradient steps, or ``pics`` iterations with ``wavelet``.
     pocs_iterations : int, default=8
         POCS iterations of a partial-Fourier unit.
@@ -444,7 +444,7 @@ class EpiRecon(PicsRecon):
     def __init__(
         self,
         wavelet: float = 0.0,
-        iterations: int = 10,
+        iterations: int = 30,
         *,
         pocs_iterations: int = 8,
         l2: float = 0.0,

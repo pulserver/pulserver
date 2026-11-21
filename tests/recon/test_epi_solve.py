@@ -63,6 +63,32 @@ def test_conjugate_gradients_unfold_a_twofold_undersampled_unit(device):
     assert error < 0.02
 
 
+def test_the_default_iterations_unfold_a_threefold_undersampled_object_filling_the_field_of_view(
+    device,
+):
+    from pulserver.recon.handlers.epi import EpiRecon, cg_sense
+
+    shape = (1, 48, 48)
+    _, y, x = np.meshgrid(*(np.arange(n) - n // 2 for n in shape), indexing="ij")
+    image = ((y / 21.0) ** 2 + (x / 17.0) ** 2 < 1).astype(np.complex64)
+    image += 0.5 * ((y / 8.0) ** 2 + ((x - 6) / 3.0) ** 2 < 1)
+    maps = _maps(shape, coils=12)
+    kspace = _kspace(image, maps)
+    sampled = torch.zeros(shape, dtype=torch.bool)
+    sampled[:, 1::3] = True
+
+    solved = cg_sense(
+        kspace * sampled,
+        torch.from_numpy(maps),
+        sampled,
+        EpiRecon().iterations,
+        device,
+    )
+
+    error = np.linalg.norm(solved.numpy() - image) / np.linalg.norm(image)
+    assert error < 0.05
+
+
 def test_pocs_restores_the_missing_lines_of_a_partial_fourier_unit_and_keeps_its_phase(
     device,
 ):
