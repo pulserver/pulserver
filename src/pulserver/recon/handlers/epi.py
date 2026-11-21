@@ -601,7 +601,7 @@ class EpiRecon(PicsRecon):
             inverse=True,
             unitary=True,
         ).reshape(kspace.shape)
-        image = coils.abs().pow(2).sum(dim=0).sqrt().numpy()
+        image = bartorch.rss(coils, 0).numpy()
         if image.ndim == 3 and image.shape[0] == 1:
             image = image[0]
         image = center_crop(image, ref.image_shape[-image.ndim :])
