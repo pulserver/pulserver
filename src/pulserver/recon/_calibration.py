@@ -2,7 +2,13 @@
 
 from __future__ import annotations
 
-__all__ = ["CoilCompression", "CoilSensitivities", "MissingCalibration", "coil_maps"]
+__all__ = [
+    "CoilCompression",
+    "CoilSensitivities",
+    "MissingCalibration",
+    "coil_maps",
+    "volume_coil_maps",
+]
 
 import copy
 import dataclasses
@@ -296,6 +302,102 @@ def coil_maps(
     )
 
 
+def volume_coil_maps(
+    context: ReconContext, units: list[ReconData], *, estimate: Any
+) -> None:
+    """Estimate one set of coil sensitivities for the slices of a stack, and store each slice's in the stream.
+
+    ``units`` are the calibration units of the slices of one stack, each
+    holding its slice's calibration k-space ``data.ref`` and no imaging
+    readouts, all with one set counter and one grid. Their k-spaces, zero-filled
+    onto the grid of their space as :func:`coil_maps` takes them, are stacked
+    in the order of the slice positions along the slice direction, Fourier
+    transformed along that order, and given to ``estimate`` as one volume
+    ``(coils, slices, y, x)``. The maps it returns are smooth across the
+    stack, and the sensitivities of each slice, its plane of them, are stored
+    in ``context.coil_maps`` as :func:`coil_maps` stores those of one slice:
+    under the slice counter, or under ``(slice, set)`` where the set is not 0.
+    A stack of one slice is estimated as :func:`coil_maps` estimates it.
+
+    Raises
+    ------
+    ValueError
+        If a unit holds imaging readouts or no calibration readouts, the units
+        do not share one set and one grid, or the estimate returns maps on
+        another grid than it was given.
+    """
+    import torch
+
+    if not units:
+        return
+    if any(unit.data is not None or unit.ref is None for unit in units):
+        raise ValueError(
+            "volume_coil_maps takes calibration units: calibration readouts and "
+            "no imaging readouts"
+        )
+    sets = {int(unit.counters.get("set", 0)) for unit in units}
+    grids = {_grid(unit.ref) for unit in units}
+    if len(sets) > 1 or len(grids) > 1:
+        raise ValueError(
+            f"the calibration units span sets {sorted(sets)} and grids "
+            f"{sorted(grids)}; one stack shares one set and one grid"
+        )
+    (polarity,) = sets
+    start = time.perf_counter()
+    method = _method(estimate)
+    if len(units) == 1:
+        (unit,) = units
+        location = int(unit.counters.get("slice", 0))
+        context.coil_maps[(location, polarity) if polarity else location] = _estimated(
+            context, unit.ref, estimate
+        )
+        return
+
+    def along_slice(unit: ReconData) -> float:
+        reference = unit.ref.reference
+        position = np.asarray(getattr(reference, "position", (0, 0, 0)), float)
+        normal = np.asarray(getattr(reference, "slice_dir", (0, 0, 1)), float)
+        return float(position @ normal)
+
+    units = sorted(units, key=along_slice)
+    planes = [_zero_filled(unit.ref) for unit in units]
+    stack = np.stack(planes, axis=1)
+    from bartorch import fft
+
+    kspace = fft(torch.from_numpy(stack), (1,), unitary=True).reshape(stack.shape)
+    maps = estimate(kspace.contiguous())
+    maps = np.asarray(maps.detach().cpu().numpy(), dtype=np.complex64)
+    if maps.shape != stack.shape:
+        raise ValueError(
+            f"the estimate returned maps of shape {maps.shape} for k-space of "
+            f"shape {stack.shape}"
+        )
+    measurement = getattr(context.header, "measurementInformation", None)
+    source = getattr(measurement, "measurementID", None)
+    for index, unit in enumerate(units):
+        location = int(unit.counters.get("slice", 0))
+        context.coil_maps[(location, polarity) if polarity else location] = (
+            CoilSensitivities(
+                maps=np.ascontiguousarray(maps[:, index]),
+                coils=coil_labels(context.header),
+                noise=_id(context.noise),
+                basis=_id(context.coil_compression),
+                geometry=_geometry(context.header, unit.ref),
+                method=f"{method} over a stack of {len(units)} slices",
+                source=None if source is None else str(source),
+            )
+        )
+    _log.info(
+        "coil sensitivities of %d slices, set %d, estimated together by %s as "
+        "one volume %s, in %.1f s",
+        len(units),
+        polarity,
+        method,
+        tuple(stack.shape),
+        time.perf_counter() - start,
+    )
+
+
 class CoilCompression:
     """Reduce the receive channels of a unit's k-space to virtual channels.
 
@@ -455,12 +557,8 @@ def _method(estimate: Any) -> str:
     return f"{name}({options})" if options else name
 
 
-def _estimated(
-    context: ReconContext, ref: ReconBuffer, estimate: Any
-) -> CoilSensitivities:
-    """Estimate maps from a unit's calibration k-space, zero-filled onto the grid of its space."""
-    import torch
-
+def _zero_filled(ref: ReconBuffer) -> np.ndarray:
+    """Return a unit's calibration k-space zero-filled onto the grid of its space, ``(coils, *grid)``."""
     space = ref.space
     if not space.cartesian:
         raise ValueError(
@@ -486,7 +584,16 @@ def _estimated(
         for name, size in zip(placement, calibration.shape[1:-1], strict=True)
     )
     kspace[(slice(None), *lines, slice(None))] = calibration
+    return kspace
 
+
+def _estimated(
+    context: ReconContext, ref: ReconBuffer, estimate: Any
+) -> CoilSensitivities:
+    """Estimate maps from a unit's calibration k-space, zero-filled onto the grid of its space."""
+    import torch
+
+    kspace = _zero_filled(ref)
     maps = estimate(torch.from_numpy(kspace))
     maps = np.asarray(maps.detach().cpu().numpy(), dtype=np.complex64)
     if maps.shape != kspace.shape:

@@ -899,7 +899,11 @@ def test_changing_the_flip_angle_scales_exactly_the_instances_a_zoo_layout_marks
     zoo, name
 ):
     plugin = zoo[name]
-    flip = plugin.listing()[UIParam.FLIP].value / 2
+    listed = plugin.listing()[UIParam.FLIP]
+    # Raising the flip angle keeps the imaging train the densest: a calibration
+    # played at its own fixed flip angle can outweigh a lowered one.
+    factor = 2.0 if 2.0 * listed.value <= listed.range_max else 0.5
+    flip = factor * listed.value
 
     before = plugin.evaluate(SYSTEM, _protocol(plugin)).rf_layout
     after = plugin.evaluate(SYSTEM, _protocol(plugin, {UIParam.FLIP: flip})).rf_layout
@@ -911,7 +915,7 @@ def test_changing_the_flip_angle_scales_exactly_the_instances_a_zoo_layout_marks
     ratio = _played_peak(after) / played
     marked = np.array([control == UIParam.FLIP for control in before.control])
     assert marked.any()
-    assert ratio[marked] == pytest.approx(0.5, rel=1e-9)
+    assert ratio[marked] == pytest.approx(factor, rel=1e-9)
     assert ratio[~marked] == pytest.approx(1.0, rel=1e-9)
 
 

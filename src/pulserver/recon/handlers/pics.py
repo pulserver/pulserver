@@ -378,7 +378,11 @@ PLUGIN = PicsRecon()
 
 
 def nlinv_estimate(
-    kspace: Any, traj: Any = None, shape: tuple[int, ...] | None = None
+    kspace: Any,
+    traj: Any = None,
+    shape: tuple[int, ...] | None = None,
+    *,
+    sobolev: float | None = None,
 ) -> Any:
     """Return the coil maps :func:`bartorch.apps.nlinv_maps` fits to ``kspace``, with phase-pole correction.
 
@@ -391,7 +395,9 @@ def nlinv_estimate(
     zero and leave a dark spot in the image. BART refuses the detection on a
     grid with an axis no longer than a twentieth of its longest, rounded up;
     k-space whose calibration grid has such an axis, a slab of 3 partitions
-    or fewer on a matrix of 48 or more, is fitted without it.
+    or fewer on a matrix of 48 or more, is fitted without it. ``sobolev`` is
+    the Sobolev weight of the maps on the calibration grid
+    (:func:`bartorch.apps.nlinv_maps`); ``None`` for BART's.
     """
     from bartorch import apps
 
@@ -405,6 +411,7 @@ def nlinv_estimate(
         radius=CALIBRATION_LINES / 2,
         shape=shape,
         phase_pole=0 if detectable else None,
+        **({} if sobolev is None else {"sobolev": sobolev}),
     )
 
 
@@ -429,6 +436,7 @@ def pics_image(
     wavelet: float,
     iterations: int,
     device: str | None,
+    x0: Any = None,
 ) -> Any:
     """Return the complex image ``(z, y, x)`` of ``bart pics -S -R W`` over host k-space ``(coils, z, y, x)``.
 
@@ -441,7 +449,9 @@ def pics_image(
     ``wavelet`` along the axes of at least ``WAVELET_MIN_POINTS`` points. A
     volume of one partition is solved as a plane. The k-space, the maps and
     the iteration's vectors stay on the host, and the encoding computes on
-    ``device``; ``None`` is the host. The image is on the host.
+    ``device``; ``None`` is the host. FISTA starts from the image ``x0``,
+    ``(z, y, x)``, when one is given, and from zero otherwise. The image is
+    on the host.
     """
     import bartorch
     import torch
@@ -461,7 +471,8 @@ def pics_image(
     axes = wavelet_axes(grid, tuple(range(-1, -len(grid) - 1, -1)))
     solve = optim.FISTA(priors.Wavelet(axes, wavelet), maxiter=iterations)
     data = (measured * (1.0 / scaling)).reshape(kspace.shape[0], *grid)
-    return (scaling * solve(data, encoding)).reshape(kspace.shape[1:])
+    start = {} if x0 is None else {"x0": (x0 * (1.0 / scaling)).reshape(grid)}
+    return (scaling * solve(data, encoding, **start)).reshape(kspace.shape[1:])
 
 
 def partial_fourier(image: Any, sampled: Any) -> Any:

@@ -41,7 +41,7 @@ from pulserver.protocol import (
     UIParam,
 )
 
-#: The calibration of an undersampled or multiband scan: ``"fleet"``, the
+#: The calibration every scan opens with: ``"fleet"``, the
 #: default, segmented EPI with the imaging train's echo spacing, its shots of
 #: a slice in rapid succession, in each phase-encode polarity, so the coil
 #: sensitivities are distorted as the images are; or ``"gre"``, a gradient
@@ -145,13 +145,19 @@ class Epi2D(SequencePlugin):
             # The reference only fills a dummy shot, which `played` counts.
             "phase_reference": False,
         }
-        *calibration, _, volume = self.app(system, **(protocol.arguments | one))
         n_shots, n_frames = a["n_shots"], a["n_frames"]
+        *prescans, volume = self.app(system, **(protocol.arguments | one))
+        stem = volume.definitions["Name"]
+        calibration = [
+            seq for seq in prescans if seq.definitions["Name"] != f"{stem}_reference"
+        ]
+        volumes = len(prescans) - len(calibration) + n_frames
         shot = volume.definitions["TR"][0] / n_shots
         sizes, cycles = _cycles(
             a | {"n_slices": groups}, shot, system.block_duration_raster
         )
-        # The reference volume and the time series each play their dummy
+        # The time series, and the reference volume that follows a
+        # calibration without FLEET's two polarities, each play their dummy
         # cycles first, packet by packet.
         n_dummy = a["n_dummy"]
         if n_dummy is None:
@@ -162,7 +168,7 @@ class Epi2D(SequencePlugin):
         if not NAVIGATOR:
             # The reference plays in the last dummy cycle, so there is one.
             dummy_cycles = max(dummy_cycles, 1)
-        played = 2 * dummy_cycles + (1 + n_frames) * n_shots
+        played = (volumes - n_frames + 1) * dummy_cycles + volumes * n_shots
         tr = n_shots * max(cycles)
         # The fat saturation is numbered after the excitation, so the
         # excitation keeps the number the listing, made with it on, gives it.
