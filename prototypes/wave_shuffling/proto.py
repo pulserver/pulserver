@@ -76,7 +76,10 @@ basis = basis_full[:, :rank].T.contiguous().to(torch.complex64)  # (coeffs, fram
 
 kwargs = dict(positions=torch.from_numpy(pos), basis=basis, centred=True)
 if waved:
-    w = waved[0]["traj"]; wy = w[:, 1] - w[:, 1].mean(); wz = w[:, 2] - w[:, 2].mean()
+    flat_at = {(r["e1"], r["e2"]): r for r in flat}
+    pair = next(r for r in waved if (r["e1"], r["e2"]) in flat_at)
+    w = pair["traj"] - flat_at[(pair["e1"], pair["e2"])]["traj"]; wy = w[:, 1]; wz = w[:, 2]
+    print("wave mean offset (lines) y", round(float(wy.mean() * fov_y), 2), "z", round(float(wz.mean() * fov_z), 2))
     yy = (np.arange(ny) - ny // 2) * fov_y / ny; zz = (np.arange(nz) - nz // 2) * fov_z / nz
     sign = float(sys.argv[6]) if len(sys.argv) > 6 else -1.0
     psf = np.exp(sign * 2j * np.pi * (wy[None, None, :] * yy[None, :, None] + wz[None, None, :] * zz[:, None, None]))
@@ -88,10 +91,16 @@ if waved:
         for r in waved:
             if r["con"] == e0: wav_[:, r["e2"], r["e1"]] = comp(r["data"])
         k_ = np.stack([wz, wy], -1)
+        if os.environ.get("CALDUMP"):
+            np.savez(os.environ["CALDUMP"], ref=ref_, wav=wav_, k=k_, fov=(fov_z, fov_y), dwell=waved[0].get("dwell", 0)); sys.exit(0)
         sc_, dl_ = linop.wave_calibrate(ref_, wav_, k_, (fov_z, fov_y))
         print("wave calibration scale", np.round(sc_, 4), "delay", np.round(dl_, 3))
         psf = linop.wave_psf(k_, (nz, ny, nx), (fov_z, fov_y), scale=sc_, delay=dl_, centred=True).numpy()
         print("psf vs nominal phase agreement", float(np.abs(np.vdot(psf, np.exp(sign * 2j * np.pi * (wy[None, None, :] * yy[None, :, None] + wz[None, None, :] * zz[:, None, None])))) / psf.size))
+    if os.environ.get("PSFDELAY"):
+        dl_ = tuple(float(v) for v in os.environ["PSFDELAY"].split(",")); sc_ = tuple(float(v) for v in os.environ.get("PSFSCALE", "1,1").split(","))
+        psf = linop.wave_psf(np.stack([wz, wy], -1), (nz, ny, nx), (fov_z, fov_y), scale=sc_, delay=dl_, centred=True).numpy()
+        print("forced psf scale", sc_, "delay", dl_)
     kwargs["psf"] = torch.from_numpy(psf.astype(np.complex64))
 else:
     kwargs["psf"] = torch.ones(nz, ny, nro, dtype=torch.complex64)
