@@ -762,3 +762,46 @@ def test_a_parameter_the_main_sequence_does_not_state_is_taken_from_the_chain(
     enrich_header(enriched, designed(tmp_path, [calibration, main]))
 
     assert pytest.approx([900.0]) == enriched.sequenceParameters.TI
+
+
+def test_a_readout_on_an_arbitrary_ramped_gradient_is_ramp_sampled_from_its_trajectory(
+    tmp_path,
+):
+    system = pp.Opts()
+    seq = pp.Sequence(system)
+    rise, flat = 100e-6, 200e-6
+    lobe = pp.make_extended_trapezoid(
+        "x",
+        times=np.array([0.0, rise, rise + flat, 2 * rise + flat]),
+        amplitudes=np.array([0.0, 4e5, 4e5, 0.0]),
+        system=system,
+    )
+    seq.add_block(
+        pp.make_trapezoid("x", area=-0.5 * 4e5 * (rise + flat), system=system)
+    )
+    seq.add_block(
+        lobe, pp.make_adc(num_samples=40, duration=2 * rise + flat, system=system)
+    )
+    seq.set_definition("Matrix", [32, 1, 1])
+    seq.set_definition("FOV", [0.2, 0.2, 0.005])
+
+    assert written(seq, tmp_path).spaces[0].ramp_sampled
+
+
+def test_a_navigator_without_geometry_of_its_own_is_on_the_grid_of_the_lines_it_navigates(
+    tmp_path,
+):
+    *_, seq = sequences.epi2D_sequence(n_x=32, n_y=16, n_dummy=0, navigator_lines=3)
+    table = written(seq, tmp_path)
+    navigator = int(
+        np.flatnonzero(
+            table.flags & np.uint64(AcquisitionFlag.IS_NAVIGATION_DATA.value)
+        )[0]
+    )
+    imaging = int(np.flatnonzero(table.encoding_space == 0)[0])
+
+    assert table.spaces[int(table.encoding_space[navigator])].navigator
+    np.testing.assert_array_equal(
+        table.grid_offset_m(navigator), table.grid_offset_m(imaging)
+    )
+    assert table.grid_offset_m(imaging).any()

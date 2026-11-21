@@ -54,6 +54,7 @@ sensitivity maps, noise prewhitening and coil compression are the subject of
 | Object | Description |
 | --- | --- |
 | {obj}`~pulserver.recon.coil_maps` | Return the coil sensitivities of a unit from its calibration k-space, the stream or the exam. |
+| {obj}`~pulserver.recon.volume_coil_maps` | Estimate one set of coil sensitivities for the slices of a stack from their calibration units, and store each slice's. |
 | {obj}`~pulserver.recon.CoilSensitivities` | Receive coil sensitivity maps with the coils, prewhitening, compression and geometry they were estimated in. |
 | {obj}`~pulserver.recon.MissingCalibration` | No source holds coil sensitivities the unit can use. |
 | {obj}`~pulserver.recon.CoilCompression` | Reduce the receive channels of a unit's k-space to virtual channels. |

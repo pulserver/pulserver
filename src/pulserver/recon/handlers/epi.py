@@ -4,6 +4,7 @@ from __future__ import annotations
 
 __all__ = ["PLUGIN", "EpiPhaseCorrection", "EpiRecon", "RampSampling"]
 
+import importlib.util
 import logging
 import time
 
@@ -12,9 +13,18 @@ import numpy as np
 from ...mrd._header import EncodingSpace
 from ...mrd._metadata import acquisition_label, has_acquisition_flag
 from .._buffers import ReconData, discards, echo_centre
+from .._calibration import MissingCalibration, coil_maps, volume_coil_maps
 from ..gadgets import AsymmetricEcho, Prewhiten, RemoveReadoutOversampling
-from ..plugin import Gadget, ReconContext
-from .pics import PicsRecon
+from ..plugin import Gadget, ReconContext, ReconResult
+from .pics import (
+    VIRTUAL_COILS,
+    PicsRecon,
+    averaged,
+    center_crop,
+    compressed,
+    nlinv_estimate,
+    pics_image,
+)
 
 _log = logging.getLogger("pulserver.recon")
 
@@ -23,23 +33,38 @@ class RampSampling(Gadget):
     """Resample each readout from the k-space positions it was sampled at onto its space's readout grid.
 
     The positions are the readout's trajectory, ramps included, which the
-    proxy's enrichment writes in 1/m; the grid is the reconstruction matrix's
-    readout at its field of view, so readout oversampling is removed with it
+    proxy's enrichment writes in 1/m: the integral of the played gradients at
+    the sample times. Delayed by the read-gradient delay :attr:`delay_s`, which
+    :class:`EpiPhaseCorrection` fits to the navigator or the phase reference,
+    the trajectory of a sample taken at ``t`` is the one designed for
+    ``t - delay_s``. The grid is the reconstruction matrix's readout at its
+    field of view, so readout oversampling is removed with it
     (:func:`bartorch.tools.epi_ramp_operator`). A reversed readout is
     resampled onto the grid in its own direction. The resampled readout is a
     full echo of the matrix's readout: its ``center_sample`` is the grid's
     centre, and it has no discards. A space that states no matrix, such as the
-    navigators', takes the geometry of the first space that does. A readout
-    without a trajectory, such as a line of the gradient-echo calibration
-    that precedes an accelerated scan, is sampled uniformly: it is completed
-    to a full echo (:class:`~pulserver.recon.AsymmetricEcho`) and its readout
-    oversampling removed (:class:`~pulserver.recon.RemoveReadoutOversampling`),
-    so it lands on the same readout grid as the EPI lines and the coil
-    sensitivities estimated from it serve them.
+    navigators', takes the geometry of the first space that does. Navigator
+    and phase-reference readouts pass on as they were sampled, for
+    :class:`EpiPhaseCorrection` to resample once it has fitted the delay to
+    them. A readout without a trajectory, such as a line of the gradient-echo
+    calibration that precedes an accelerated scan, is sampled uniformly: it is
+    completed to a full echo (:class:`~pulserver.recon.AsymmetricEcho`) and its
+    readout oversampling removed
+    (:class:`~pulserver.recon.RemoveReadoutOversampling`), so it lands on the
+    same readout grid as the EPI lines and the coil sensitivities estimated
+    from it serve them.
+
+    Attributes
+    ----------
+    delay_s : float
+        Delay of the played read gradient behind the designed one (s).
     """
+
+    delay_s = 0.0
 
     def startup(self, context):
         super().startup(context)
+        self.delay_s = 0.0
         self.uniform = (AsymmetricEcho(), RemoveReadoutOversampling())
         for gadget in self.uniform:
             gadget.startup(context)
@@ -65,17 +90,36 @@ class RampSampling(Gadget):
 
     def __call__(self, acquisition, data):
         traj = getattr(acquisition, "traj", None)
-        space = int(acquisition_label(acquisition, "encoding_space_ref", 0) or 0)
         if traj is None or np.size(traj) == 0:
             for gadget in self.uniform:
                 data = gadget(acquisition, data)
             return data
-        if space >= len(self.geometry):
+        if has_acquisition_flag(
+            acquisition, "ACQ_IS_PHASECORR_DATA"
+        ) or has_acquisition_flag(acquisition, "ACQ_IS_NAVIGATION_DATA"):
+            return data
+        return self.resample(acquisition, data)
+
+    def resample(self, acquisition, data, delay_s=None):
+        """Return one readout resampled onto its space's readout grid, the trajectory delayed by ``delay_s``.
+
+        ``None`` is :attr:`delay_s`. The acquisition's ``center_sample`` and
+        discards are set to those of the grid. A readout of a space without
+        geometry, or without a trajectory, is returned as it is.
+        """
+        traj = getattr(acquisition, "traj", None)
+        space = int(acquisition_label(acquisition, "encoding_space_ref", 0) or 0)
+        if traj is None or np.size(traj) == 0 or space >= len(self.geometry):
             return data
         if self.geometry[space] is None:
             return data
         columns, fov = self.geometry[space]
-        positions = np.asarray(traj)[:, 0] * fov / columns
+        delay = self.delay_s if delay_s is None else float(delay_s)
+        k = np.asarray(traj, dtype=np.float64)[:, 0]
+        dwell = acquisition_label(acquisition, "sample_time_us", None)
+        if delay and dwell:
+            k = delayed(k, delay / (1e-6 * float(dwell)))
+        positions = k * fov / columns
         key = positions.tobytes()
         if key not in self.operators:
             import torch
@@ -96,6 +140,21 @@ class RampSampling(Gadget):
         )
         acquisition.discard_pre = acquisition.discard_post = 0
         return data @ self.operators[key]
+
+
+def delayed(k: np.ndarray, samples: float) -> np.ndarray:
+    """Return the trajectory ``k`` sampled ``samples`` sample intervals earlier, as a delayed gradient plays it.
+
+    ``k[i]`` becomes the designed trajectory at ``i - samples``, interpolated
+    linearly between samples and extrapolated linearly past the first and the
+    last.
+    """
+    index = np.arange(k.size, dtype=np.float64) - samples
+    inner = np.interp(index, np.arange(k.size), k)
+    before, after = index < 0, index > k.size - 1
+    inner[before] = k[0] + (k[1] - k[0]) * index[before]
+    inner[after] = k[-1] + (k[-1] - k[-2]) * (index[after] - (k.size - 1))
+    return inner
 
 
 def _echo_index(acquisition) -> int:
@@ -127,7 +186,26 @@ class EpiPhaseCorrection(Gadget):
     (:func:`bartorch.tools.correct_lines`), and its ``center_sample`` and
     discards are mirrored with it. Navigator readouts are consumed whether or
     not a reference serves.
+
+    A delay of the read gradient moves every sample along the trajectory by
+    the gradient times the delay, which on the ramps is not the shift a linear
+    phase removes. The first reference train, or the first navigator, of the
+    stream gives the delay: the one that, applied to the trajectory before the
+    ramp resampling (:class:`RampSampling`), leaves no linear term in the fit.
+    It is found by the secant method on that term, starting from no delay, and
+    the gadget's :class:`RampSampling` resamples every later readout with it;
+    the phase of each reference and navigator is then fitted to its readouts
+    resampled with the delay. Without a :class:`RampSampling` (``ramp`` is
+    ``None``), the reference and navigator readouts are taken as they come.
+
+    Attributes
+    ----------
+    ramp : RampSampling or None
+        The resampling the reference and navigator readouts go through, and
+        whose delay is set.
     """
+
+    ramp = None
 
     def startup(self, context):
         super().startup(context)
@@ -137,18 +215,72 @@ class EpiPhaseCorrection(Gadget):
         self.references = {}
         self.latest = None
         self._warned = False
+        self._delay_fitted = False
+
+    def _lines(self, collected, delay=None):
+        """Return the readouts of ``collected``, ``(acquisition, data, reverse)``, resampled and in forward order."""
+        import torch
+        from bartorch import tools
+
+        lines = []
+        for acquisition, data, reverse in collected:
+            if self.ramp is not None:
+                data = self.ramp.resample(acquisition, data, delay)
+            lines.append((torch.from_numpy(np.ascontiguousarray(data)), reverse))
+        return tools.correct_lines(lines)
+
+    def _fit_delay(self, linear_term, collected) -> None:
+        """Set the ramp resampling's delay to the one that zeroes ``linear_term(delay)``, once a stream."""
+        if self._delay_fitted or self.ramp is None:
+            return
+        self._delay_fitted = True
+        if not any(np.size(getattr(a, "traj", None)) > 1 for a, _, _ in collected):
+            return
+        step = DELAY_STEP_S
+        delays, terms = [0.0, step], [linear_term(0.0), linear_term(step)]
+        for _ in range(DELAY_ITERATIONS):
+            slope = (terms[-1] - terms[-2]) / (delays[-1] - delays[-2])
+            if not np.isfinite(slope) or slope == 0.0:
+                break
+            delay = delays[-1] - terms[-1] / slope
+            if abs(delay) > MAX_DELAY_S:
+                _log.warning(
+                    "the read-gradient delay fitted to the odd/even phase, "
+                    "%.2f us, is beyond %.0f us and is not applied",
+                    1e6 * delay,
+                    1e6 * MAX_DELAY_S,
+                )
+                return
+            delays.append(delay)
+            terms.append(linear_term(delay))
+        self.ramp.delay_s = delays[-1]
+        _log.info(
+            "read-gradient delay of %.2f us fitted to the odd/even phase; the "
+            "ramp resampling delays the trajectory by it",
+            1e6 * self.ramp.delay_s,
+        )
 
     def _close_references(self) -> None:
         """Fit every reference train still collecting."""
         from bartorch import tools
 
-        for location, lines in self.pending.items():
-            lines = sorted(lines, key=lambda item: item[0])
-            polarity = [reverse for _, (_, reverse) in lines]
-            try:
-                fit = tools.estimate_epi_echo_phase(
-                    tools.correct_lines([line for _, line in lines]), polarity
+        for location, collected in self.pending.items():
+            collected = sorted(collected, key=lambda item: item[0])
+            echoes = [echo for echo, _ in collected]
+            lines = [line for _, line in collected]
+            polarity = [reverse for _, _, reverse in lines]
+            rows = [r for r, flag in enumerate(polarity) if flag]
+
+            def fit(delay=None, lines=lines, polarity=polarity):
+                return tools.estimate_epi_echo_phase(
+                    self._lines(lines, delay), polarity
                 )
+
+            try:
+                self._fit_delay(
+                    lambda d, rows=rows: float(fit(d)[rows, 1].mean()), lines
+                )
+                coefficients = fit()
             except ValueError as error:
                 _log.warning(
                     "the odd/even phase reference of slice %d is unusable (%s); "
@@ -157,22 +289,26 @@ class EpiPhaseCorrection(Gadget):
                     error,
                 )
                 continue
-            echoes = [echo for echo, _ in lines]
-            table = {echo: fit[row] for row, echo in enumerate(echoes)}
+            table = {echo: coefficients[row] for row, echo in enumerate(echoes)}
             last = max(
                 (e for e, r in zip(echoes, polarity, strict=True) if r), default=None
             )
             self.references[location] = (table, last)
             self.latest = location
-            slope = float(fit[[r for r, flag in enumerate(polarity) if flag], 1].mean())
             _log.info(
                 "odd/even phase of slice %d fitted to a %d-echo reference train: "
                 "mean linear term %.4f rad across the readout",
                 location,
                 len(lines),
-                slope,
+                float(coefficients[rows, 1].mean()),
             )
         self.pending = {}
+
+    def _navigator_phase(self, delay=None):
+        from bartorch import tools
+
+        phase = tools.estimate_epi_phase(self._lines(self.navigator, delay))
+        return -phase if self.navigator[0][2] else phase
 
     def _reference_phase(self, acquisition):
         if not self.references:
@@ -189,7 +325,6 @@ class EpiPhaseCorrection(Gadget):
         from bartorch import tools
 
         reverse = has_acquisition_flag(acquisition, "ACQ_IS_REVERSE")
-        line = (torch.from_numpy(np.ascontiguousarray(data)), reverse)
         if has_acquisition_flag(acquisition, "ACQ_IS_PHASECORR_DATA"):
             location = int(acquisition_label(acquisition, "slice", 0) or 0)
             echo = _echo_index(acquisition)
@@ -197,17 +332,22 @@ class EpiPhaseCorrection(Gadget):
             if collected and echo <= collected[-1][0]:
                 # A new train of a slice still collecting closes the last.
                 self._close_references()
-            self.pending.setdefault(location, []).append((echo, line))
+            self.pending.setdefault(location, []).append(
+                (echo, (acquisition, data, reverse))
+            )
             return None
         if self.pending:
             self._close_references()
         if has_acquisition_flag(acquisition, "ACQ_IS_NAVIGATION_DATA"):
-            self.navigator.append(line)
+            self.navigator.append((acquisition, data, reverse))
             if len(self.navigator) == 3:
-                phase = tools.estimate_epi_phase(tools.correct_lines(self.navigator))
-                self.phase = -phase if self.navigator[0][1] else phase
+                self._fit_delay(
+                    lambda d: float(self._navigator_phase(d)[1]), self.navigator
+                )
+                self.phase = self._navigator_phase()
                 self.navigator = []
             return None
+        line = (torch.from_numpy(np.ascontiguousarray(data)), reverse)
         phase = None
         if reverse:
             samples = data.shape[-1]
@@ -227,42 +367,72 @@ class EpiPhaseCorrection(Gadget):
         return tools.correct_lines([line], phase)[0].numpy()
 
 
+#: First trial delay of the read gradient (s), and the secant steps after it.
+DELAY_STEP_S, DELAY_ITERATIONS = 1e-6, 3
+
+#: Largest read-gradient delay (s) applied to the trajectory; a larger fit
+#: points at a reference that does not describe the train.
+MAX_DELAY_S = 20e-6
+
+
 class EpiRecon(PicsRecon):
-    """Images of :class:`~pulserver.recon.handlers.pics.PicsRecon` from EPI readouts.
+    """Images of EPI readouts: coil sensitivities of the whole stack from its calibration, a linear SENSE solve, one distortion field for every image.
 
     Each readout is whitened (:class:`~pulserver.recon.Prewhiten`),
-    ramp-resampled (:class:`RampSampling`) and has its odd/even phase removed
-    (:class:`EpiPhaseCorrection`, from the blip-free reference train
-    ``ACQ_IS_PHASECORR_DATA`` the sequence plays in a dummy shot, else from
-    the navigator) on arrival, so the k-space is Cartesian,
-    forward-ordered and at the reconstruction matrix when its slice closes.
+    ramp-resampled along its k-space trajectory (:class:`RampSampling`) and
+    has its odd/even phase removed (:class:`EpiPhaseCorrection`, from the
+    blip-free reference train ``ACQ_IS_PHASECORR_DATA`` the sequence plays in
+    a dummy shot, else from the navigator) on arrival, so the k-space is
+    Cartesian, forward-ordered and at the reconstruction matrix when its slice
+    closes. Each unit's channels are compressed to ``virtual_coils``
+    (:class:`~pulserver.recon.CompressChannels`).
+
+    Coil sensitivities come from the calibration the scan opens with, once
+    for the whole stack: the calibration units of every slice, held until the
+    first unit that needs maps, are estimated together as one volume
+    (:func:`~pulserver.recon.volume_coil_maps` with
+    :func:`~pulserver.recon.handlers.pics.nlinv_estimate`), each phase-encode
+    polarity of a FLEET calibration on its own, so each set is unfolded by
+    maps distorted as its image is. Every later image of a slice takes its
+    slice's maps (:func:`~pulserver.recon.coil_maps`). A scan without a
+    calibration has the maps of each slice and set fitted once, to its first
+    unit, and kept.
+
+    A unit whose lines fill k-space within the range acquired along the phase
+    encode is combined as the least-squares SENSE image of its maps,
+    ``sum_c conj(S_c) F^-1 y_c / sum_c |S_c|^2``; an undersampled one is the
+    solution of ``min |P F S x - y|^2`` by ``iterations`` conjugate-gradient
+    steps (:class:`bartorch.optim.CG`), or with ``wavelet`` above zero the
+    ``pics`` solve of :class:`~pulserver.recon.handlers.pics.PicsRecon`. A
+    partial-Fourier phase encode is completed by ``pocs_iterations`` of POCS
+    (:func:`pocs`), which keeps the image phase.
+
     The phase-encode-reversed reference volume (``SET`` 1) is reconstructed and
     kept, Fermi filtered as the images are, but sent as no image of the
-    series: when PyHySCO is installed (bartorch's ``pyhysco`` extra, GPL-3.0)
-    the first later image of the same slice, or volume of a 3D scan, and the
-    reference give the slice's susceptibility displacement field
-    (:func:`bartorch.tools.correct_susceptibility`), which is kept and applied
-    to that image and every later one of the slice
+    series. When PyHySCO is installed (bartorch's ``pyhysco`` extra, GPL-3.0),
+    the first image of every slice of the stack is held until the stack is
+    complete; that volume and the reference volume give one susceptibility
+    displacement field for the whole stack
+    (:func:`bartorch.tools.correct_susceptibility`, :func:`stack_field`),
+    estimated once and applied to every image of every slice
     (:func:`bartorch.tools.apply_susceptibility`, as FSL's ``applytopup
-    --method=jac``), history ``HYSCO``. The
-    correction is logged as the other corrections are, and an image left
-    uncorrected, for want of PyHySCO or of its reference, is logged with the
-    reason at ``WARNING``. The calibration readouts of an accelerated scan
-    reach the same readout grid as the EPI lines (:class:`RampSampling`), so
-    the coil sensitivities estimated from them unfold it. A FLEET
-    calibration's readouts are EPI lines, ramp-resampled and phase-corrected
-    as the imaging lines are, read once in each phase-encode polarity: each set is unfolded by the maps of its own polarity, distorted
-    as its image is (:func:`~pulserver.recon.coil_maps`). Each image is Fermi
-    filtered before its magnitude is taken, and corrected for gradient
+    --method=jac``), history ``HYSCO``. The correction is logged as the other
+    corrections are, and an image left uncorrected, for want of PyHySCO or of
+    its reference, is logged with the reason at ``WARNING``. Each image is
+    Fermi filtered before its magnitude is taken, and corrected for gradient
     nonlinearity and divided by the receive field after the distortion
-    correction, the reference set by a field of its own
-    (:class:`~pulserver.recon.Corrections`).
+    correction (:class:`~pulserver.recon.Corrections`).
 
     Parameters
     ----------
-    wavelet : float, default=0.005
-        As :class:`~pulserver.recon.handlers.pics.PicsRecon`.
-    iterations : int, default=30
+    wavelet : float, default=0.0
+        ``lambda`` of a wavelet ``pics`` solve of undersampled units; zero
+        solves them by conjugate gradients.
+    iterations : int, default=10
+        Conjugate-gradient steps, or ``pics`` iterations with ``wavelet``.
+    pocs_iterations : int, default=8
+        POCS iterations of a partial-Fourier unit.
+    virtual_coils : int | None, default=VIRTUAL_COILS
         As :class:`~pulserver.recon.handlers.pics.PicsRecon`.
     kspace_filter, gradient_unwarp, intensity_correction : bool, default=True
         As :class:`~pulserver.recon.handlers.pics.PicsRecon`.
@@ -270,9 +440,11 @@ class EpiRecon(PicsRecon):
 
     def __init__(
         self,
-        wavelet: float = 0.005,
-        iterations: int = 30,
+        wavelet: float = 0.0,
+        iterations: int = 10,
         *,
+        pocs_iterations: int = 8,
+        virtual_coils: int | None = VIRTUAL_COILS,
         kspace_filter: bool = True,
         gradient_unwarp: bool = True,
         intensity_correction: bool = True,
@@ -280,94 +452,221 @@ class EpiRecon(PicsRecon):
         super().__init__(
             wavelet,
             iterations,
+            virtual_coils,
             kspace_filter=kspace_filter,
             gradient_unwarp=gradient_unwarp,
             intensity_correction=intensity_correction,
         )
+        self.pocs_iterations = int(pocs_iterations)
         self.gadgets = (Prewhiten(), RampSampling(), EpiPhaseCorrection())
         # The odd/even phase reference is consumed by EpiPhaseCorrection.
         self.reject_flags = ()
 
     def startup(self, context):
         super().startup(context)
+        self.gadget(EpiPhaseCorrection).ramp = self.gadget(RampSampling)
+        self.calibrations = {}
+        self.own_maps = {}
         self.references = {}
-        # The displacement field of each slice, estimated once from its first
-        # image and its reference.
-        self.fields = {}
+        self.field = None
+        self.held = []
         self._skips_logged = set()
+        self.hysco = (
+            None
+            if importlib.util.find_spec(PYHYSCO_PACKAGE) is not None
+            else f"PyHySCO is not installed (no package {PYHYSCO_PACKAGE})"
+        )
+
+    def unit_image(self, context, data):
+        data = compressed(context, data, self.virtual_coils)
+        buffer = data.data
+        if buffer is None:
+            if data.ref is not None:
+                polarity = int(data.counters.get("set", 0))
+                self.calibrations.setdefault(polarity, []).append(data)
+            return None
+        if self.calibrations:
+            for units in self.calibrations.values():
+                volume_coil_maps(context, units, estimate=nlinv_estimate)
+            self.calibrations = {}
+        image = self.image(averaged(buffer), buffer.image_shape, context, data)
+        return buffer, data, image
+
+    def image(self, kspace, shape, context, data):
+        """Return the complex image of ``(coils, [partitions,] phase encodes, readout)`` k-space, cropped to ``shape`` and Fermi filtered."""
+        import torch
+
+        volume = kspace if kspace.ndim == 4 else kspace[:, None]
+        volume = torch.from_numpy(np.ascontiguousarray(volume, dtype=np.complex64))
+        maps = self._maps(context, data, volume)
+        sampled = volume.abs().sum(dim=0) > 0
+        if _fills_acquired_range(sampled.numpy()):
+            image = sense_combined(volume, maps)
+        elif self.wavelet > 0:
+            image = pics_image(
+                volume, maps, sampled, self.wavelet, self.iterations, context.device
+            )
+        else:
+            image = cg_sense(volume, maps, sampled, self.iterations, context.device)
+        image = pocs(image, sampled, self.pocs_iterations).numpy()
+        if kspace.ndim == 3:
+            image = image[0]
+        return self._filtered(np.array(center_crop(image, shape[-image.ndim :])))
+
+    def _maps(self, context, data, volume):
+        """Return the unit's coil maps shaped as ``volume``: its slice's, else fitted once to it and kept."""
+        try:
+            return coil_maps(context, data, estimate=nlinv_estimate).reshape(
+                volume.shape
+            )
+        except MissingCalibration as missing:
+            key = (int(data.counters.get("slice", 0)), int(data.counters.get("set", 0)))
+            if key not in self.own_maps:
+                self._self_calibrated(context, data, missing)
+                self.own_maps[key] = nlinv_estimate(volume)
+            return self.own_maps[key]
 
     def recon(self, context: ReconContext, branch: str, data: ReconData):
-        if int(data.counters.get("set", 0)) != 1:
-            return super().recon(context, branch, data)
-        # The reference only corrects the images of its slice (image() keeps
-        # it); it is not an image of the series.
-        self.unit_image(context, data)
-        return None
-
-    def image(
-        self,
-        kspace: np.ndarray,
-        shape: tuple[int, ...],
-        context: ReconContext,
-        data: ReconData,
-    ) -> np.ndarray:
-        image = np.abs(super().image(kspace, shape, context, data))
+        del branch
+        unit = self.unit_image(context, data)
+        if unit is None:
+            return None
+        buffer, data, image = unit
         location = int(data.counters.get("slice", 0))
         if int(data.counters.get("set", 0)) == 1:
-            self.references[location] = image
-            self.fields.pop(location, None)
-            return image
-        reference = self.references.get(location)
-        space = data.data.space
-        if reference is None:
+            # The reference only corrects the images (_corrected); it is not
+            # an image of the series.
+            self.references[location] = (np.abs(image), buffer.reference)
+            self.field = None
+            return None
+        image = np.abs(image)
+        if self.hysco is not None or not self.references or self.field is not None:
+            return self._results(context, data, self._corrected(image, location))
+        self.held.append((data, image))
+        if {int(d.counters.get("slice", 0)) for d, _ in self.held} < set(
+            self.references
+        ):
+            return None
+        held, self.held = self.held, []
+        self._estimate_field(held)
+        results = []
+        for unit_data, unit_image in held:
+            location = int(unit_data.counters.get("slice", 0))
+            results += self._results(
+                context, unit_data, self._corrected(unit_image, location)
+            )
+        return results
+
+    def finish(self, context):
+        if self.held:
+            _log.warning(
+                "the stack never completed its first volume; %d images are sent "
+                "without susceptibility distortion correction",
+                len(self.held),
+            )
+        return super().finish(context)
+
+    def flush(self, context):
+        emitted = super().flush(context)
+        held, self.held = self.held, []
+        for data, image in held:
+            emitted.append((data, self._results(context, data, image)))
+        return emitted
+
+    def _results(self, context, data, image):
+        """Return the image's results, its geometry its own unit's whatever unit closed."""
+        corrections = self.corrections
+        history = ["PULSERVER", "PYTHON", "PICS" if self.wavelet > 0 else "SENSE"]
+        if corrections is not None:
+            image = corrections.unwarped(image, context, data)
+            history += corrections.applied()
+        results = [
+            ReconResult(
+                np.abs(image),
+                reference=data.data.reference,
+                attributes={"ImageProcessingHistory": history},
+            )
+        ]
+        if corrections is not None:
+            results = corrections.intensity_corrected(results, data)
+        return results
+
+    def _estimate_field(self, held) -> None:
+        """Estimate the stack's displacement field from its held first volume and its reference volume.
+
+        The slices of a 2D stack are stacked in the order of their positions
+        and corrected as one volume, the spacing of their positions its third
+        voxel size; a 3D unit is its own volume.
+        """
+        start = time.perf_counter()
+        images = {int(d.counters.get("slice", 0)): (img, d) for d, img in held}
+        locations = sorted(
+            images, key=lambda loc: _along_slice(self.references[loc][1])
+        )
+        space = images[locations[0]][1].data.space
+        if not space.recon_fov:
+            self.hysco = "the header states no reconstruction field of view"
+            return
+        planes = images[locations[0]][0].ndim == 2
+        image = np.stack([images[loc][0] for loc in locations])
+        reference = np.stack([self.references[loc][0] for loc in locations])
+        voxel = tuple(
+            1e3 * fov / n
+            for fov, n in zip(space.recon_fov, space.recon_matrix, strict=False)
+        )
+        if not planes:
+            image, reference, voxel = image[0], reference[0], voxel[-3:]
+        elif len(locations) == 1:
+            image, reference, voxel = image[0], reference[0], voxel[-2:]
+        else:
+            positions = [_along_slice(self.references[loc][1]) for loc in locations]
+            voxel = (float(np.median(np.diff(positions))), *voxel[-2:])
+        try:
+            field = susceptibility_field(image, reference, voxel)
+        except ImportError as error:
+            self.hysco = f"PyHySCO is not installed ({error})"
+            return
+        except Exception:
+            _log.exception(
+                "the susceptibility distortion field could not be estimated; the "
+                "images are sent uncorrected"
+            )
+            self.hysco = "its field could not be estimated"
+            return
+        if planes and len(locations) > 1:
+            self.field = {
+                loc: (field[index], voxel[-2:]) for index, loc in enumerate(locations)
+            }
+        else:
+            self.field = {locations[0]: (field, voxel)}
+        _log.info(
+            "susceptibility displacement field of a stack %s estimated in %.2f s "
+            "against its phase-encode-reversed reference",
+            image.shape,
+            time.perf_counter() - start,
+        )
+
+    def _corrected(self, image, location):
+        """Return ``image`` corrected by the stack's field, or as it is with the reason logged."""
+        if self.field is not None and location in self.field:
+            field, voxel = self.field[location]
+            if self.corrections is not None:
+                self.corrections.ran(
+                    "HYSCO",
+                    "susceptibility distortion of a %s image corrected by the "
+                    "stack's displacement field",
+                    image.shape,
+                )
+            return undistorted(image, field, voxel)
+        if self.hysco is not None:
+            reason = self.hysco
+        elif location not in self.references:
             reason = (
                 f"no phase-encode-reversed reference (set 1) of slice {location} "
                 "came before it"
             )
-        elif image.shape != reference.shape:
-            reason = f"its reference is {reference.shape}, the image {image.shape}"
-        elif image.ndim not in (2, 3):
-            reason = f"it has {image.ndim} dimensions, not 2 or 3"
-        elif not space.recon_fov:
-            reason = "the header states no reconstruction field of view"
         else:
-            voxel = tuple(
-                1e3 * fov / n
-                for fov, n in zip(space.recon_fov, space.recon_matrix, strict=False)
-            )
-            voxel = voxel[-image.ndim :]
-            start = time.perf_counter()
-            field = self.fields.get(location)
-            estimated = field is None
-            try:
-                if estimated:
-                    field = susceptibility_field(image, reference, voxel)
-                corrected = undistorted(image, field, voxel)
-            except ImportError as error:
-                reason = f"PyHySCO is not installed ({error})"
-            except Exception:
-                _log.exception(
-                    "the susceptibility distortion correction failed; the image is "
-                    "sent uncorrected"
-                )
-                return image
-            else:
-                self.fields[location] = field
-                if self.corrections is not None:
-                    self.corrections.ran(
-                        "HYSCO",
-                        "susceptibility distortion of a %s image corrected in %.2f s "
-                        "by %s",
-                        image.shape,
-                        time.perf_counter() - start,
-                        (
-                            f"the field of slice {location} estimated against its "
-                            "phase-encode-reversed reference"
-                            if estimated
-                            else f"applying the field of slice {location}"
-                        ),
-                    )
-                return corrected
+            reason = f"the stack's field holds no slice {location}"
         level = logging.DEBUG if reason in self._skips_logged else logging.WARNING
         self._skips_logged.add(reason)
         _log.log(
@@ -378,6 +677,139 @@ class EpiRecon(PicsRecon):
         )
         return image
 
+
+def _along_slice(acquisition) -> float:
+    """Return an acquisition's position along its slice direction (mm)."""
+    position = np.asarray(getattr(acquisition, "position", (0, 0, 0)), float)
+    normal = np.asarray(getattr(acquisition, "slice_dir", (0, 0, 1)), float)
+    return float(position @ normal)
+
+
+def _fills_acquired_range(sampled: np.ndarray) -> bool:
+    """Whether every line between the first and last acquired along each encoded axis was acquired."""
+    lines = sampled.any(axis=-1)
+    for axis in range(lines.ndim):
+        profile = lines.any(axis=tuple(a for a in range(lines.ndim) if a != axis))
+        acquired = np.flatnonzero(profile)
+        if acquired.size and not profile[acquired[0] : acquired[-1] + 1].all():
+            return False
+    inside = np.ones(lines.shape, dtype=bool)
+    for axis in range(lines.ndim):
+        profile = lines.any(axis=tuple(a for a in range(lines.ndim) if a != axis))
+        acquired = np.flatnonzero(profile)
+        shape = [1] * lines.ndim
+        shape[axis] = -1
+        window = np.zeros(profile.size, dtype=bool)
+        if acquired.size:
+            window[acquired[0] : acquired[-1] + 1] = True
+        inside = inside & window.reshape(shape)
+    return bool(np.array_equal(lines, inside))
+
+
+def sense_combined(kspace, maps):
+    """Return the least-squares SENSE image ``sum_c conj(S_c) F^-1 y_c / sum_c |S_c|^2`` of fully sampled k-space.
+
+    ``kspace`` and ``maps`` are ``(coils, z, y, x)``; the transform is
+    centred and unitary over ``(y, x)``, and over ``z`` where it has more than
+    one point. Where no coil is sensitive the image is zero.
+    """
+    import bartorch
+    import torch
+
+    axes = (-1, -2, -3) if kspace.shape[1] > 1 else (-1, -2)
+    coils = bartorch.fft(kspace, axes, inverse=True, unitary=True).reshape(kspace.shape)
+    maps = maps.to(coils.dtype)
+    weight = (maps.abs() ** 2).sum(dim=0)
+    image = (maps.conj() * coils).sum(dim=0)
+    return torch.where(weight > 0, image / weight.clamp_min(1e-12), 0)
+
+
+def cg_sense(kspace, maps, sampled, iterations, device):
+    """Return the image ``(z, y, x)`` minimising ``|P F S x - y|^2`` by conjugate gradients from zero.
+
+    The encoding is :class:`bartorch.linop.CartesianSense` of ``maps`` over
+    the ``sampled`` lines, on ``device``; stopping after ``iterations`` steps
+    regularizes the solve. The data are scaled as ``pics`` scales them.
+    """
+    import bartorch
+    import torch
+    from bartorch import linop, optim
+
+    grid = tuple(kspace.shape[2:] if kspace.shape[1] == 1 else kspace.shape[1:])
+    pattern = sampled.reshape(grid).to(torch.complex64)
+    measured = kspace * sampled
+    encoding = linop.CartesianSense(
+        maps.reshape(maps.shape[0], *grid), grid, pattern=pattern, device=device
+    )
+    shifted = bartorch.fftmod(measured, axes=(-1, -2, -3), inverse=True)
+    scaling = optim.data_scaling(shifted.reshape(kspace.shape[0], *grid), A=encoding)
+    scaling = scaling or 1.0
+    data = (measured * (1.0 / scaling)).reshape(kspace.shape[0], *grid)
+    solve = optim.CG(maxiter=int(iterations))
+    return (scaling * solve(data, encoding)).reshape(kspace.shape[1:])
+
+
+def pocs(image, sampled, iterations):
+    """Return ``image`` completed by POCS over every partial-Fourier axis of ``sampled``; ``image`` where none is.
+
+    The partial-Fourier axes and the acquired range ``R`` along each are those
+    :func:`~pulserver.recon.handlers.pics.partial_fourier` finds. The phase
+    is that of the image of the samples whose conjugates are also in ``R``;
+    each iteration imposes it on the image's magnitude and restores the
+    k-space of ``image`` inside ``R``. The image keeps its phase.
+
+    Parameters
+    ----------
+    image : torch.Tensor
+        Complex ``(z, y, x)`` image of the sampled k-space, the transform
+        centred.
+    sampled : torch.Tensor
+        Boolean ``(z, y, x)`` mask of the acquired samples.
+    iterations : int
+        POCS iterations.
+    """
+    import bartorch
+    import torch
+
+    from .pics import _acquired_range
+
+    mask = sampled.cpu().numpy()
+    kept = np.ones(mask.shape, dtype=bool)
+    axes = []
+    for axis in range(mask.ndim):
+        lines = _acquired_range(mask, axis)
+        if lines is None:
+            continue
+        axes.append(axis)
+        shape = [1] * mask.ndim
+        shape[axis] = mask.shape[axis]
+        inside = np.zeros(mask.shape[axis], dtype=bool)
+        inside[lines[0] : lines[1] + 1] = True
+        kept = kept & inside.reshape(shape)
+    if not axes or iterations < 1:
+        return image
+    every = tuple(range(-1, -mask.ndim - 1, -1))
+    mirrored = np.roll(np.flip(kept), [1 - n % 2 for n in mask.shape], axis=every)
+    symmetric = torch.from_numpy((kept & mirrored).astype(np.float32)).to(image.device)
+    inside = torch.from_numpy(kept).to(image.device)
+
+    def forward(x):
+        return bartorch.fft(x, every, unitary=True).reshape(x.shape)
+
+    def inverse(k):
+        return bartorch.fft(k, every, inverse=True, unitary=True).reshape(k.shape)
+
+    measured = forward(image.to(torch.complex64))
+    phase = torch.exp(1j * torch.angle(inverse(measured * symmetric)))
+    estimate = image.to(torch.complex64)
+    for _ in range(int(iterations)):
+        k = forward(estimate.abs() * phase)
+        estimate = inverse(torch.where(inside, measured, k))
+    return estimate
+
+
+#: The package PyHySCO installs, which the susceptibility correction imports.
+PYHYSCO_PACKAGE = "EPI_MRI"
 
 PLUGIN = EpiRecon()
 
@@ -410,8 +842,12 @@ def susceptibility_field(image, reverse, voxel_size):
         down = np.repeat(reverse[:, :, None], 3, axis=2)
         voxel = (*voxel_size, 1.0)
     else:
-        # (partition, phase, readout) to (phase, readout, partition).
-        up, down = image.transpose(1, 2, 0), reverse.transpose(1, 2, 0)
+        # (partition, phase, readout) to (phase, readout, partition), the
+        # outer partitions repeated so the smoothness penalty does not pull
+        # the field of the end partitions towards zero.
+        edges = ((FIELD_EDGE_PARTITIONS,) * 2, (0, 0), (0, 0))
+        up = np.pad(image, edges, mode="edge").transpose(1, 2, 0)
+        down = np.pad(reverse, edges, mode="edge").transpose(1, 2, 0)
         voxel = (voxel_size[1], voxel_size[2], voxel_size[0])
     corrected = tools.correct_susceptibility(
         torch.from_numpy(np.ascontiguousarray(up)),
@@ -420,7 +856,14 @@ def susceptibility_field(image, reverse, voxel_size):
         phase_encoding_axis=0,
     )
     field = corrected.field_map.detach().cpu().numpy()
-    return field[:, :, 1] if image.ndim == 2 else field.transpose(2, 0, 1)
+    if image.ndim == 2:
+        return field[:, :, 1]
+    inner = slice(FIELD_EDGE_PARTITIONS, field.shape[2] - FIELD_EDGE_PARTITIONS)
+    return field[:, :, inner].transpose(2, 0, 1)
+
+
+#: Partitions repeated beyond each end of a volume whose field is estimated.
+FIELD_EDGE_PARTITIONS = 2
 
 
 def undistorted(image, field, voxel_size):

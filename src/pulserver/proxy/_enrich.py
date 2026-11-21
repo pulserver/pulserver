@@ -213,10 +213,17 @@ class SequenceTable:
         ``n``-voxel axis. The grid is centred instead, its voxel centres
         symmetric about the field-of-view centre, which puts voxel ``n // 2``
         half a voxel past it along each axis of even ``n``: ``FOV / (2 n)``,
-        and 0 along an axis of odd ``n`` or one voxel. Zero for a space that
-        states no matrix size or field of view.
+        and 0 along an axis of odd ``n`` or one voxel. A navigator space that
+        states no matrix size or field of view is on the grid of its file's
+        imaging space, so its readouts carry the phase of the readouts they
+        navigate; any other such space is at zero.
         """
-        space = self.spaces[int(self.encoding_space[index])]
+        number = int(self.encoding_space[index])
+        space = self.spaces[number]
+        if (space.matrix is None or space.fov_mm is None) and space.navigator:
+            imaging = self.spaces[number - 1] if number else None
+            if imaging is not None and imaging.subsequence == space.subsequence:
+                space = imaging
         if space.matrix is None or space.fov_mm is None:
             return np.zeros(3)
         matrix = np.asarray(space.matrix, dtype=np.int64)
@@ -775,27 +782,29 @@ def _slice_offsets(
 
 
 def _ramp_sampled(readouts: ReadoutTable, index: int) -> bool:
-    """Whether a readout samples the ramps of its readout gradient.
+    """Whether a readout's k-space samples are unevenly spaced, as sampling on the gradient ramps leaves them.
 
-    The readout gradient is the trapezoid with the longest flat top in the
-    block; a block with none is not ramp sampled.
+    Decided from the readout's k-space trajectory, the integral of the played
+    gradients at the sample times: along the axis it travels furthest, the
+    spacing of consecutive samples differs from their mean by more than
+    ``_UNEVEN_SPACING`` of it. A readout whose k does not move is not ramp
+    sampled.
     """
-    block = readouts.readout_block(index)
-    adc = block.adc
-    trapezoids = [
-        g
-        for g in (block.gx, block.gy, block.gz)
-        if g is not None and getattr(g, "type", "") == "trap"
-    ]
-    if adc is None or not trapezoids:
+    k = readouts.readout_k(index)
+    if k.shape[1] < 3:
         return False
-    g = max(trapezoids, key=lambda g: g.flat_time)
-    start = float(adc.delay) - float(g.delay)
-    stop = start + int(adc.num_samples) * float(adc.dwell)
-    tolerance = 1e-9
-    return (
-        start < g.rise_time - tolerance or stop > g.rise_time + g.flat_time + tolerance
-    )
+    axis = int(np.argmax(np.ptp(k, axis=1)))
+    steps = np.diff(k[axis])
+    mean = float(np.mean(steps))
+    if mean == 0.0:
+        return False
+    return bool(np.max(np.abs(steps - mean)) > _UNEVEN_SPACING * abs(mean))
+
+
+#: Relative departure of a sample spacing from the mean spacing above which a
+#: readout counts as ramp sampled; a plateau's spacing departs from it only by
+#: rounding.
+_UNEVEN_SPACING = 1e-3
 
 
 def _full_echo(
