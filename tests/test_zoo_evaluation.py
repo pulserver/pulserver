@@ -680,6 +680,9 @@ def test_an_evaluation_states_as_its_layout_a_regular_tr_of_the_design(
     # opens with its half-angle pulse, so its last TR is the regular one.
     balanced = name.startswith("bssfp")
     start = main.duration()[0] - main.definitions["TR"][0] if balanced else 0
+    # A ZTE shell opens with its ramp, so its regular TR follows it.
+    if name.startswith("zte"):
+        start = main.block_durations[1]
     # An optimized refocusing train is designed around its flip angle rather
     # than scaled by it.
     scaled = UIParam.FLIP in plugin.protocol and not name.startswith("fse")
