@@ -25,7 +25,8 @@ KINDS = {"fse": fse_interpretation, "mprage": mprage_interpretation, "megre": me
 
 case = sys.argv[1]
 kind = sys.argv[2] if len(sys.argv) > 2 else "fse"
-N = (48, 64, 64); FOV = (0.192, 0.24, 0.24)  # (z, y, x)
+import os
+N = tuple(int(v) for v in os.environ.get("MATRIX", "48,64,64").split(",")); FOV = tuple(float(v) for v in os.environ.get("FOVZYX", "0.192,0.24,0.24").split(","))  # (z, y, x)
 coil = COILS["head8/head32"]
 tissue = BrainWeb().tissue(1e-3, field_t=7.0, coil=coil)
 b1 = np.abs(tissue.transmit) if tissue.transmit is not None else np.ones(len(tissue.density))

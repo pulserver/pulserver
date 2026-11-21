@@ -16,7 +16,7 @@ for r_ in rows:
     if r_["traj"].size == 0:
         n_ = r_["data"].shape[-1]
         fx_, fy_, fz_ = (float(v) for v in os.environ.get("FOV", "0.32,0.16,0.032").split(","))
-        r_["traj"] = np.stack([(np.arange(n_) - n_ // 2) / fx_, np.full(n_, (r_["e1"] - 32) / fy_), np.full(n_, (r_["e2"] - 24) / fz_)], -1)
+        r_["traj"] = np.stack([(np.arange(n_) - n_ // 2) / fx_, np.full(n_, (r_["e1"] - int(os.environ.get("NY", 64)) // 2) / fy_), np.full(n_, (r_["e2"] - int(os.environ.get("NZ", 48)) // 2) / fz_)], -1)
 basis_full = torch.load(sys.argv[5]) if len(sys.argv) > 5 else torch.load(f"{case}/basis.pt")
 VC = int(os.environ.get("VC", 8))
 
@@ -80,10 +80,25 @@ if waved:
     yy = (np.arange(ny) - ny // 2) * fov_y / ny; zz = (np.arange(nz) - nz // 2) * fov_z / nz
     sign = float(sys.argv[6]) if len(sys.argv) > 6 else -1.0
     psf = np.exp(sign * 2j * np.pi * (wy[None, None, :] * yy[None, :, None] + wz[None, None, :] * zz[:, None, None]))
+    if os.environ.get("CALIBRATE"):
+        e0 = 0
+        ref_ = np.zeros((VC, nz, ny, nro), np.complex64); wav_ = np.zeros_like(ref_)
+        for r in flat:
+            if r["con"] == e0: ref_[:, r["e2"], r["e1"]] = comp(r["data"])
+        for r in waved:
+            if r["con"] == e0: wav_[:, r["e2"], r["e1"]] = comp(r["data"])
+        k_ = np.stack([wz, wy], -1)
+        sc_, dl_ = linop.wave_calibrate(ref_, wav_, k_, (fov_z, fov_y))
+        print("wave calibration scale", np.round(sc_, 4), "delay", np.round(dl_, 3))
+        psf = linop.wave_psf(k_, (nz, ny, nx), (fov_z, fov_y), scale=sc_, delay=dl_, centred=True).numpy()
+        print("psf vs nominal phase agreement", float(np.abs(np.vdot(psf, np.exp(sign * 2j * np.pi * (wy[None, None, :] * yy[None, :, None] + wz[None, None, :] * zz[:, None, None])))) / psf.size))
     kwargs["psf"] = torch.from_numpy(psf.astype(np.complex64))
 else:
     kwargs["psf"] = torch.ones(nz, ny, nro, dtype=torch.complex64)
-A = linop.WaveSense(maps.to(torch.complex64), (rank, nz, ny, nx), nro, **kwargs)
+DEVICE = os.environ.get("DEVICE")
+if DEVICE and DEVICE.startswith("cuda"):
+    torch.cuda.reset_peak_memory_stats()
+A = linop.WaveSense(maps.to(torch.complex64), (rank, nz, ny, nx), nro, device=DEVICE, **kwargs)
 data = torch.from_numpy(y)
 if os.environ.get("SYNTH"):
     x0 = torch.from_numpy(np.load(os.environ["SYNTH"])["alpha"])
@@ -100,6 +115,8 @@ elif solver == "admm":
 else:
     alpha = optim.FISTA(prior, maxiter=iters, step=0.95 / float(eig))(data / scaling, A) * scaling
 print(f"solve {iters} it in {time.perf_counter()-t:.1f} s")
+import resource
+print(f"peak RAM {resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024:.0f} MiB" + (f", peak VRAM {torch.cuda.max_memory_allocated() / 2**20:.0f} MiB" if DEVICE and DEVICE.startswith("cuda") else ""))
 res_ = (A(alpha) - data); residual = float(res_.norm() / data.norm()); print("residual", residual)
 np.savez(f"{case}/resid.npz", r=res_.norm(dim=(0, 3)).numpy(), d=data.norm(dim=(0, 3)).numpy(), order=order)
 echoes = torch.einsum("kf,kzyx->fzyx", basis, alpha)

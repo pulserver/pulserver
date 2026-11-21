@@ -14,4 +14,6 @@ cmd = [sys.executable, "-c", "import sys; from pulserver._cli import main; sys.e
        "--plugins", str(Path(__file__).resolve().parent / "plugins"), "--plugins", str(ROOT / "src/pulserver/_zoo/sequences"), "--plugin", plugin,
        "--protocol", str(d / "protocol.txt"), "--limits", str(d / "limits.txt"), "--store", str(d / "designs"),
        "--mrd", str(d / "raw.h5"), "--coil", "head8/head32", "--phantom", "brainweb", "--spacing", "2"]
+import os
+cmd += os.environ.get("SCANARGS", "").split()
 sys.exit(subprocess.run(cmd, cwd=d).returncode)

@@ -1,5 +1,6 @@
 import sys, numpy as np
-z=np.load("h_ref/truth.npz"); T=z["echoes"]; K=list(z["keep"])
+import os
+z=np.load(os.environ.get("TRUTH","h_ref")+"/truth.npz"); T=z["echoes"]; K=list(z["keep"])
 from scipy.ndimage import binary_erosion
 m = binary_erosion(T[0] > 0.1*T[0].max(), iterations=4)
 def score(f):
