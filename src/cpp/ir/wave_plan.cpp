@@ -8,6 +8,8 @@
 #include <array>
 #include <cfloat>
 #include <cstddef>
+#include <functional>
+#include <unordered_map>
 #include <vector>
 
 extern "C"
@@ -55,10 +57,38 @@ int driven_axes(const pulseg_wave_region &region)
     return (region.offset[0] >= 0) + (region.offset[1] >= 0) + (region.offset[2] >= 0);
 }
 
-/* RESIDENT: a region per wave of each subsequence, laid out in order. */
+/* What a playout loads on one axis of a resident wave: its first raster
+ * interval, its sample count and the samples themselves. */
+struct AxisSamples
+{
+    float start_us;
+    long count;
+    std::vector<PULSEG_WAVE_SAMPLE> samples;
+    bool operator==(const AxisSamples &other) const
+    {
+        return start_us == other.start_us && count == other.count && samples == other.samples;
+    }
+};
+
+struct AxisSamplesHash
+{
+    std::size_t operator()(const AxisSamples &key) const
+    {
+        std::size_t h = std::hash<float>{}(key.start_us) ^ (static_cast<std::size_t>(key.count) << 1);
+        for (PULSEG_WAVE_SAMPLE v : key.samples)
+            h = h * 1099511628211ull ^ static_cast<std::size_t>(static_cast<long>(v));
+        return h;
+    }
+};
+
+/* RESIDENT: a region per wave of each subsequence, laid out in order. Waves
+ * that play the same samples on an axis share that axis's memory: a turn
+ * whose shape recurs at other amplitudes is held once. */
 Tables lay_out_waves(const pulseg_collection *coll, float raster_us, Axes &used)
 {
     Tables tables(static_cast<size_t>(std::max(coll->num_subsequences, 0)));
+    std::array<std::unordered_map<AxisSamples, long, AxisSamplesHash>, 3> held;
+    std::vector<float> scratch;
     for (int s = 0; s < coll->num_subsequences; ++s)
     {
         const pulseg_sequence_descriptor &desc = coll->descriptors[s];
@@ -66,7 +96,34 @@ Tables lay_out_waves(const pulseg_collection *coll, float raster_us, Axes &used)
         {
             pulseg_wave_region region{};
             pulseg__wave_cover(desc.waves[w].start_us, desc.waves[w].end_us, raster_us, &region);
-            place(region, peak_axes(desc.waves[w]), used);
+            const int axes = peak_axes(desc.waves[w]);
+            const size_t count = static_cast<size_t>(std::max(region.samples, 0L));
+            scratch.assign(3 * count, 0.0f);
+            float *out[3];
+            for (int a = 0; a < 3; ++a)
+                out[a] = (axes & (1 << a)) ? scratch.data() + a * count : nullptr;
+            const bool sampled = PULSEG_SUCCEEDED(pulseg__sample_wave_axes(
+                coll, s, w, region.start_us, raster_us, region.samples, out));
+            for (int a = 0; a < 3; ++a)
+            {
+                region.offset[a] = -1;
+                if (!(axes & (1 << a)))
+                    continue;
+                AxisSamples key{region.start_us, region.samples, std::vector<PULSEG_WAVE_SAMPLE>(count)};
+                if (sampled)
+                    pulseg_wave_samples(out[a], region.samples, key.samples.data());
+                auto found = sampled ? held[static_cast<size_t>(a)].find(key)
+                                     : held[static_cast<size_t>(a)].end();
+                if (found != held[static_cast<size_t>(a)].end())
+                {
+                    region.offset[a] = found->second;
+                    continue;
+                }
+                region.offset[a] = used[static_cast<size_t>(a)];
+                used[static_cast<size_t>(a)] += region.samples;
+                if (sampled)
+                    held[static_cast<size_t>(a)].emplace(std::move(key), region.offset[a]);
+            }
             tables[static_cast<size_t>(s)].push_back(region);
         }
     }

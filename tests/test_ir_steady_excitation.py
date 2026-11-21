@@ -14,8 +14,9 @@ from pulserver.mrd import read_chain
 
 FIXTURES = Path(__file__).parent / "fixtures" / "sequences"
 SYSTEM = pp.Opts(B0=3.0)
-# ZTE turns every spoke, its excitation's too, so no position plays one gradient.
-UNFLAGGED = {"zte_3d.seq", "zte3D_sequence"}
+# This ZTE turns every spoke, its excitation's too, by a rotation event, so no
+# position plays one gradient.
+UNFLAGGED = {"zte_3d.seq"}
 Rotation = pytest.importorskip("scipy.spatial.transform").Rotation
 
 

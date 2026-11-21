@@ -219,11 +219,33 @@ static int prepare_segments(const wave_loader *l, const pulseg_wave_plan *plan)
 
 static int load_resident(const wave_loader *l, const pulseg_wave_plan *plan)
 {
-    int s, w, rc = PULSEG_SUCCESS;
+    int s, w, a, rc = PULSEG_SUCCESS;
+    long next[3] = {0, 0, 0};
 
     for (s = 0; s < plan->num_subsequences && PULSEG_SUCCEEDED(rc); ++s)
         for (w = 0; w < plan->num_waves[s] && PULSEG_SUCCEEDED(rc); ++w)
-            rc = load_wave(l, s, w, &plan->waves[s][w]);
+        {
+            pulseg_wave_region region = plan->waves[s][w];
+            int any = 0;
+
+            /* The layout hands out offsets in this order, so a region that
+             * starts below the next unused offset on an axis shares the
+             * samples of a wave loaded before it. */
+            for (a = 0; a < 3; ++a)
+            {
+                if (region.offset[a] < 0)
+                    continue;
+                if (region.offset[a] < next[a])
+                    region.offset[a] = -1;
+                else
+                {
+                    next[a] = region.offset[a] + region.samples;
+                    any = 1;
+                }
+            }
+            if (any)
+                rc = load_wave(l, s, w, &region);
+        }
     return rc;
 }
 

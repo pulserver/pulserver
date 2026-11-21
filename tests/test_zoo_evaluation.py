@@ -460,6 +460,8 @@ TOGGLED = {
     "mprage3d+SHUFFLING": ("mprage3d", {"ordering": "shuffling"}),
     "zte3d+SPIRAL": ("zte3d", {"scheme": "spiral"}),
     "zte3d+MERIDIAN": ("zte3d", {"scheme": "meridian"}),
+    "zte3d+GOLDEN": ("zte3d", {"ordering": "golden"}),
+    "zte3d+RAGA": ("zte3d", {"ordering": "raga"}),
 }
 
 
