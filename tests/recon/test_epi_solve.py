@@ -195,3 +195,120 @@ def test_the_stack_maps_are_estimated_once_in_slice_position_order_and_stored_pe
     for location in range(3):
         stored = context.coil_maps[location].maps
         np.testing.assert_allclose(stored, plane * (location + 1), atol=1e-5)
+
+
+def _multiband(device, coils=8, grid=(24, 24)):
+    """Two bands' single-slice k-space and their blipped-CAIPI partition volume."""
+    import bartorch
+
+    image = _phantom((1, *grid))[0]
+    shifted = np.roll(image, 5, axis=-1) * 0.7
+    maps = _maps((1, *grid), coils)[:, 0]
+    other = np.roll(maps, coils // 2, axis=0) * np.exp(
+        1.1j * np.arange(grid[1]) / grid[1]
+    )
+    singles = torch.stack(
+        [_kspace(image, maps), _kspace(shifted, other.astype(np.complex64))]
+    ).to(device)
+    unit = torch.eye(2, dtype=torch.complex64, device=device)
+    weights = bartorch.fft(unit, (1,), unitary=True).reshape(2, 2)
+    volume = torch.zeros(coils, 2, *grid, dtype=torch.complex64, device=device)
+    for line in range(grid[0]):
+        encode = line % 2
+        volume[:, encode, line] = (
+            weights[:, encode, None, None] * singles[:, :, line]
+        ).sum(0)
+    return singles, volume
+
+
+def test_split_slice_grappa_returns_each_caipi_band_of_a_multiband_unit_as_its_own_kspace(
+    device,
+):
+    from pulserver.recon.handlers.epi import slice_grappa_bands
+
+    singles, volume = _multiband(device)
+
+    bands = slice_grappa_bands(volume, singles)
+
+    inner = (slice(None), slice(None), slice(2, -2), slice(3, -3))
+    expected = singles.transpose(0, 1)
+    error = torch.linalg.vector_norm(
+        bands[inner] - expected[inner]
+    ) / torch.linalg.vector_norm(expected[inner])
+    assert error < 0.1
+
+
+def test_split_slice_grappa_declines_a_unit_with_fewer_calibrated_lines_than_the_kernel():
+    from pulserver.recon.handlers.epi import slice_grappa_bands
+
+    singles, volume = _multiband("cpu")
+    training = torch.zeros_like(singles)
+    training[:, :, 10:12] = singles[:, :, 10:12]
+
+    assert slice_grappa_bands(volume, training) is None
+
+
+def _band_unit(position, partitions=2):
+    reference = SimpleNamespace(
+        position=(0.0, 0.0, position), slice_dir=(0.0, 0.0, 1.0)
+    )
+    space = SimpleNamespace(recon_fov=(0.005 * partitions, 0.2, 0.2))
+    buffer = SimpleNamespace(reference=reference, space=space)
+    return SimpleNamespace(data=buffer, counters={"set": 1})
+
+
+def test_the_band_calibration_stacks_the_slices_at_each_band_position_preferring_the_unit_set():
+    from pulserver.recon.handlers.epi import band_calibration
+
+    plane = np.ones((3, 4, 4), np.complex64)
+    stored = [
+        (0, -2.5, plane * 1),
+        (0, 2.5, plane * 2),
+        (1, 2.5, plane * 3),
+    ]
+
+    training = band_calibration(stored, _band_unit(2.5), (3, 2, 4, 4))
+
+    assert training.shape == (2, 3, 4, 4)
+    np.testing.assert_array_equal(training[:, 0, 0, 0], [1, 3])
+
+
+def test_the_band_calibration_is_absent_when_a_band_slice_was_not_calibrated():
+    from pulserver.recon.handlers.epi import band_calibration
+
+    stored = [(0, -2.5, np.ones((3, 4, 4), np.complex64))]
+
+    assert band_calibration(stored, _band_unit(2.5), (3, 2, 4, 4)) is None
+
+
+def test_each_calibration_slice_of_a_stack_is_fitted_its_own_maps(monkeypatch):
+    from pulserver.recon import ReconContext
+    from pulserver.recon.handlers import epi
+
+    calls = []
+
+    def estimate(kspace, *args, **kwargs):
+        calls.append(tuple(kspace.shape))
+        return kspace.new_ones(kspace.shape)
+
+    monkeypatch.setattr(epi, "nlinv_estimate", estimate)
+    context = ReconContext.offline()
+    plugin = epi.EpiRecon(
+        gradient_unwarp=False, intensity_correction=False, kspace_filter=False
+    )
+    plugin.startup(context)
+    plane = np.ones((2, 4, 4), np.complex64)
+    units = [
+        _calibration_unit(location, plane, position)
+        for location, position in ((0, 10.0), (1, -10.0), (2, 0.0))
+    ]
+    for unit in units:
+        unit.ref.mask = np.ones(plane.shape[1:], bool)
+    plugin.calibrations = {0: units}
+
+    plugin._calibrate(context)
+
+    assert len(calls) == 3
+    assert all(int(np.prod(shape[1:-2])) == 1 for shape in calls)
+    assert sorted(context.coil_maps) == [0, 1, 2]
+    assert len(plugin.slice_calibrations) == 3

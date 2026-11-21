@@ -13,7 +13,11 @@ import numpy as np
 from ...mrd._header import EncodingSpace
 from ...mrd._metadata import acquisition_label, has_acquisition_flag
 from .._buffers import ReconData, discards, echo_centre
-from .._calibration import MissingCalibration, coil_maps, volume_coil_maps
+from .._calibration import (
+    MissingCalibration,
+    _zero_filled,
+    coil_maps,
+)
 from ..gadgets import AsymmetricEcho, Prewhiten, RemoveReadoutOversampling
 from ..plugin import Gadget, ReconContext, ReconResult
 from .pics import (
@@ -389,11 +393,13 @@ class EpiRecon(PicsRecon):
 
     Coil sensitivities come from the calibration the scan opens with, once
     for the whole stack: the calibration units of every slice, held until the
-    first unit that needs maps, are estimated together as one volume
-    (:func:`~pulserver.recon.volume_coil_maps` with
+    first unit that needs maps, are each estimated on their own
+    (:func:`~pulserver.recon.coil_maps` with
     :func:`~pulserver.recon.handlers.pics.nlinv_estimate`), each phase-encode
-    polarity of a FLEET calibration on its own, so each set is unfolded by
-    maps distorted as its image is. Every later image of a slice takes its
+    polarity of a FLEET calibration apart, so each set is unfolded by maps
+    distorted as its image is. A slice stack with gaps is no contiguous
+    volume, and maps fitted smooth across it fit no slice well enough for a
+    multiband or in-plane unfolding. Every later image of a slice takes its
     slice's maps (:func:`~pulserver.recon.coil_maps`). A scan without a
     calibration has the maps of each slice and set fitted once, to its first
     unit, and kept.
@@ -406,6 +412,12 @@ class EpiRecon(PicsRecon):
     ``pics`` solve of :class:`~pulserver.recon.handlers.pics.PicsRecon`. A
     partial-Fourier phase encode is completed by ``pocs_iterations`` of POCS
     (:func:`pocs`), which keeps the image phase.
+
+    A multiband unit whose bands each lie on a calibrated slice has its bands
+    separated by split-slice GRAPPA (:func:`slice_grappa_bands`), with kernels
+    trained on those slices' calibration k-space, and each band is then
+    solved as a slice of its own, with its slice's maps. A multiband unit
+    without that calibration is solved as one volume of its bands.
 
     The phase-encode-reversed reference volume (``SET`` 1) is reconstructed and
     kept, Fermi filtered as the images are, but sent as no image of the
@@ -471,6 +483,7 @@ class EpiRecon(PicsRecon):
         super().startup(context)
         self.gadget(EpiPhaseCorrection).ramp = self.gadget(RampSampling)
         self.calibrations = {}
+        self.slice_calibrations = []
         self.own_maps = {}
         self.references = {}
         self.field = None
@@ -491,9 +504,7 @@ class EpiRecon(PicsRecon):
                 self.calibrations.setdefault(polarity, []).append(data)
             return None
         if self.calibrations:
-            for units in self.calibrations.values():
-                volume_coil_maps(context, units, estimate=nlinv_estimate)
-            self.calibrations = {}
+            self._calibrate(context)
         image = self.image(averaged(buffer), buffer.image_shape, context, data)
         return buffer, data, image
 
@@ -504,6 +515,43 @@ class EpiRecon(PicsRecon):
         volume = kspace if kspace.ndim == 4 else kspace[:, None]
         volume = torch.from_numpy(np.ascontiguousarray(volume, dtype=np.complex64))
         maps = self._maps(context, data, volume)
+        bands = None
+        if volume.shape[1] > 1:
+            training = band_calibration(self.slice_calibrations, data, volume.shape)
+            if training is not None:
+                bands = slice_grappa_bands(volume, torch.from_numpy(training))
+        if bands is None:
+            image = self._solved(volume, maps, context)
+        else:
+            image = torch.cat(
+                [
+                    self._solved(bands[:, b : b + 1], maps[:, b : b + 1], context)
+                    for b in range(bands.shape[1])
+                ]
+            )
+        image = image.numpy()
+        if kspace.ndim == 3:
+            image = image[0]
+        return self._filtered(np.array(center_crop(image, shape[-image.ndim :])))
+
+    def _calibrate(self, context):
+        """Estimate the maps of each held calibration slice on its own, and keep its k-space for split-slice GRAPPA."""
+        for polarity, units in self.calibrations.items():
+            for unit in units:
+                coil_maps(context, unit, estimate=nlinv_estimate)
+                kspace = _zero_filled(unit.ref)
+                if int(np.prod(kspace.shape[1:-2])) == 1:
+                    self.slice_calibrations.append(
+                        (
+                            polarity,
+                            _along_slice(unit.ref.reference),
+                            kspace.reshape(kspace.shape[0], *kspace.shape[-2:]),
+                        )
+                    )
+        self.calibrations = {}
+
+    def _solved(self, volume, maps, context):
+        """Return the image of ``(coils, z, y, x)`` k-space by the solve its sampling calls for, partial Fourier completed."""
         sampled = volume.abs().sum(dim=0) > 0
         if _fills_acquired_range(sampled.numpy()):
             image = sense_combined(volume, maps)
@@ -515,10 +563,7 @@ class EpiRecon(PicsRecon):
             image = cg_sense(
                 volume, maps, sampled, self.iterations, context.device, l2=self.l2
             )
-        image = pocs(image, sampled, self.pocs_iterations).numpy()
-        if kspace.ndim == 3:
-            image = image[0]
-        return self._filtered(np.array(center_crop(image, shape[-image.ndim :])))
+        return pocs(image, sampled, self.pocs_iterations)
 
     def _maps(self, context, data, volume):
         """Return the unit's coil maps shaped as ``volume``: its slice's, its bands' slices', else fitted once to it and kept."""
@@ -733,11 +778,7 @@ def band_maps(context, data, shape):
     """
     import torch
 
-    buffer = data.data
-    if buffer is None or len(shape) != 4 or shape[1] < 2:
-        return None
-    polarity = int(data.counters.get("set", 0))
-    stored = {}
+    stored = []
     for key, maps in context.coil_maps.items():
         position = getattr(maps, "geometry", {}).get("position")
         normal = getattr(maps, "geometry", {}).get("slice_dir")
@@ -745,21 +786,108 @@ def band_maps(context, data, shape):
             continue
         key_set = key[1] if isinstance(key, tuple) else 0
         along = float(np.asarray(position) @ np.asarray(normal))
-        stored.setdefault(key_set, []).append((along, maps.maps))
+        stored.append((key_set, along, maps.maps))
+    planes = _band_planes(stored, data, shape)
+    return None if planes is None else torch.from_numpy(planes)
+
+
+def band_calibration(stored, data, shape):
+    """Return the calibration k-space of a multiband group's bands, ``(bands, coils, y, x)``; ``None`` where some band's slice has none.
+
+    ``stored`` holds ``(set, position along the slice direction in mm,
+    (coils, y, x) k-space)`` for each calibrated slice; band ``p`` takes the
+    slice at the position of partition ``p``, as :func:`band_maps` does.
+    """
+    planes = _band_planes(stored, data, shape)
+    return None if planes is None else np.ascontiguousarray(planes.swapaxes(0, 1))
+
+
+def _band_planes(stored, data, shape):
+    """Return the entries of ``stored`` at the planes of a multiband unit, stacked as ``(coils, bands, y, x)``; ``None`` where a band has none.
+
+    ``stored`` holds ``(set, position in mm, (coils, *plane) array)``. A
+    band takes the entry of the unit's set at its plane's position within
+    ``BAND_TOLERANCE_MM``, else that of set 0.
+    """
+    buffer = data.data
+    if buffer is None or len(shape) != 4 or shape[1] < 2:
+        return None
+    polarity = int(data.counters.get("set", 0))
     planes = []
     for position in plane_positions(buffer.reference, buffer.space, shape[1]):
         found = None
         for key_set in (polarity, 0):
-            for along, maps in stored.get(key_set, ()):
-                if abs(along - position) <= BAND_TOLERANCE_MM:
-                    found = maps
-                    break
+            found = next(
+                (
+                    values
+                    for entry_set, along, values in stored
+                    if entry_set == key_set
+                    and abs(along - position) <= BAND_TOLERANCE_MM
+                ),
+                None,
+            )
             if found is not None:
                 break
         if found is None or found.shape[-2:] != tuple(shape[-2:]):
             return None
         planes.append(found.reshape(found.shape[0], *shape[-2:]))
-    return torch.from_numpy(np.ascontiguousarray(np.stack(planes, axis=1)))
+    return np.ascontiguousarray(np.stack(planes, axis=1))
+
+
+def slice_grappa_bands(volume, training, size=(3, 5)):
+    """Return the bands of multiband k-space separated by split-slice GRAPPA, ``(coils, bands, y, x)``; ``None`` where the calibration cannot train the kernels.
+
+    Each acquired line of ``volume`` holds one partition encode, its
+    collapsed bands each weighted by the centred, unitary Fourier transform
+    along the partitions of a unit image at that band, the encoding the
+    joint solve models. The kernels
+    (:func:`bartorch.tools.slice_grappa_kernel`) are trained on the
+    calibration lines on the acquired lattice, each band's single-band
+    k-space carrying the weight of the line's encode, and applied
+    (:func:`bartorch.tools.slice_grappa`) to the collapsed lines, whose
+    weights they then remove. Lines not acquired stay zero.
+
+    Parameters
+    ----------
+    volume : torch.Tensor
+        ``(coils, bands, y, x)`` multiband k-space, each acquired line in one
+        partition.
+    training : torch.Tensor
+        ``(bands, coils, y, x)`` single-band calibration k-space of each band's
+        slice, zero outside its calibration lines.
+    size : tuple of int, default=(3, 5)
+        Kernel extent along lines and readout.
+
+    Returns
+    -------
+    torch.Tensor or None
+        Separated k-space, each band's lines unweighted.
+    """
+    import bartorch
+    import torch
+    from bartorch import tools
+
+    count = volume.shape[1]
+    lines = volume.abs().sum(dim=(0, 3)) > 0
+    acquired = torch.nonzero(lines.any(dim=0)).flatten()
+    encode = lines[:, acquired].to(torch.int64).argmax(dim=0)
+    unit = torch.eye(count, dtype=torch.complex64)
+    weights = bartorch.fft(unit, (1,), unitary=True).reshape(count, count)[:, encode]
+    calibrated = (training.abs().sum(dim=(0, 1, 3)) > 0)[acquired]
+    taught = torch.nonzero(calibrated).flatten()
+    if taught.numel() < size[0] or not bool(
+        (taught[-1] - taught[0] + 1) == taught.numel()
+    ):
+        return None
+    window = slice(int(taught[0]), int(taught[-1]) + 1)
+    kernels = tools.slice_grappa_kernel(
+        training[:, :, acquired[window]].to(torch.complex64), weights[:, window], size
+    )
+    collapsed = volume.sum(dim=1)[:, acquired]
+    separated = tools.slice_grappa(collapsed, kernels, size) / weights[:, None, :, None]
+    bands = torch.zeros_like(volume)
+    bands[:, :, acquired] = separated.transpose(0, 1).to(volume.dtype)
+    return bands
 
 
 #: Distance (mm) within which a stored slice's position is a band's.
