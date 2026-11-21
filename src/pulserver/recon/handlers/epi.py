@@ -139,7 +139,7 @@ class RampSampling(Gadget):
                     torch.from_numpy(positions), torch.from_numpy(grid.copy()), columns
                 )
                 .numpy()
-                .T
+                .T.astype(np.complex64)
             )
         acquisition.center_sample = (
             columns - 1 - columns // 2 if positions[-1] < positions[0] else columns // 2

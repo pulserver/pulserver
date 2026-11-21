@@ -32,7 +32,14 @@ class Solves(NufftRecon):
 
 
 def header(
-    *, segments=1, averages=1, depth=1, partitions=1, lines=LINES, fov_z_mm=None
+    *,
+    segments=1,
+    averages=1,
+    depth=1,
+    partitions=1,
+    lines=LINES,
+    fov_z_mm=None,
+    channels=COILS,
 ):
     """One non-Cartesian encoding space of ``MATRIX`` voxels in plane and ``depth`` along z, counting what it is given.
 
@@ -63,7 +70,7 @@ def header(
                 trajectory="other",
             )
         ],
-        acquisitionSystemInformation=SimpleNamespace(receiverChannels=COILS),
+        acquisitionSystemInformation=SimpleNamespace(receiverChannels=channels),
     )
 
 
@@ -94,7 +101,7 @@ def noise(*shape, seed=0):
 def readout(data, points, *, segment, line, **counters):
     """A readout of ``data`` ``(coils, samples)`` along ``points`` ``(samples, dimensions)`` in grid units."""
     acquisition = ismrmrd.Acquisition()
-    acquisition.resize(data.shape[-1], COILS, points.shape[-1])
+    acquisition.resize(data.shape[-1], data.shape[0], points.shape[-1])
     acquisition.data[:] = data
     acquisition.traj[:] = points / (1e-3 * FOV_MM)
     acquisition.idx.segment = segment
@@ -286,35 +293,42 @@ def test_a_stack_of_segments_is_one_solve_its_partitions_the_kz_encodes_of_its_s
     assert image.data.shape == (partitions, MATRIX, MATRIX)
 
 
-def stack_phantom(partitions, points):
-    """The samples ``(partitions, shots, coils, samples)`` of a stack of ``points`` ``(shots, samples, 2)`` through three blobs on its centre partition and one beside it, with the object."""
+def stack_phantom(partitions, points, channels=COILS):
+    """The samples ``(partitions, shots, channels, samples)`` of a stack of ``points`` ``([partitions,] shots, samples, 2)`` through three blobs on its centre partition and one beside it, with the object."""
     axis = np.arange(MATRIX) - MATRIX // 2
     y, x = np.meshgrid(axis, axis, indexing="ij")
     obj = np.zeros((partitions, MATRIX, MATRIX))
     for shift in (-3.0, 0.0, 3.0):
         obj[partitions // 2] += np.exp(-((x - shift) ** 2 + (y - shift) ** 2) / 4.0)
     obj[partitions // 2 + 1] = np.exp(-(x**2 + (y + 4) ** 2) / 6.0)
-    maps = np.stack([1.0 + 0.04 * x, 1.0 + 0.04 * y])
+    maps = np.stack([1.0 + 0.04 * x, 1.0 + 0.04 * y])[:channels]
     z = np.arange(partitions) - partitions // 2
     kz = z
     phase_z = np.exp(-2j * np.pi * np.outer(kz, z) / partitions)
+    per_partition = np.broadcast_to(points, (partitions, *points.shape[-3:]))
     phase = np.exp(
         -2j
         * np.pi
-        * (points[..., 0, None] * x.ravel() + points[..., 1, None] * y.ravel())
+        * (
+            per_partition[..., 0, None] * x.ravel()
+            + per_partition[..., 1, None] * y.ravel()
+        )
         / MATRIX
     )
-    coil_images = (maps[:, None] * obj[None]).reshape(COILS, partitions, -1)
+    coil_images = (maps[:, None] * obj[None]).reshape(channels, partitions, -1)
     hybrid = np.einsum("kz,czv->ckv", phase_z, coil_images)
-    samples = np.einsum("lsv,ckv->klcs", phase, hybrid)
+    samples = np.einsum("klsv,ckv->klcs", phase, hybrid)
     return obj, samples.astype(np.complex64)
 
 
-def test_the_image_of_a_stack_of_blades_is_the_object_it_samples_partition_by_partition():
+@pytest.mark.parametrize("channels", [1, COILS])
+def test_the_image_of_a_stack_of_blades_is_the_object_it_samples_partition_by_partition(
+    channels,
+):
     pytest.importorskip("bartorch")
     partitions = 8
     points = blades(4).reshape(-1, SAMPLES, 2)
-    obj, data = stack_phantom(partitions, points)
+    obj, data = stack_phantom(partitions, points, channels)
     acquisitions = []
     for partition in range(partitions):
         for line in range(points.shape[0]):
@@ -328,7 +342,12 @@ def test_the_image_of_a_stack_of_blades_is_the_object_it_samples_partition_by_pa
                 )
             )
     acquisitions[-1].setFlag(ismrmrd.ACQ_LAST_IN_MEASUREMENT)
-    stack = header(depth=partitions, partitions=partitions, lines=points.shape[0])
+    stack = header(
+        depth=partitions,
+        partitions=partitions,
+        lines=points.shape[0],
+        channels=channels,
+    )
 
     ((_, result),) = play(NufftRecon(kspace_filter=False), stack, acquisitions)
 
@@ -337,6 +356,64 @@ def test_the_image_of_a_stack_of_blades_is_the_object_it_samples_partition_by_pa
     for plane in (partitions // 2, partitions // 2 + 1):
         correlation = np.corrcoef(image[plane].ravel(), obj[plane].ravel())[0, 1]
         assert correlation > 0.9
+
+
+def test_a_stack_whose_partitions_turn_their_blades_is_the_object_it_samples():
+    pytest.importorskip("bartorch")
+    partitions = 8
+    shared = blades(4).reshape(-1, SAMPLES, 2)
+    turns = np.pi / 16 * np.arange(partitions)
+    rotation = np.stack(
+        [
+            np.stack([np.cos(turns), -np.sin(turns)], -1),
+            np.stack([np.sin(turns), np.cos(turns)], -1),
+        ],
+        -2,
+    )
+    points = np.einsum("pij,lsj->plsi", rotation, shared)
+    obj, data = stack_phantom(partitions, points)
+    acquisitions = [
+        readout(
+            data[partition, line],
+            points[partition, line],
+            segment=0,
+            line=line,
+            kspace_encode_step_2=partition,
+        )
+        for partition in range(partitions)
+        for line in range(shared.shape[0])
+    ]
+    acquisitions[-1].setFlag(ismrmrd.ACQ_LAST_IN_MEASUREMENT)
+    stack = header(depth=partitions, partitions=partitions, lines=shared.shape[0])
+
+    ((_, result),) = play(NufftRecon(kspace_filter=False), stack, acquisitions)
+
+    image = np.asarray(result.data, dtype=float)
+    for plane in (partitions // 2, partitions // 2 + 1):
+        correlation = np.corrcoef(image[plane].ravel(), obj[plane].ravel())[0, 1]
+        assert correlation > 0.9
+
+
+def test_each_partition_of_a_turned_stack_is_weighted_by_the_density_of_its_own_trajectory():
+    torch = pytest.importorskip("torch")
+    bartorch = pytest.importorskip("bartorch")
+    from pulserver.recon.handlers.nufft import _density
+
+    partitions, grid = 4, (4, MATRIX, MATRIX)
+    plane = torch.from_numpy(blades(2).reshape(-1, SAMPLES, 2)).float()
+    plane[..., 0] *= torch.linspace(0.5, 1.0, SAMPLES)
+    turned = torch.stack([plane, plane.flip(-1)])
+    shots = torch.cat([turned[p % 2] for p in range(partitions)])
+    kz = torch.arange(partitions).repeat_interleave(plane.shape[0]) - partitions // 2
+    points = torch.cat(
+        [shots, kz[:, None, None].float().expand(*shots.shape[:-1], 1)], -1
+    )
+
+    weights = _density(points, grid, partitions)
+
+    own = bartorch.estimate_density(turned[1].reshape(-1, 2), grid[-2:])
+    second = weights[plane.shape[0] : 2 * plane.shape[0]]
+    assert torch.allclose(second.reshape(-1), own.reshape(-1))
 
 
 def test_slices_counted_as_partitions_by_the_header_are_not_a_stack():

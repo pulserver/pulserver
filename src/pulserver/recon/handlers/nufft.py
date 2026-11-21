@@ -327,6 +327,7 @@ class NufftRecon(ReconPlugin):
             kernels=held_as_kernels,
             traj=points if device is None else points.to(device),
             weights=weights,
+            coil_batch=1 if held_as_kernels else 0,
         )
         measured = samples * weights
         scaling = optim.data_scaling(measured[..., None], A=encoding) or 1.0
@@ -351,17 +352,29 @@ class NufftRecon(ReconPlugin):
 def _density(points: Any, grid: tuple[int, ...], partitions: int) -> Any:
     """Return the Pipe-Menon density of ``(shots, samples, 3)`` points on ``grid`` (:func:`bartorch.estimate_density`), shaped as the shots.
 
-    The shots of a stack of ``partitions``, partition after partition, share
-    one in-plane trajectory on whole kz: its density is that of the in-plane
-    trajectory of one partition, the same at every partition, so the encoding
-    decouples the partitions.
+    The shots of a stack of ``partitions``, partition after partition, lie on
+    whole kz, so each partition's density is that of its own in-plane
+    trajectory. Where every partition plays the same in-plane trajectory the
+    density is computed once and is the same at every partition, so the
+    encoding decouples the partitions; a partition whose trajectory is shifted
+    or rotated has the density of its own.
     """
     import bartorch
+    import torch
 
     if partitions > 1:
-        plane = points[: points.shape[0] // partitions, ..., :2]
-        density = bartorch.estimate_density(plane.reshape(-1, 2), grid[-2:])
-        return density.reshape(plane.shape[:-1]).repeat(partitions, 1)
+        planes = points[..., :2].reshape(partitions, -1, *points.shape[1:-1], 2)
+        if bool((planes == planes[:1]).all()):
+            first = bartorch.estimate_density(planes[0].reshape(-1, 2), grid[-2:])
+            density = first.reshape(1, -1).expand(partitions, -1)
+        else:
+            density = torch.stack(
+                [
+                    bartorch.estimate_density(plane.reshape(-1, 2), grid[-2:])
+                    for plane in planes
+                ]
+            )
+        return density.reshape(points.shape[:-1]).contiguous()
     axes = len(grid)
     density = bartorch.estimate_density(points[..., :axes].reshape(-1, axes), grid)
     return density.reshape(points.shape[:-1])

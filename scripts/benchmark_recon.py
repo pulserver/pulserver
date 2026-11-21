@@ -137,6 +137,11 @@ def replay(name: str, raw: Path, store: Path, output: Path) -> dict[str, float]:
         sys.executable,
         "-c",
         "import resource, sys, time\n"
+        "try:\n"
+        "    from pulserver._threads import serial_blas\n"
+        "    serial_blas()\n"
+        "except ImportError:\n"
+        "    pass\n"
         "import ismrmrd\n"
         "from pulserver.recon._replay import main\n"
         "from pulserver.recon._runtime.offline import _FileConnection\n"
