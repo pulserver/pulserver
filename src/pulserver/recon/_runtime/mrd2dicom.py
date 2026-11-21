@@ -21,6 +21,7 @@ import numpy as np
 import pydicom
 
 from ...mrd import diffusion_table
+from .._diffusion import ADC_SERIES, TRACE_SERIES
 
 
 @dataclasses.dataclass
@@ -789,16 +790,21 @@ class MrdDicomBuilder:
     def _set_diffusion(self, dicomDset: pydicom.Dataset, mrdImg: ismrmrd.Image) -> None:
         """State the image's b-value and direction, the table row its ``repetition`` indexes.
 
-        The direction is taken from the logical axes into the patient frame
+        A trace-weighted image (``TRACE_SERIES``) states its shell's b-value
+        and is isotropic; an ADC map (``ADC_SERIES``) states neither. The
+        direction is taken from the logical axes into the patient frame
         through the image's ``read_dir``, ``phase_dir`` and ``slice_dir``.
         """
-        if self.diffusion is None:
+        if self.diffusion is None or mrdImg.image_series_index == ADC_SERIES:
             return
         b, g = self.diffusion
         volume = int(mrdImg.repetition)
         if volume >= b.size:
             return
         dicomDset.DiffusionBValue = float(b[volume])
+        if mrdImg.image_series_index == TRACE_SERIES:
+            dicomDset.DiffusionDirectionality = "ISOTROPIC"
+            return
         if b[volume] <= 0:
             dicomDset.DiffusionDirectionality = "NONE"
             return

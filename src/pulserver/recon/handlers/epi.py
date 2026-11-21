@@ -18,6 +18,7 @@ from .._calibration import (
     _zero_filled,
     coil_maps,
 )
+from .._diffusion import DiffusionMaps
 from ..gadgets import AsymmetricEcho, Prewhiten, RemoveReadoutOversampling
 from ..plugin import Gadget, ReconContext, ReconResult
 from .pics import (
@@ -444,6 +445,13 @@ class EpiRecon(PicsRecon):
     nonlinearity and divided by the receive field after the distortion
     correction (:class:`~pulserver.recon.Corrections`).
 
+    A series whose header states a diffusion table with a b-value above zero
+    also sends, once a slice holds an image of every volume of the table, a
+    trace-weighted image of each shell, series ``TRACE_SERIES``, and the ADC
+    map of the shells' log-linear fit, series ``ADC_SERIES``, in 10⁻⁶ mm²/s
+    (:class:`~pulserver.recon._diffusion.DiffusionMaps`). Both are magnitude
+    images of every voxel, the background fitted as the brain is.
+
     Parameters
     ----------
     wavelet : float | None, default=None
@@ -502,6 +510,7 @@ class EpiRecon(PicsRecon):
         self.calibration_field = False
         self.held = []
         self._skips_logged = set()
+        self.diffusion = DiffusionMaps.from_header(context.header)
         self.hysco = (
             None
             if importlib.util.find_spec(PYHYSCO_PACKAGE) is not None
@@ -728,6 +737,13 @@ class EpiRecon(PicsRecon):
         ]
         if corrections is not None:
             results = corrections.intensity_corrected(results, data)
+        if self.diffusion is not None:
+            results += self.diffusion.add(
+                int(data.counters.get("slice", 0)),
+                int(data.counters.get("repetition", 0)),
+                results[0].data,
+                data.data.reference,
+            )
         return results
 
     def _estimate_field(self, pairs, against) -> None:
