@@ -377,3 +377,43 @@ def test_an_undersampled_unit_takes_the_wavelet_of_a_slab_or_a_slice_unless_one_
 
     want = getattr(epi, expected) if isinstance(expected, str) else expected
     assert plugin._wavelet(volume) == want
+
+
+def test_the_smooth_phase_has_unit_magnitude_and_keeps_a_slowly_varying_phase(device):
+    from pulserver.recon.handlers.epi import smooth_phase
+
+    shape = (2, 32, 32)
+    _, y, x = np.meshgrid(*(np.arange(n) - n // 2 for n in shape), indexing="ij")
+    slow = 0.5 * np.pi * (x / 16.0) ** 2 - 0.3 * np.pi * y / 16.0
+    image = np.exp(-((x / 40.0) ** 2) - (y / 40.0) ** 2) * np.exp(1j * slow)
+
+    phase = smooth_phase(torch.from_numpy(image.astype(np.complex64)).to(device))
+
+    phase = phase.cpu().numpy()
+    np.testing.assert_allclose(np.abs(phase), 1.0, atol=1e-5)
+    inside = (np.abs(x) < 10) & (np.abs(y) < 10)
+    assert np.abs(np.angle(phase * np.exp(-1j * slow)))[inside].max() < 0.05
+
+
+def test_a_fast_image_phase_adds_little_to_the_error_of_the_wavelet_solve(device):
+    from pulserver.recon.handlers.epi import EpiRecon
+
+    shape = (1, 48, 48)
+    _, y, x = np.meshgrid(*(np.arange(n) - n // 2 for n in shape), indexing="ij")
+    magnitude = ((y / 18.0) ** 2 + (x / 15.0) ** 2 < 1).astype(np.float32)
+    lobe = np.exp(-((x**2 + (y - 8) ** 2) / (2 * 6.0**2)))
+    maps = _maps(shape, coils=12)
+    sampled = torch.zeros(shape, dtype=torch.bool)
+    sampled[:, ::3] = True
+    plugin = EpiRecon(0.03)
+
+    def error(cycles):
+        image = (magnitude * np.exp(1j * cycles * np.pi * lobe)).astype(np.complex64)
+        kspace = _kspace(image, maps) * sampled
+        solved = plugin._solved(
+            kspace, torch.from_numpy(maps), SimpleNamespace(device=device)
+        )
+        residual = np.abs(solved.cpu().numpy()) - magnitude
+        return np.linalg.norm(residual) / np.linalg.norm(magnitude)
+
+    assert error(6) < 1.25 * error(0)
