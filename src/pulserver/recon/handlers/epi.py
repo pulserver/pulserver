@@ -432,6 +432,9 @@ class EpiRecon(PicsRecon):
         Conjugate-gradient steps, or ``pics`` iterations with ``wavelet``.
     pocs_iterations : int, default=8
         POCS iterations of a partial-Fourier unit.
+    l2 : float, default=0.0
+        Tikhonov weight ``lambda`` of the conjugate-gradient solve, on data
+        scaled as ``pics`` scales them.
     virtual_coils : int | None, default=VIRTUAL_COILS
         As :class:`~pulserver.recon.handlers.pics.PicsRecon`.
     kspace_filter, gradient_unwarp, intensity_correction : bool, default=True
@@ -444,6 +447,7 @@ class EpiRecon(PicsRecon):
         iterations: int = 10,
         *,
         pocs_iterations: int = 8,
+        l2: float = 0.0,
         virtual_coils: int | None = VIRTUAL_COILS,
         kspace_filter: bool = True,
         gradient_unwarp: bool = True,
@@ -458,6 +462,7 @@ class EpiRecon(PicsRecon):
             intensity_correction=intensity_correction,
         )
         self.pocs_iterations = int(pocs_iterations)
+        self.l2 = float(l2)
         self.gadgets = (Prewhiten(), RampSampling(), EpiPhaseCorrection())
         # The odd/even phase reference is consumed by EpiPhaseCorrection.
         self.reject_flags = ()
@@ -507,7 +512,9 @@ class EpiRecon(PicsRecon):
                 volume, maps, sampled, self.wavelet, self.iterations, context.device
             )
         else:
-            image = cg_sense(volume, maps, sampled, self.iterations, context.device)
+            image = cg_sense(
+                volume, maps, sampled, self.iterations, context.device, l2=self.l2
+            )
         image = pocs(image, sampled, self.pocs_iterations).numpy()
         if kspace.ndim == 3:
             image = image[0]
@@ -805,8 +812,8 @@ def sense_combined(kspace, maps):
     return torch.where(weight > 0, image / weight.clamp_min(1e-12), 0)
 
 
-def cg_sense(kspace, maps, sampled, iterations, device):
-    """Return the image ``(z, y, x)`` minimising ``|P F S x - y|^2`` by conjugate gradients from zero.
+def cg_sense(kspace, maps, sampled, iterations, device, *, l2=0.0):
+    """Return the image ``(z, y, x)`` minimising ``|P F S x - y|^2 + l2 |x|^2`` by conjugate gradients from zero.
 
     The encoding is :class:`bartorch.linop.CartesianSense` of ``maps`` over
     the ``sampled`` lines, on ``device``; stopping after ``iterations`` steps
@@ -826,7 +833,7 @@ def cg_sense(kspace, maps, sampled, iterations, device):
     scaling = optim.data_scaling(shifted.reshape(kspace.shape[0], *grid), A=encoding)
     scaling = scaling or 1.0
     data = (measured * (1.0 / scaling)).reshape(kspace.shape[0], *grid)
-    solve = optim.CG(maxiter=int(iterations))
+    solve = optim.CG(lambda_=float(l2), maxiter=int(iterations))
     return (scaling * solve(data, encoding)).reshape(kspace.shape[1:])
 
 
@@ -874,6 +881,8 @@ def pocs(image, sampled, iterations):
     symmetric = torch.from_numpy((kept & mirrored).astype(np.float32)).to(image.device)
     inside = torch.from_numpy(kept).to(image.device)
 
+    from bartorch import optim
+
     def forward(x):
         return bartorch.fft(x, every, unitary=True).reshape(x.shape)
 
@@ -882,11 +891,13 @@ def pocs(image, sampled, iterations):
 
     measured = forward(image.to(torch.complex64))
     phase = torch.exp(1j * torch.angle(inverse(measured * symmetric)))
-    estimate = image.to(torch.complex64)
-    for _ in range(int(iterations)):
-        k = forward(estimate.abs() * phase)
-        estimate = inverse(torch.where(inside, measured, k))
-    return estimate
+    return optim.POCS(
+        [
+            lambda x: x.abs() * phase,
+            lambda x: inverse(torch.where(inside, measured, forward(x))),
+        ],
+        maxiter=int(iterations),
+    )(measured, x0=image.to(torch.complex64))
 
 
 #: The package PyHySCO installs, which the susceptibility correction imports.
