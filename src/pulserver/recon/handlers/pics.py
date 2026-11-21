@@ -13,7 +13,7 @@ import numpy as np
 from ...mrd._acquisitions import AcquisitionFlag
 from ...mrd._images import center_crop
 from .._buffers import ReconBuffer, ReconData
-from .._calibration import CoilCompression, MissingCalibration, coil_maps
+from .._calibration import CoilCompression, MissingCalibration, _id, coil_maps
 from .._correct import Corrections
 from ..gadgets import (
     AsymmetricEcho,
@@ -80,8 +80,10 @@ class PicsRecon(ReconPlugin):
     with :func:`nlinv_estimate` as the estimate: from the unit's calibration
     readouts, else the maps stored for its slice, else the exam's. A unit for
     which none of these has maps takes them from the low-resolution centre of
-    its own k-space (``bart nlinv -m 1 --phase-pole 0``), with unit
-    sensitivity for one coil. A unit that holds calibration readouts and no
+    the k-space of the first such unit of its slice and set (``bart nlinv -m 1
+    --phase-pole 0``), fitted once and kept for the rest of the stream
+    (:meth:`~pulserver.recon.ReconContext.memoized`), with unit sensitivity
+    for one coil. A unit that holds calibration readouts and no
     imaging readouts makes no image; its maps are stored for the later units
     of its slice. The image minimises
     ``|P F S x - y|^2 + lambda |W x|_1`` over the maps (``bart pics -R W``),
@@ -261,8 +263,18 @@ class PicsRecon(ReconPlugin):
                 volume.shape
             )
         except MissingCalibration as missing:
-            self._self_calibrated(context, data, missing)
-            maps = nlinv_estimate(volume)
+            reason = missing
+            maps = context.memoized(
+                (
+                    "pics own maps",
+                    int(data.counters.get("slice", 0)),
+                    int(data.counters.get("set", 0)),
+                    _id(context.noise),
+                    _id(context.coil_compression),
+                    tuple(volume.shape),
+                ),
+                lambda: self._own_maps(context, data, reason, volume),
+            )
         sampled = volume.abs().sum(dim=0) > 0
         image = pics_image(
             volume, maps, sampled, self.wavelet, self.iterations, context.device
@@ -271,6 +283,17 @@ class PicsRecon(ReconPlugin):
         if kspace.ndim == 3:
             image = image[0]
         return self._filtered(np.array(center_crop(image, shape[-image.ndim :])))
+
+    def _own_maps(
+        self,
+        context: ReconContext,
+        data: ReconData,
+        missing: MissingCalibration,
+        volume: Any,
+    ) -> Any:
+        """Return the maps fitted to the k-space centre of the first unit of a slice and set, which its later units reuse."""
+        self._self_calibrated(context, data, missing)
+        return nlinv_estimate(volume)
 
     def _self_calibrated(
         self, context: ReconContext, data: ReconData, missing: MissingCalibration

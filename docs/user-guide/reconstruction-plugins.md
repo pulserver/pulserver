@@ -264,8 +264,14 @@ coil_images = nufft.adjoint(torch.from_numpy(buffer.kspace))
 ```
 
 The partitions of a stack of spokes or spirals are placed by their
-`kspace_encode_step_2` counter and carry no kz: transform the partition axis
-with an FFT before the in-plane NUFFT.
+`kspace_encode_step_2` counter and carry no kz. Partition `p` of `n` is the kz
+encode `p - n // 2` on the image grid: give the stack's trajectory that kz and
+it is one three-dimensional encoding, which `bartorch.linop.NoncartesianSense`
+decouples into in-plane transforms by an FFT along the partitions wherever
+every partition shares the in-plane trajectory and its weights. The `nufft`
+plugin reconstructs a stack so: one fit of the maps to the low-resolution
+centre of the stack's k-space in three dimensions, and one solve of the
+volume.
 
 ## Coil sensitivities, noise and compression
 
@@ -326,6 +332,32 @@ holds the leading calibration readouts until the first imaging-only readout,
 estimates the basis from those of the first contrast, and gives them on
 projected; a scan whose first readout is not calibration passes it unchanged,
 and a `CoilCompression` step in `recon` then compresses each unit.
+`CompressChannels(n, train_readouts=m)` holds the first `m` readouts of such a
+scan instead and takes the basis from them, as a non-Cartesian scan, every
+shot of which crosses the k-space centre, does in the `nufft` plugin.
+
+## Calibration computed once per series
+
+What a series computes from its first units and reuses for the rest, the coil
+maps of a slice, a trajectory's density compensation, the largest eigenvalue
+of an encoding, the kernels of split-slice GRAPPA, is kept with
+{meth}`~pulserver.recon.ReconContext.memoized`: the value is computed the first
+time its key is asked for and returned from then on, for that stream only. The
+key names what the value depends on, an array by a digest of its bytes:
+
+```python
+def recon(self, context, branch, data):
+    location = (data.counters.get("slice", 0), data.counters.get("set", 0))
+    maps = context.memoized(
+        ("maps", *location), lambda: estimate(data), what="coil maps"
+    )
+```
+
+With `what`, the computation is logged once at `INFO` with the time it took.
+The shipped handlers keep coil sensitivities as their k-space kernels on the
+grid they were fitted on, the low-resolution centre, rather than zero-filled
+maps on the image grid, and apply them with `kernels=True`
+(`bartorch.maps_to_kernels`).
 
 `apps.pics` computes where the maps are, here the host. An encoding built with
 `device=context.device`, such as {func}`bartorch.linop.CartesianSense`, computes
@@ -333,7 +365,8 @@ on the GPU and takes the k-space, the maps and the solver's vectors from the
 host a coil at a time, so the GPU never holds a whole multi-coil volume; the
 `pics` plugin solves so. Off the grid, `apps.pics` builds its encoding where the
 trajectory is, so a trajectory on `context.device` with the rest on the host
-does the same; the `nufft` plugin solves so.
+does the same; the `nufft` plugin builds its encoding,
+`bartorch.linop.NoncartesianSense`, so.
 
 The `pics` and `nufft` handlers fit the maps with
 `apps.nlinv_maps(kspace, phase_pole=0)`, `bart nlinv --phase-pole 0`, on a grid
@@ -593,7 +626,7 @@ PLUGIN = PicsRecon(intensity_correction=False)
 | `pics_train` | `pics`'s images from readouts that number their place in an echo train or an inversion shot (`contrast`, `ECO`), merged so that the readouts of every place fill one image; its channels are compressed a unit at a time, as a train mixes calibration and imaging lines |
 | `nufft` | The images of `pics` for a radial, spiral, PROPELLER or zero-echo-time trajectory or a stack of them, each solved as `bart pics -t -R W` over `bart nlinv --phase-pole 0 -t` sensitivities of the unit's samples near the k-space centre. The readouts of every segment of a unit, the blades of a PROPELLER scan or the shells of a zero-echo-time one, enter one solve; a trajectory that encodes the partition direction without a partition axis is solved as one volume |
 | `nufft_train` | `nufft`'s images from readouts that number their place in a train of excitations (`contrast`, `ECO`), merged so that the readouts of every place fill one image |
-| `epi` | Images from EPI readouts, each whitened, resampled off its ramps onto the matrix along its k-space trajectory and corrected for its odd/even phase as it arrives, against the blip-free reference train or the shot's navigator (`bart` ramp operator, `estimate_epi_echo_phase`, `estimate_epi_phase`). The first reference or navigator also gives the read-gradient delay, by which every later readout's trajectory is delayed before it is resampled. The coil sensitivities of the whole stack are estimated once, as one volume, from the calibration the scan opens with (FLEET's EPI shots, each polarity's maps unfolding the images of its set, or a gradient echo's lines), and serve every image. A fully sampled unit is the least-squares SENSE combination of its coils, an undersampled one a conjugate-gradient SENSE solve, and a partial-Fourier one is completed by POCS. The phase-encode-reversed reference set is reconstructed and kept but sent as no image; with PyHySCO installed (GPL-3.0, not a dependency; the Docker image carries it), the first volume is held until its stack is complete, one displacement field is estimated from it and the reference volume, and every image is corrected by it, history `HYSCO`, logged as the corrections are; an image left uncorrected, for want of PyHySCO or of its reference, is logged with the reason as a warning |
+| `epi` | Images from EPI readouts, each whitened, resampled off its ramps onto the matrix along its k-space trajectory and corrected for its odd/even phase as it arrives, against the blip-free reference train or the shot's navigator (`bart` ramp operator, `estimate_epi_echo_phase`, `estimate_epi_phase`). The first reference or navigator also gives the read-gradient delay, by which every later readout's trajectory is delayed before it is resampled. The coil sensitivities of the whole stack are estimated once, as one volume, from the calibration the scan opens with (FLEET's EPI shots, each polarity's maps unfolding the images of its set, or a gradient echo's lines), and serve every image. A fully sampled unit is the least-squares SENSE combination of its coils, an undersampled one a wavelet-regularised SENSE solve whose maps carry the smooth phase of a conjugate-gradient SENSE image, so the off-resonance phase of a long echo time does not ring under the prior (with `wavelet=0`, the conjugate-gradient image itself), and a partial-Fourier one is completed by POCS. The phase-encode-reversed reference set is reconstructed and kept but sent as no image; with PyHySCO installed (GPL-3.0, not a dependency; the Docker image carries it), the first volume is held until its stack is complete, one displacement field is estimated from it and the reference volume, and every image is corrected by it, history `HYSCO`, logged as the corrections are; an image left uncorrected, for want of PyHySCO or of its reference, is logged with the reason as a warning |
 | `qsm` | A multi-echo 3D gradient echo: the echoes themselves are not sent. `pics` makes each echo; once the last echo of a volume is in, fast-qsm (an optional dependency; without it the root sum of squares alone) makes, each its own series: the root sum of squares over the echoes' intensity-corrected magnitudes (3) and T2* of the whole object (4) for every anatomy; then for the `QsmAnatomy` recon parameter 0 (phantom) QSM by PDF and MEDI+0 referenced to the water (5), 1 (brain) QSM by V-SHARP and iLSQR inside the SynthStrip brain mask (5; FreeSurfer's weights at `share/fastqsm/synthstrip.1.pt` in the site library or the environment, or the file `FASTQSM_SYNTHSTRIP_WEIGHTS` names), the minimum intensity projection of SWI (6) from the echo nearest `SWI_TE_3T` scaled by 3 T / B0, and the DECOMPOSE paramagnetic (8) and diamagnetic (9) component susceptibilities, 2 (body) QSM by mask-free total field inversion (5) and SWI (6) as for the brain. The maps are sent in the order of their series, so a GE system, which numbers series by arrival from `100 × measurementID + 1`, numbers a map alike for every scan of one anatomy. A single-echo scan is `pics`'s magnitude image. A partial-Fourier axis makes the echoes real, without the field's phase: QSM scans sample all of k-space |
 | `pmc` | `pics_train`'s images, and a pose from each three-plane navigator (`NAV` or `RTFEEDBACK` readouts): planes gridded with Pipe-Menon density compensation on one thread, coils combined by root sum of squares, registered against the first navigator and filtered by an extended Kalman filter. The pose is published to the scan when its design sets `EnablePmc`; the navigators are not corrected |
 

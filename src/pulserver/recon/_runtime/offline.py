@@ -13,6 +13,7 @@ from typing import Any
 
 import ismrmrd
 import ismrmrd.xsd
+import numpy as np
 
 from ..plugin import ExamCache, ReconContext
 from .application import run_application
@@ -52,11 +53,39 @@ class _FileConnection:
         if self._design is not None and not any(map(is_description, stored)):
             yield from self._design.description
         yield from stored
-        for index in range(_count(self._dataset.number_of_acquisitions)):
-            yield self._dataset.read_acquisition(index)
+        yield from _acquisitions(self._dataset)
 
     def send(self, item: Any) -> None:
         self.sent.append(item)
+
+
+#: Acquisitions read from the file at once.
+_CHUNK = 512
+
+
+def _acquisitions(dataset: Any) -> Any:
+    """Yield the acquisitions of an ISMRMRD dataset in order, reading ``_CHUNK`` rows of the file at a time.
+
+    Each acquisition is the one ``dataset.read_acquisition`` returns, built
+    from one read of its row rather than one read per field.
+    """
+    count = _count(dataset.number_of_acquisitions)
+    if count == 0:
+        return
+    rows = dataset._dataset["data"]
+    for start in range(0, count, _CHUNK):
+        for row in rows[start : start + _CHUNK]:
+            acquisition = ismrmrd.Acquisition(row["head"])
+            acquisition.data[:] = (
+                row["data"]
+                .view(np.complex64)
+                .reshape(acquisition.active_channels, acquisition.number_of_samples)
+            )
+            if acquisition.traj.size:
+                acquisition.traj[:] = row["traj"].reshape(
+                    acquisition.number_of_samples, acquisition.trajectory_dimensions
+                )
+            yield acquisition
 
 
 def reconstruct_file(

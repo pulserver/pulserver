@@ -15,8 +15,10 @@ from ...mrd._metadata import acquisition_label, has_acquisition_flag
 from .._buffers import ReconData, discards, echo_centre
 from .._calibration import (
     MissingCalibration,
+    _id,
     _zero_filled,
     coil_maps,
+    digest,
 )
 from ..gadgets import AsymmetricEcho, Prewhiten, RemoveReadoutOversampling
 from ..plugin import Gadget, ReconContext, ReconResult
@@ -137,7 +139,7 @@ class RampSampling(Gadget):
                     torch.from_numpy(positions), torch.from_numpy(grid.copy()), columns
                 )
                 .numpy()
-                .T
+                .T.astype(np.complex64)
             )
         acquisition.center_sample = (
             columns - 1 - columns // 2 if positions[-1] < positions[0] else columns // 2
@@ -408,7 +410,9 @@ class EpiRecon(PicsRecon):
     encode is combined as the least-squares SENSE image of its maps,
     ``sum_c conj(S_c) F^-1 y_c / sum_c |S_c|^2``; an undersampled one is the
     wavelet-regularised ``pics`` solve of
-    :class:`~pulserver.recon.handlers.pics.PicsRecon` at its ``wavelet``, or
+    :class:`~pulserver.recon.handlers.pics.PicsRecon` at its ``wavelet`` on
+    maps carrying the smooth phase (:func:`smooth_phase`) of its
+    ``iterations``-step conjugate-gradient image, so the prior acts on a near-real image, or
     with ``wavelet`` zero the solution of ``min |P F S x - y|^2`` by
     ``iterations`` conjugate-gradient steps (:class:`bartorch.optim.CG`). A
     partial-Fourier phase encode is completed by ``pocs_iterations`` of POCS
@@ -488,7 +492,6 @@ class EpiRecon(PicsRecon):
         self.gadget(EpiPhaseCorrection).ramp = self.gadget(RampSampling)
         self.calibrations = {}
         self.slice_calibrations = []
-        self.own_maps = {}
         self.references = {}
         self.field = None
         self.held = []
@@ -523,7 +526,13 @@ class EpiRecon(PicsRecon):
         if volume.shape[1] > 1:
             training = band_calibration(self.slice_calibrations, data, volume.shape)
             if training is not None:
-                bands = slice_grappa_bands(volume, torch.from_numpy(training))
+                bands = slice_grappa_bands(
+                    volume,
+                    torch.from_numpy(training),
+                    memo=lambda key, train: context.memoized(
+                        key, train, what="split-slice GRAPPA kernels of a group"
+                    ),
+                )
         if bands is None:
             image = self._solved(volume, maps, context)
         else:
@@ -566,9 +575,12 @@ class EpiRecon(PicsRecon):
         if _fills_acquired_range(sampled.numpy()):
             image = sense_combined(volume, maps)
         elif self._wavelet(volume) > 0:
-            image = pics_image(
+            phase = smooth_phase(
+                cg_sense(volume, maps, sampled, self.iterations, context.device)
+            )
+            image = phase * pics_image(
                 volume,
-                maps,
+                maps * phase,
                 sampled,
                 self._wavelet(volume),
                 self.iterations,
@@ -590,11 +602,20 @@ class EpiRecon(PicsRecon):
             bands = band_maps(context, data, volume.shape)
             if bands is not None:
                 return bands
-            key = (int(data.counters.get("slice", 0)), int(data.counters.get("set", 0)))
-            if key not in self.own_maps:
-                self._self_calibrated(context, data, missing)
-                self.own_maps[key] = epi_nlinv_estimate(volume)
-            return self.own_maps[key]
+            key = (
+                "epi own maps",
+                int(data.counters.get("slice", 0)),
+                int(data.counters.get("set", 0)),
+                _id(context.noise),
+                _id(context.coil_compression),
+            )
+            reason = missing
+
+            def fitted():
+                self._self_calibrated(context, data, reason)
+                return epi_nlinv_estimate(volume)
+
+            return context.memoized(key, fitted)
 
     def recon(self, context: ReconContext, branch: str, data: ReconData):
         del branch
@@ -793,6 +814,12 @@ def plane_positions(acquisition, space, count) -> list[float]:
 EPI_WAVELET_SLAB = 0.1
 EPI_WAVELET_SLICE = 0.03
 
+#: Standard deviation, in lines, of the in-plane Gaussian k-space window that
+#: smooths that phase. At 7T the off-resonance phase near the sinuses wraps
+#: within a few voxels by a BOLD echo time; a wavelet prior on that complex
+#: image turns each wrap into a ring.
+PHASE_SMOOTHING_LINES = 8.0
+
 #: Sobolev weight of the coil maps of a 3D EPI slab on their calibration
 #: grid. Below BART's, the maps follow the sensitivity across the end
 #: partitions of a slab whose signal reaches them and wraps onto each other,
@@ -874,7 +901,7 @@ def _band_planes(stored, data, shape):
     return np.ascontiguousarray(np.stack(planes, axis=1))
 
 
-def slice_grappa_bands(volume, training, size=(3, 5)):
+def slice_grappa_bands(volume, training, size=(3, 5), *, memo=None):
     """Return the bands of multiband k-space separated by split-slice GRAPPA, ``(coils, bands, y, x)``; ``None`` where the calibration cannot train the kernels.
 
     Each acquired line of ``volume`` holds one partition encode, its
@@ -897,6 +924,13 @@ def slice_grappa_bands(volume, training, size=(3, 5)):
         slice, zero outside its calibration lines.
     size : tuple of int, default=(3, 5)
         Kernel extent along lines and readout.
+    memo : callable, default=None
+        ``memo(key, train)``, returning the kernels trained for ``key`` the
+        first time and reused after, as
+        :meth:`~pulserver.recon.ReconContext.memoized` does; ``None`` trains
+        them on every call. The key names the calibration, the acquired lines
+        and their encodes, so every group of a series with the same bands and
+        sampling reuses one training.
 
     Returns
     -------
@@ -920,9 +954,25 @@ def slice_grappa_bands(volume, training, size=(3, 5)):
     ):
         return None
     window = slice(int(taught[0]), int(taught[-1]) + 1)
-    kernels = tools.slice_grappa_kernel(
-        training[:, :, acquired[window]].to(torch.complex64), weights[:, window], size
-    )
+
+    def train():
+        return tools.slice_grappa_kernel(
+            training[:, :, acquired[window]].to(torch.complex64),
+            weights[:, window],
+            size,
+        )
+
+    if memo is None:
+        kernels = train()
+    else:
+        key = (
+            "split-slice GRAPPA kernels",
+            digest(training.cpu().numpy()),
+            tuple(acquired.tolist()),
+            tuple(encode.tolist()),
+            tuple(size),
+        )
+        kernels = memo(key, train)
     collapsed = volume.sum(dim=1)[:, acquired]
     separated = tools.slice_grappa(collapsed, kernels, size) / weights[:, None, :, None]
     bands = torch.zeros_like(volume)
@@ -1005,6 +1055,36 @@ def cg_sense(kspace, maps, sampled, iterations, device, *, l2=0.0):
     return (scaling * solve(data, encoding)).reshape(kspace.shape[1:])
 
 
+def smooth_phase(image):
+    """Return the unit-magnitude phase of ``image`` low-passed in plane.
+
+    Parameters
+    ----------
+    image : torch.Tensor
+        Complex ``(z, y, x)`` image, the transform centred.
+
+    Returns
+    -------
+    torch.Tensor
+        ``exp(i angle(g * image))``, complex64, ``g`` a Gaussian k-space
+        window of ``PHASE_SMOOTHING_LINES`` lines over ``y`` and ``x``.
+    """
+    import bartorch
+    import torch
+
+    image = image.to(torch.complex64)
+    ny, nx = image.shape[-2:]
+    y = torch.arange(ny, dtype=torch.float32, device=image.device) - ny // 2
+    x = torch.arange(nx, dtype=torch.float32, device=image.device) - nx // 2
+    window = torch.exp(
+        -(y[:, None] ** 2 + x[None, :] ** 2) / (2 * PHASE_SMOOTHING_LINES**2)
+    )
+    axes = (-1, -2)
+    kspace = bartorch.fft(image, axes, unitary=True).reshape(image.shape)
+    smooth = bartorch.fft(kspace * window, axes, inverse=True, unitary=True)
+    return torch.exp(1j * torch.angle(smooth.reshape(image.shape))).to(torch.complex64)
+
+
 def pocs(image, sampled, iterations):
     """Return ``image`` completed by POCS over every partial-Fourier axis of ``sampled``; ``image`` where none is.
 
@@ -1082,9 +1162,10 @@ def susceptibility_field(image, reverse, voxel_size):
     field is PyHySCO's (:func:`bartorch.tools.correct_susceptibility`), in mm
     on the cell edges of the phase encode, in the axes of ``image``: one row
     (a volume: one phase-encode line) longer. PyHySCO corrects volumes: a
-    volume is corrected as one, its phase encode first, and a slice as three
-    identical slices, which its smoothness penalty leaves uncoupled, the
-    middle one's field kept.
+    volume is corrected as one, its phase encode first, at the smoothness
+    weight ``SLAB_FIELD_SMOOTHNESS``, and a slice as three identical slices,
+    which its smoothness penalty leaves uncoupled, the middle one's field
+    kept, at PyHySCO's own weight.
 
     Raises
     ------
@@ -1097,11 +1178,13 @@ def susceptibility_field(image, reverse, voxel_size):
     image = np.asarray(image, dtype=np.float64)
     reverse = np.asarray(reverse, dtype=np.float64)
     scale = np.sum(image) / max(np.sum(reverse), 1e-30)
+    smoothness = {}
     if image.ndim == 2:
         up = np.repeat(image[:, :, None], 3, axis=2)
         down = np.repeat(reverse[:, :, None], 3, axis=2)
         voxel = (*voxel_size, 1.0)
     else:
+        smoothness = {"alpha": SLAB_FIELD_SMOOTHNESS}
         # (partition, phase, readout) to (phase, readout, partition), the
         # outer partitions repeated so the smoothness penalty does not pull
         # the field of the end partitions towards zero.
@@ -1114,6 +1197,7 @@ def susceptibility_field(image, reverse, voxel_size):
         torch.from_numpy(np.ascontiguousarray(down * scale)),
         voxel_size=voxel,
         phase_encoding_axis=0,
+        **smoothness,
     )
     field = corrected.field_map.detach().cpu().numpy()
     if image.ndim == 2:
@@ -1124,6 +1208,12 @@ def susceptibility_field(image, reverse, voxel_size):
 
 #: Partitions repeated beyond each end of a volume whose field is estimated.
 FIELD_EDGE_PARTITIONS = 2
+
+#: PyHySCO smoothness weight of a volume's field. At PyHySCO's own weight a
+#: slab whose blip-up and blip-down images differ only by their T2* blur is
+#: fitted a field that steps by over half a voxel between neighbouring lines,
+#: and the Jacobian of that step darkens a line of the corrected image.
+SLAB_FIELD_SMOOTHNESS = 3000.0
 
 
 def undistorted(image, field, voxel_size):

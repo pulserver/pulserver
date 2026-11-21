@@ -197,11 +197,15 @@ class _Correction:
 
     def __init__(self):
         self.calls = []
+        self.smoothness = []
 
-    def __call__(self, blip_up, blip_down, *, voxel_size, phase_encoding_axis):
+    def __call__(
+        self, blip_up, blip_down, *, voxel_size, phase_encoding_axis, alpha=None
+    ):
         import torch
 
         self.calls.append((tuple(blip_up.shape), voxel_size, phase_encoding_axis))
+        self.smoothness.append(alpha)
         shape = list(blip_up.shape)
         shape[phase_encoding_axis] += 1
         steps = torch.arange(shape[-1], dtype=torch.float64)
@@ -257,6 +261,17 @@ def test_a_volume_is_estimated_as_one_its_phase_encode_first_its_end_partitions_
     for k in range(4):
         shift = k + FIELD_EDGE_PARTITIONS
         np.testing.assert_allclose(corrected[k], np.roll(volume[k], -shift, axis=0))
+
+
+def test_a_volume_field_is_fitted_at_the_slab_smoothness_and_a_slice_at_pyhysco_s(
+    correction,
+):
+    from pulserver.recon.handlers.epi import SLAB_FIELD_SMOOTHNESS, susceptibility_field
+
+    susceptibility_field(np.ones((4, 6, 8)), np.ones((4, 6, 8)), (5.0, 2.0, 3.0))
+    susceptibility_field(np.ones((6, 8)), np.ones((6, 8)), (2.0, 3.0))
+
+    assert correction.smoothness == [SLAB_FIELD_SMOOTHNESS, None]
 
 
 def _oversampled_header(columns, oversampling):
