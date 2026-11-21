@@ -1082,9 +1082,10 @@ def susceptibility_field(image, reverse, voxel_size):
     field is PyHySCO's (:func:`bartorch.tools.correct_susceptibility`), in mm
     on the cell edges of the phase encode, in the axes of ``image``: one row
     (a volume: one phase-encode line) longer. PyHySCO corrects volumes: a
-    volume is corrected as one, its phase encode first, and a slice as three
-    identical slices, which its smoothness penalty leaves uncoupled, the
-    middle one's field kept.
+    volume is corrected as one, its phase encode first, at the smoothness
+    weight ``SLAB_FIELD_SMOOTHNESS``, and a slice as three identical slices,
+    which its smoothness penalty leaves uncoupled, the middle one's field
+    kept, at PyHySCO's own weight.
 
     Raises
     ------
@@ -1097,11 +1098,13 @@ def susceptibility_field(image, reverse, voxel_size):
     image = np.asarray(image, dtype=np.float64)
     reverse = np.asarray(reverse, dtype=np.float64)
     scale = np.sum(image) / max(np.sum(reverse), 1e-30)
+    smoothness = {}
     if image.ndim == 2:
         up = np.repeat(image[:, :, None], 3, axis=2)
         down = np.repeat(reverse[:, :, None], 3, axis=2)
         voxel = (*voxel_size, 1.0)
     else:
+        smoothness = {"alpha": SLAB_FIELD_SMOOTHNESS}
         # (partition, phase, readout) to (phase, readout, partition), the
         # outer partitions repeated so the smoothness penalty does not pull
         # the field of the end partitions towards zero.
@@ -1114,6 +1117,7 @@ def susceptibility_field(image, reverse, voxel_size):
         torch.from_numpy(np.ascontiguousarray(down * scale)),
         voxel_size=voxel,
         phase_encoding_axis=0,
+        **smoothness,
     )
     field = corrected.field_map.detach().cpu().numpy()
     if image.ndim == 2:
@@ -1124,6 +1128,12 @@ def susceptibility_field(image, reverse, voxel_size):
 
 #: Partitions repeated beyond each end of a volume whose field is estimated.
 FIELD_EDGE_PARTITIONS = 2
+
+#: PyHySCO smoothness weight of a volume's field. At PyHySCO's own weight a
+#: slab whose blip-up and blip-down images differ only by their T2* blur is
+#: fitted a field that steps by over half a voxel between neighbouring lines,
+#: and the Jacobian of that step darkens a line of the corrected image.
+SLAB_FIELD_SMOOTHNESS = 3000.0
 
 
 def undistorted(image, field, voxel_size):
