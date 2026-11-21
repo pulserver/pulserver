@@ -35,6 +35,11 @@ WAVELET_MIN_POINTS = 4
 #: GRAPPA leaves it.
 CALIBRATION_LINES = 48
 
+#: Gauss-Newton step of :func:`nlinv_estimate` after which the phase poles the
+#: maps share are detected and moved into the image, once: two of BART's eight
+#: steps remain to refine the maps around them.
+PHASE_POLE_STEP = 6
+
 #: Virtual channels the receive channels are compressed to before the maps
 #: and the solve (:class:`~pulserver.recon.CompressChannels`).
 VIRTUAL_COILS = 6
@@ -386,11 +391,11 @@ def nlinv_estimate(
 ) -> Any:
     """Return the coil maps :func:`bartorch.apps.nlinv_maps` fits to ``kspace``, with phase-pole correction.
 
-    ``bart nlinv -m 1 --phase-pole 0`` on a calibration grid of
+    ``bart nlinv -m 1 --phase-pole PHASE_POLE_STEP`` on a calibration grid of
     ``CALIBRATION_LINES`` points an axis, capped at the axis: the central
     lines of Cartesian k-space, or the samples of a trajectory within half
-    that of the centre, the maps of which are on ``shape``. After every
-    Gauss-Newton step the phase poles the maps share are moved into the
+    that of the centre, the maps of which are on ``shape``. After Gauss-Newton
+    step ``PHASE_POLE_STEP`` the phase poles the maps share are moved into the
     image, where they would otherwise drive every coil's sensitivity towards
     zero and leave a dark spot in the image. BART refuses the detection on a
     grid with an axis no longer than a twentieth of its longest, rounded up;
@@ -410,7 +415,7 @@ def nlinv_estimate(
         size=CALIBRATION_LINES,
         radius=CALIBRATION_LINES / 2,
         shape=shape,
-        phase_pole=0 if detectable else None,
+        phase_pole=PHASE_POLE_STEP if detectable else None,
         **({} if sobolev is None else {"sobolev": sobolev}),
     )
 

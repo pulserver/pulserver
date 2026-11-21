@@ -17,6 +17,7 @@ from conftest import (
 from pulserver.recon.handlers.pics import (
     IMAGINARY_SERIES,
     MAGNITUDE_SERIES,
+    PHASE_POLE_STEP,
     REAL_SERIES,
     PicsRecon,
     partial_fourier,
@@ -222,20 +223,20 @@ def test_maps_of_a_plane_from_calibration_readouts_and_from_the_units_own_centre
     )
     reconstruct(stream(kspace, lines), device=device)
 
-    assert [option["phase_pole"] for option in options] == [0, 0]
+    assert [option["phase_pole"] for option in options] == [PHASE_POLE_STEP] * 2
 
 
 @pytest.mark.parametrize(
     ("shape", "trajectory", "image", "phase_pole"),
     [
-        ((COILS, MATRIX, MATRIX), False, None, 0),
-        ((COILS, 1, MATRIX, MATRIX), False, None, 0),
+        ((COILS, MATRIX, MATRIX), False, None, PHASE_POLE_STEP),
+        ((COILS, 1, MATRIX, MATRIX), False, None, PHASE_POLE_STEP),
         ((COILS, 2, MATRIX, MATRIX), False, None, None),
-        ((COILS, 3, MATRIX, MATRIX), False, None, 0),
+        ((COILS, 3, MATRIX, MATRIX), False, None, PHASE_POLE_STEP),
         ((COILS, 3, 256, 256), False, None, None),
-        ((COILS, 4, 256, 256), False, None, 0),
-        ((COILS, 8, MATRIX), True, None, 0),
-        ((COILS, 8, MATRIX), True, (MATRIX,) * 3, 0),
+        ((COILS, 4, 256, 256), False, None, PHASE_POLE_STEP),
+        ((COILS, 8, MATRIX), True, None, PHASE_POLE_STEP),
+        ((COILS, 8, MATRIX), True, (MATRIX,) * 3, PHASE_POLE_STEP),
         ((COILS, 8, MATRIX), True, (2, MATRIX, MATRIX), None),
     ],
     ids=[
@@ -804,3 +805,49 @@ def test_an_image_without_partial_fourier_axes_keeps_its_phase():
     sampled[:, ::2] = False
 
     assert partial_fourier(image, sampled) is image
+
+
+def test_one_phase_pole_correction_removes_the_poles_the_maps_share():
+    """BART's 3D pole case: maps started from an image holding two phase poles."""
+    import torch
+    from bartorch import BartError, tools
+
+    poles = torch.tensor([[-10.0, -10.0, -10.0], [10.0, 10.0, 10.0]])
+    pole = tools.phasepole(
+        input__coils_singularity_positions_=poles.to(torch.complex64),
+        sample=True,
+        dims=(48, 48, 48),
+    )
+    kspace = torch.zeros(4, 48, 48, 48, dtype=torch.complex64)
+    kspace[:, 8:40, 8:40, 8:40] = tools.phantom((32, 32, 32), kspace=True, coils=4)
+    initial = torch.cat(
+        [
+            pole[None].to(torch.complex64),
+            torch.zeros(4, 48, 48, 48, dtype=torch.complex64),
+        ]
+    )
+
+    def poles_left(**correction):
+        _, maps = tools.nlinv(
+            kspace,
+            maxiter=8,
+            initial=initial,
+            alpha=32.0,
+            return_sensitivities=True,
+            cgiter=4,
+            sens_os=1.5,
+            w=-1000.0,
+            M=0.001,
+            N=True,
+            S=True,
+            **correction,
+        )
+        try:
+            return tools.phasepole(
+                input__coils_singularity_positions_=maps, estimate=True
+            )
+        except BartError:  # no pole found, so no output written
+            return None
+
+    assert poles_left() is not None
+    assert poles_left(phase_pole=PHASE_POLE_STEP) is None
