@@ -407,9 +407,10 @@ class EpiRecon(PicsRecon):
     A unit whose lines fill k-space within the range acquired along the phase
     encode is combined as the least-squares SENSE image of its maps,
     ``sum_c conj(S_c) F^-1 y_c / sum_c |S_c|^2``; an undersampled one is the
-    solution of ``min |P F S x - y|^2`` by ``iterations`` conjugate-gradient
-    steps (:class:`bartorch.optim.CG`), or with ``wavelet`` above zero the
-    ``pics`` solve of :class:`~pulserver.recon.handlers.pics.PicsRecon`. A
+    wavelet-regularised ``pics`` solve of
+    :class:`~pulserver.recon.handlers.pics.PicsRecon` at its ``wavelet``, or
+    with ``wavelet`` zero the solution of ``min |P F S x - y|^2`` by
+    ``iterations`` conjugate-gradient steps (:class:`bartorch.optim.CG`). A
     partial-Fourier phase encode is completed by ``pocs_iterations`` of POCS
     (:func:`pocs`), which keeps the image phase.
 
@@ -437,9 +438,11 @@ class EpiRecon(PicsRecon):
 
     Parameters
     ----------
-    wavelet : float, default=0.0
+    wavelet : float | None, default=None
         ``lambda`` of a wavelet ``pics`` solve of undersampled units; zero
-        solves them by conjugate gradients.
+        solves them by conjugate gradients. ``None`` takes ``EPI_WAVELET_SLAB``
+        for a unit of more than one partition and ``EPI_WAVELET_SLICE`` for a
+        slice.
     iterations : int, default=30
         Conjugate-gradient steps, or ``pics`` iterations with ``wavelet``.
     pocs_iterations : int, default=8
@@ -455,7 +458,7 @@ class EpiRecon(PicsRecon):
 
     def __init__(
         self,
-        wavelet: float = 0.0,
+        wavelet: float | None = None,
         iterations: int = 30,
         *,
         pocs_iterations: int = 8,
@@ -466,13 +469,14 @@ class EpiRecon(PicsRecon):
         intensity_correction: bool = True,
     ) -> None:
         super().__init__(
-            wavelet,
+            0.0 if wavelet is None else wavelet,
             iterations,
             virtual_coils,
             kspace_filter=kspace_filter,
             gradient_unwarp=gradient_unwarp,
             intensity_correction=intensity_correction,
         )
+        self.automatic_wavelet = wavelet is None
         self.pocs_iterations = int(pocs_iterations)
         self.l2 = float(l2)
         self.gadgets = (Prewhiten(), RampSampling(), EpiPhaseCorrection())
@@ -550,14 +554,25 @@ class EpiRecon(PicsRecon):
                     )
         self.calibrations = {}
 
+    def _wavelet(self, volume):
+        """Return the wavelet ``lambda`` of ``(coils, z, y, x)`` k-space."""
+        if not self.automatic_wavelet:
+            return self.wavelet
+        return EPI_WAVELET_SLAB if volume.shape[1] > 1 else EPI_WAVELET_SLICE
+
     def _solved(self, volume, maps, context):
         """Return the image of ``(coils, z, y, x)`` k-space by the solve its sampling calls for, partial Fourier completed."""
         sampled = volume.abs().sum(dim=0) > 0
         if _fills_acquired_range(sampled.numpy()):
             image = sense_combined(volume, maps)
-        elif self.wavelet > 0:
+        elif self._wavelet(volume) > 0:
             image = pics_image(
-                volume, maps, sampled, self.wavelet, self.iterations, context.device
+                volume,
+                maps,
+                sampled,
+                self._wavelet(volume),
+                self.iterations,
+                context.device,
             )
         else:
             image = cg_sense(
@@ -631,7 +646,11 @@ class EpiRecon(PicsRecon):
     def _results(self, context, data, image):
         """Return the image's results, its geometry its own unit's whatever unit closed."""
         corrections = self.corrections
-        history = ["PULSERVER", "PYTHON", "PICS" if self.wavelet > 0 else "SENSE"]
+        history = [
+            "PULSERVER",
+            "PYTHON",
+            "PICS" if self.automatic_wavelet or self.wavelet > 0 else "SENSE",
+        ]
         if corrections is not None:
             image = corrections.unwarped(image, context, data)
             history += corrections.applied()
@@ -767,6 +786,12 @@ def plane_positions(acquisition, space, count) -> list[float]:
     depth = 1e3 * float(space.recon_fov[0]) / count
     return [centre + (index - count // 2) * depth for index in range(count)]
 
+
+#: Wavelet ``lambda`` of an undersampled 3D EPI slab and 2D EPI slice, on
+#: data scaled as ``pics`` scales them. A slab's partition and CAIPI
+#: unfolding amplifies noise and converges slowly without the prior.
+EPI_WAVELET_SLAB = 0.1
+EPI_WAVELET_SLICE = 0.03
 
 #: Sobolev weight of the coil maps of a 3D EPI slab on their calibration
 #: grid. Below BART's, the maps follow the sensitivity across the end

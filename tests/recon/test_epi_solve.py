@@ -332,3 +332,19 @@ def test_a_slab_calibration_is_fitted_at_the_epi_sobolev_weight_and_a_slice_at_b
     epi.epi_nlinv_estimate(np.ones(shape, np.complex64))
 
     assert given == expected
+
+
+@pytest.mark.parametrize(
+    ("wavelet", "partitions", "expected"),
+    [(None, 4, "EPI_WAVELET_SLAB"), (None, 1, "EPI_WAVELET_SLICE"), (0.0, 4, 0.0)],
+)
+def test_an_undersampled_unit_takes_the_wavelet_of_a_slab_or_a_slice_unless_one_is_given(
+    wavelet, partitions, expected
+):
+    from pulserver.recon.handlers import epi
+
+    plugin = epi.EpiRecon(wavelet)
+    volume = np.zeros((2, partitions, 4, 4), np.complex64)
+
+    want = getattr(epi, expected) if isinstance(expected, str) else expected
+    assert plugin._wavelet(volume) == want
