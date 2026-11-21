@@ -174,7 +174,9 @@ class SubspaceRecon(PicsRecon):
         echoes = self.echo_images(context, data)
         attributes = {"ImageProcessingHistory": ["PULSERVER", "PYTHON", "SUBSPACE"]}
         return [
-            ReconResult(np.abs(image), attributes={**attributes, "EchoNumber": echo + 1})
+            ReconResult(
+                np.abs(image), attributes={**attributes, "EchoNumber": echo + 1}
+            )
             for echo, image in enumerate(echoes)
         ]
 
@@ -238,9 +240,11 @@ class SubspaceRecon(PicsRecon):
         prior = priors.LocallyLowRank(
             (-3, -2, -1), self.wavelet, joint_axes=(0,), block=self.block
         )
-        solve = optim.FISTA(prior, maxiter=self.iterations)
+        solve = optim.FISTA(prior, maxiter=self.iterations, eigen=True)
         coefficients = scaling * solve(measured * (1.0 / scaling), encoding)
-        echoes = torch.einsum("kf,kzyx->fzyx", basis.to(coefficients.dtype), coefficients)
+        echoes = torch.einsum(
+            "kf,kzyx->fzyx", basis.to(coefficients.dtype), coefficients
+        )
         return np.stack([self._filtered(e) for e in echoes.numpy()])
 
     def _maps(self, context: ReconContext, data: ReconData, buffer: ReconBuffer) -> Any:
@@ -320,7 +324,10 @@ def _wave_psf(buffer: ReconBuffer, shape: tuple[int, ...]) -> np.ndarray:
     ny, nz = shape[1], shape[0]
     yy = (np.arange(ny) - ny // 2) * fov_y / ny
     zz = (np.arange(nz) - nz // 2) * fov_z / nz
-    phase = wave[0][None, None, :] * yy[None, :, None] + wave[1][None, None, :] * zz[:, None, None]
+    phase = (
+        wave[0][None, None, :] * yy[None, :, None]
+        + wave[1][None, None, :] * zz[:, None, None]
+    )
     return np.exp(-2j * np.pi * phase).astype(np.complex64)
 
 
