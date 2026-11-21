@@ -514,12 +514,15 @@ class EpiRecon(PicsRecon):
         return self._filtered(np.array(center_crop(image, shape[-image.ndim :])))
 
     def _maps(self, context, data, volume):
-        """Return the unit's coil maps shaped as ``volume``: its slice's, else fitted once to it and kept."""
+        """Return the unit's coil maps shaped as ``volume``: its slice's, its bands' slices', else fitted once to it and kept."""
         try:
             return coil_maps(context, data, estimate=nlinv_estimate).reshape(
                 volume.shape
             )
         except MissingCalibration as missing:
+            bands = band_maps(context, data, volume.shape)
+            if bands is not None:
+                return bands
             key = (int(data.counters.get("slice", 0)), int(data.counters.get("set", 0)))
             if key not in self.own_maps:
                 self._self_calibrated(context, data, missing)
@@ -594,33 +597,43 @@ class EpiRecon(PicsRecon):
     def _estimate_field(self, held) -> None:
         """Estimate the stack's displacement field from its held first volume and its reference volume.
 
-        The slices of a 2D stack are stacked in the order of their positions
-        and corrected as one volume, the spacing of their positions its third
-        voxel size; a 3D unit is its own volume.
+        Every plane of the held units, a slice, a band of a multiband group or
+        a partition of a 3D volume, is placed at its position along the slice
+        direction (:func:`plane_positions`); the planes are stacked in that
+        order and corrected as one volume, the median spacing of their
+        positions its third voxel size, and each unit takes the field of its
+        own planes.
         """
         start = time.perf_counter()
-        images = {int(d.counters.get("slice", 0)): (img, d) for d, img in held}
-        locations = sorted(
-            images, key=lambda loc: _along_slice(self.references[loc][1])
-        )
-        space = images[locations[0]][1].data.space
-        if not space.recon_fov:
-            self.hysco = "the header states no reconstruction field of view"
-            return
-        planes = images[locations[0]][0].ndim == 2
-        image = np.stack([images[loc][0] for loc in locations])
-        reference = np.stack([self.references[loc][0] for loc in locations])
+        planes = []
+        for data, image in held:
+            location = int(data.counters.get("slice", 0))
+            reference, acquisition = self.references[location]
+            space = data.data.space
+            if not space.recon_fov:
+                self.hysco = "the header states no reconstruction field of view"
+                return
+            images = image if image.ndim == 3 else image[None]
+            references = reference if reference.ndim == 3 else reference[None]
+            for index, position in enumerate(
+                plane_positions(acquisition, space, images.shape[0])
+            ):
+                planes.append(
+                    (position, location, index, images[index], references[index])
+                )
+        planes.sort(key=lambda plane: plane[0])
+        space = held[0][0].data.space
         voxel = tuple(
             1e3 * fov / n
             for fov, n in zip(space.recon_fov, space.recon_matrix, strict=False)
-        )
-        if not planes:
-            image, reference, voxel = image[0], reference[0], voxel[-3:]
-        elif len(locations) == 1:
-            image, reference, voxel = image[0], reference[0], voxel[-2:]
+        )[-2:]
+        image = np.stack([plane[3] for plane in planes])
+        reference = np.stack([plane[4] for plane in planes])
+        if len(planes) == 1:
+            image, reference = image[0], reference[0]
         else:
-            positions = [_along_slice(self.references[loc][1]) for loc in locations]
-            voxel = (float(np.median(np.diff(positions))), *voxel[-2:])
+            spacing = float(np.median(np.diff([plane[0] for plane in planes])))
+            voxel = (spacing, *voxel)
         try:
             field = susceptibility_field(image, reference, voxel)
         except ImportError as error:
@@ -633,15 +646,26 @@ class EpiRecon(PicsRecon):
             )
             self.hysco = "its field could not be estimated"
             return
-        if planes and len(locations) > 1:
-            self.field = {
-                loc: (field[index], voxel[-2:]) for index, loc in enumerate(locations)
-            }
-        else:
-            self.field = {locations[0]: (field, voxel)}
+        field = field if field.ndim == 3 else field[None]
+        by_location = {}
+        for (_, location, index, _, _), plane in zip(planes, field, strict=True):
+            by_location.setdefault(location, {})[index] = plane
+        depth = voxel[0] if len(voxel) == 3 else 1.0
+        volumes = {
+            int(d.counters.get("slice", 0)): image.ndim == 3 for d, image in held
+        }
+        self.field = {
+            location: (
+                (np.stack([fields[i] for i in sorted(fields)]), (depth, *voxel[-2:]))
+                if volumes[location]
+                else (fields[0], voxel[-2:])
+            )
+            for location, fields in by_location.items()
+        }
         _log.info(
-            "susceptibility displacement field of a stack %s estimated in %.2f s "
-            "against its phase-encode-reversed reference",
+            "susceptibility displacement field of a stack of %d planes %s "
+            "estimated in %.2f s against its phase-encode-reversed reference",
+            len(planes),
             image.shape,
             time.perf_counter() - start,
         )
@@ -676,6 +700,63 @@ class EpiRecon(PicsRecon):
             reason,
         )
         return image
+
+
+def plane_positions(acquisition, space, count) -> list[float]:
+    """Return the position (mm) along the slice direction of each of a unit's ``count`` planes.
+
+    The reference acquisition's position is that of plane ``count // 2``, the
+    voxel an FFT centres; the planes, the partitions of the unit's
+    reconstruction space, are one voxel of that space's field of view apart.
+    """
+    centre = _along_slice(acquisition)
+    if count == 1:
+        return [centre]
+    depth = 1e3 * float(space.recon_fov[0]) / count
+    return [centre + (index - count // 2) * depth for index in range(count)]
+
+
+def band_maps(context, data, shape):
+    """Return the coil maps of a multiband group, its bands' slices' maps stacked as its partitions; ``None`` where the stream holds no maps for some band.
+
+    Band ``p`` of a group of ``shape[1]`` bands lies at the position of
+    partition ``p`` (:func:`plane_positions`), and takes the maps the stream
+    stored for the slice of that position and the unit's set, else of that
+    position in set 0, within ``BAND_TOLERANCE_MM``.
+    """
+    import torch
+
+    buffer = data.data
+    if buffer is None or len(shape) != 4 or shape[1] < 2:
+        return None
+    polarity = int(data.counters.get("set", 0))
+    stored = {}
+    for key, maps in context.coil_maps.items():
+        position = getattr(maps, "geometry", {}).get("position")
+        normal = getattr(maps, "geometry", {}).get("slice_dir")
+        if position is None or normal is None:
+            continue
+        key_set = key[1] if isinstance(key, tuple) else 0
+        along = float(np.asarray(position) @ np.asarray(normal))
+        stored.setdefault(key_set, []).append((along, maps.maps))
+    planes = []
+    for position in plane_positions(buffer.reference, buffer.space, shape[1]):
+        found = None
+        for key_set in (polarity, 0):
+            for along, maps in stored.get(key_set, ()):
+                if abs(along - position) <= BAND_TOLERANCE_MM:
+                    found = maps
+                    break
+            if found is not None:
+                break
+        if found is None or found.shape[-2:] != tuple(shape[-2:]):
+            return None
+        planes.append(found.reshape(found.shape[0], *shape[-2:]))
+    return torch.from_numpy(np.ascontiguousarray(np.stack(planes, axis=1)))
+
+
+#: Distance (mm) within which a stored slice's position is a band's.
+BAND_TOLERANCE_MM = 0.01
 
 
 def _along_slice(acquisition) -> float:

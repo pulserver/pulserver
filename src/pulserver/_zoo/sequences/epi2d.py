@@ -41,7 +41,7 @@ from pulserver.protocol import (
     UIParam,
 )
 
-#: The calibration of an undersampled or multiband scan: ``"fleet"``, the
+#: The calibration every scan opens with: ``"fleet"``, the
 #: default, segmented EPI with the imaging train's echo spacing, its shots of
 #: a slice in rapid succession, in each phase-encode polarity, so the coil
 #: sensitivities are distorted as the images are; or ``"gre"``, a gradient

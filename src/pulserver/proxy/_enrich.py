@@ -672,6 +672,7 @@ def _map_readouts(
     _mark_boundaries(flags, counters, local_space, set(labels))
 
     stack = _is_slice_stack(labels, definitions)
+    bands = _multiband_stack(labels, definitions)
     spaces = []
     navigates = bool(navigator.any())
     for local, is_navigator in ((0, False), (1, True)):
@@ -681,6 +682,8 @@ def _map_readouts(
         fov = definitions.navigator_fov if is_navigator else definitions.fov
         if stack:
             matrix, fov = _one_slice(matrix, fov, definitions.slice_thickness)
+        elif bands is not None and not is_navigator:
+            matrix, fov = _one_band_group(matrix, fov, definitions, bands)
         members = local_space == local if navigates else slice(None)
         trajectory = bool((readouts.trajectory_dimensions[members] > 1).any())
         spaces.append(
@@ -717,6 +720,8 @@ def _map_readouts(
         "num_samples": readouts.num_samples,
         "slice_offset_m": _slice_offsets(labels, definitions, count)
         if stack
+        else _band_group_offsets(labels, definitions, bands, count)
+        if bands is not None
         else np.zeros(count),
     }
     return part, spaces
@@ -736,6 +741,59 @@ def _is_slice_stack(
     slices = labels.get("SLC")
     varies = slices is not None and np.unique(slices).size > 1
     return bool(definitions.slice_positions) or varies
+
+
+def _multiband_stack(
+    labels: dict[str, np.ndarray], definitions: SequenceDefinitions
+) -> int | None:
+    """Return the slice groups of a subsequence that excites its slices several at a time; ``None`` otherwise.
+
+    A multiband stack defines ``MultibandFactor`` ``m`` above 1 and
+    ``SlicePositions``, whose count ``m`` divides, and writes ``PAR`` for the
+    band: ``SLC`` ``g`` excites the slices ``g + b G`` of the ``G`` groups,
+    ``b`` from 0 to ``m - 1``, ``G`` slice positions apart.
+    """
+    m, positions = definitions.multiband, definitions.slice_positions
+    if m < 2 or "PAR" not in labels or not positions or len(positions) % m:
+        return None
+    return len(positions) // m
+
+
+def _one_band_group(
+    matrix: tuple[int, int, int] | None,
+    fov: tuple[float, float, float] | None,
+    definitions: SequenceDefinitions,
+    groups: int,
+) -> tuple[tuple[int, int, int] | None, tuple[float, float, float] | None]:
+    """Return the matrix and field of view of one slice group of a multiband stack, in m.
+
+    The bands of a group are its partitions: ``MultibandFactor`` of them
+    along z, each the gap between the bands of a group deep, so the partition
+    grid, centred on the group, places each band on a voxel.
+    """
+    m = definitions.multiband
+    positions = np.asarray(definitions.slice_positions, dtype=np.float64)
+    gap = abs(float(positions[groups] - positions[0]))
+    if matrix is not None:
+        matrix = (matrix[0], matrix[1], m)
+    if fov is not None:
+        fov = (fov[0], fov[1], m * gap)
+    return matrix, fov
+
+
+def _band_group_offsets(
+    labels: dict[str, np.ndarray],
+    definitions: SequenceDefinitions,
+    groups: int,
+    count: int,
+) -> np.ndarray:
+    """Return the centre of the slice group each readout's ``SLC`` indexes, in m: the mean of its bands' positions."""
+    positions = np.asarray(definitions.slice_positions, dtype=np.float64)
+    centres = positions.reshape(definitions.multiband, groups).mean(axis=0)
+    slices = labels.get("SLC")
+    if slices is None:
+        return np.full(count, centres[0])
+    return centres[np.asarray(slices, dtype=np.int64)]
 
 
 def _one_slice(

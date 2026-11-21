@@ -107,6 +107,9 @@ class SequenceDefinitions:
         empty when undefined.
     slice_thickness : float or None
         ``SliceThickness``, in metres; ``None`` when undefined.
+    multiband : int
+        ``MultibandFactor``: the slices one excitation excites; 1 when
+        undefined.
     """
 
     matrix: tuple[int, int, int] | None
@@ -121,6 +124,7 @@ class SequenceDefinitions:
     centre_partition: int | None = None
     slice_positions: tuple[float, ...] = ()
     slice_thickness: float | None = None
+    multiband: int = 1
 
     @classmethod
     def from_sequence(cls, seq: Any) -> SequenceDefinitions:
@@ -155,6 +159,9 @@ class SequenceDefinitions:
             slice_positions=tuple(_numbers(seq.get_definition("SlicePositions"))),
             slice_thickness=next(
                 iter(_numbers(seq.get_definition("SliceThickness"))), None
+            ),
+            multiband=int(
+                next(iter(_numbers(seq.get_definition("MultibandFactor"))), 1)
             ),
         )
 
