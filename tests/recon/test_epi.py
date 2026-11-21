@@ -626,3 +626,44 @@ def test_the_navigator_gives_the_read_gradient_delay_and_the_ramp_resampling_app
         assert gadget(acquisition, data) is None
 
     np.testing.assert_allclose(ramp.delay_s, 1e-6 * delay_us, rtol=0.03)
+
+
+def _calibration_unit(location, polarity, kspace):
+    space = SimpleNamespace(recon_fov=(0.005, 0.2, 0.2), recon_matrix=(1, 6, 8))
+    reference = SimpleNamespace(
+        position=(0.0, 0.0, 5.0 * location), slice_dir=(0.0, 0.0, 1.0)
+    )
+    ref = SimpleNamespace(
+        space=space, reference=reference, image_shape=(6, 8), kspace=kspace
+    )
+    return SimpleNamespace(counters={"slice": location, "set": polarity}, ref=ref)
+
+
+def test_a_fleet_calibration_of_both_polarities_gives_the_stack_field_that_a_later_reference_keeps(
+    monkeypatch, correction
+):
+    from pulserver.recon.handlers import epi
+
+    monkeypatch.setattr(epi, "coil_maps", lambda *args, **kwargs: None)
+    monkeypatch.setattr(epi, "_zero_filled", lambda ref: ref.kspace)
+    images = _images(1)
+    plugin, context = _stack_recon(monkeypatch, images)
+    rng = np.random.default_rng(3)
+    plugin.calibrations = {
+        polarity: [
+            _calibration_unit(
+                0, polarity, rng.random((2, 1, 6, 8)).astype(np.complex64)
+            )
+        ]
+        for polarity in (0, 1)
+    }
+
+    plugin._calibrate(context)
+    (first,) = plugin.recon(context, "", _unit(0, 0))
+    plugin.recon(context, "", _unit(0, 1))
+    (later,) = plugin.recon(context, "", _unit(0, 0))
+
+    assert len(correction.calls) == 1
+    for result in (first, later):
+        np.testing.assert_allclose(result.data, np.roll(images[(0, 0)], -1, axis=0))
+        assert "HYSCO" in result.attributes["ImageProcessingHistory"]
