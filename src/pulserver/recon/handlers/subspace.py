@@ -317,6 +317,21 @@ class MprageSubspaceRecon(SubspaceRecon):
             ),
         )
 
+    def tissue(self) -> Any:
+        import torch
+        from blochsim.sequence import TissueProperties
+
+        t1, b1 = torch.meshgrid(
+            torch.logspace(np.log10(300.0), np.log10(5000.0), 64),
+            torch.linspace(*B1),
+            indexing="ij",
+        )
+        return TissueProperties(
+            t1_ms=t1.reshape(-1),
+            t2_ms=torch.full((t1.numel(),), 45.0),
+            b1=b1.reshape(-1),
+        )
+
 
 class MegreSubspaceRecon(SubspaceRecon):
     """Echo images of a 3D multi-echo spoiled gradient echo by :class:`SubspaceRecon`.

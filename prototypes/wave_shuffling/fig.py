@@ -1,37 +1,46 @@
-"""08-layout figure: fig.py OUT TITLE REF:LABEL CASE:LABEL ... (echo images of each recon, error x5 rows vs the first)."""
-import sys
+"""08-layout figure against the phantom's ground truth: fig.py OUT TITLE TRUTHCASE RECON.npz:LABEL ...
+
+Rows: three echoes (images), each followed by its |error| x5 against that case's truth;
+NRMSE in the head printed on each error panel. ROWS env picks entries of the truth's echo list.
+"""
+import os, sys
 import numpy as np
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-out, title, *cases = sys.argv[1:]
-ECHOES = [int(e) for e in __import__("os").environ.get("ECHOES", "1,9,24").split(",")]
-ESP = float(__import__("os").environ.get("ESP_MS", "4.08"))
-cols = [c.split(":", 1) for c in cases]
-ims = [np.abs(np.load(f)["echoes"]) for f, _ in cols]
-ref = ims[0]
-z = ref.shape[1] // 2
-rows = []
-for e in ECHOES:
-    rows.append((f"echo {e + 1}\nTE {ESP * (e + 1):.0f} ms", [im[e, z] for im in ims], False, e))
-    rows.append((f"|error| x5\necho {e + 1}", [5 * np.abs(im[e, z] - ref[e, z]) for im in ims], True, e))
-fig, ax = plt.subplots(len(rows), len(cols), figsize=(2.6 * len(cols), 2.6 * len(rows)), squeeze=False)
-for i, (label, row, err, e) in enumerate(rows):
-    for j, img in enumerate(row):
-        a = ax[i, j]
-        a.imshow(np.rot90(img), cmap="gray", vmin=0, vmax=np.percentile(ref[e, z], 99.5))
-        a.set_xticks([]); a.set_yticks([])
-        if err and j > 0:
-            m = np.abs(ims[j][e] - ref[e]); n = np.linalg.norm(m) / np.linalg.norm(ref[e])
-            a.text(0.03, 0.04, f"NRMSE {100 * n:.1f}%", color="yellow", fontsize=8, transform=a.transAxes)
-        if err and j == 0:
-            a.text(0.5, 0.5, "reference", color="w", ha="center", va="center", transform=a.transAxes)
-        if i == 0:
-            a.set_title(cols[j][1], fontsize=10)
-        if j == 0:
-            a.set_ylabel(label, fontsize=9)
-fig.suptitle(title, fontsize=11)
+out, title, truthcase, *cols = sys.argv[1:]
+z = np.load(f"{truthcase}/truth.npz"); T = z["echoes"]; keep = list(z["keep"])
+rows_at = [int(r) for r in os.environ.get("ROWS", "0,2,4").split(",")]
+label_of = os.environ.get("XLABEL", "echo")
+cols = [c.split(":", 1) for c in cols]
+from scipy.ndimage import binary_erosion
+mask = binary_erosion(T[0] > 0.1 * T[0].max(), iterations=4)
+ims = []
+for f, _ in cols:
+    R = np.abs(np.load(f)["echoes"])[keep]
+    s = (R[:, mask] * T[:, mask]).sum() / (R[:, mask] ** 2).sum()
+    ims.append(s * R)
+sl = T.shape[1] // 2
+names = ["Ground truth"] + [c[1] for c in cols]
+fig, ax = plt.subplots(2 * len(rows_at), len(names), figsize=(2.5 * len(names), 2.5 * 2 * len(rows_at)), squeeze=False)
+for i, j in enumerate(rows_at):
+    v = np.percentile(T[j, sl], 99.5)
+    for c in range(len(names)):
+        img = T[j, sl] if c == 0 else ims[c - 1][j, sl]
+        a, b = ax[2 * i, c], ax[2 * i + 1, c]
+        a.imshow(np.rot90(img), cmap="gray", vmin=0, vmax=v)
+        if c == 0:
+            b.text(0.5, 0.5, "reference", color="w", ha="center", va="center", transform=b.transAxes); b.set_facecolor("k")
+        else:
+            b.imshow(np.rot90(5 * np.abs(img - T[j, sl])), cmap="gray", vmin=0, vmax=v)
+            n = np.linalg.norm((ims[c - 1][j] - T[j])[mask]) / np.linalg.norm(T[j][mask])
+            b.text(0.03, 0.04, f"NRMSE {100 * n:.1f}%", color="yellow", fontsize=8, transform=b.transAxes)
+        for q in (a, b): q.set_xticks([]); q.set_yticks([])
+        if i == 0: a.set_title(names[c], fontsize=10)
+    ax[2 * i, 0].set_ylabel(f"{label_of} {keep[j] + 1}", fontsize=9)
+    ax[2 * i + 1, 0].set_ylabel(f"|error| x5\n{label_of} {keep[j] + 1}", fontsize=9)
+fig.suptitle(title, fontsize=10)
 fig.tight_layout()
 fig.savefig(out, dpi=110)
 print("wrote", out)

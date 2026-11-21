@@ -54,6 +54,14 @@ for r in flat:
 grid /= np.maximum(cnt, 1)[None, :, :, None]
 t = time.perf_counter()
 maps = nlinv_estimate(torch.from_numpy(grid))
+if os.environ.get("TRUEMAPS"):
+    from pulserver.virtual import COILS
+    zz_, yy_, xx_ = [(np.arange(n_) - n_ // 2) * f_ / n_ for n_, f_ in ((nz, fov_z), (ny, fov_y), (nx, fov_xos / 2))]
+    Z_, Y_, X_ = np.meshgrid(zz_, yy_, xx_, indexing="ij")
+    sens = COILS["head8/head32"].receive(np.stack([X_.ravel(), Y_.ravel(), Z_.ravel()], 1))
+    sens = (cc @ np.asarray(sens).T).reshape(VC, nz, ny, nx).astype(np.complex64)
+    maps = torch.from_numpy(sens / np.sqrt((np.abs(sens) ** 2).sum(0)).max())
+    print("true coil maps")
 print(f"maps {tuple(maps.shape)} in {time.perf_counter()-t:.1f} s")
 
 # Frames = echo index; positions (frames, shots, 2) of (z, y); samples (coils, frames, shots, readout).
@@ -77,11 +85,20 @@ else:
     kwargs["psf"] = torch.ones(nz, ny, nro, dtype=torch.complex64)
 A = linop.WaveSense(maps.to(torch.complex64), (rank, nz, ny, nx), nro, **kwargs)
 data = torch.from_numpy(y)
+if os.environ.get("SYNTH"):
+    x0 = torch.from_numpy(np.load(os.environ["SYNTH"])["alpha"])
+    data = A(x0); print("synthetic data from", os.environ["SYNTH"])
 scaling = optim.data_scaling(data, A=A) or 1.0
 t = time.perf_counter(); eig = optim.maxeigen(A); print(f"eig {float(eig):.3g} in {time.perf_counter()-t:.1f} s")
 prior = priors.LocallyLowRank((-3, -2, -1), lam, joint_axes=(0,), block=8)
 t = time.perf_counter()
-alpha = optim.FISTA(prior, maxiter=iters, step=0.95 / float(eig))(data / scaling, A) * scaling
+solver = os.environ.get("SOLVER", "fista")
+if solver == "cg":
+    alpha = optim.CG(lam, maxiter=iters)(data / scaling, A) * scaling
+elif solver == "admm":
+    alpha = optim.ADMM(prior, maxiter=iters, rho=float(os.environ.get("RHO", 0.5)))(data / scaling, A) * scaling
+else:
+    alpha = optim.FISTA(prior, maxiter=iters, step=0.95 / float(eig))(data / scaling, A) * scaling
 print(f"solve {iters} it in {time.perf_counter()-t:.1f} s")
 res_ = (A(alpha) - data); residual = float(res_.norm() / data.norm()); print("residual", residual)
 np.savez(f"{case}/resid.npz", r=res_.norm(dim=(0, 3)).numpy(), d=data.norm(dim=(0, 3)).numpy(), order=order)

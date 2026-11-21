@@ -1,1 +1,3 @@
-from pulserver.recon.handlers.subspace import PLUGIN
+from pulserver.recon.handlers.subspace import FseSubspaceRecon
+
+PLUGIN = FseSubspaceRecon(llr=0.02)
