@@ -32,11 +32,14 @@ SCHEME = option(
     "scheme", "quiet", choices=("spiral", "meridian", "quiet"), **OPTIONS["scheme"]
 )
 
-#: Order of the shells, ``"sequential"`` or ``"golden"``: under golden ratio
+#: Order of the shells, ``"sequential"``, ``"golden"`` or ``"raga"``: under golden ratio
 #: order every run of consecutive shells covers the sphere evenly, for a
 #: sliding-window reconstruction, and ``r`` keeps the first shells.
 ORDERING = option(
-    "ordering", "sequential", choices=("sequential", "golden"), **OPTIONS["ordering"]
+    "ordering",
+    "sequential",
+    choices=("sequential", "golden", "raga"),
+    **OPTIONS["ordering"],
 )
 
 
