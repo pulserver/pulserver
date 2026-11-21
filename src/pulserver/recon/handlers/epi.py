@@ -395,7 +395,7 @@ class EpiRecon(PicsRecon):
     for the whole stack: the calibration units of every slice, held until the
     first unit that needs maps, are each estimated on their own
     (:func:`~pulserver.recon.coil_maps` with
-    :func:`~pulserver.recon.handlers.pics.nlinv_estimate`), each phase-encode
+    :func:`epi_nlinv_estimate`), each phase-encode
     polarity of a FLEET calibration apart, so each set is unfolded by maps
     distorted as its image is. A slice stack with gaps is no contiguous
     volume, and maps fitted smooth across it fit no slice well enough for a
@@ -538,7 +538,7 @@ class EpiRecon(PicsRecon):
         """Estimate the maps of each held calibration slice on its own, and keep its k-space for split-slice GRAPPA."""
         for polarity, units in self.calibrations.items():
             for unit in units:
-                coil_maps(context, unit, estimate=nlinv_estimate)
+                coil_maps(context, unit, estimate=epi_nlinv_estimate)
                 kspace = _zero_filled(unit.ref)
                 if int(np.prod(kspace.shape[1:-2])) == 1:
                     self.slice_calibrations.append(
@@ -568,7 +568,7 @@ class EpiRecon(PicsRecon):
     def _maps(self, context, data, volume):
         """Return the unit's coil maps shaped as ``volume``: its slice's, its bands' slices', else fitted once to it and kept."""
         try:
-            return coil_maps(context, data, estimate=nlinv_estimate).reshape(
+            return coil_maps(context, data, estimate=epi_nlinv_estimate).reshape(
                 volume.shape
             )
         except MissingCalibration as missing:
@@ -578,7 +578,7 @@ class EpiRecon(PicsRecon):
             key = (int(data.counters.get("slice", 0)), int(data.counters.get("set", 0)))
             if key not in self.own_maps:
                 self._self_calibrated(context, data, missing)
-                self.own_maps[key] = nlinv_estimate(volume)
+                self.own_maps[key] = epi_nlinv_estimate(volume)
             return self.own_maps[key]
 
     def recon(self, context: ReconContext, branch: str, data: ReconData):
@@ -766,6 +766,19 @@ def plane_positions(acquisition, space, count) -> list[float]:
         return [centre]
     depth = 1e3 * float(space.recon_fov[0]) / count
     return [centre + (index - count // 2) * depth for index in range(count)]
+
+
+#: Sobolev weight of the EPI coil maps on their calibration grid. Below
+#: BART's, the maps follow the sensitivity across the whole field of view,
+#: where SENSE unfolds the aliases of an in-plane, multiband or partition
+#: undersampling, and across the end partitions of a slab that wrap onto
+#: each other.
+EPI_SOBOLEV = 1.0
+
+
+def epi_nlinv_estimate(kspace):
+    """Return the coil maps of EPI calibration k-space: :func:`~pulserver.recon.handlers.pics.nlinv_estimate` at ``EPI_SOBOLEV``."""
+    return nlinv_estimate(kspace, sobolev=EPI_SOBOLEV)
 
 
 def band_maps(context, data, shape):

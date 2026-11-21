@@ -312,3 +312,16 @@ def test_each_calibration_slice_of_a_stack_is_fitted_its_own_maps(monkeypatch):
     assert all(int(np.prod(shape[1:-2])) == 1 for shape in calls)
     assert sorted(context.coil_maps) == [0, 1, 2]
     assert len(plugin.slice_calibrations) == 3
+
+
+def test_the_epi_coil_maps_are_fitted_at_the_epi_sobolev_weight(monkeypatch):
+    from pulserver.recon.handlers import epi
+
+    given = {}
+    monkeypatch.setattr(
+        epi, "nlinv_estimate", lambda kspace, **options: given.update(options)
+    )
+
+    epi.epi_nlinv_estimate(np.ones((2, 4, 4), np.complex64))
+
+    assert given == {"sobolev": epi.EPI_SOBOLEV}

@@ -378,7 +378,11 @@ PLUGIN = PicsRecon()
 
 
 def nlinv_estimate(
-    kspace: Any, traj: Any = None, shape: tuple[int, ...] | None = None
+    kspace: Any,
+    traj: Any = None,
+    shape: tuple[int, ...] | None = None,
+    *,
+    sobolev: float | None = None,
 ) -> Any:
     """Return the coil maps :func:`bartorch.apps.nlinv_maps` fits to ``kspace``, with phase-pole correction.
 
@@ -391,7 +395,9 @@ def nlinv_estimate(
     zero and leave a dark spot in the image. BART refuses the detection on a
     grid with an axis no longer than a twentieth of its longest, rounded up;
     k-space whose calibration grid has such an axis, a slab of 3 partitions
-    or fewer on a matrix of 48 or more, is fitted without it.
+    or fewer on a matrix of 48 or more, is fitted without it. ``sobolev`` is
+    the Sobolev weight of the maps on the calibration grid
+    (:func:`bartorch.apps.nlinv_maps`); ``None`` for BART's.
     """
     from bartorch import apps
 
@@ -405,6 +411,7 @@ def nlinv_estimate(
         radius=CALIBRATION_LINES / 2,
         shape=shape,
         phase_pole=0 if detectable else None,
+        **({} if sobolev is None else {"sobolev": sobolev}),
     )
 
 
