@@ -31,9 +31,16 @@ SCHEME = option(
     "scheme", "quiet", choices=("spiral", "meridian", "quiet"), **OPTIONS["scheme"]
 )
 
+#: Order of the shells, ``"sequential"`` or ``"golden"``: under golden ratio
+#: order every run of consecutive shells covers the sphere evenly, for a
+#: sliding-window reconstruction, and ``r`` keeps the first shells.
+ORDERING = option(
+    "ordering", "sequential", choices=("sequential", "golden"), **OPTIONS["ordering"]
+)
+
 
 class Zte3D(SequencePlugin):
-    app = functools.partial(zte3d, scheme=SCHEME)
+    app = functools.partial(zte3d, scheme=SCHEME, ordering=ORDERING)
     protocol = {
         UIParam.IMAGING_MODE: StatedParam(ImagingMode.THREE_D),
         UIParam.FLIP: FloatParam(
