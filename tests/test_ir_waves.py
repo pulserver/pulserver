@@ -165,6 +165,39 @@ def test_every_wave_is_held_at_once_where_the_memory_affords_it(radial):
     assert plan["samples"][2] == 0
 
 
+def test_waves_that_play_the_same_samples_on_a_board_share_its_memory(tmp_path):
+    """Two turns that differ on y alone hold one copy of their common x lobe."""
+
+    def lobe(channel, ends, amplitude):
+        return pp.make_extended_trapezoid(
+            channel,
+            times=np.array([0.0, 1e-3, 2e-3]),
+            amplitudes=np.array([*ends, 0.0]) * amplitude,
+            system=SYSTEM,
+        )
+
+    adc = pp.make_adc(64, duration=1.5e-3, system=SYSTEM)
+    pulse = pp.make_block_pulse(math.pi / 12, duration=0.5e-3, system=SYSTEM)
+    seq = pp.Sequence(SYSTEM)
+    for view in range(6):
+        ends = (1.0, 0.5) if view % 2 else (1.0, 0.25)
+        seq.add_block(pulse)
+        seq.add_block(
+            adc, lobe("x", (1.0, 0.5), 2e5), lobe("y", ends, 2e5 * (view + 1) / 6)
+        )
+        seq.add_block(pp.make_delay(2e-3))
+    path = tmp_path / "shared.seq"
+    seq.write(str(path))
+    ir.convert(path, SYSTEM)
+    plan = _plan(path)
+    (waves,) = plan["waves"]
+    assert len(waves) == 2
+    assert waves[0]["offset"][0] == waves[1]["offset"][0]
+    assert waves[0]["offset"][1] != waves[1]["offset"][1]
+    assert plan["samples"][0] == waves[0]["samples"]
+    assert plan["samples"][1] == 2 * waves[0]["samples"]
+
+
 @pytest.mark.parametrize("ring", [2, 3])
 def test_waves_that_do_not_fit_at_once_stream_through_a_ring_of_slots_per_position(
     radial, ring
