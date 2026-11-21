@@ -408,7 +408,9 @@ class EpiRecon(PicsRecon):
     encode is combined as the least-squares SENSE image of its maps,
     ``sum_c conj(S_c) F^-1 y_c / sum_c |S_c|^2``; an undersampled one is the
     wavelet-regularised ``pics`` solve of
-    :class:`~pulserver.recon.handlers.pics.PicsRecon` at its ``wavelet``, or
+    :class:`~pulserver.recon.handlers.pics.PicsRecon` at its ``wavelet`` on
+    maps carrying the smooth phase (:func:`smooth_phase`) of its
+    ``iterations``-step conjugate-gradient image, so the prior acts on a near-real image, or
     with ``wavelet`` zero the solution of ``min |P F S x - y|^2`` by
     ``iterations`` conjugate-gradient steps (:class:`bartorch.optim.CG`). A
     partial-Fourier phase encode is completed by ``pocs_iterations`` of POCS
@@ -566,9 +568,12 @@ class EpiRecon(PicsRecon):
         if _fills_acquired_range(sampled.numpy()):
             image = sense_combined(volume, maps)
         elif self._wavelet(volume) > 0:
-            image = pics_image(
+            phase = smooth_phase(
+                cg_sense(volume, maps, sampled, self.iterations, context.device)
+            )
+            image = phase * pics_image(
                 volume,
-                maps,
+                maps * phase,
                 sampled,
                 self._wavelet(volume),
                 self.iterations,
@@ -793,6 +798,12 @@ def plane_positions(acquisition, space, count) -> list[float]:
 EPI_WAVELET_SLAB = 0.1
 EPI_WAVELET_SLICE = 0.03
 
+#: Standard deviation, in lines, of the in-plane Gaussian k-space window that
+#: smooths that phase. At 7T the off-resonance phase near the sinuses wraps
+#: within a few voxels by a BOLD echo time; a wavelet prior on that complex
+#: image turns each wrap into a ring.
+PHASE_SMOOTHING_LINES = 8.0
+
 #: Sobolev weight of the coil maps of a 3D EPI slab on their calibration
 #: grid. Below BART's, the maps follow the sensitivity across the end
 #: partitions of a slab whose signal reaches them and wraps onto each other,
@@ -1003,6 +1014,36 @@ def cg_sense(kspace, maps, sampled, iterations, device, *, l2=0.0):
     data = (measured * (1.0 / scaling)).reshape(kspace.shape[0], *grid)
     solve = optim.CG(lambda_=float(l2), maxiter=int(iterations))
     return (scaling * solve(data, encoding)).reshape(kspace.shape[1:])
+
+
+def smooth_phase(image):
+    """Return the unit-magnitude phase of ``image`` low-passed in plane.
+
+    Parameters
+    ----------
+    image : torch.Tensor
+        Complex ``(z, y, x)`` image, the transform centred.
+
+    Returns
+    -------
+    torch.Tensor
+        ``exp(i angle(g * image))``, complex64, ``g`` a Gaussian k-space
+        window of ``PHASE_SMOOTHING_LINES`` lines over ``y`` and ``x``.
+    """
+    import bartorch
+    import torch
+
+    image = image.to(torch.complex64)
+    ny, nx = image.shape[-2:]
+    y = torch.arange(ny, dtype=torch.float32, device=image.device) - ny // 2
+    x = torch.arange(nx, dtype=torch.float32, device=image.device) - nx // 2
+    window = torch.exp(
+        -(y[:, None] ** 2 + x[None, :] ** 2) / (2 * PHASE_SMOOTHING_LINES**2)
+    )
+    axes = (-1, -2)
+    kspace = bartorch.fft(image, axes, unitary=True).reshape(image.shape)
+    smooth = bartorch.fft(kspace * window, axes, inverse=True, unitary=True)
+    return torch.exp(1j * torch.angle(smooth.reshape(image.shape))).to(torch.complex64)
 
 
 def pocs(image, sampled, iterations):
