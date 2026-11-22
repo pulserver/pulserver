@@ -840,3 +840,10 @@ def test_a_channel_driven_at_phase_phi_turns_the_signal_by_minus_phi_as_a_pulse_
     assert np.angle(drive / still) == pytest.approx(
         np.angle(np.exp(-1j * phase)), abs=1e-4
     )
+
+
+def test_a_moment_to_the_edge_of_k_space_does_not_shift_the_states_on_either_side_of_rounding():
+    edge = _fourier.SHIFT_CYCLES
+    rounded = np.array([edge * (1 - 1e-12), edge, edge * (1 + 1e-12)])
+    assert not _fourier._dephases(rounded).any()
+    assert _fourier._dephases(np.array([1.5 * edge])).all()
