@@ -74,6 +74,11 @@ for f, b in enumerate(by):
         pos[f, s_] = (r["e2"], r["e1"]); y[:, f, s_] = comp(r["data"]); order[f, s_] = next(i for i, q in enumerate(rows) if q is r)
 basis = basis_full[:, :rank].T.contiguous().to(torch.complex64)  # (coeffs, frames)
 
+DROP = int(os.environ.get("DROP", 0))
+if DROP:
+    # Lines read in the first DROP echoes of each train are left out of the solve.
+    pos[:DROP] = -1; y[:, :DROP] = 0
+    print(f"left out the lines of echoes 1-{DROP}")
 kwargs = dict(positions=torch.from_numpy(pos), basis=basis, centred=True)
 if waved:
     flat_at = {(r["e1"], r["e2"]): r for r in flat}
@@ -184,5 +189,6 @@ import resource
 print(f"peak RAM {resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024:.0f} MiB" + (f", peak VRAM {torch.cuda.max_memory_allocated() / 2**20:.0f} MiB" if DEVICE and DEVICE.startswith("cuda") else ""))
 res_ = (A(alpha) - data); residual = float(res_.norm() / data.norm()); print("residual", residual)
 np.savez(f"{case}/resid.npz", r=res_.norm(dim=(0, 3)).numpy(), d=data.norm(dim=(0, 3)).numpy(), order=order)
-echoes = torch.einsum("kf,kzyx->fzyx", basis, alpha)
-np.savez(f"{case}/recon_{sys.argv[7] if len(sys.argv) > 7 else 'out'}.npz", alpha=alpha.numpy(), echoes=echoes.numpy())
+KEEP = [int(v) for v in os.environ.get("KEEP", ",".join(map(str, range(frames)))).split(",")]
+echoes = torch.einsum("kf,kzyx->fzyx", basis[:, KEEP], alpha)
+np.savez(f"{case}/recon_{sys.argv[7] if len(sys.argv) > 7 else 'out'}.npz", alpha=alpha.numpy(), echoes=echoes.numpy(), frames=np.array(KEEP))
