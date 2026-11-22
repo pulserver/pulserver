@@ -445,8 +445,8 @@ function takes, at the same user entry in every plugin, each as a
 
 `bssfp3d` takes its number of phase cycles, each a train with its own RF phase
 increment, as `user12`. Its reconstruction, `phase_cycles`, combines the cycles
-by their root sum of squares into one image whose off-resonance bands are
-filled in; two cycles are CISS.
+into one image whose off-resonance bands are filled in: two cycles by their
+larger magnitude, which is CISS, and more by their root sum of squares.
 
 `bssfp2d` takes its frames from the console's number of frames. Ungated, each
 slice's k-space is acquired that many times back to back, a free-running series

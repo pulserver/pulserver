@@ -79,8 +79,10 @@ class PhaseCycleRecon(PicsRecon):
 
     Parameters
     ----------
-    combination : {'rss', 'maximum', 'complex'}, default='rss'
-        How the phase cycles are combined.
+    combination : {'rss', 'maximum', 'complex'} or None, default=None
+        How the phase cycles are combined; ``None`` takes the maximum of two
+        cycles, as CISS combines them, and the root sum of squares of more,
+        whose cycles together cover the off-resonance profile.
     **kwargs
         As :class:`~pulserver.recon.handlers.pics.PicsRecon`.
 
@@ -90,9 +92,9 @@ class PhaseCycleRecon(PicsRecon):
         If ``combination`` is unknown.
     """
 
-    def __init__(self, combination: str = "rss", **kwargs: Any) -> None:
+    def __init__(self, combination: str | None = None, **kwargs: Any) -> None:
         super().__init__(**kwargs)
-        if combination not in COMBINATIONS:
+        if combination is not None and combination not in COMBINATIONS:
             raise ValueError(
                 f"combination must be one of {COMBINATIONS}, got {combination!r}"
             )
@@ -116,13 +118,14 @@ class PhaseCycleRecon(PicsRecon):
         images = np.stack(
             [self.image(c, buffer.image_shape, context, data) for c in cycles]
         )
-        image = combined(images, self.combination)
+        combination = self.combination or ("maximum" if len(images) == 2 else "rss")
+        image = combined(images, combination)
         corrections = self.corrections
         history = [
             "PULSERVER",
             "PYTHON",
             "PICS",
-            f"PHASECYCLES_{self.combination.upper()}",
+            f"PHASECYCLES_{combination.upper()}",
         ]
         if corrections is not None:
             image = corrections.unwarped(image, context, data)

@@ -106,3 +106,13 @@ def test_the_maximum_of_the_cycles_flattens_the_bands_further_than_their_root_su
     maximum = _reconstructed(4, combination="maximum")
 
     assert _band_depth(maximum) < _band_depth(rss)
+
+
+def test_two_cycles_combine_by_their_maximum_as_ciss_and_more_by_root_sum_of_squares():
+    two_default = _reconstructed(2)
+    two_maximum = _reconstructed(2, combination="maximum")
+    four_default = _reconstructed(4)
+    four_rss = _reconstructed(4, combination="rss")
+
+    np.testing.assert_allclose(two_default, two_maximum, rtol=1e-5, atol=1e-7)
+    np.testing.assert_allclose(four_default, four_rss, rtol=1e-5, atol=1e-7)
