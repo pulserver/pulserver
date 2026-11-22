@@ -1,5 +1,6 @@
 """The shipped scanner sequences' evaluations: their scan time, the values they read back and the RF they state."""
 
+import copy
 import dataclasses
 import functools
 import importlib.util
@@ -2326,3 +2327,23 @@ def test_pd_target_option_offers_no_control_fitting():
         _plugins.SEQUENCES / "fse_pd3d.py", {"pd_target": True, "fit_controls": True}
     )
     assert plugin.app.keywords["pd_optimize"] is False
+
+
+@pytest.mark.parametrize("field", [1.5, 3.0])
+def test_an_inflow_mra_inverts_to_null_venous_blood_at_the_scanners_field(zoo, field):
+    from pulserver._zoo.sequences.inflow_mra3d import BLOOD_T1_S
+
+    plugin = zoo["inflow_mra3d"]
+    system = copy.copy(SYSTEM)
+    system.B0 = field
+    nulled = _chain(plugin.generate(system, _protocol(plugin)))[-1]
+    chosen = _chain(
+        plugin.generate(
+            system, _protocol(plugin, {"user15_value": 0, "prep_time": 900_000})
+        )
+    )[-1]
+
+    assert nulled.definitions["InversionTime"][0] == pytest.approx(
+        np.log(2.0) * BLOOD_T1_S[field]
+    )
+    assert chosen.definitions["InversionTime"][0] == pytest.approx(0.9)

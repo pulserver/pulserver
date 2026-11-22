@@ -462,7 +462,7 @@ refused. The RF the console checks is that of one trigger period.
 | Plugin | Trigger | Preparations | Segment (`user12`) |
 | --- | --- | --- | --- |
 | `coronary_mra3d` | ECG; the trigger delay places the segment in mid-diastole | T2 preparation (preparation time), fat saturation | Views per heartbeat |
-| `inflow_mra3d` | Respiratory | Slab-selective adiabatic inversion, the preparation time its inversion time, then fat saturation | Views per breath; `user13` and `user14` the inversion slab's thickness and offset along the readout, in mm |
+| `inflow_mra3d` | Respiratory | Slab-selective adiabatic inversion, then fat saturation; the inversion time nulls venous blood at the scanner's B0, `ln 2` times the T1 of blood (`BLOOD_T1_S`), unless `user15` is off and the preparation time sets it | Views per breath; `user13` and `user14` the inversion slab's thickness and offset along the readout, in mm; `user15` the venous null |
 
 The coronary scan's catalyst reads neighbouring lines of the central partition,
 an image navigator: the projection of the slab along the partition axis, from
