@@ -96,6 +96,10 @@ _MIXED_SAMPLE = 1 << 16
 #: projected onto it.
 _SKETCH = 4096
 
+#: Singular value, relative to the largest, below which a row of the union
+#: of two orthonormal bases adds no direction.
+_INDEPENDENT = 1e-3
+
 #: Deviation from the periodic state, relative to the equilibrium
 #: magnetization, below which one period of a stream stands for every later
 #: one: relaxation contracts the deviation by at least ``exp(-t / T1)``.
@@ -333,17 +337,25 @@ class FourierPlayer:
                 parts.append(signal if weigh is None else weigh(signal, some))
             return torch.cat(parts, dim=1)
 
+        carried = self._carried(local, atoms)
         sketched = max(1, _SKETCH // count)
         if atoms.numel() <= max(sketched, step):
-            left, right = _leading(simulated(atoms).reshape(-1, width), self._tolerance)
-            coefficients = left.reshape(count, atoms.numel(), -1)
+            signals = simulated(atoms)
+            right = self._spanning(signals, carried, width)
+            coefficients = signals @ right.mH
         else:
             generator = torch.Generator(device=self.device).manual_seed(0)
-            order = torch.randperm(
-                atoms.numel(), device=self.device, generator=generator
+            order = (
+                torch.multinomial(
+                    carried**2, sketched, replacement=False, generator=generator
+                )
+                if int(torch.count_nonzero(carried)) >= sketched
+                else torch.randperm(
+                    atoms.numel(), device=self.device, generator=generator
+                )[:sketched]
             )
-            sample = atoms[order[:sketched]]
-            _, right = _leading(simulated(sample).reshape(-1, width), self._tolerance)
+            sample = atoms[order]
+            right = self._spanning(simulated(sample), carried[order], width)
             coefficients = torch.empty(
                 (count, atoms.numel(), right.shape[0]),
                 dtype=torch.complex64,
@@ -388,6 +400,34 @@ class FourierPlayer:
             return signal[..., source] * decay.to(signal.dtype)
 
         return weigh, column.reshape(-1)
+
+    def _carried(self, local: torch.Tensor, atoms: torch.Tensor) -> torch.Tensor:
+        """Return the root of the summed squared magnetization each of ``atoms`` carries over the entries at ``local``.
+
+        A basis spanning the atoms' signals weighted by it spans the images
+        to the tolerance, however few entries a tissue class holds and
+        however many classes share the rest.
+        """
+        density = self._entries.density[local].abs()[:, None]
+        share = (self._atoms.weight[local] * density).reshape(-1) ** 2
+        position = torch.searchsorted(atoms, self._atoms.index[local].reshape(-1))
+        carried = torch.zeros(atoms.numel(), dtype=share.dtype, device=self.device)
+        carried.index_add_(0, position, share)
+        return carried.sqrt().to(torch.float32)
+
+    def _spanning(
+        self, signals: torch.Tensor, carried: torch.Tensor, width: int
+    ) -> torch.Tensor:
+        """Return orthonormal rows spanning the atoms' signals to the tolerance, both as each atom alone and as weighted by the magnetization it carries, ``(terms, width)``."""
+        _, alone = _leading(signals.reshape(-1, width), self._tolerance)
+        _, weighted = _leading(
+            (signals * carried[None, :, None]).reshape(-1, width), self._tolerance
+        )
+        _, sigma, rows = torch.linalg.svd(
+            torch.cat([alone, weighted]), full_matrices=False
+        )
+        kept = int(torch.count_nonzero(sigma > _INDEPENDENT * sigma[0]))
+        return rows[: max(1, min(kept, MAX_TERMS))]
 
     def _image(self, basis: _Basis, tissue: Tissue, rotation: np.ndarray) -> _Grid:
         """Return the images a station's readouts encode.
@@ -898,6 +938,11 @@ def _shifted(
     return np.where(winding, np.clip(shifts - before, 0, None), shifts)
 
 
+def _energy(values: torch.Tensor) -> torch.Tensor:
+    """Return the summed squared magnitude of a tensor, accumulated in double precision."""
+    return values.abs().square().sum(dtype=torch.float64)
+
+
 def _leading(
     values: torch.Tensor, tolerance: float
 ) -> tuple[torch.Tensor, torch.Tensor]:
@@ -922,7 +967,7 @@ def _leading(
             found = torch.linalg.qr(values @ (values.mH @ found)).Q
         small, s, vh = torch.linalg.svd(found.mH @ values, full_matrices=False)
         u = found @ small
-    total = torch.linalg.vector_norm(values).double() ** 2
+    total = _energy(values)
     residual = 1.0 - torch.cumsum(s.double() ** 2, 0) / total.clamp_min(1e-300)
     rank = int(torch.count_nonzero(residual > tolerance**2)) + 1
     rank = max(1, min(rank, MAX_TERMS, s.numel()))
@@ -958,7 +1003,7 @@ def _span(
         guess = torch.zeros((rows, sketch), dtype=torch.complex64, device=device)
         total = 0.0
         for block in blocks():
-            total += float(torch.linalg.vector_norm(block)) ** 2
+            total += float(_energy(block))
             if sketch < rows:
                 guess += block @ torch.randn(
                     (block.shape[1], sketch),

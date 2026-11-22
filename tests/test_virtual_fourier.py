@@ -573,6 +573,40 @@ def test_a_3d_image_sampled_only_on_its_kz_zero_plane_transforms_as_in_3d(device
     )
 
 
+def test_a_direction_holding_a_fraction_of_a_percent_of_many_equal_rows_is_kept(device):
+    generator = torch.Generator().manual_seed(0)
+    common, rare = torch.linalg.qr(
+        torch.randn(1344, 2, dtype=torch.complex64, generator=generator)
+    ).Q.T
+    rows = 16384
+    values = torch.cat([common.expand(rows, -1), rare[None] * (0.003 * rows) ** 0.5])
+
+    _, kept = _fourier._leading(values.to(device), 1e-2)
+
+    assert kept.shape[0] == 2
+
+
+def test_the_temporal_basis_spans_a_class_holding_most_magnetization_among_many_small_ones(
+    device,
+):
+    generator = torch.Generator().manual_seed(0)
+    shared, own = torch.linalg.qr(
+        torch.randn(64, 2, dtype=torch.complex64, generator=generator)
+    ).Q.T
+    many = 20000
+    signals = torch.cat([shared.expand(many, -1), (shared + 0.3 * own)[None]])
+    carried = torch.cat([torch.ones(many), torch.tensor([float(many)])])
+    player = SimpleNamespace(_tolerance=1e-2)
+
+    rows = _fourier.FourierPlayer._spanning(
+        player, signals[None].to(device), carried.to(device), 64
+    )
+
+    bulk = signals[-1:].to(device)
+    left = bulk - (bulk @ rows.mH) @ rows
+    assert float(left.norm() / bulk.norm()) <= 1e-2
+
+
 def test_a_rare_group_of_flip_angles_joins_the_nearest_one_the_same_pulses_turn(
     device,
 ):
