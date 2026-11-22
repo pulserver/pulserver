@@ -65,6 +65,7 @@ def reconstruct_file(
     *,
     group: str = "dataset",
     exam_id: Any = None,
+    exam_directory: Any = None,
     config: Any = None,
     store: Any = None,
     design: Any = None,
@@ -102,7 +103,7 @@ def reconstruct_file(
                 fov_offset_m = header_fov_offset_m(header)
         context = ReconContext(
             header=header,
-            exam=ExamCache(path if exam_id is None else exam_id),
+            exam=ExamCache(path if exam_id is None else exam_id, exam_directory),
             config=config,
         )
         connection = _FileConnection(dataset, played, fov_offset_m)
