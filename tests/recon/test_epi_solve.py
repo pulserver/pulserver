@@ -456,3 +456,37 @@ def test_the_wavelet_solve_starts_from_the_conjugate_gradient_image(device):
 
     error = np.linalg.norm(np.abs(solved.cpu().numpy()) - np.abs(start.numpy()))
     assert error / np.linalg.norm(np.abs(start.numpy())) < 0.05
+
+
+def test_full_resolution_maps_of_a_threefold_undersampled_slice_follow_steep_coil_sensitivities(
+    device,
+):
+    from pulserver.recon.handlers.epi import full_resolution_maps
+
+    shape = (1, 48, 48)
+    _, y, x = np.meshgrid(*(np.arange(n) - n // 2 for n in shape), indexing="ij")
+    image = ((y / 21.0) ** 2 + (x / 17.0) ** 2 < 1).astype(np.complex64)
+    image += 0.5 * ((y / 8.0) ** 2 + ((x - 6) / 3.0) ** 2 < 1)
+    angles = np.arange(8) * np.pi / 4
+    true = np.stack(
+        [
+            1.0
+            / ((y - 24 * np.cos(a)) ** 2 + (x - 20 * np.sin(a)) ** 2 + 9.0) ** 0.75
+            * np.exp(1j * a)
+            for a in angles
+        ]
+    ).astype(np.complex64)[:, 0]
+    true /= np.sqrt((np.abs(true) ** 2).sum(axis=0, keepdims=True))
+    kspace = _kspace(image[0], true)
+    sampled = torch.zeros((48, 48), dtype=torch.bool)
+    sampled[1::3] = True
+    calibration = torch.zeros_like(kspace)
+    calibration[:, 12:36] = kspace[:, 12:36]
+    smooth = torch.from_numpy(_maps((1, 48, 48), coils=8)[:, 0])
+
+    maps = full_resolution_maps(kspace * sampled, calibration, smooth, device).numpy()
+
+    inside = np.abs(image[0]) > 0
+    phase = np.exp(1j * np.angle((np.conj(maps) * true).sum(axis=0)))
+    error = np.sqrt((np.abs(maps * phase - true) ** 2).sum(axis=0))
+    assert np.median(error[inside]) < 0.05
