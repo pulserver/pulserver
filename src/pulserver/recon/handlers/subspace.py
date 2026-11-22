@@ -298,10 +298,15 @@ class SubspaceRecon(PicsRecon):
         )
         solve = optim.FISTA(prior, maxiter=self.iterations, eigen=True)
         coefficients = scaling * solve(measured * (1.0 / scaling), encoding)
-        echoes = torch.einsum(
-            "kf,kzyx->fzyx", basis.to(coefficients.dtype), coefficients
-        )
-        return np.stack([self._filtered(e) for e in echoes.numpy()])
+        basis = basis.to(coefficients.dtype)
+        echoes = None
+        for frame in range(frames):
+            echo = torch.einsum("k,kzyx->zyx", basis[:, frame], coefficients)
+            filtered = self._filtered(echo.cpu().numpy())
+            if echoes is None:
+                echoes = np.empty((frames, *filtered.shape), np.complex64)
+            echoes[frame] = filtered
+        return echoes
 
     def _maps(self, context: ReconContext, data: ReconData, buffer: ReconBuffer) -> Any:
         """Return the coil maps of a Cartesian unit, fitted to its own k-space centre where the stream stored none."""
