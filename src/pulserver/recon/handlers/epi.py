@@ -14,6 +14,7 @@ from ...mrd._header import EncodingSpace
 from ...mrd._metadata import acquisition_label, has_acquisition_flag
 from .._buffers import ReconData, discards, echo_centre
 from .._calibration import (
+    CoilCompression,
     MissingCalibration,
     _zero_filled,
     coil_maps,
@@ -389,8 +390,11 @@ class EpiRecon(PicsRecon):
     blip-free reference train ``ACQ_IS_PHASECORR_DATA`` the sequence plays in
     a dummy shot, else from the navigator) on arrival, so the k-space is
     Cartesian, forward-ordered and at the reconstruction matrix when its slice
-    closes. Each unit's channels are compressed to ``virtual_coils``
-    (:class:`~pulserver.recon.CompressChannels`).
+    closes. Each unit's channels are compressed to ``virtual_coils`` by one
+    basis for the stack, pooled from the calibration of every slice
+    (:meth:`~pulserver.recon.CoilCompression.pool`), so the bands of a
+    multiband unit and the slices its kernels are trained on share their
+    virtual channels.
 
     Coil sensitivities come from the calibration the scan opens with, once
     for the whole stack: the calibration units of every slice, held until the
@@ -426,11 +430,15 @@ class EpiRecon(PicsRecon):
 
     When PyHySCO is installed (bartorch's ``pyhysco`` extra, GPL-3.0), one
     susceptibility displacement field is estimated for the whole stack
-    (:func:`bartorch.tools.correct_susceptibility`, :func:`stack_field`) from
-    the root-sum-of-squares images of the FLEET calibration's two
-    phase-encode polarities. They share the imaging's echo spacing, and so
-    its distortion, at the calibration's short echo time, where the
-    signal near air-tissue interfaces has not yet dephased. Without them,
+    (:func:`bartorch.tools.correct_susceptibility`, :func:`stack_field`).
+    A spin-echo field pair (``SET`` 2 forward, 3 reversed), reconstructed and
+    kept but sent as no image of the series, gives it in preference to any
+    other: its two volumes are displaced in opposite directions by the field
+    and, refocused, differ in nothing else. Without one, the root-sum-of-squares
+    images of the FLEET calibration's two phase-encode polarities give it.
+    They share the imaging's echo spacing, and so its distortion, at the
+    calibration's short echo time, where the signal near air-tissue
+    interfaces has not yet dephased. Without either,
     the phase-encode-reversed reference volume (``SET`` 1), reconstructed and
     kept, Fermi filtered as the images are, but sent as no image of the
     series, is the reference: the first image of every slice of the stack is
@@ -508,6 +516,7 @@ class EpiRecon(PicsRecon):
         self.references = {}
         self.field = None
         self.calibration_field = False
+        self.field_pair = {}
         self.held = []
         self._skips_logged = set()
         self.diffusion = DiffusionMaps.from_header(context.header)
@@ -518,13 +527,15 @@ class EpiRecon(PicsRecon):
         )
 
     def unit_image(self, context, data):
-        data = compressed(context, data, self.virtual_coils)
-        buffer = data.data
-        if buffer is None:
+        if data.data is None:
             if data.ref is not None:
                 polarity = int(data.counters.get("set", 0))
                 self.calibrations.setdefault(polarity, []).append(data)
             return None
+        if self.calibrations:
+            self._pool(context)
+        data = compressed(context, data, self.virtual_coils, by_slice=False)
+        buffer = data.data
         if self.calibrations:
             self._calibrate(context)
         image = self.image(averaged(buffer), buffer.image_shape, context, data)
@@ -556,11 +567,23 @@ class EpiRecon(PicsRecon):
             image = image[0]
         return self._filtered(np.array(center_crop(image, shape[-image.ndim :])))
 
+    def _pool(self, context):
+        """Estimate the stream's channel compression from the held calibration of every slice and polarity together."""
+        units = [unit for held in self.calibrations.values() for unit in held]
+        if (
+            self.virtual_coils is None
+            or None in context.coil_compressions
+            or units[0].ref.coils <= self.virtual_coils
+        ):
+            return
+        CoilCompression(self.virtual_coils, by_slice=False).pool(context, units)
+
     def _calibrate(self, context):
         """Estimate the maps of each held calibration slice on its own, keep its k-space for split-slice GRAPPA, and fit the stack's field to its polarities."""
         polarities = {}
         for polarity, units in self.calibrations.items():
             for unit in units:
+                unit = compressed(context, unit, self.virtual_coils, by_slice=False)
                 coil_maps(context, unit, estimate=epi_nlinv_estimate)
                 kspace = _zero_filled(unit.ref)
                 polarities.setdefault(int(unit.counters.get("slice", 0)), {})[
@@ -669,7 +692,17 @@ class EpiRecon(PicsRecon):
             return None
         buffer, data, image = unit
         location = int(data.counters.get("slice", 0))
-        if int(data.counters.get("set", 0)) == 1:
+        polarity = int(data.counters.get("set", 0))
+        if polarity in FIELD_PAIR_SETS:
+            self.field_pair.setdefault(location, {})[polarity] = (
+                np.abs(image),
+                buffer.space,
+                buffer.reference,
+            )
+            return None
+        if self.field_pair:
+            self._field_from_pair()
+        if polarity == 1:
             # The reference only corrects the images (_corrected); it is not
             # an image of the series.
             self.references[location] = (np.abs(image), buffer.reference)
@@ -700,6 +733,22 @@ class EpiRecon(PicsRecon):
                 context, unit_data, self._corrected(unit_image, location)
             )
         return results
+
+    def _field_from_pair(self) -> None:
+        """Estimate the stack's field from its spin-echo field pair; it takes the place of any other."""
+        forward_set, reversed_set = FIELD_PAIR_SETS
+        pairs = []
+        for location, by_set in sorted(self.field_pair.items()):
+            if {forward_set, reversed_set} <= set(by_set):
+                image, space, acquisition = by_set[forward_set]
+                pairs.append(
+                    (location, space, acquisition, image, by_set[reversed_set][0])
+                )
+        self.field_pair = {}
+        if not pairs or self.hysco is not None:
+            return
+        self._estimate_field(pairs, "its spin-echo field pair")
+        self.calibration_field = self.field is not None
 
     def finish(self, context):
         if self.held:
@@ -1183,6 +1232,9 @@ def pocs(image, sampled, iterations):
     )(measured, x0=image.to(torch.complex64))
 
 
+#: ``SET`` of the forward and of the reversed volume of a spin-echo field pair.
+FIELD_PAIR_SETS = (2, 3)
+
 #: The package PyHySCO installs, which the susceptibility correction imports.
 PYHYSCO_PACKAGE = "EPI_MRI"
 
@@ -1196,11 +1248,10 @@ def susceptibility_field(image, reverse, voxel_size):
     encode, readout)``, with ``voxel_size`` in mm along the same axes. The
     field is PyHySCO's (:func:`bartorch.tools.correct_susceptibility`), in mm
     on the cell edges of the phase encode, in the axes of ``image``: one row
-    (a volume: one phase-encode line) longer. PyHySCO corrects volumes: a
-    volume is corrected as one, its phase encode first, at the smoothness
-    weight ``SLAB_FIELD_SMOOTHNESS``, and a slice as three identical slices,
-    which its smoothness penalty leaves uncoupled, the middle one's field
-    kept, at PyHySCO's own weight.
+    (a volume: one phase-encode line) longer. A volume is corrected as one,
+    its phase encode first, at the smoothness weight
+    ``SLAB_FIELD_SMOOTHNESS``, and a slice in its plane, at PyHySCO's own
+    weight.
 
     Raises
     ------
@@ -1215,9 +1266,7 @@ def susceptibility_field(image, reverse, voxel_size):
     scale = np.sum(image) / max(np.sum(reverse), 1e-30)
     smoothness = {}
     if image.ndim == 2:
-        up = np.repeat(image[:, :, None], 3, axis=2)
-        down = np.repeat(reverse[:, :, None], 3, axis=2)
-        voxel = (*voxel_size, 1.0)
+        up, down, voxel = image, reverse, tuple(voxel_size)
     else:
         smoothness = {"alpha": SLAB_FIELD_SMOOTHNESS}
         # (partition, phase, readout) to (phase, readout, partition), the
@@ -1236,7 +1285,7 @@ def susceptibility_field(image, reverse, voxel_size):
     )
     field = corrected.field_map.detach().cpu().numpy()
     if image.ndim == 2:
-        return field[:, :, 1]
+        return field
     inner = slice(FIELD_EDGE_PARTITIONS, field.shape[2] - FIELD_EDGE_PARTITIONS)
     return field[:, :, inner].transpose(2, 0, 1)
 
@@ -1244,11 +1293,11 @@ def susceptibility_field(image, reverse, voxel_size):
 #: Partitions repeated beyond each end of a volume whose field is estimated.
 FIELD_EDGE_PARTITIONS = 2
 
-#: PyHySCO smoothness weight of a volume's field. At PyHySCO's own weight a
-#: slab whose blip-up and blip-down images differ only by their T2* blur is
-#: fitted a field that steps by over half a voxel between neighbouring lines,
-#: and the Jacobian of that step darkens a line of the corrected image.
-SLAB_FIELD_SMOOTHNESS = 3000.0
+#: PyHySCO smoothness weight of a volume's field, on the intensity scale of
+#: :func:`bartorch.tools.correct_susceptibility`. A 7T spin-echo pair of a
+#: 2 mm stack is corrected best near this weight; ten times stiffer, the field
+#: recovers under half of the displacement near the sinuses.
+SLAB_FIELD_SMOOTHNESS = 300.0
 
 
 def undistorted(image, field, voxel_size):

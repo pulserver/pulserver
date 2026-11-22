@@ -193,11 +193,12 @@ def test_forward_and_reversed_lines_leave_the_gadgets_in_one_direction_with_one_
 
 
 class _Correction:
-    """Stands in for bartorch's susceptibility estimate: records what it is given and returns a field displacing the k-th slice of its last axis by k voxels."""
+    """Stands in for bartorch's susceptibility estimate: records what it is given and returns a field displacing a slice by one voxel, and the k-th slice of a volume's last axis by k voxels."""
 
     def __init__(self):
         self.calls = []
         self.smoothness = []
+        self.blip_up = []
 
     def __call__(
         self, blip_up, blip_down, *, voxel_size, phase_encoding_axis, alpha=None
@@ -206,8 +207,14 @@ class _Correction:
 
         self.calls.append((tuple(blip_up.shape), voxel_size, phase_encoding_axis))
         self.smoothness.append(alpha)
+        self.blip_up.append(blip_up.numpy().copy())
         shape = list(blip_up.shape)
         shape[phase_encoding_axis] += 1
+        if len(shape) == 2:
+            field = torch.full(
+                shape, voxel_size[phase_encoding_axis], dtype=torch.float64
+            )
+            return SimpleNamespace(field_map=field)
         steps = torch.arange(shape[-1], dtype=torch.float64)
         field = (voxel_size[phase_encoding_axis] * steps).expand(shape).clone()
         return SimpleNamespace(field_map=field)
@@ -222,7 +229,7 @@ def correction(monkeypatch):
     return stand_in
 
 
-def test_a_slice_is_estimated_as_three_identical_slices_its_phase_encode_first(
+def test_a_slice_is_estimated_in_its_plane_its_phase_encode_first(
     correction,
 ):
     from pulserver.recon.handlers.epi import susceptibility_field, undistorted
@@ -232,8 +239,8 @@ def test_a_slice_is_estimated_as_three_identical_slices_its_phase_encode_first(
     field = susceptibility_field(image, image, (2.0, 3.0))
     corrected = undistorted(image, field, (2.0, 3.0))
 
-    assert correction.calls == [((6, 8, 3), (2.0, 3.0, 1.0), 0)]
-    # The middle slice's field: one voxel, so the image is sampled at x + 1.
+    assert correction.calls == [((6, 8), (2.0, 3.0), 0)]
+    # A field of one voxel: the image is sampled at x + 1.
     assert field.shape == (7, 8)
     np.testing.assert_allclose(corrected, np.roll(image, -1, axis=0))
 
@@ -376,12 +383,12 @@ def _unit(location, set_index):
     )
 
 
-def _images(count):
+def _images(count, polarities=(0, 1)):
     rng = np.random.default_rng(2)
     return {
         (location, polarity): rng.random((6, 8))
         for location in range(count)
-        for polarity in (0, 1)
+        for polarity in polarities
     }
 
 
@@ -634,9 +641,15 @@ def _calibration_unit(location, polarity, kspace):
         position=(0.0, 0.0, 5.0 * location), slice_dir=(0.0, 0.0, 1.0)
     )
     ref = SimpleNamespace(
-        space=space, reference=reference, image_shape=(6, 8), kspace=kspace
+        space=space,
+        reference=reference,
+        image_shape=(6, 8),
+        kspace=kspace,
+        coils=kspace.shape[0],
     )
-    return SimpleNamespace(counters={"slice": location, "set": polarity}, ref=ref)
+    return SimpleNamespace(
+        counters={"slice": location, "set": polarity}, ref=ref, data=None
+    )
 
 
 def test_a_fleet_calibration_of_both_polarities_gives_the_stack_field_that_a_later_reference_keeps(
@@ -667,3 +680,50 @@ def test_a_fleet_calibration_of_both_polarities_gives_the_stack_field_that_a_lat
     for result in (first, later):
         np.testing.assert_allclose(result.data, np.roll(images[(0, 0)], -1, axis=0))
         assert "HYSCO" in result.attributes["ImageProcessingHistory"]
+
+
+def test_a_spin_echo_field_pair_is_sent_as_no_image_and_its_field_corrects_every_image(
+    monkeypatch, correction
+):
+    images = _images(1, polarities=(0, 1, 2, 3))
+    plugin, context = _stack_recon(monkeypatch, images)
+
+    assert plugin.recon(context, "", _unit(0, 2)) is None
+    assert plugin.recon(context, "", _unit(0, 3)) is None
+    (first,) = plugin.recon(context, "", _unit(0, 0))
+    plugin.recon(context, "", _unit(0, 1))
+    (later,) = plugin.recon(context, "", _unit(0, 0))
+
+    assert len(correction.calls) == 1
+    np.testing.assert_allclose(correction.blip_up[0], images[(0, 2)])
+    for result in (first, later):
+        np.testing.assert_allclose(result.data, np.roll(images[(0, 0)], -1, axis=0))
+        assert "HYSCO" in result.attributes["ImageProcessingHistory"]
+
+
+def test_a_spin_echo_field_pair_takes_the_place_of_the_fleet_calibration_field(
+    monkeypatch, correction
+):
+    from pulserver.recon.handlers import epi
+
+    monkeypatch.setattr(epi, "coil_maps", lambda *args, **kwargs: None)
+    monkeypatch.setattr(epi, "_zero_filled", lambda ref: ref.kspace)
+    images = _images(1, polarities=(0, 2, 3))
+    plugin, context = _stack_recon(monkeypatch, images)
+    rng = np.random.default_rng(3)
+    plugin.calibrations = {
+        polarity: [
+            _calibration_unit(
+                0, polarity, rng.random((2, 1, 6, 8)).astype(np.complex64)
+            )
+        ]
+        for polarity in (0, 1)
+    }
+
+    plugin._calibrate(context)
+    plugin.recon(context, "", _unit(0, 2))
+    plugin.recon(context, "", _unit(0, 3))
+    plugin.recon(context, "", _unit(0, 0))
+
+    assert len(correction.calls) == 2
+    np.testing.assert_allclose(correction.blip_up[-1], images[(0, 2)])
