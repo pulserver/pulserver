@@ -5,7 +5,10 @@ import numpy as np
 import pytest
 from conftest import play
 
+from pulserver.recon.handlers import cine
 from pulserver.recon.handlers.cine import (
+    REALTIME_TEMPORAL,
+    TEMPORAL,
     CineRecon,
     binned,
     cardiac_phases,
@@ -131,6 +134,21 @@ def _stream(played, waves, parameters, frames):
     return acquisitions, header
 
 
+def _golden_stream(cycles):
+    waves = _cine.r_waves(20.0, rr=0.8, variability=0.0)
+    order = np.argsort(np.argsort((np.arange(MATRIX) / 1.618034) % 1.0))
+    lines = np.tile(order, cycles)
+    count = lines.size
+    played = _cine.Timeline(
+        np.arange(count) * TR + 0.05,
+        lines,
+        np.repeat(np.arange(cycles), MATRIX),
+        np.zeros(count, int),
+        np.zeros(count, int),
+    )
+    return _stream(played, waves, {"Gating": "none", "Ordering": "golden"}, cycles)
+
+
 def _images(plugin):
     return np.stack([np.asarray(r.data) for rs in plugin.results if rs for r in rs])
 
@@ -160,6 +178,32 @@ def test_a_retrospective_cine_follows_the_heart_through_systole(device):
     assert _cavity(images[4]) < 0.8 * _cavity(images[0])
 
 
+#: How far a retrospective cine through a premature beat and its compensatory
+#: pause may lie from one of a regular heart, relative to its norm. Without the
+#: rejected beats filling the lines no regular beat reaches, it lies about
+#: 0.2 away; with them, a few per cent.
+ECTOPY = 0.06
+
+
+def test_a_premature_beat_leaves_no_line_of_a_retrospective_cine_empty(device):
+    images = []
+    for ectopic in (None, 3):
+        waves = _cine.r_waves(20.0, rr=0.8, variability=0.0, ectopic=ectopic)
+        played = _segmented(views=8, cycles=round(0.8 / (8 * TR)), n_segments=6)
+        acquisitions, header = _stream(
+            played,
+            waves,
+            {"Gating": "retrospective", "CardiacPhases": 12},
+            int(played.phases.max()) + 1,
+        )
+        plugin = Frames()
+        play(plugin, header, acquisitions, device=device)
+        images.append(_images(plugin))
+    regular, arrhythmic = images
+
+    assert np.linalg.norm(arrhythmic - regular) < ECTOPY * np.linalg.norm(regular)
+
+
 def test_a_prospective_cine_makes_one_image_per_cardiac_phase(device):
     waves = _cine.r_waves(20.0, rr=0.8, variability=0.0)
     lines = np.tile(np.arange(MATRIX), 3)
@@ -183,25 +227,12 @@ def test_a_prospective_cine_makes_one_image_per_cardiac_phase(device):
 def test_a_golden_free_running_series_makes_real_time_frames_of_consecutive_readouts(
     device,
 ):
-    waves = _cine.r_waves(20.0, rr=0.8, variability=0.0)
-    order = np.argsort(np.argsort((np.arange(MATRIX) / 1.618034) % 1.0))
-    lines = np.tile(order, 4)
-    count = lines.size
-    played = _cine.Timeline(
-        np.arange(count) * TR + 0.05,
-        lines,
-        np.repeat(np.arange(4), MATRIX),
-        np.zeros(count, int),
-        np.zeros(count, int),
-    )
-    acquisitions, header = _stream(
-        played, waves, {"Gating": "none", "Ordering": "golden"}, 4
-    )
+    acquisitions, header = _golden_stream(4)
     plugin = Frames(realtime_acceleration=4)
 
     play(plugin, header, acquisitions, device=device)
 
-    assert _images(plugin).shape == (count // (MATRIX // 4), MATRIX, MATRIX)
+    assert _images(plugin).shape == (4 * MATRIX // (MATRIX // 4), MATRIX, MATRIX)
 
 
 def test_a_golden_series_binned_by_the_ecg_makes_the_cardiac_phases_asked_for(device):
@@ -229,6 +260,30 @@ def test_a_golden_series_binned_by_the_ecg_makes_the_cardiac_phases_asked_for(de
 
     assert images.shape == (10, MATRIX, MATRIX)
     assert _cavity(images[3]) < 0.8 * _cavity(images[0])
+
+
+@pytest.mark.parametrize(
+    ("temporal", "expected"),
+    [(None, REALTIME_TEMPORAL), (0.05, 0.05)],
+    ids=["default", "given"],
+)
+def test_real_time_frames_take_the_real_time_temporal_prior_unless_one_is_given(
+    monkeypatch, temporal, expected
+):
+    weights = []
+    solve = cine.cine_image
+
+    def spy(kspace, maps, spatial, temporal, iterations, device):
+        weights.append(temporal)
+        return solve(kspace, maps, spatial, temporal, 2, device)
+
+    monkeypatch.setattr(cine, "cine_image", spy)
+    acquisitions, header = _golden_stream(2)
+
+    play(Frames(temporal=temporal, realtime_acceleration=4), header, acquisitions)
+
+    assert weights == [expected]
+    assert TEMPORAL < REALTIME_TEMPORAL
 
 
 def test_binning_by_an_unknown_channel_is_refused():

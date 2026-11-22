@@ -477,10 +477,13 @@ and repetitions that do not acquire fill the trigger delay and each nominal
 heartbeat after its cardiac phases. The train waits for its trigger itself, so
 the scanner sets the whole slice up before the trigger arrives rather than in
 the time between the trigger and the train. Retrospective and golden binned
-cines need the physiological record (`opuser1`): the reconstruction rejects
-readouts of beats whose interval differs from the median by more than 20 %,
-and leaves a line empty in a cardiac phase no readout reaches; a prospective
-cine drops the readouts of such beats where the record is there.
+cines need the physiological record (`opuser1`): the reconstruction places
+each readout in its beat by the recorded triggers and rejects beats whose
+interval differs from the median by more than `ARRHYTHMIA_REJECTION` of it,
+filling from them only the cardiac phases of a line no regular beat reaches;
+a prospective cine drops the readouts of such beats where the record is
+there. No timing re-acquires a rejected beat, so an arrhythmia costs image
+quality rather than scan time.
 
 ### Console controls
 

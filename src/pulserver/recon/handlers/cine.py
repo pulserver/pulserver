@@ -41,6 +41,8 @@ ARRHYTHMIA_REJECTION = 0.2
 #: is this fraction of the lines of a fully sampled frame, in consecutive
 #: readouts.
 REALTIME_ACCELERATION = 8
+TEMPORAL = 0.01
+REALTIME_TEMPORAL = 0.1
 
 _log = logging.getLogger("pulserver.recon")
 
@@ -314,7 +316,8 @@ class CineRecon(PicsRecon):
         Every readout is placed in its beat by the physiological triggers it
         is stamped with (:func:`cardiac_phases`), beats off the median
         rejected, and each line of each of ``CardiacPhases`` phases
-        interpolated from its two nearest readouts (:func:`binned`).
+        interpolated from its two nearest readouts (:func:`binned`). A phase
+        of a line no regular beat reaches takes the rejected beats' readouts.
     ``Gating`` ``none`` with ``Ordering`` ``golden``
         Real-time frames of ``1 / realtime_acceleration`` of the lines in
         consecutive readouts (:func:`realtime`); with ``binning``, cardiac
@@ -336,8 +339,10 @@ class CineRecon(PicsRecon):
     ----------
     spatial : float, default=0.002
         Weight of the wavelet term, relative to the data scaling.
-    temporal : float, default=0.01
-        Weight of the temporal total variation, relative to the data scaling.
+    temporal : float or None, default=None
+        Weight of the temporal total variation, relative to the data scaling;
+        ``None`` takes ``REALTIME_TEMPORAL`` for real-time frames and
+        ``TEMPORAL`` for cardiac phases.
     iterations : int, default=60
         Conjugate-gradient iterations the ADMM solve spends in all.
     binning : str or None, default=None
@@ -358,7 +363,7 @@ class CineRecon(PicsRecon):
     def __init__(
         self,
         spatial: float = 0.002,
-        temporal: float = 0.01,
+        temporal: float | None = None,
         iterations: int = 60,
         binning: str | None = None,
         realtime_acceleration: int = REALTIME_ACCELERATION,
@@ -424,6 +429,7 @@ class CineRecon(PicsRecon):
         )
         n_lines = buffer.kspace.shape[buffer.axes.index("phase_encode")]
         trigger_times = None
+        temporal = TEMPORAL if self.temporal is None else self.temporal
         if gating == "retrospective" or (ordering == "golden" and self.binning):
             channel = self._channel(readouts.physiology)
             phases, rr = cardiac_phases(
@@ -439,13 +445,23 @@ class CineRecon(PicsRecon):
                 rr,
                 100.0 * kept,
             )
+            interpolate = gating == "retrospective"
             weights = binned(
-                phases,
-                readouts.lines,
-                n_lines,
-                n_phases,
-                interpolate=gating == "retrospective",
+                phases, readouts.lines, n_lines, n_phases, interpolate=interpolate
             )
+            # A cardiac phase of a line no regular beat reaches takes the
+            # rejected beats' readouts, each placed in its own beat: a line
+            # missing from every phase is beyond the temporal regulariser.
+            every, _ = cardiac_phases(
+                readouts.times, readouts.physiology[:, channel], np.inf
+            )
+            rejected = np.where(np.isnan(phases), every, np.nan)
+            empty = weights.sum(axis=2) == 0
+            if empty.any() and np.isfinite(rejected).any():
+                fallback = binned(
+                    rejected, readouts.lines, n_lines, n_phases, interpolate=interpolate
+                )
+                weights[empty] = fallback[empty]
             frame, line, readout = np.nonzero(weights)
             taken = (
                 weights[frame, line, readout][:, None, None] * readouts.kspace[readout]
@@ -458,6 +474,8 @@ class CineRecon(PicsRecon):
             trigger_times = (np.arange(n_phases) / n_phases) * rr
             labels = np.arange(n_phases)
         elif gating == "none" and ordering == "golden":
+            if self.temporal is None:
+                temporal = REALTIME_TEMPORAL
             window = max(1, n_lines // self.realtime_acceleration)
             frame = realtime(np.arange(readouts.lines.size), window)
             labels = np.arange(frame.max() + 1)
@@ -498,7 +516,7 @@ class CineRecon(PicsRecon):
             volume,
             maps,
             self.spatial,
-            self.temporal,
+            temporal,
             self.cine_iterations,
             context.device,
         ).numpy()
