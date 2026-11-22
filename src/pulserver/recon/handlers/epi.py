@@ -29,7 +29,6 @@ from ..gadgets import (
 from ..plugin import Gadget, ReconContext, ReconResult
 from .pics import (
     CG_MIN_L2,
-    VIRTUAL_COILS,
     PicsRecon,
     averaged,
     center_crop,
@@ -388,6 +387,13 @@ DELAY_STEP_S, DELAY_ITERATIONS = 1e-6, 3
 MAX_DELAY_S = 20e-6
 
 
+#: Virtual channels of an EPI reconstruction. A helmet array sees the scalp
+#: many times brighter than the brain, and the strongest channels of a
+#: calibration so lit leave less of the brain's sensitivity than an
+#: acceleration along the phase encode needs to unfold it.
+EPI_VIRTUAL_COILS = 8
+
+
 class EpiRecon(PicsRecon):
     """Images of EPI readouts: coil sensitivities of the whole stack from its calibration, a linear SENSE solve, one distortion field for every image.
 
@@ -482,7 +488,7 @@ class EpiRecon(PicsRecon):
     l2 : float, default=0.0
         Tikhonov weight ``lambda`` of the conjugate-gradient solve, on data
         scaled as ``pics`` scales them.
-    virtual_coils : int | None, default=VIRTUAL_COILS
+    virtual_coils : int | None, default=EPI_VIRTUAL_COILS
         As :class:`~pulserver.recon.handlers.pics.PicsRecon`.
     kspace_filter, gradient_unwarp, intensity_correction : bool, default=True
         As :class:`~pulserver.recon.handlers.pics.PicsRecon`.
@@ -494,7 +500,7 @@ class EpiRecon(PicsRecon):
         iterations: int = 30,
         *,
         l2: float = 0.0,
-        virtual_coils: int | None = VIRTUAL_COILS,
+        virtual_coils: int | None = EPI_VIRTUAL_COILS,
         kspace_filter: bool = True,
         gradient_unwarp: bool = True,
         intensity_correction: bool = True,
