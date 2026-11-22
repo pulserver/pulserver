@@ -490,3 +490,107 @@ def test_full_resolution_maps_of_a_threefold_undersampled_slice_follow_steep_coi
     phase = np.exp(1j * np.angle((np.conj(maps) * true).sum(axis=0)))
     error = np.sqrt((np.abs(maps * phase - true) ** 2).sum(axis=0))
     assert np.median(error[inside]) < 0.05
+
+
+def _steep_maps(shape=(48, 48), coils=8):
+    y, x = np.meshgrid(*(np.arange(n) - n // 2 for n in shape), indexing="ij")
+    angles = np.arange(coils) * 2 * np.pi / coils
+    maps = np.stack(
+        [
+            1.0
+            / ((y - 24 * np.cos(a)) ** 2 + (x - 20 * np.sin(a)) ** 2 + 9.0) ** 0.75
+            * np.exp(1j * a)
+            for a in angles
+        ]
+    ).astype(np.complex64)
+    return maps / np.sqrt((np.abs(maps) ** 2).sum(axis=0, keepdims=True))
+
+
+def _missing(maps, true):
+    """Fraction of each pixel's true sensitivity that ``maps`` do not hold, whatever their common phase."""
+    overlap = np.abs((np.conj(maps) * true).sum(axis=0))
+    return np.sqrt(np.clip(1.0 - overlap**2, 0.0, None))
+
+
+def test_maps_drawn_from_fully_encoded_kspace_are_its_sensitivities_where_there_is_signal():
+    from pulserver.recon.handlers.epi import fully_encoded_maps
+
+    y, x = np.meshgrid(*(np.arange(48) - 24,) * 2, indexing="ij")
+    image = ((y / 21.0) ** 2 + (x / 17.0) ** 2 < 1) * np.exp(0.3j * np.sin(x / 3.0))
+    true = _steep_maps()
+
+    maps = fully_encoded_maps(_kspace(image.astype(np.complex64), true)).numpy()
+
+    np.testing.assert_allclose((np.abs(maps) ** 2).sum(axis=0), 1.0, rtol=1e-5)
+    assert _missing(maps, true)[np.abs(image) > 0].max() < 1e-3
+
+
+def test_maps_drawn_from_fully_encoded_kspace_take_the_sensitivity_of_the_signal_nearby_where_there_is_none():
+    import bartorch
+
+    from pulserver.recon.handlers.epi import fully_encoded_maps
+
+    y, x = np.meshgrid(*(np.arange(48) - 24,) * 2, indexing="ij")
+    radius = np.sqrt((y / 15.0) ** 2 + (x / 12.0) ** 2)
+    image = (radius < 1).astype(np.complex64)
+    true = _maps((1, 48, 48), coils=8)[:, 0]
+    rng = np.random.default_rng(0)
+    noise = rng.standard_normal((8, 48, 48)) + 1j * rng.standard_normal((8, 48, 48))
+    kspace = _kspace(image, true) + 1e-3 * torch.from_numpy(noise.astype(np.complex64))
+
+    maps = fully_encoded_maps(kspace).numpy()
+
+    own = bartorch.fft(kspace, (-1, -2), inverse=True, unitary=True).reshape(8, 48, 48)
+    own = (own / own.abs().square().sum(dim=0).sqrt()).numpy()
+    beside = (radius > 1.05) & (radius < 1.3)
+    assert np.median(_missing(own, true)[beside]) > 0.8
+    assert np.median(_missing(maps, true)[beside]) < 0.4
+
+
+def test_kspace_missing_a_phase_encode_line_is_not_fully_encoded():
+    from pulserver.recon.handlers.epi import fully_encoded
+
+    kspace = _kspace(_phantom()[0], _maps()[:, 0])
+    partial = kspace.clone()
+    partial[:, 3] = 0
+
+    assert fully_encoded(kspace)
+    assert not fully_encoded(partial)
+
+
+def _reference_unit(unit_set):
+    reference = SimpleNamespace(position=(0.0, 0.0, 4.0), slice_dir=(0.0, 0.0, 1.0))
+    return SimpleNamespace(
+        data=SimpleNamespace(reference=reference),
+        counters={"slice": 0, "set": unit_set},
+    )
+
+
+def test_a_slice_takes_the_maps_drawn_from_its_fully_encoded_phase_reference_from_then_on(
+    monkeypatch,
+):
+    from pulserver.recon import ReconContext
+    from pulserver.recon.handlers import epi
+
+    y, x = np.meshgrid(*(np.arange(48) - 24,) * 2, indexing="ij")
+    image = ((y / 21.0) ** 2 + (x / 17.0) ** 2 < 1).astype(np.complex64)
+    steep = _steep_maps()
+    smooth = torch.from_numpy(_maps((1, 48, 48), coils=8))
+    monkeypatch.setattr(epi, "coil_maps", lambda context, data, estimate: smooth)
+    context = ReconContext.offline()
+    plugin = epi.EpiRecon(
+        gradient_unwarp=False, intensity_correction=False, kspace_filter=False
+    )
+    plugin.startup(context)
+    reference = _kspace(image, steep)[:, None]
+    imaging = torch.zeros_like(reference)
+    imaging[:, :, 1::3] = reference[:, :, 1::3]
+    inside = np.abs(image) > 0
+
+    before = plugin._maps(context, _reference_unit(0), imaging)
+    drawn = plugin._maps(context, _reference_unit(epi.FULL_K_REFERENCE_SET), reference)
+    after = plugin._maps(context, _reference_unit(0), imaging)
+
+    assert torch.equal(before, smooth)
+    assert _missing(drawn[:, 0].numpy(), steep)[inside].max() < 1e-3
+    assert after is drawn

@@ -8,6 +8,7 @@ __all__ = ["PLUGIN", "EpiPhaseCorrection", "EpiRecon", "RampSampling"]
 
 import importlib.util
 import logging
+import math
 import time
 
 import numpy as np
@@ -718,8 +719,9 @@ class EpiRecon(PicsRecon):
     def _maps(self, context, data, volume):
         """Return the unit's coil maps shaped as ``volume``: its slice's, its bands' slices', else fitted once to it and kept.
 
-        From a slice's full-k phase reference on, its maps are those
-        :func:`full_resolution_maps` draws from the reference.
+        From a slice's full-k phase reference on, its maps are drawn from the
+        reference: by :func:`fully_encoded_maps` where the reference holds
+        every line, else by :func:`full_resolution_maps`.
         """
         try:
             maps = coil_maps(context, data, estimate=epi_nlinv_estimate).reshape(
@@ -742,11 +744,18 @@ class EpiRecon(PicsRecon):
         location = int(data.counters.get("slice", 0))
         if location in self.full_resolution_maps:
             return self.full_resolution_maps[location]
+        if int(data.counters.get("set", 0)) != FULL_K_REFERENCE_SET:
+            return maps
+        if fully_encoded(volume[:, 0]):
+            drawn = fully_encoded_maps(volume[:, 0])[:, None].to(maps.dtype)
+            self.full_resolution_maps[location] = drawn
+            _log.info(
+                "coil maps of slice %d drawn from its fully encoded phase reference",
+                location,
+            )
+            return drawn
         calibration = self._slice_calibration(data)
-        if (
-            int(data.counters.get("set", 0)) != FULL_K_REFERENCE_SET
-            or calibration is None
-        ):
+        if calibration is None:
             return maps
         start = time.perf_counter()
         import torch
@@ -1132,6 +1141,76 @@ def full_resolution_maps(kspace, calibration, maps, device):
     blended = weight * drawn + (1 - weight) * maps * phase
     return (blended / blended.abs().square().sum(dim=0).sqrt().clamp_min(1e-12)).to(
         maps.dtype
+    )
+
+
+#: Root-sum-of-squares, as a fraction of its 99th percentile, at which the
+#: maps of :func:`fully_encoded_maps` weigh a pixel's own coil images and
+#: those of its neighbourhood equally.
+ENCODED_MAPS_FLOOR = 0.02
+
+#: Standard deviation, in pixels, of the Gaussian neighbourhood whose coil
+#: images give :func:`fully_encoded_maps` its maps where a pixel has no signal.
+ENCODED_MAPS_REACH = 8.0
+
+
+def fully_encoded(kspace):
+    """Return whether ``(coils, y, x)`` k-space holds every phase-encode line of its grid."""
+    return bool((kspace.abs().sum(dim=(0, 2)) > 0).all())
+
+
+def fully_encoded_maps(kspace):
+    """Return coil maps of a slice drawn from k-space that encodes it whole.
+
+    The coil images divided by their root-sum-of-squares are the maps where
+    there is signal. A reference read with the echo train and at the echo
+    time of the imaging holds, pixel by pixel, the sensitivity the imaging
+    signal of that pixel is received with, also where the field has piled
+    the signal of several places, each at its own phase, onto one pixel:
+    there no map smooth in space, and none fitted at another echo time,
+    unfolds the imaging. Where a pixel has little signal its maps are the
+    principal direction of the coil images' covariance over a Gaussian
+    neighbourhood (``ENCODED_MAPS_REACH``), the sensitivity of the signal
+    nearby, smooth into the air around the head.
+
+    Parameters
+    ----------
+    kspace : torch.Tensor
+        ``(coils, y, x)`` centred k-space of the slice, every phase-encode
+        line sampled.
+
+    Returns
+    -------
+    torch.Tensor
+        ``(coils, y, x)`` maps, complex64, of unit root-sum-of-squares.
+    """
+    import bartorch
+    import torch
+
+    shape = tuple(kspace.shape)
+    axes = (-1, -2)
+    images = bartorch.fft(
+        kspace.to(torch.complex64), axes, inverse=True, unitary=True
+    ).reshape(shape)
+    rss = images.abs().square().sum(dim=0).sqrt()
+    floor = ENCODED_MAPS_FLOOR * torch.quantile(rss.flatten(), 0.99)
+    weight = rss.square() / (rss.square() + floor.square()).clamp_min(1e-30)
+    drawn = images / rss.clamp_min(1e-12)
+    ny, nx = shape[-2:]
+    y = (torch.arange(ny, dtype=torch.float32) - ny // 2) / ny
+    x = (torch.arange(nx, dtype=torch.float32) - nx // 2) / nx
+    window = torch.exp(
+        -2 * (math.pi * ENCODED_MAPS_REACH) ** 2 * (y[:, None] ** 2 + x[None] ** 2)
+    )
+    covariance = images[:, None] * images[None].conj()
+    spectrum = bartorch.fft(covariance, axes, unitary=True).reshape(covariance.shape)
+    covariance = bartorch.fft(spectrum * window, axes, inverse=True, unitary=True)
+    covariance = covariance.reshape(shape[0], *shape).permute(2, 3, 0, 1)
+    nearby = torch.linalg.eigh(covariance).eigenvectors[..., -1].permute(2, 0, 1)
+    phase = torch.exp(1j * torch.angle((nearby.conj() * drawn).sum(dim=0)))
+    blended = weight * drawn + (1 - weight) * nearby * phase
+    return (blended / blended.abs().square().sum(dim=0).sqrt().clamp_min(1e-12)).to(
+        torch.complex64
     )
 
 
