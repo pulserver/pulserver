@@ -17,9 +17,15 @@ from ._motion import RigidMotion
 from ._timeline import Timeline
 from ._tissue import Tissue
 
-#: Dephasing across a voxel, in cycles, from which the net moment between two
-#: events shifts the configuration states by one order.
+#: Dephasing across a voxel, in cycles, beyond which the net moment between two
+#: events shifts the configuration states by one order. Half a cycle is the edge
+#: of the k-space a voxel grid encodes, which a phase-encode prewinder reaches.
 SHIFT_CYCLES = 0.5
+
+#: Relative margin by which a dephasing exceeds :data:`SHIFT_CYCLES` to shift
+#: the states: a moment to the edge of k-space, summed in floating point from
+#: the moments before it, lands on either side of the threshold by rounding.
+_SHIFT_MARGIN = 1e-6
 
 #: Relative residual to which the signals of the tissue's classes are spanned
 #: by a temporal basis across the readouts, and their decay and precession by
@@ -130,7 +136,7 @@ class FourierPlayer:
     spectral-spatial pulse, has its profile across the field and the position
     along that axis, simulated over those the entries span. Between events, the
     net gradient moment across a voxel shifts the configuration states by one
-    order where it dephases by at least :data:`SHIFT_CYCLES` cycles along the
+    order where it dephases by more than :data:`SHIFT_CYCLES` cycles along the
     axes the tissue spans; its part that changes from one repetition to the
     next counts where the intervals between two pulses do not cancel it, and
     anything less is taken as balanced.
@@ -210,7 +216,7 @@ class FourierPlayer:
         voxel = _voxel(timeline, everything, tissue.spacing)
         spanned = _spanned(everything, tissue.axes, timeline.rotation, voxel)
         winds = np.linalg.norm((timeline.readouts.winding @ spanned) * voxel, axis=1)
-        timeline.read_free_induction(np.flatnonzero(winds < SHIFT_CYCLES))
+        timeline.read_free_induction(np.flatnonzero(~_dephases(winds)))
         shifted = _shifted(timeline, events, voxel, spanned)
         self._poses = None if motion is None else _poses(timeline, motion, self.device)
         selector_of, selectors = _selectors(pulses)
@@ -860,6 +866,11 @@ def _spanned(
     return np.diag((cube | (spread > 0.5 * voxel)).astype(float))
 
 
+def _dephases(cycles: np.ndarray) -> np.ndarray:
+    """Return where a dephasing across a voxel, in cycles, shifts the configuration states."""
+    return np.asarray(cycles) > SHIFT_CYCLES * (1.0 + _SHIFT_MARGIN)
+
+
 def _shifted(
     timeline: Timeline, events: _Events, voxel: np.ndarray, spanned: np.ndarray
 ) -> np.ndarray:
@@ -869,7 +880,7 @@ def _shifted(
     projecting onto them, and is read in cycles across the voxel. While the
     magnetization precesses freely from an excitation, the states shift by one
     order over the interval to the next pulse where k winds by
-    :data:`SHIFT_CYCLES` or more by then, and each readout reads the pathway
+    more than :data:`SHIFT_CYCLES` by then, and each readout reads the pathway
     the timeline found it reads: the shifts fall before the readouts of the
     echoes of earlier intervals, as an SSFP-echo readout reads one, and after
     those of the free induction. Around a refocusing
@@ -880,7 +891,7 @@ def _shifted(
     encoding where the intervals between consecutive pulses sum it to
     nothing, and counted where they do not, as the turned readout of a
     radial scan is. An interval shifts the states where the median over its
-    place dephases by :data:`SHIFT_CYCLES`.
+    place dephases by more than :data:`SHIFT_CYCLES`.
     """
     readouts = timeline.readouts
     played = timeline.played
@@ -902,7 +913,7 @@ def _shifted(
     interval = np.cumsum(events.kind == 1)[:-1]
     summed = np.zeros((int(interval.max()) + 1, 3))
     np.add.at(summed, interval, changing)
-    cancelled = np.linalg.norm(summed, axis=1) < SHIFT_CYCLES
+    cancelled = ~_dephases(np.linalg.norm(summed, axis=1))
     dephasing = mean[pair] + np.where(cancelled[interval][:, None], 0.0, changing)
     use = np.where(
         events.kind == 1,
@@ -927,7 +938,7 @@ def _shifted(
     firsts = np.concatenate([[0], np.cumsum(counts)[:-1]])
     ranked = size[order]
     typical = 0.5 * (ranked[firsts + (counts - 1) // 2] + ranked[firsts + counts // 2])
-    shifts = (typical[pair] >= SHIFT_CYCLES).astype(np.int64)
+    shifts = _dephases(typical[pair]).astype(np.int64)
     pathway = np.where(
         events.kind == 2,
         readouts.pathway[np.where(events.kind == 2, events.index, 0)],
