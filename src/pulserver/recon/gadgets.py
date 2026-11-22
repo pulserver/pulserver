@@ -24,6 +24,7 @@ from ._calibration import (
     coil_labels,
     digest,
     projected_readout,
+    rovir_basis,
 )
 from ._units import carries
 from .plugin import NOISE_COVARIANCE, Gadget
@@ -145,6 +146,22 @@ class Prewhiten(Gadget):
         self._resolved = True
 
 
+#: Signal fraction of the brightest pixel above which a pixel of the
+#: calibration's channel images belongs to the head, for :class:`CompressChannels`
+#: rejecting the scalp.
+HEAD_THRESHOLD = 0.12
+#: Thickness (m) of the shell inside the head's outline whose signal
+#: :class:`CompressChannels` rejects: the scalp, brightest next to the coil
+#: elements.
+SCALP_SHELL_M = 0.010
+#: Depth (m) inside the head's outline beyond which :class:`CompressChannels`
+#: keeps the signal.
+BRAIN_DEPTH_M = 0.016
+#: ROVir directions :class:`CompressChannels` draws its virtual channels from,
+#: per virtual channel.
+ROVIR_DIRECTIONS_PER_CHANNEL = 2
+
+
 class CompressChannels(Gadget):
     """Project the receive channels of each readout onto ``n_virtual`` virtual channels as it arrives.
 
@@ -176,22 +193,41 @@ class CompressChannels(Gadget):
     Corresponds to Gadgetron's ``PCACoilGadget`` and
     ``CoilReductionGadget``.
 
+    With ``reject_scalp`` the basis is region-optimized (ROVir,
+    :func:`~pulserver.recon._calibration.rovir_basis`) instead: the held
+    calibration lines of a single-slice Cartesian space are imaged, the head
+    is the pixels above ``HEAD_THRESHOLD`` of the brightest, and the virtual
+    channels keep the signal deeper than ``BRAIN_DEPTH_M`` inside its outline
+    and reject that of the outer ``SCALP_SHELL_M``. Next to the coil elements
+    the scalp is far brighter than the brain, and coil maps err most along
+    it; in an accelerated scan those errors fold the scalp into the brain.
+    The lines are put on the readout grid by :attr:`readout_grid`, a callable
+    of an acquisition and its readout that returns the readout on the grid
+    and leaves the acquisition as it is; without it, or without a Cartesian
+    calibration, the basis is the channel covariance's.
+
     Parameters
     ----------
     n_virtual : int
         Virtual channels kept.
+    reject_scalp : bool, default=False
+        Whether the virtual channels reject the scalp's signal.
     """
 
-    def __init__(self, n_virtual: int) -> None:
+    readout_grid = None
+
+    def __init__(self, n_virtual: int, reject_scalp: bool = False) -> None:
         if n_virtual < 1:
             raise ValueError(f"n_virtual is {n_virtual}; it has to be at least 1")
         self.n_virtual = int(n_virtual)
+        self.reject_scalp = bool(reject_scalp)
 
     def startup(self, context):
         super().startup(context)
         self._held: list[tuple[Any, np.ndarray]] = []
         self._passing = False
         self._centres = _kspace_centres(getattr(context, "header", None))
+        self._planes = _planes(getattr(context, "header", None))
 
     def __call__(self, acquisition: Any, data: np.ndarray) -> Any:
         if self._passing or carries(acquisition, AcquisitionFlag.IS_NOISE_MEASUREMENT):
@@ -263,10 +299,67 @@ class CompressChannels(Gadget):
                 if int(acquisition_label(acquisition, "contrast", 0) or 0) == 0
             ]
             readouts = first or [data for _, data in calibration]
-            self.context.coil_compression = basis_of(
-                np.concatenate(readouts, axis=1), self.n_virtual
-            )
+            regions = self._regions(calibration) if self.reject_scalp else None
+            if regions is not None:
+                images, wanted, rejected = regions
+                keep = min(ROVIR_DIRECTIONS_PER_CHANNEL * self.n_virtual, len(images))
+                self.context.coil_compression = rovir_basis(
+                    images, wanted, rejected, self.n_virtual, keep
+                )
+            else:
+                self.context.coil_compression = basis_of(
+                    np.concatenate(readouts, axis=1), self.n_virtual
+                )
         return self.context.coil_compression
+
+    def _regions(
+        self, calibration: list[tuple[Any, np.ndarray]]
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray] | None:
+        """Return the channel images of the calibration lines, the brain and the scalp; ``None`` where they cannot be formed."""
+        if self.readout_grid is None:
+            return None
+        spaces = [
+            int(acquisition_label(acquisition, "encoding_space_ref", 0) or 0)
+            for acquisition, _ in calibration
+        ]
+        planar = [space for space in spaces if space in self._planes]
+        if not planar:
+            return None
+        space = max(set(planar), key=planar.count)
+        lines_n, pixel_m = self._planes[space]
+        # Each line from the readouts of one direction where it has them, so
+        # the odd/even phase does not ghost the image.
+        lines: dict[int, dict[bool, list[np.ndarray]]] = {}
+        for (acquisition, data), own in zip(calibration, spaces, strict=True):
+            line = int(acquisition_label(acquisition, "kspace_encode_step_1", 0) or 0)
+            if own != space or not 0 <= line < lines_n:
+                continue
+            gridded = self.readout_grid(acquisition, data)
+            if gridded is None:
+                continue
+            backwards = carries(acquisition, AcquisitionFlag.IS_REVERSE)
+            if backwards:
+                gridded = gridded[:, ::-1]
+            lines.setdefault(line, {}).setdefault(backwards, []).append(gridded)
+        if not lines:
+            return None
+        columns = {
+            d.shape[1] for by in lines.values() for ds in by.values() for d in ds
+        }
+        if len(columns) != 1:
+            return None
+        kspace = np.zeros((calibration[0][1].shape[0], lines_n, columns.pop()), complex)
+        for line, by_direction in lines.items():
+            kspace[:, line] = np.mean(
+                by_direction.get(False) or by_direction[True], axis=0
+            )
+        images = np.fft.fftshift(
+            np.fft.ifft2(np.fft.ifftshift(kspace, axes=(-2, -1))), axes=(-2, -1)
+        )
+        wanted, rejected = head_regions(np.sqrt((np.abs(images) ** 2).sum(0)), pixel_m)
+        if not wanted.any() or not rejected.any():
+            return None
+        return images, wanted, rejected
 
 
 class AsymmetricEcho(Gadget):
@@ -389,6 +482,75 @@ def _kspace_centres(header: Any) -> dict[int, tuple[int | None, int | None]]:
             partition = space.partitions // 2 if partition is None else partition
         centres[space.index] = (line, partition)
     return centres
+
+
+def _planes(header: Any) -> dict[int, tuple[int, tuple[float, float]]]:
+    """Return the phase-encode lines and the pixel size (m) of each single-slice Cartesian encoding space of ``header``."""
+    if header is None or not getattr(header, "encoding", None):
+        return {}
+    from ..mrd._header import EncodingSpace
+
+    planes = {}
+    for space in EncodingSpace.all_from_header(header):
+        if not space.cartesian or space.partitions > 1 or not space.recon_fov:
+            continue
+        if len(space.recon_matrix) != 2:
+            continue
+        (n_y, n_x), (fov_y, fov_x) = space.recon_matrix, space.recon_fov
+        planes[space.index] = (space.phase_encodes, (fov_y / n_y, fov_x / n_x))
+    return planes
+
+
+def head_regions(
+    rss: np.ndarray, pixel_m: tuple[float, float]
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return the brain and the scalp of a coil-combined image: the head deeper than ``BRAIN_DEPTH_M``, and its outer ``SCALP_SHELL_M``.
+
+    The head is the pixels above ``HEAD_THRESHOLD`` of the brightest, closed
+    and with its holes filled, so the dark skull and the ventricles stay in it.
+
+    Parameters
+    ----------
+    rss : ndarray
+        ``(n_y, n_x)`` coil-combined magnitude.
+    pixel_m : tuple of float
+        Pixel size (m) along y and x.
+
+    Returns
+    -------
+    tuple of ndarray
+        Boolean masks of the brain and of the scalp.
+    """
+    import torch
+
+    head = torch.from_numpy(rss > HEAD_THRESHOLD * rss.max())[None, None].float()
+
+    def dilated(mask, radius):
+        size = (2 * radius[0] + 1, 2 * radius[1] + 1)
+        return torch.nn.functional.max_pool2d(mask, size, 1, radius)
+
+    def eroded(mask, radius):
+        return 1 - dilated(1 - mask, radius)
+
+    def radius(metres):
+        return tuple(max(1, round(metres / p)) for p in pixel_m)
+
+    closing = radius(SCALP_SHELL_M / 2)
+    head = eroded(dilated(head, closing), closing)
+    # Outside is what the border reaches through pixels outside the head.
+    outside = torch.zeros_like(head)
+    outside[..., 0, :] = outside[..., -1, :] = 1
+    outside[..., :, 0] = outside[..., :, -1] = 1
+    outside *= 1 - head
+    while True:
+        grown = dilated(outside, (1, 1)) * (1 - head)
+        if torch.equal(grown, outside):
+            break
+        outside = grown
+    head = 1 - outside
+    brain = eroded(head, radius(BRAIN_DEPTH_M))
+    scalp = head * (1 - eroded(head, radius(SCALP_SHELL_M)))
+    return brain[0, 0].bool().numpy(), scalp[0, 0].bool().numpy()
 
 
 def _off_line(acquisition: Any) -> bool:
