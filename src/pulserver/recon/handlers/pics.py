@@ -25,8 +25,9 @@ from ..plugin import ReconContext, ReconPlugin, ReconResult
 
 #: Fewest points along an axis that BART's wavelet, ``dau2`` as
 #: :class:`bartorch.priors.Wavelet` takes it by default, decomposes: the
-#: coarsest scale of a shorter axis is never reached, and the process dies.
-WAVELET_MIN_POINTS = 4
+#: coarsest scale of a shorter axis is never reached, and the random shift of
+#: each iteration reaches four points, so on an axis of four the process dies.
+WAVELET_MIN_POINTS = 5
 
 #: Lines of every encoded axis, around the k-space centre, the coil maps are
 #: fitted to, as :func:`bartorch.apps.nlinv_maps` takes them. Maps fitted to

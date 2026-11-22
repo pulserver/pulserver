@@ -379,7 +379,7 @@ def test_contrasts_that_are_images_reconstruct_to_one_image_each(device):
         assert relative_difference(image, expected) < 1e-4
 
 
-@pytest.mark.parametrize("partitions", [2, 3])
+@pytest.mark.parametrize("partitions", [2, 3, 4])
 def test_a_volume_of_fewer_partitions_than_the_wavelet_needs_reconstructs(
     device, partitions
 ):
