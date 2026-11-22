@@ -1,11 +1,13 @@
-"""pypulseqpp's 2D balanced SSFP bound to the scanner UI, with ECG-gated cine."""
+"""pypulseqpp's 2D balanced SSFP bound to the scanner UI: free-running, retrospective and prospective cine."""
 
 import math
 
 import pypulseqpp as pp
 from pypulseqpp import sequences
 from pypulseqpp.sequences.sequence.bssfp2D_sequence import (
+    ORDERINGS,
     PROSPECTIVE_DUMMIES,
+    RETROSPECTIVE_WINDOW,
     STEADY_STATE_TOLERANCE,
     bssfp2d,
     prospective_starts,
@@ -18,9 +20,10 @@ from pulserver._zoo._evaluation import (
     edge,
     rf_layout,
 )
-from pulserver._zoo._user import OPTIONS, user_entries
+from pulserver._zoo._user import OPTIONS, OWN, user_entries
 from pulserver.design import (
     ChoiceParam,
+    Description,
     Evaluation,
     FloatParam,
     IntParam,
@@ -28,14 +31,36 @@ from pulserver.design import (
     StatedParam,
     TimeParam,
     option,
+    recon_parameters,
 )
 from pulserver.protocol import ImagingMode, TriggerType, TRPreset, UIParam
 
-#: ECG gating is retrospective: each segment cycled over a heartbeat, binned
-#: into cardiac phases by the reconstruction. Prospective otherwise: each
-#: slice triggered once, on its first excitation, then every nominal heartbeat
-#: acquired once per cardiac phase, the slice one train with no rest in it.
+#: ECG gating is retrospective: each segment cycled over ``RETROSPECTIVE_WINDOW``
+#: heartbeats, binned into cardiac phases by the reconstruction from the
+#: recorded ECG.
+#: Prospective otherwise: each slice triggered once, on its first excitation,
+#: then every nominal heartbeat acquired once per cardiac phase, the slice one
+#: train with no rest in it; with a trigger window, every heartbeat waits for
+#: its own trigger.
 RETROSPECTIVE = option("retrospective", False, **OPTIONS["retrospective"])
+
+#: Phase-encode order of an ungated cine: every frame in k-space order, or
+#: every line of the grid in golden-ratio order, for real-time frames or a
+#: binning by the recorded physiological signal in the reconstruction; or
+#: interleaved, the scanner's real-time cine: the central phase resolution,
+#: every ``ry``-th line a frame, the frames together sampling every line.
+ORDERING = option("ordering", "sequential", choices=ORDERINGS, **OPTIONS["ordering"])
+
+#: Fraction of the phase encodes an ``interleaved`` real-time cine acquires:
+#: with ``ry`` 3 at TR 2.5 ms and 160 lines, frames of about 60 ms.
+REALTIME_PHASE_RESOLUTION = 0.45
+
+#: Breathing rate a respiratory-triggered cine is timed to (breaths per
+#: minute): each breath triggers one segment of every cardiac phase.
+RESPIRATORY_RATE_BPM = 15.0
+
+#: Shortest part of a breath left free for the next respiratory trigger (s).
+RESPIRATORY_WINDOW = 1.5
 
 
 class Bssfp2D(SequencePlugin):
@@ -84,15 +109,38 @@ class Bssfp2D(SequencePlugin):
         UIParam.TRIGGER_DELAY: FloatParam(
             "trigger_delay", unit="ms", scale=1e-3, range_min=0.0, range_max=2000.0
         ),
+        UIParam.TRIGGER_WINDOW: FloatParam(
+            "trigger_window", unit="ms", scale=1e-3, range_min=0.0, range_max=1000.0
+        ),
         UIParam.HEART_RATE: IntParam(
             "heart_rate_bpm", unit="bpm", range_min=30, range_max=200, default=60
+        ),
+        UIParam.user_name(OWN): Description(
+            "Phase resolution of interleaved real-time, %"
+        ),
+        UIParam.user_value(OWN): FloatParam(
+            "phase_resolution",
+            unit="%",
+            scale=1e-2,
+            range_min=25.0,
+            range_max=100.0,
+            default=REALTIME_PHASE_RESOLUTION * 100,
         ),
     }
 
     protocol |= user_entries(app, protocol)
 
     def generate(self, system, protocol):
-        return self.app(system, **_gated(self, system, protocol))
+        designed = self.app(system, **_gated(self, system, protocol))
+        a = arguments(self, protocol)
+        stated = {
+            "Gating": _gating(protocol),
+            "Ordering": _ordering(protocol),
+            "CardiacPhases": int(a["n_phases"]),
+        }
+        for part in designed if isinstance(designed, list) else [designed]:
+            recon_parameters(part, **stated)
+        return designed
 
     def evaluate(self, system, protocol):
         # Each slice plays its own train, one TR per repetition, the first
@@ -101,13 +149,20 @@ class Bssfp2D(SequencePlugin):
         # slice; ``once`` is the train of one line.
         a = arguments(self, protocol)
         one, lines = cartesian_2d(a)
+        if _ordering(protocol) == "golden":
+            lines = len(_golden_lines(a))
+        frames_lines = None
+        if _ordering(protocol) == "interleaved":
+            frames_lines = _interleaved_lines(a)
+            lines = max(frames_lines)
         line = self.app(system, **(_ungated(protocol) | one | _ONE_TRAIN))
         tr = line.definitions["TR"][0]
         once = line.duration()[0] - (len(_designed_lines(a)) - 1) * tr
         gating = _gating(protocol)
         n_dummy = _dummies(a, tr, gating)
         frames = a["n_phases"] if gating == "none" else 1
-        train = once + (n_dummy + frames * lines - 1) * tr
+        played = sum(frames_lines) if frames_lines else frames * lines
+        train = once + (n_dummy + played - 1) * tr
         # A frame of an ungated cine plays every line once; a gated one's
         # cardiac phase plays the lines of a segment.
         frame_time = lines * tr if a["n_phases"] > 1 else None
@@ -115,8 +170,14 @@ class Bssfp2D(SequencePlugin):
             g = _segmented(a, tr, protocol)
             frame_time = g["views_per_segment"] * tr
             segments = _segments(a, g["views_per_segment"])
-            rr = 60.0 / a["heart_rate_bpm"]
-            if gating == "prospective":
+            rr = _period(a, protocol)
+            if gating == "prospective" and g["trigger_window"] > 0.0:
+                # Every heartbeat opens on its own trigger with the dummies:
+                # a heartbeat a segment.
+                lead = n_dummy + round(a["trigger_delay"] / tr)
+                last = lead + a["n_phases"] * segments[-1]
+                train = (len(segments) - 1) * rr + once + (last - 1) * tr
+            elif gating == "prospective":
                 # One trigger, on the first excitation, opens the slice; the trigger
                 # delay and the heartbeats after the first are repetitions
                 # that do not acquire.
@@ -126,7 +187,9 @@ class Bssfp2D(SequencePlugin):
                 played = starts[-1] + a["n_phases"] * segments[-1]
                 train = once + (played - 1) * tr
             else:
-                per_segment = max(1, round(rr / (g["views_per_segment"] * tr)))
+                per_segment = math.ceil(
+                    RETROSPECTIVE_WINDOW * rr / (g["views_per_segment"] * tr)
+                )
                 cycles = per_segment * sum(segments)
                 train = once + (n_dummy + cycles - 1) * tr
         return Evaluation(
@@ -138,9 +201,9 @@ class Bssfp2D(SequencePlugin):
         )
 
 
-#: The app's arguments for one train of one slice: ungated, the frames are
-#: counted rather than designed.
-_ONE_TRAIN = {"n_slices": 1, "n_phases": 1}
+#: The app's arguments for one train of one slice: ungated and in k-space
+#: order, the frames counted rather than designed.
+_ONE_TRAIN = {"n_slices": 1, "n_phases": 1, "ordering": "sequential"}
 
 
 def _designed_lines(a) -> list[int]:
@@ -152,19 +215,49 @@ def _designed_lines(a) -> list[int]:
 
 
 def _gating(protocol) -> str:
-    """Return the ``gating`` of the app the trigger choice selects.
-
-    Raises
-    ------
-    ValueError
-        If respiratory triggering is chosen, which the cine does not offer.
-    """
+    """Return the ``gating`` of the app the trigger choice selects: a respiratory trigger is prospective."""
     trigger = protocol.arguments["trigger_type"]
     if trigger == TriggerType.RESPIRATORY:
-        raise ValueError("the cine is ECG-gated; respiratory triggering is not offered")
+        return "prospective"
     if trigger == TriggerType.ECG:
         return "retrospective" if RETROSPECTIVE else "prospective"
     return "none"
+
+
+def _ordering(protocol) -> str:
+    """Return the ``ordering`` of the app: :data:`ORDERING` when ungated, else ``'sequential'``."""
+    return ORDERING if _gating(protocol) == "none" else "sequential"
+
+
+def _period(a, protocol) -> float:
+    """Return the nominal interval between triggers (s): the heartbeat, or the breath under respiratory triggering."""
+    if protocol.arguments["trigger_type"] == TriggerType.RESPIRATORY:
+        return 60.0 / RESPIRATORY_RATE_BPM
+    return 60.0 / a["heart_rate_bpm"]
+
+
+def _window(a, protocol) -> float:
+    """Return the trigger window (s): the one asked for, at least :data:`RESPIRATORY_WINDOW` under respiratory triggering."""
+    if protocol.arguments["trigger_type"] == TriggerType.RESPIRATORY:
+        return max(a["trigger_window"], RESPIRATORY_WINDOW)
+    return a["trigger_window"]
+
+
+def _golden_lines(a) -> list[int]:
+    """Return the lines a golden free-running frame visits: every line of the grid partial Fourier keeps."""
+    calibrating, imaging = pp.make_cartesian_axis_sampling(
+        a["n_y"], 1, 0, partial_fourier=a["partial_fourier_y"]
+    )
+    return [*calibrating, *imaging]
+
+
+def _interleaved_lines(a) -> list[int]:
+    """Return the lines each frame of an ``interleaved`` free-running series plays: every ``ry``-th of the central ``phase_resolution`` of the grid."""
+    lines = sorted(_golden_lines(a))
+    kept = max(a["ry"], round(a["n_y"] * a["phase_resolution"]))
+    first = a["n_y"] // 2 - kept // 2
+    central = [line for line in lines if first <= line < first + kept]
+    return [len(central[f % a["ry"] :: a["ry"]]) for f in range(a["n_phases"])]
 
 
 def _dummies(a, tr: float, gating: str) -> int:
@@ -185,8 +278,13 @@ def _dummies(a, tr: float, gating: str) -> int:
 
 
 def _ungated(protocol) -> dict:
-    """Return the app's arguments of an ungated design of ``protocol``."""
-    return {k: v for k, v in protocol.arguments.items() if k != "trigger_type"}
+    """Return the app's arguments of an ungated design of ``protocol``, in its view order."""
+    arguments_ = {
+        k: v
+        for k, v in protocol.arguments.items()
+        if k not in ("trigger_type", "trigger_window")
+    }
+    return arguments_ | {"ordering": _ordering(protocol)}
 
 
 def _segmented(a, tr: float, protocol) -> dict:
@@ -197,22 +295,28 @@ def _segmented(a, tr: float, protocol) -> dict:
     ValueError
         If one line per cardiac phase does not fit the heartbeat.
     """
-    rr = 60.0 / a["heart_rate_bpm"]
+    rr = _period(a, protocol)
     gating = _gating(protocol)
+    window = _window(a, protocol) if gating == "prospective" else 0.0
     leading = _dummies(a, tr, gating) * tr if gating == "prospective" else 0.0
-    free = rr - a["trigger_delay"] - leading
+    free = rr - window - a["trigger_delay"] - leading
     views = math.floor(free / (a["n_phases"] * tr) + 1e-9)
     if views < 1:
         raise ValueError(
             f"{a['n_phases']} cardiac phases of one line do not fit the "
-            f"{rr * 1e3:.0f} ms heartbeat"
+            f"{rr * 1e3:.0f} ms between triggers"
         )
-    return {
+    gated = {
         "gating": gating,
         "views_per_segment": views,
         "n_phases": a["n_phases"],
         "trigger_delay": a["trigger_delay"],
+        "trigger_window": window,
+        "trigger_channel": str(protocol.arguments["trigger_type"]),
     }
+    if gating != "none":
+        gated["heart_rate_bpm"] = 60.0 / rr
+    return gated
 
 
 def _segments(a, views: int) -> list[int]:

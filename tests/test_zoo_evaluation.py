@@ -1,5 +1,6 @@
 """The shipped scanner sequences' evaluations: their scan time, the values they read back and the RF they state."""
 
+import copy
 import dataclasses
 import functools
 import importlib.util
@@ -64,6 +65,8 @@ POWER_RTOL = 1e-3
 CHANGED = {
     "bssfp2d": {"flip": 30.0, "ny": 48},
     "bssfp3d": {"flip": 30.0, "ny": 32, "nslices": 8},
+    "coronary_mra3d": {"flip": 60.0, "ny": 32, "nslices": 8},
+    "inflow_mra3d": {"flip": 70.0, "ny": 32, "nslices": 8},
     "epi2d": {"flip": 60.0, "nx": 64, "ny": 32},
     "epi3d": {"flip": 60.0, "nx": 64, "ny": 32, "nslices": 8},
     "fse3d": {"nx": 64, "ny": 32, "nslices": 16, "etl": 16},
@@ -427,6 +430,13 @@ TRAINS: dict[str, list[str]] = {
     "mprage3d": ["inversion"] + ["excitation"] * 256,
     "mprage_stack_of_spirals3d": ["inversion"] + ["excitation"] * 16,
     "mprage_stack_of_stars3d": ["inversion"] + ["excitation"] * 403,
+    # One trigger period: T2 preparation, fat saturation, the catalyst ramp
+    # and a segment of views.
+    "coronary_mra3d": ["preparation", "refocusing", "refocusing", "preparation"]
+    + ["saturation"]
+    + ["excitation"] * 40,
+    # One breath: slab inversion, fat saturation, ramp and segment.
+    "inflow_mra3d": ["inversion", "saturation"] + ["excitation"] * 90,
 }
 
 #: The layouts of the banded sequences with both their bands placed.
@@ -445,6 +455,8 @@ LAST_TR_BLOCKS = {"zte3d": 2}
 #: Shipped sequences loaded with options, by the name the scans below use.
 TOGGLED = {
     "bssfp2d+RETROSPECTIVE": ("bssfp2d", {"retrospective": True}),
+    "bssfp2d+GOLDEN": ("bssfp2d", {"ordering": "golden"}),
+    "bssfp2d+INTERLEAVED": ("bssfp2d", {"ordering": "interleaved"}),
     "fse3d+OPTIMIZED": ("fse3d", {"refocusing": "optimized"}),
     "fse3d+DUAL_REGION": ("fse3d", {"refocusing": "dual_region"}),
     "fse3d+NAVIGATOR": ("fse3d", {"navigator": True}),
@@ -585,12 +597,33 @@ def _wire_power(listed, layout):
     return _mean_power(layout.period, layout.amplitude, peak[which], energy[which])
 
 
+def _period(main):
+    """The period the RF of ``main`` repeats in: its trigger period if it waits for a trigger, its ``TR`` otherwise."""
+    definitions = main.definitions
+    return definitions.get("TriggerPeriod", definitions["TR"])[0]
+
+
+def _first_segment(main):
+    """The blocks of ``main`` from its first trigger to its second, with its trigger period as their ``TR``."""
+    blocks = [main.get_block(i) for i in range(1, len(main.block_events) + 1)]
+    triggered = [i for i, block in enumerate(blocks) if getattr(block, "trig", None)]
+    segment = pp.Sequence(main.system)
+    for block in blocks[triggered[0] : triggered[1]]:
+        segment.add_block(block)
+    segment.set_definition("TR", _period(main))
+    return segment
+
+
 def _last_tr_power(main, blocks=None):
     """The RF energy of the last TR of ``main``, over its ``TR``, in Hz².
 
     The last TR is the last ``blocks`` blocks, or those that end within a
-    ``TR`` of the end.
+    ``TR`` of the end. A triggered scan repeats its first segment, which plays
+    every view of a segment, over its trigger period.
     """
+    if "TriggerPeriod" in main.definitions:
+        segment = _first_segment(main)
+        return segment.calc_rf_power()[3] / _period(main)
     tr = main.definitions["TR"][0]
     ends = np.cumsum(main.libraries().block_durations)
     first = (
@@ -653,6 +686,17 @@ def test_an_evaluation_states_the_values_and_the_scan_time_of_the_design(
 
     expected = protocol.replace(achieved(plugin, chain[-1]))
     assert evaluation.protocol.to_wire() == expected.to_wire()
+    if "TriggerPeriod" in chain[-1].definitions:
+        # A segment waits for its trigger after it ends: the scan lasts a
+        # trigger period per segment however long the segment plays.
+        definitions = chain[-1].definitions
+        segments, period = (
+            definitions["NumSegments"][0],
+            definitions["TriggerPeriod"][0],
+        )
+        assert definitions["SegmentDuration"][0] <= period
+        assert evaluation.duration == pytest.approx(segments * period)
+        return
     # The delay closing a TR is rounded up to the block raster, so each TR the
     # design plays lasts the TR it states or one raster more.
     played = sum(sequence.duration()[0] for sequence in chain)
@@ -709,6 +753,8 @@ def test_an_evaluation_states_as_its_layout_a_regular_tr_of_the_design(
         main = _bounding(plugin, protocol, PRESCRIBED[name])
     else:
         main = _main(plugin, protocol)
+    if "TriggerPeriod" in main.definitions:
+        main = _first_segment(main)
     # The first TR holds the largest packet of slices; a balanced steady state
     # opens with its half-angle pulse, so its last TR is the regular one.
     balanced = name.startswith("bssfp")
@@ -853,6 +899,12 @@ def test_a_zoo_evaluation_designs_a_few_trs_however_large_the_prescription(
     assert len(designed) <= 2
     for chain in designed:
         main = _chain(chain)[-1]
+        if "TriggerPeriod" in main.definitions:
+            # ... or one segment of the centre and edge views after its ramp.
+            assert main.definitions["NumSegments"][0] == 1
+            ramp = main.definitions["CatalystRamp"][0]
+            assert _excitations(main) <= ramp + 45
+            continue
         tr = main.definitions["TR"][0]
         rounding = SYSTEM.block_duration_raster * _excitations(main)
         # ... or a readout in eight directions, up to fifteen where their
@@ -918,9 +970,7 @@ def test_each_zoo_layout_is_one_tr_of_an_excitation_and_a_spin_echo_refocusing_p
 
     instances = layout.instances
     uses = [instances.definitions[number].use for number in instances.definition]
-    assert layout.period == pytest.approx(
-        _main(plugin, protocol).definitions["TR"][0], rel=1e-12
-    )
+    assert layout.period == pytest.approx(_period(_main(plugin, protocol)), rel=1e-12)
     single = ["excitation", "refocusing"] if name in SPIN_ECHO else ["excitation"]
     assert uses == TRAINS.get(name, single)
 
@@ -1511,10 +1561,112 @@ def _phase_labels(sequence):
     return set(np.asarray(sequence.evaluate_labels(evolution="adc")["PHS"]).tolist())
 
 
-def test_the_cine_refuses_respiratory_triggering(zoo):
-    validation = zoo["bssfp2d"].validate(SYSTEM, {"trigger_type": "physio1"})
-    assert not validation.valid
-    assert "respiratory" in validation.info
+def test_a_respiratory_trigger_opens_every_segment_of_the_cine(zoo):
+    plugin = zoo["bssfp2d"]
+    module = SimpleNamespace(**type(plugin).generate.__globals__)
+    protocol = _protocol(plugin, {"trigger_type": "physio1", "num_frames": 4})
+
+    evaluation = plugin.evaluate(SYSTEM, protocol)
+    gated = module._gated(plugin, SYSTEM, protocol)
+    main = _main(plugin, protocol)
+    segments = module._segments(
+        _arguments(plugin, protocol), gated["views_per_segment"]
+    )
+    triggered = [
+        main.get_block(b).trig
+        for b in range(1, main.num_blocks + 1)
+        if getattr(main.get_block(b), "trig", None)
+    ]
+    breath = 60.0 / module.RESPIRATORY_RATE_BPM
+
+    assert gated["gating"] == "prospective"
+    assert gated["trigger_window"] >= module.RESPIRATORY_WINDOW
+    assert len(triggered) == len(segments)
+    assert {trig[0].channel for trig in triggered} == {"physio1"}
+    assert (len(segments) - 1) * breath < evaluation.duration < len(segments) * breath
+
+
+def test_an_ecg_trigger_window_has_every_heartbeat_wait_for_its_trigger(zoo):
+    plugin = zoo["bssfp2d"]
+    module = SimpleNamespace(**type(plugin).generate.__globals__)
+    changes = {"trigger_type": "physio2", "num_frames": 8, "trigger_window": 150.0}
+    protocol = _protocol(plugin, changes)
+
+    evaluation = plugin.evaluate(SYSTEM, protocol)
+    gated = module._gated(plugin, SYSTEM, protocol)
+    main = _main(plugin, protocol)
+    segments = module._segments(
+        _arguments(plugin, protocol), gated["views_per_segment"]
+    )
+    tr = main.definitions["TR"][0]
+
+    assert _triggers(main) == len(segments)
+    leading = module.PROSPECTIVE_DUMMIES * tr
+    assert leading + 8 * gated["views_per_segment"] * tr <= 1.0 - 0.15
+    assert _phase_labels(main) == set(range(8))
+    assert (len(segments) - 1) * 1.0 < evaluation.duration < len(segments) * 1.0
+
+
+def test_a_golden_free_running_cine_reads_every_line_each_frame(zoo):
+    plugin = zoo["bssfp2d+GOLDEN"]
+    protocol = _protocol(plugin, CHANGED["bssfp2d"] | {"num_frames": 3, "Ry": 2})
+
+    evaluation = plugin.evaluate(SYSTEM, protocol)
+    main = _main(plugin, protocol)
+    labels = main.evaluate_labels(evolution="adc")
+    lines = np.asarray(labels["LIN"])
+
+    assert sorted(lines[: lines.size // 3].tolist()) == list(range(48))
+    assert lines[:4].tolist() != [0, 1, 2, 3]
+    assert main.definitions["Ordering"] == "golden"
+    assert evaluation.frame_time == pytest.approx(48 * main.definitions["TR"][0])
+
+
+def test_interleaved_real_time_frames_together_sample_the_central_lines_once(zoo):
+    plugin = zoo["bssfp2d+INTERLEAVED"]
+    changes = CHANGED["bssfp2d"] | {"num_frames": 6, "Ry": 3, "user12_value": 50.0}
+    protocol = _protocol(plugin, changes)
+
+    evaluation = plugin.evaluate(SYSTEM, protocol)
+    main = _main(plugin, protocol)
+    labels = main.evaluate_labels(evolution="adc")
+    lines, phases = np.asarray(labels["LIN"]), np.asarray(labels["PHS"])
+
+    first_three = np.sort(lines[phases < 3])
+    assert first_three.tolist() == list(range(12, 36))
+    assert set(lines[phases == 0]).isdisjoint(lines[phases == 1])
+    assert evaluation.frame_time == pytest.approx(8 * main.definitions["TR"][0])
+    chain = _chain(plugin.generate(SYSTEM, protocol))
+    played = sum(part.duration()[0] for part in chain)
+    assert abs(evaluation.duration - played) <= 2 * SYSTEM.block_duration_raster
+
+
+@pytest.mark.parametrize(
+    ("name", "changes", "stated"),
+    [
+        ("bssfp2d", {}, ("none", "sequential")),
+        ("bssfp2d+GOLDEN", {}, ("none", "golden")),
+        ("bssfp2d+INTERLEAVED", {}, ("none", "interleaved")),
+        ("bssfp2d", {"trigger_type": "physio2"}, ("prospective", "sequential")),
+        (
+            "bssfp2d+RETROSPECTIVE",
+            {"trigger_type": "physio2"},
+            ("retrospective", "sequential"),
+        ),
+    ],
+)
+def test_the_cine_states_its_gating_and_view_order_to_the_reconstruction(
+    zoo, name, changes, stated
+):
+    plugin = zoo[name]
+    protocol = _protocol(plugin, CHANGED["bssfp2d"] | {"num_frames": 6} | changes)
+
+    main = _main(plugin, protocol)
+    listed = str(main.definitions["ReconParameters"]).split()
+
+    assert {"Gating", "Ordering", "CardiacPhases"} <= set(listed)
+    assert (main.definitions["Gating"], main.definitions["Ordering"]) == stated
+    assert np.atleast_1d(main.definitions["CardiacPhases"])[0] == 6
 
 
 @pytest.mark.parametrize("name", SHIPPED)
@@ -2253,3 +2405,23 @@ def test_pd_target_option_offers_no_control_fitting():
         _plugins.SEQUENCES / "fse_pd3d.py", {"pd_target": True, "fit_controls": True}
     )
     assert plugin.app.keywords["pd_optimize"] is False
+
+
+@pytest.mark.parametrize("field", [1.5, 3.0])
+def test_an_inflow_mra_inverts_to_null_venous_blood_at_the_scanners_field(zoo, field):
+    from pulserver._zoo.sequences.inflow_mra3d import BLOOD_T1_S
+
+    plugin = zoo["inflow_mra3d"]
+    system = copy.copy(SYSTEM)
+    system.B0 = field
+    nulled = _chain(plugin.generate(system, _protocol(plugin)))[-1]
+    chosen = _chain(
+        plugin.generate(
+            system, _protocol(plugin, {"user15_value": 0, "prep_time": 900_000})
+        )
+    )[-1]
+
+    assert nulled.definitions["InversionTime"][0] == pytest.approx(
+        np.log(2.0) * BLOOD_T1_S[field]
+    )
+    assert chosen.definitions["InversionTime"][0] == pytest.approx(0.9)
