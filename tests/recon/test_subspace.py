@@ -18,6 +18,7 @@ from pulserver.recon.handlers.subspace import (  # noqa: E402
     FseSubspaceRecon,
     _by_contrast,
     _by_echo,
+    _calibration_lines,
     _echoes,
 )
 
@@ -139,3 +140,33 @@ def test_a_buffer_laid_out_by_contrast_is_solved_one_frame_per_contrast():
                 np.testing.assert_array_equal(
                     samples[:, frame, shot], kspace[:, frame, z, y]
                 )
+
+
+CALIBRATION_ONLY, CALIBRATION_AND_IMAGING = 1 << 19, 1 << 20
+
+
+def test_calibration_only_lines_join_the_solve_at_their_echo_on_the_imaging_grid():
+    kspace = np.arange(2 * 2 * 3 * 5, dtype=np.complex64).reshape(2, 2, 3, 5)
+    ref = Placed(kspace, {(0, 1): None, (1, 2): None, (1, 0): None})
+    ref.origin = {"partition": 4, "phase_encode": 6}
+    acquisitions = [
+        SimpleNamespace(
+            where=(0, 1), idx=SimpleNamespace(contrast=1), flags=CALIBRATION_ONLY
+        ),
+        SimpleNamespace(
+            where=(1, 2), idx=SimpleNamespace(contrast=0), flags=CALIBRATION_ONLY
+        ),
+        SimpleNamespace(
+            where=(1, 0), idx=SimpleNamespace(contrast=0), flags=CALIBRATION_AND_IMAGING
+        ),
+        SimpleNamespace(where=(1, 0), idx=SimpleNamespace(contrast=2), flags=0),
+    ]
+    data = SimpleNamespace(ref=ref, acquisitions=acquisitions)
+
+    positions, samples = _calibration_lines(data, frames=3)
+
+    assert positions[0].tolist() == [[5, 8]]
+    assert positions[1].tolist() == [[4, 7]]
+    assert positions[2].tolist() == [[-1, -1]]
+    np.testing.assert_array_equal(samples[:, 0, 0], kspace[:, 1, 2])
+    np.testing.assert_array_equal(samples[:, 1, 0], kspace[:, 0, 1])

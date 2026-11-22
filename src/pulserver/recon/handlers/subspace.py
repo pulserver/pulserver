@@ -18,17 +18,22 @@ from typing import Any
 import numpy as np
 
 from ...mrd._images import center_crop
-from .._buffers import ReconBuffer, ReconData
+from .._buffers import ReconBuffer, ReconData, readout_roles
 from .._calibration import MissingCalibration, coil_maps
 from ..gadgets import AsymmetricEcho, Prewhiten, RemoveReadoutOversampling
 from ..plugin import ReconContext, ReconResult
 from .pics import PicsRecon, _volume, _wave_trajectory, compressed, nlinv_estimate
 
 #: Temporal basis functions kept: the leading singular vectors of the dictionary.
-RANK = 4
+RANK = 3
 
 #: Edge, in voxels, of the blocks of the locally low-rank penalty.
 BLOCK = 8
+
+#: Weight of the calibration-only readouts beside the imaging readouts in the
+#: solve: at one, their fully sampled centre at the train's first echoes pulls
+#: the late echoes off the basis's span.
+CALIBRATION_WEIGHT = 0.3
 
 #: T1 values of the dictionary, in ms: white matter to CSF at 3 T and 7 T.
 T1_MS = (400.0, 800.0, 1200.0, 1600.0, 2000.0, 2800.0, 4400.0)
@@ -90,6 +95,10 @@ class SubspaceRecon(PicsRecon):
         Receive channels beyond this many are compressed to it.
     block : int, default=BLOCK
         Block edge of the locally low-rank penalty.
+    calibration_weight : float, default=CALIBRATION_WEIGHT
+        Weight of the calibration-only readouts of a unit laid out by line,
+        each solved in the frame of its echo without the wave, beside the
+        imaging readouts; zero leaves them to the coil maps alone.
     kspace_filter, gradient_unwarp, intensity_correction : bool, default=True
         As :class:`~pulserver.recon.handlers.pics.PicsRecon`.
     """
@@ -101,6 +110,7 @@ class SubspaceRecon(PicsRecon):
         iterations: int = 40,
         virtual_coils: int | None = 6,
         block: int = BLOCK,
+        calibration_weight: float = CALIBRATION_WEIGHT,
         *,
         kspace_filter: bool = True,
         gradient_unwarp: bool = True,
@@ -118,6 +128,7 @@ class SubspaceRecon(PicsRecon):
         self.gadgets = (Prewhiten(), AsymmetricEcho(), RemoveReadoutOversampling())
         self.rank = rank
         self.block = block
+        self.calibration_weight = calibration_weight
         self._described: tuple[Any, ...] = ()
 
     def interpret(self, description: Any) -> Any:
@@ -227,6 +238,9 @@ class SubspaceRecon(PicsRecon):
                     f"{frames} echoes"
                 )
             positions, kspace = _by_echo(buffer, echo_of, frames)
+        calibration = None
+        if not by_contrast and data.ref is not None and self.calibration_weight > 0:
+            calibration = _calibration_lines(data, frames)
         shape = buffer.image_shape
         cartesian = buffer.space.cartesian
         if cartesian:
@@ -255,6 +269,29 @@ class SubspaceRecon(PicsRecon):
                 **common,
             )
         measured = torch.from_numpy(kspace)
+        if calibration is not None:
+            weight = self.calibration_weight
+            positions_ref, kspace_ref = calibration
+            alone = linop.CartesianSense(
+                maps.contiguous(),
+                image_shape,
+                **{**common, "positions": torch.from_numpy(positions_ref)},
+            )
+            if not cartesian:
+                alone = linop.WaveSense(
+                    maps.contiguous(),
+                    image_shape,
+                    kspace.shape[-1],
+                    centred=True,
+                    psf=torch.ones(
+                        (*shape[:-1], kspace.shape[-1]), dtype=torch.complex64
+                    ),
+                    **{**common, "positions": torch.from_numpy(positions_ref)},
+                )
+            encoding = linop.concatenate([encoding, weight * alone], axis=-2)
+            measured = torch.cat(
+                [measured, weight * torch.from_numpy(kspace_ref)], dim=-2
+            )
         scaling = optim.data_scaling(measured, A=encoding) or 1.0
         prior = priors.LocallyLowRank(
             (-3, -2, -1), self.wavelet, joint_axes=(0,), block=self.block
@@ -437,6 +474,21 @@ def _by_echo(
     for frame, line in enumerate(lines):
         positions[frame, : len(line)] = line
         kspace[:, frame, : len(line)] = buffer.kspace[:, line[:, 0], line[:, 1]]
+    return positions, kspace
+
+
+def _calibration_lines(data: ReconData, frames: int) -> tuple[np.ndarray, np.ndarray]:
+    """Return the calibration-only readouts of a unit by echo, at their phase encodes on the imaging grid, as :func:`_by_echo` does."""
+    ref = data.ref
+    alone = [a for a in data.acquisitions if readout_roles(a) == (False, True)]
+    echo_of = _echoes(ref, alone)
+    echo_of[echo_of >= frames] = -1
+    positions, kspace = _by_echo(ref, echo_of, frames)
+    placed = positions[..., 0] >= 0
+    origin = np.array(
+        [ref.origin.get("partition", 0), ref.origin.get("phase_encode", 0)]
+    )
+    positions[placed] += origin
     return positions, kspace
 
 
