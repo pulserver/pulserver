@@ -447,6 +447,7 @@ LAST_TR_BLOCKS = {"zte3d": 2}
 TOGGLED = {
     "bssfp2d+RETROSPECTIVE": ("bssfp2d", {"retrospective": True}),
     "bssfp2d+GOLDEN": ("bssfp2d", {"ordering": "golden"}),
+    "bssfp2d+INTERLEAVED": ("bssfp2d", {"ordering": "interleaved"}),
     "fse3d+OPTIMIZED": ("fse3d", {"refocusing": "optimized"}),
     "fse3d+DUAL_REGION": ("fse3d", {"refocusing": "dual_region"}),
     "fse3d+NAVIGATOR": ("fse3d", {"navigator": True}),
@@ -1564,11 +1565,31 @@ def test_a_golden_free_running_cine_reads_every_line_each_frame(zoo):
     assert evaluation.frame_time == pytest.approx(48 * main.definitions["TR"][0])
 
 
+def test_interleaved_real_time_frames_together_sample_the_central_lines_once(zoo):
+    plugin = zoo["bssfp2d+INTERLEAVED"]
+    changes = CHANGED["bssfp2d"] | {"num_frames": 6, "Ry": 3, "user12_value": 50.0}
+    protocol = _protocol(plugin, changes)
+
+    evaluation = plugin.evaluate(SYSTEM, protocol)
+    main = _main(plugin, protocol)
+    labels = main.evaluate_labels(evolution="adc")
+    lines, phases = np.asarray(labels["LIN"]), np.asarray(labels["PHS"])
+
+    first_three = np.sort(lines[phases < 3])
+    assert first_three.tolist() == list(range(12, 36))
+    assert set(lines[phases == 0]).isdisjoint(lines[phases == 1])
+    assert evaluation.frame_time == pytest.approx(8 * main.definitions["TR"][0])
+    chain = _chain(plugin.generate(SYSTEM, protocol))
+    played = sum(part.duration()[0] for part in chain)
+    assert abs(evaluation.duration - played) <= 2 * SYSTEM.block_duration_raster
+
+
 @pytest.mark.parametrize(
     ("name", "changes", "stated"),
     [
         ("bssfp2d", {}, ("none", "sequential")),
         ("bssfp2d+GOLDEN", {}, ("none", "golden")),
+        ("bssfp2d+INTERLEAVED", {}, ("none", "interleaved")),
         ("bssfp2d", {"trigger_type": "physio2"}, ("prospective", "sequential")),
         (
             "bssfp2d+RETROSPECTIVE",

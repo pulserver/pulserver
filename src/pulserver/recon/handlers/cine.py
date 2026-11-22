@@ -512,6 +512,8 @@ class CineRecon(PicsRecon):
             kspace /= np.maximum(counts, 1.0)[None, :, :, None]
         else:
             labels = np.unique(readouts.phase)
+            if ordering == "interleaved" and self.temporal is None:
+                temporal = REALTIME_TEMPORAL
             if gating == "prospective":
                 readouts = self._regular_beats(readouts, data)
             kspace = np.zeros(
