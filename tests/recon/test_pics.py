@@ -19,7 +19,8 @@ from pulserver.recon.handlers.pics import (
     MAGNITUDE_SERIES,
     REAL_SERIES,
     PicsRecon,
-    partial_fourier,
+    partial_fourier_axes,
+    pics_image,
 )
 from pulserver.recon.handlers.pics_train import PicsTrainRecon
 
@@ -312,7 +313,7 @@ def test_a_partial_fourier_image_is_closer_to_the_full_one_than_the_solve_of_its
         return image
 
     completed = image()
-    monkeypatch.setattr(pics, "partial_fourier", lambda image, sampled: image)
+    monkeypatch.setattr(pics, "partial_fourier_axes", lambda sampled: False)
     solved = image()
 
     full = root_sum_of_squares(kspace)
@@ -764,43 +765,43 @@ def magnitude_error(image, magnitude):
     return np.linalg.norm(difference[inside]) / np.linalg.norm(magnitude[inside])
 
 
-@pytest.mark.parametrize("n", [32, 33])
-def test_homodyne_over_two_partial_fourier_axes_together_beats_one_axis_after_the_other(
-    n,
+@pytest.mark.parametrize("axes", [(0,), (1,), (0, 1)])
+def test_a_real_image_times_its_phase_restores_the_lines_partial_fourier_leaves_out(
+    axes,
 ):
-    from bartorch import apps
+    import torch
 
-    magnitude, kspace = ellipsoid(n)
-    image, sampled = truncated(kspace, (0, 1))
-
-    together = magnitude_error(partial_fourier(image, sampled), magnitude)
-    in_turn = magnitude_error(apps.partial_fourier(image, sampled), magnitude)
-
-    assert together < 0.8 * in_turn
-    assert together < 0.8 * magnitude_error(image, magnitude)
-
-
-@pytest.mark.parametrize("axis", [0, 1])
-def test_homodyne_along_one_partial_fourier_axis_makes_a_real_image_near_the_full_magnitude(
-    axis,
-):
     magnitude, kspace = ellipsoid(32)
-    image, sampled = truncated(kspace, (axis,))
+    image, sampled = truncated(kspace, axes)
+    z, y, x = np.meshgrid(*(np.linspace(-1, 1, 32),) * 3, indexing="ij")
+    phase = torch.from_numpy(
+        np.exp(1j * (0.8 * y + 0.5 * z + 0.3 * x * y)).astype(np.complex64)
+    )
+    measured = torch.fft.fftshift(
+        torch.fft.fftn(torch.fft.ifftshift(image), norm="ortho")
+    )[None]
 
-    completed = partial_fourier(image, sampled)
+    solved = pics_image(
+        measured, torch.ones_like(measured), sampled, 0.0, 30, None, phase=phase
+    )
 
-    assert completed.imag.abs().max() == 0
-    assert magnitude_error(completed, magnitude) < 0.5 * magnitude_error(
+    inside = magnitude > 0
+    quadrature = (solved.numpy() * np.conj(phase.numpy()))[inside].imag
+    assert np.abs(quadrature).max() < 1e-5 * np.abs(solved.numpy()).max()
+    # Two axes leave out k-space whose conjugate is not sampled either.
+    bound = 0.6 if len(axes) > 1 else 0.1
+    assert magnitude_error(solved, magnitude) < bound * magnitude_error(
         image, magnitude
     )
 
 
-def test_an_image_without_partial_fourier_axes_keeps_its_phase():
-    import torch
+def test_an_axis_is_partial_fourier_only_where_lines_are_missing_at_one_end():
+    sampled = np.ones((1, 16, 16), dtype=bool)
+    undersampled = sampled.copy()
+    undersampled[:, ::2] = False
+    partial = sampled.copy()
+    partial[:, 12:] = False
 
-    _, kspace = ellipsoid(16)
-    image, _ = truncated(kspace, ())
-    sampled = torch.ones(image.shape, dtype=torch.bool)
-    sampled[:, ::2] = False
-
-    assert partial_fourier(image, sampled) is image
+    assert not partial_fourier_axes(sampled)
+    assert not partial_fourier_axes(undersampled)
+    assert partial_fourier_axes(partial)
