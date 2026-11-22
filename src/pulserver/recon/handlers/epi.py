@@ -121,47 +121,12 @@ class RampSampling(Gadget):
         discards are set to those of the grid. A readout of a space without
         geometry, or without a trajectory, is returned as it is.
         """
-        operator = self._operator(acquisition, delay_s)
-        if operator is None:
-            return data
-        matrix, reversed_read = operator
-        columns = matrix.shape[1]
-        acquisition.center_sample = (
-            columns - 1 - columns // 2 if reversed_read else columns // 2
-        )
-        acquisition.discard_pre = acquisition.discard_post = 0
-        return data @ matrix
-
-    def gridded(self, acquisition, data):
-        """Return one readout on its space's readout grid, leaving ``acquisition`` as it is; ``None`` for a space without geometry.
-
-        A readout with a trajectory is resampled as :meth:`resample` does; one
-        without is cut to the grid's columns about its centre in image space,
-        which removes its readout oversampling.
-        """
-        operator = self._operator(acquisition, None)
-        if operator is not None:
-            return data @ operator[0]
-        space = int(acquisition_label(acquisition, "encoding_space_ref", 0) or 0)
-        if space >= len(self.geometry) or self.geometry[space] is None:
-            return None
-        columns = self.geometry[space][0]
-        samples = data.shape[-1]
-        if samples < columns:
-            return None
-        image = np.fft.fftshift(np.fft.ifft(np.fft.ifftshift(data, axes=-1)), axes=-1)
-        start = samples // 2 - columns // 2
-        cut = image[..., start : start + columns]
-        return np.fft.fftshift(np.fft.fft(np.fft.ifftshift(cut, axes=-1)), axes=-1)
-
-    def _operator(self, acquisition, delay_s):
-        """Return the matrix that resamples a readout onto its grid and whether the readout runs backwards; ``None`` without a trajectory or a geometry."""
         traj = getattr(acquisition, "traj", None)
         space = int(acquisition_label(acquisition, "encoding_space_ref", 0) or 0)
         if traj is None or np.size(traj) == 0 or space >= len(self.geometry):
-            return None
+            return data
         if self.geometry[space] is None:
-            return None
+            return data
         columns, fov = self.geometry[space]
         delay = self.delay_s if delay_s is None else float(delay_s)
         k = np.asarray(traj, dtype=np.float64)[:, 0]
@@ -184,7 +149,11 @@ class RampSampling(Gadget):
                 .numpy()
                 .T
             )
-        return self.operators[key], bool(positions[-1] < positions[0])
+        acquisition.center_sample = (
+            columns - 1 - columns // 2 if positions[-1] < positions[0] else columns // 2
+        )
+        acquisition.discard_pre = acquisition.discard_post = 0
+        return data @ self.operators[key]
 
 
 def delayed(k: np.ndarray, samples: float) -> np.ndarray:
@@ -553,7 +522,7 @@ class EpiRecon(PicsRecon):
         compression = (
             ()
             if self.virtual_coils is None
-            else (CompressChannels(self.virtual_coils, reject_scalp=True),)
+            else (CompressChannels(self.virtual_coils),)
         )
         self.gadgets = (
             Prewhiten(),
@@ -567,10 +536,6 @@ class EpiRecon(PicsRecon):
     def startup(self, context):
         super().startup(context)
         self.gadget(EpiPhaseCorrection).ramp = self.gadget(RampSampling)
-        if self.virtual_coils is not None:
-            self.gadget(CompressChannels).readout_grid = self.gadget(
-                RampSampling
-            ).gridded
         self.calibrations = {}
         self.slice_calibrations = []
         self.own_maps = {}
@@ -1021,17 +986,18 @@ def plane_positions(acquisition, space, count) -> list[float]:
 EPI_WAVELET_SLAB = 0.1
 EPI_WAVELET_SLICE = 0.03
 
-#: Sobolev weight of the coil maps of a 3D EPI slab on their calibration
-#: grid. Below BART's, the maps follow the sensitivity across the end
-#: partitions of a slab whose signal reaches them and wraps onto each other,
-#: where the partition and in-plane aliases are unfolded.
+#: Sobolev weight of the EPI coil maps on their calibration grid. Below
+#: BART's, the maps follow the steep sensitivity next to the coil elements:
+#: along the scalp of a close-fitting array, where the scalp is far brighter
+#: than the brain and smoother maps fold it into the brain at R=3, and across
+#: the end partitions of a slab whose signal reaches them and wraps onto each
+#: other.
 EPI_SOBOLEV = 1.0
 
 
 def epi_nlinv_estimate(kspace):
-    """Return the coil maps of EPI calibration k-space by :func:`~pulserver.recon.handlers.pics.nlinv_estimate`: a slab's at ``EPI_SOBOLEV``, a slice's at BART's weight."""
-    slab = kspace.ndim == 4 and kspace.shape[1] > 1
-    if not slab or EPI_SOBOLEV is None:
+    """Return the coil maps of EPI calibration k-space by :func:`~pulserver.recon.handlers.pics.nlinv_estimate` at ``EPI_SOBOLEV``."""
+    if EPI_SOBOLEV is None:
         return nlinv_estimate(kspace)
     return nlinv_estimate(kspace, sobolev=EPI_SOBOLEV)
 

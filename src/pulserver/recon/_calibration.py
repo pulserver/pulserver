@@ -798,69 +798,6 @@ def basis_of(samples: np.ndarray, n_virtual: int) -> Basis:
     return Basis(matrix, n_virtual, digest(matrix[:, :n_virtual], n_virtual))
 
 
-def rovir_basis(
-    images: np.ndarray,
-    wanted: np.ndarray,
-    rejected: np.ndarray,
-    n_virtual: int,
-    keep: int,
-) -> Basis:
-    """Return the basis of ``n_virtual`` region-optimized virtual channels (ROVir, :func:`bartorch.tools.rovir`).
-
-    The ``keep`` directions of highest ``wanted``-to-``rejected`` energy of
-    the ``(coils, *grid)`` channel ``images`` are kept, and within them the
-    ``n_virtual`` of most energy, as :func:`bartorch.tools.rovir_fov` does
-    (Kim et al., Magn Reson Med 2021;86:197-212). The kept channels are
-    orthonormal, so whitened noise stays white.
-
-    Parameters
-    ----------
-    images : ndarray
-        ``(coils, *grid)`` complex channel images.
-    wanted, rejected : ndarray
-        Boolean masks on ``grid``: the region whose signal is kept, and the
-        one whose signal is suppressed.
-    n_virtual : int
-        Virtual channels kept.
-    keep : int
-        ROVir directions the virtual channels are drawn from.
-
-    Returns
-    -------
-    Basis
-        The basis, ``matrix`` holding the virtual channels in its first
-        ``n_virtual`` rows.
-
-    Raises
-    ------
-    ValueError
-        If ``n_virtual`` exceeds ``keep`` or ``keep`` the coils.
-    """
-    import torch
-    from bartorch import tools
-
-    coils = images.shape[0]
-    if not n_virtual <= keep <= coils:
-        raise ValueError(
-            f"cannot keep {n_virtual} virtual channels of {keep} ROVir "
-            f"directions of {coils} coils"
-        )
-    x = torch.from_numpy(np.ascontiguousarray(images, dtype=np.complex64))
-    # BART reads the coils of a (coils, z, y, x) array; a plane is one z.
-    volume = x if x.ndim == 4 else x.reshape(coils, 1, *x.shape[1:])
-    masks = [torch.from_numpy(m).reshape(volume.shape[1:]) for m in (wanted, rejected)]
-    transform = tools.rovir(
-        (volume * masks[0]).contiguous(), (volume * masks[1]).contiguous()
-    )
-    q = transform.reshape(coils, coils).mT.to(torch.complex128)[:, :keep]
-    flat = x.reshape(coils, -1).to(torch.complex128)
-    u = torch.linalg.svd(q.conj().mT @ flat, full_matrices=False)[0][:, :n_virtual]
-    w = (q @ u).numpy()
-    matrix = np.zeros((coils, coils), dtype=np.complex64)
-    matrix[:n_virtual] = w.T
-    return Basis(matrix, n_virtual, digest(matrix[:n_virtual], n_virtual))
-
-
 def projected_readout(data: np.ndarray, basis: Basis) -> np.ndarray:
     """Return a ``(coils, samples)`` readout on the virtual channels of ``basis``, as :func:`bartorch.tools.ccapply` projects k-space."""
     virtual = basis.matrix[: basis.n_virtual].conj()
