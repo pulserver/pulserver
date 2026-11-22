@@ -453,6 +453,12 @@ class IntensityCorrection:
     of mean 1 inside its own mask, so ratios between slices are not kept.
     Make one instance per stream.
 
+    A field measured apart from the images, such as the one an EPI
+    calibration's proton-density image gives (:meth:`prescribe`), divides
+    every image of its slice in place of the estimate: N4 cannot tell a
+    smooth receive field from the contrast of an image that nulls a tissue,
+    such as grey matter in a T1-FLAIR.
+
     A magnitude image that is not 2D or 3D once its axes of one point are
     dropped, or whose mask holds fewer than 64 pixels or 128 voxels or less
     than :data:`N4_MIN_MASK_FRACTION` of the image, or that falls apart into
@@ -469,6 +475,19 @@ class IntensityCorrection:
     def __init__(self, levels: int | None = None) -> None:
         self.levels = N4_FITTING_LEVELS if levels is None else int(levels)
         self.fields: dict[tuple[Any, ...], np.ndarray | None] = {}
+        self.prescribed: dict[int, np.ndarray] = {}
+
+    def prescribe(self, location: int, field: np.ndarray) -> None:
+        """Divide the magnitude images of slice ``location`` by ``field`` rather than by a field N4 estimates from them.
+
+        Parameters
+        ----------
+        location : int
+            Slice counter of the images.
+        field : numpy.ndarray
+            Receive field on the grid of the images, mean 1 over the object.
+        """
+        self.prescribed[int(location)] = np.asarray(field, dtype=np.float32)
 
     def __call__(self, results: Any, data: Any) -> Any:
         """Return ``results``, a :class:`~pulserver.recon.ReconResult` or a list of them, with their magnitude images divided by the field.
@@ -520,6 +539,15 @@ class IntensityCorrection:
             magnitude.shape,
         )
         if key in self.fields:
+            return self.fields[key]
+        prescribed = self.prescribed.get(key[0])
+        if prescribed is not None and prescribed.size == magnitude.size:
+            self.fields[key] = prescribed.reshape(magnitude.shape)
+            _log.info(
+                "slice %d, set %d is divided by the receive field its calibration measured",
+                key[0],
+                key[1],
+            )
             return self.fields[key]
         squeezed = tuple(n for n in magnitude.shape if n > 1)
         if len(squeezed) not in (2, 3):

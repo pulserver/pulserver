@@ -20,6 +20,7 @@ from .._calibration import (
     _zero_filled,
     coil_maps,
 )
+from .._correct import receive_field
 from .._diffusion import DiffusionMaps
 from ..gadgets import (
     AsymmetricEcho,
@@ -469,7 +470,15 @@ class EpiRecon(PicsRecon):
     the field pair, is logged with the reason at ``WARNING``. Each image is
     Fermi filtered before its magnitude is taken, and corrected for gradient
     nonlinearity and divided by the receive field after the distortion
-    correction (:class:`~pulserver.recon.Corrections`).
+    correction (:class:`~pulserver.recon.Corrections`). The receive field of
+    a slice whose scan opens with a single-slice calibration is N4's field
+    of the calibration's forward image, combined with the slice's own maps
+    (:func:`sense_combined`): a short-TE low-flip gradient echo, close to
+    proton density weighted, from which N4 tells the field from the anatomy
+    better than from a T1-FLAIR or a diffusion-weighted image. Every image of
+    the slice is divided by it, on the image grid where the calibration
+    shares the slice's in-plane field of view; elsewhere N4 fits the slice's
+    own first image.
 
     A series whose header states a diffusion table with a b-value above zero
     also sends, once a slice holds an image of every volume of the table, a
@@ -539,6 +548,7 @@ class EpiRecon(PicsRecon):
         self.calibrations = {}
         self.slice_calibrations = []
         self.own_maps = {}
+        self.receive_fields = {}
         self.field = None
         self.field_pair = {}
         self.phase_references = {}
@@ -601,8 +611,10 @@ class EpiRecon(PicsRecon):
         """Estimate the maps of each held calibration slice on its own, and keep its k-space for split-slice GRAPPA."""
         for polarity, units in self.calibrations.items():
             for unit in units:
-                coil_maps(context, unit, estimate=epi_nlinv_estimate)
+                maps = coil_maps(context, unit, estimate=epi_nlinv_estimate)
                 kspace = _zero_filled(unit.ref)
+                if int(np.prod(kspace.shape[1:-2])) == 1 and polarity == 0:
+                    self._measure_receive_field(unit, kspace, maps)
                 if int(np.prod(kspace.shape[1:-2])) == 1:
                     self.slice_calibrations.append(
                         (
@@ -612,6 +624,62 @@ class EpiRecon(PicsRecon):
                         )
                     )
         self.calibrations = {}
+
+    def _measure_receive_field(self, unit, kspace, maps) -> None:
+        """Keep the receive field N4 finds in the calibration image of a slice, for its images to be divided by."""
+        import torch
+
+        if self.corrections is None or self.corrections.intensity is None:
+            return
+        volume = torch.from_numpy(
+            kspace.reshape(kspace.shape[0], 1, *kspace.shape[-2:])
+        )
+        image = sense_combined(volume, maps.reshape(volume.shape)).abs().numpy()[0]
+        image = np.array(center_crop(image, unit.ref.image_shape[-2:]))
+        start = time.perf_counter()
+        field = receive_field(image, self.corrections.intensity.levels)
+        location = int(unit.counters.get("slice", 0))
+        _log.info(
+            "receive field of slice %d %s from its %s calibration image in %.1f s",
+            location,
+            "estimated"
+            if field is not None
+            else "not estimated (its mask is too small)",
+            image.shape,
+            time.perf_counter() - start,
+        )
+        if field is not None:
+            self.receive_fields[location] = (
+                field,
+                tuple(unit.ref.space.recon_fov[-2:]),
+            )
+
+    def _prescribe_receive_field(self, data, shape) -> None:
+        """Hand the slice's calibration receive field, on the grid of its images, to the intensity correction."""
+        import torch
+
+        location = int(data.counters.get("slice", 0))
+        measured = self.receive_fields.pop(location, None)
+        if measured is None:
+            return
+        field, fov = measured
+        if not np.allclose(fov, data.data.space.recon_fov[-2:], rtol=0, atol=1e-6):
+            _log.info(
+                "slice %d keeps its own N4 field: its calibration's field of view differs",
+                location,
+            )
+            return
+        squeezed = tuple(n for n in shape if n > 1)
+        if len(squeezed) != 2:
+            return
+        if field.shape != squeezed:
+            field = torch.nn.functional.interpolate(
+                torch.from_numpy(field)[None, None],
+                size=squeezed,
+                mode="bilinear",
+                align_corners=False,
+            )[0, 0].numpy()
+        self.corrections.intensity.prescribe(location, field)
 
     def _wavelet(self, volume):
         """Return the wavelet ``lambda`` of ``(coils, z, y, x)`` k-space."""
@@ -770,6 +838,8 @@ class EpiRecon(PicsRecon):
             )
         ]
         if corrections is not None:
+            if corrections.intensity is not None:
+                self._prescribe_receive_field(data, np.shape(results[0].data))
             results = corrections.intensity_corrected(results, data)
         if self.diffusion is not None:
             results += self.diffusion.add(
