@@ -429,25 +429,19 @@ class EpiRecon(PicsRecon):
 
     When PyHySCO is installed (bartorch's ``pyhysco`` extra, GPL-3.0), one
     susceptibility displacement field is estimated for the whole stack
-    (:func:`bartorch.tools.correct_susceptibility`, :func:`stack_field`).
-    A spin-echo field pair (``SET`` 2 forward, 3 reversed), reconstructed and
-    kept but sent as no image of the series, gives it in preference to any
-    other: its two volumes are displaced in opposite directions by the field
-    and, refocused, differ in nothing else. Without one, the root-sum-of-squares
-    images of the FLEET calibration's two phase-encode polarities give it.
-    They share the imaging's echo spacing, and so its distortion, at the
-    calibration's short echo time, where the signal near air-tissue
-    interfaces has not yet dephased. Without either,
-    the phase-encode-reversed reference volume (``SET`` 1), reconstructed and
-    kept, Fermi filtered as the images are, but sent as no image of the
-    series, is the reference: the first image of every slice of the stack is
-    held until the stack is complete, and that volume and the reference
-    volume give the field. The field is estimated once and applied to every
-    image of every slice
+    (:func:`bartorch.tools.correct_susceptibility`) from its spin-echo field
+    pair (``SET`` 2 forward, 3 reversed), reconstructed and kept but sent as
+    no image of the series: refocused, its two volumes are displaced in
+    opposite directions by the field and differ in nothing else. A pair of
+    gradient echoes, such as the FLEET calibration's two polarities or the
+    reversed reference volume (``SET`` 1), also differs in the intensity the
+    field gradient moves along the phase encode at 7T, and gives no field;
+    the reversed reference volume is sent as no image. The field is
+    estimated once and applied to every image of every slice
     (:func:`bartorch.tools.apply_susceptibility`, as FSL's ``applytopup
     --method=jac``), history ``HYSCO``. The correction is logged as the other
     corrections are, and an image left uncorrected, for want of PyHySCO or of
-    its reference, is logged with the reason at ``WARNING``. Each image is
+    the field pair, is logged with the reason at ``WARNING``. Each image is
     Fermi filtered before its magnitude is taken, and corrected for gradient
     nonlinearity and divided by the receive field after the distortion
     correction (:class:`~pulserver.recon.Corrections`).
@@ -505,11 +499,8 @@ class EpiRecon(PicsRecon):
         self.calibrations = {}
         self.slice_calibrations = []
         self.own_maps = {}
-        self.references = {}
         self.field = None
-        self.calibration_field = False
         self.field_pair = {}
-        self.held = []
         self._skips_logged = set()
         self.hysco = (
             None
@@ -570,16 +561,12 @@ class EpiRecon(PicsRecon):
         CoilCompression(self.virtual_coils, by_slice=False).pool(context, units)
 
     def _calibrate(self, context):
-        """Estimate the maps of each held calibration slice on its own, keep its k-space for split-slice GRAPPA, and fit the stack's field to its polarities."""
-        polarities = {}
+        """Estimate the maps of each held calibration slice on its own, and keep its k-space for split-slice GRAPPA."""
         for polarity, units in self.calibrations.items():
             for unit in units:
                 unit = compressed(context, unit, self.virtual_coils, by_slice=False)
                 coil_maps(context, unit, estimate=epi_nlinv_estimate)
                 kspace = _zero_filled(unit.ref)
-                polarities.setdefault(int(unit.counters.get("slice", 0)), {})[
-                    polarity
-                ] = (unit, kspace)
                 if int(np.prod(kspace.shape[1:-2])) == 1:
                     self.slice_calibrations.append(
                         (
@@ -589,47 +576,6 @@ class EpiRecon(PicsRecon):
                         )
                     )
         self.calibrations = {}
-        pairs = [
-            (location, by_polarity[0], by_polarity[1])
-            for location, by_polarity in polarities.items()
-            if {0, 1} <= set(by_polarity)
-        ]
-        if pairs and self.hysco is None:
-            self._estimate_field(
-                [
-                    (
-                        location,
-                        forward.ref.space,
-                        forward.ref.reference,
-                        self._calibration_image(forward.ref, forward_kspace),
-                        self._calibration_image(reverse.ref, reverse_kspace),
-                    )
-                    for location, (forward, forward_kspace), (
-                        reverse,
-                        reverse_kspace,
-                    ) in pairs
-                ],
-                "its FLEET calibration's two phase-encode polarities",
-            )
-            self.calibration_field = self.field is not None
-
-    def _calibration_image(self, ref, kspace):
-        """Return the root-sum-of-squares image of zero-filled calibration k-space on the grid of the images, Fermi filtered."""
-        import bartorch
-        import torch
-
-        axes = tuple(range(-1, -kspace.ndim, -1))
-        coils = bartorch.fft(
-            torch.from_numpy(np.ascontiguousarray(kspace, dtype=np.complex64)),
-            axes,
-            inverse=True,
-            unitary=True,
-        ).reshape(kspace.shape)
-        image = bartorch.rss(coils, 0).numpy()
-        if image.ndim == 3 and image.shape[0] == 1:
-            image = image[0]
-        image = center_crop(image, ref.image_shape[-image.ndim :])
-        return np.abs(self._filtered(np.array(image)))
 
     def _wavelet(self, volume):
         """Return the wavelet ``lambda`` of ``(coils, z, y, x)`` k-space."""
@@ -694,39 +640,12 @@ class EpiRecon(PicsRecon):
         if self.field_pair:
             self._field_from_pair()
         if polarity == 1:
-            # The reference only corrects the images (_corrected); it is not
-            # an image of the series.
-            self.references[location] = (np.abs(image), buffer.reference)
-            if not self.calibration_field:
-                self.field = None
+            # The reversed reference volume is no image of the series.
             return None
-        image = np.abs(image)
-        if self.hysco is not None or not self.references or self.field is not None:
-            return self._results(context, data, self._corrected(image, location))
-        self.held.append((data, image))
-        if {int(d.counters.get("slice", 0)) for d, _ in self.held} < set(
-            self.references
-        ):
-            return None
-        held, self.held = self.held, []
-        pairs = []
-        for unit_data, unit_image in held:
-            location = int(unit_data.counters.get("slice", 0))
-            reference, acquisition = self.references[location]
-            pairs.append(
-                (location, unit_data.data.space, acquisition, unit_image, reference)
-            )
-        self._estimate_field(pairs, "its phase-encode-reversed reference")
-        results = []
-        for unit_data, unit_image in held:
-            location = int(unit_data.counters.get("slice", 0))
-            results += self._results(
-                context, unit_data, self._corrected(unit_image, location)
-            )
-        return results
+        return self._results(context, data, self._corrected(np.abs(image), location))
 
     def _field_from_pair(self) -> None:
-        """Estimate the stack's field from its spin-echo field pair; it takes the place of any other."""
+        """Estimate the stack's field from its spin-echo field pair."""
         forward_set, reversed_set = FIELD_PAIR_SETS
         pairs = []
         for location, by_set in sorted(self.field_pair.items()):
@@ -739,23 +658,6 @@ class EpiRecon(PicsRecon):
         if not pairs or self.hysco is not None:
             return
         self._estimate_field(pairs, "its spin-echo field pair")
-        self.calibration_field = self.field is not None
-
-    def finish(self, context):
-        if self.held:
-            _log.warning(
-                "the stack never completed its first volume; %d images are sent "
-                "without susceptibility distortion correction",
-                len(self.held),
-            )
-        return super().finish(context)
-
-    def flush(self, context):
-        emitted = super().flush(context)
-        held, self.held = self.held, []
-        for data, image in held:
-            emitted.append((data, self._results(context, data, image)))
-        return emitted
 
     def _results(self, context, data, image):
         """Return the image's results, its geometry its own unit's whatever unit closed."""
@@ -867,11 +769,8 @@ class EpiRecon(PicsRecon):
             return undistorted(image, field, voxel)
         if self.hysco is not None:
             reason = self.hysco
-        elif location not in self.references:
-            reason = (
-                f"no phase-encode-reversed reference (set 1) of slice {location} "
-                "came before it"
-            )
+        elif self.field is None:
+            reason = "no spin-echo field pair (sets 2 and 3) came before it"
         else:
             reason = f"the stack's field holds no slice {location}"
         level = logging.DEBUG if reason in self._skips_logged else logging.WARNING
