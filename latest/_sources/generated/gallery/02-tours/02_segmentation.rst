@@ -100,10 +100,10 @@ write it to a file and convert it under the scanner limits.
  .. code-block:: none
 
     585 blocks in the file; cache se2d.pseg
-    repetition: 9 blocks, TR 18.02 ms, played 65 times
+    repetition: 9 blocks, TR 17.56 ms, played 65 times
     virtual segment 0: blocks 1-2, 3.56 ms, events
     virtual segment 1: blocks 3-3, 0.02 ms, pure delay
-    virtual segment 2: blocks 4-8, 12.04 ms, events
+    virtual segment 2: blocks 4-8, 11.58 ms, events
 
 
 
@@ -242,7 +242,7 @@ base block, so both subsequences play the virtual segments printed above.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.600 seconds)
+   **Total running time of the script:** (0 minutes 0.566 seconds)
 
 
 .. _sphx_glr_download_generated_gallery_02-tours_02_segmentation.py:
