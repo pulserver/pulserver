@@ -21,6 +21,7 @@ from pulserver._zoo._evaluation import (
     packets,
     pixel_bandwidth,
     rf_layout,
+    stack_prescans,
 )
 from pulserver._zoo._user import OPTIONS, OWN, user_entries
 from pulserver.design import (
@@ -149,9 +150,15 @@ class Epi2D(SequencePlugin):
         *prescans, volume = self.app(system, **(protocol.arguments | one))
         stem = volume.definitions["Name"]
         calibration = [
-            seq for seq in prescans if seq.definitions["Name"] != f"{stem}_reference"
+            seq for seq in prescans if seq.definitions["Name"] == f"{stem}_calibration"
         ]
-        volumes = len(prescans) - len(calibration) + n_frames
+        references = [
+            seq for seq in prescans if seq.definitions["Name"] == f"{stem}_reference"
+        ]
+        volumes = len(references) + n_frames
+        # The field pair and the full-k reference image the whole stack at
+        # their own shortest TR, so they are designed at the prescription.
+        stack_volumes = stack_prescans(list(self.app(system, **protocol.arguments)))
         shot = volume.definitions["TR"][0] / n_shots
         sizes, cycles = _cycles(
             a | {"n_slices": groups}, shot, system.block_duration_raster
@@ -178,12 +185,18 @@ class Epi2D(SequencePlugin):
         values = achieved(self, volume) | {UIParam.TR: tr}
         return Evaluation(
             protocol.replace(values),
-            played * sum(cycles) + groups * sequences.duration(calibration),
+            played * sum(cycles)
+            + groups * sequences.duration(calibration)
+            + sequences.duration(stack_volumes),
             info=bandwidth_note(
                 system, a["readout_bandwidth_hz"], *first_readout(volume)
             ),
             rf_layout=densest(
-                layout, *(RfLayout.of(prescan, None) for prescan in calibration)
+                layout,
+                *(
+                    RfLayout.of(prescan, None)
+                    for prescan in (*calibration, *stack_volumes)
+                ),
             ),
             sequence=volume,
             echo_spacing=volume.definitions["EchoSpacing"][0],

@@ -16,7 +16,14 @@ from _host import LIMITS, value_block
 
 from pulserver import _plugins
 from pulserver._zoo import ZOO_PAIRS
-from pulserver._zoo._evaluation import achieved, cartesian_2d, densest, rf_layout
+from pulserver._zoo._evaluation import (
+    achieved,
+    cartesian_2d,
+    densest,
+    rf_layout,
+    rf_power,
+    stack_prescans,
+)
 from pulserver._zoo._evaluation import arguments as app_arguments
 from pulserver._zoo._fse import bounding_train
 from pulserver._zoo._saturation import explicit_bands
@@ -39,7 +46,9 @@ SYSTEM = design_system(LIMITS)
 SHIPPED = sorted(path.stem for path in _plugins.SEQUENCES.glob("*.py"))
 # The spin-echo sequences fix their flip angles; the others take one.
 SPIN_ECHO = [name for name in SHIPPED if name.startswith(("se", "fse"))]
-FLIPPED = [name for name in SHIPPED if name not in SPIN_ECHO]
+# The 2D EPI states its spin-echo field pair, whose refocusing pulses at the
+# pair's shortest TR outweigh the excitation train at any flip angle.
+FLIPPED = [name for name in SHIPPED if name not in SPIN_ECHO and name != "epi2d"]
 
 # The layout integrates the squared magnitude of each unit-peak waveform with
 # the trapezoidal rule over the sample times the listing carries;
@@ -503,6 +512,31 @@ def _prescans(plugin, protocol, name="calibration"):
     ]
 
 
+def _repeating_prescans(plugin, protocol):
+    """The prescans of the chain ``plugin`` designs for ``protocol`` that repeat at a TR of their own: its calibration and the volumes of its whole stack."""
+    chain = _chain(plugin.generate(SYSTEM, protocol))
+    return [*_prescans(plugin, protocol), *stack_prescans(chain)]
+
+
+def _stated_power(designed, period, prescans):
+    """The mean RF power in Hz² a layout of ``period`` states for a TR of power ``designed`` and the RF of ``prescans``: the strongest prescan's pulses, as many as it plays in the period rounded up, where it plays more."""
+    layouts = [RfLayout.of(prescan, None) for prescan in prescans]
+    strongest = max(layouts, key=rf_power, default=None)
+    if strongest is None or rf_power(strongest) <= designed:
+        return designed
+    played = len(strongest.instances.definition)
+    count = int(np.ceil(period * played / strongest.period - 1e-9))
+    energy = np.array(
+        [
+            _unit_energy(d.time, d.waveform) * d.peak_hz**2
+            for d in strongest.instances.definitions
+        ]
+    )
+    each = strongest.instances.amplitude**2 * energy[strongest.instances.definition]
+    picked = np.sort(each)[::-1][np.arange(count) % played]
+    return float(picked.sum() / period)
+
+
 def _bounding(plugin, protocol, peak):
     """The main sequence of the scan whose trains play every pulse of ``protocol``'s at its angle ``peak``."""
     a = app_arguments(plugin, protocol)
@@ -687,7 +721,10 @@ def test_an_evaluation_states_as_its_layout_a_regular_tr_of_the_design(
     # A calibration that plays more RF power than a TR is stated in its place.
     expected = densest(
         expected,
-        *(RfLayout.of(prescan, None) for prescan in _prescans(plugin, protocol)),
+        *(
+            RfLayout.of(prescan, None)
+            for prescan in _repeating_prescans(plugin, protocol)
+        ),
     )
     amplitude = expected.instances.amplitude.copy()
     if name in OPTIMIZED or name in PRESCRIBED:
@@ -856,14 +893,18 @@ def test_each_zoo_layout_plays_the_rf_power_of_the_last_tr_of_the_design(zoo, na
 
     layout = plugin.evaluate(SYSTEM, protocol).rf_layout
 
-    designed = _last_tr_power(_main(plugin, protocol), LAST_TR_BLOCKS.get(name))
+    main = _main(plugin, protocol)
+    designed = _last_tr_power(main, LAST_TR_BLOCKS.get(name))
     if name in PRESCRIBED:
         # The train at its largest angle plays at least the power of the
         # train the design solves for.
         assert _layout_power(layout) >= designed
         bound = _bounding(plugin, protocol, PRESCRIBED[name])
         designed = _last_tr_power(bound, LAST_TR_BLOCKS.get(name))
-    assert _layout_power(layout) == pytest.approx(designed, rel=POWER_RTOL)
+    stated = _stated_power(
+        designed, main.definitions["TR"][0], _repeating_prescans(plugin, protocol)
+    )
+    assert _layout_power(layout) == pytest.approx(stated, rel=POWER_RTOL)
 
 
 @pytest.mark.parametrize("name", SHIPPED)
@@ -1053,12 +1094,16 @@ def test_the_listed_definitions_and_the_validated_layout_play_the_rf_power_of_th
     assert set(layout.definition) <= {record.index for record in listed}
     plugin = zoo[name]
     protocol = _protocol(plugin, changes)
-    designed = _last_tr_power(_main(plugin, protocol), LAST_TR_BLOCKS.get(name))
+    main = _main(plugin, protocol)
+    designed = _last_tr_power(main, LAST_TR_BLOCKS.get(name))
     if name in PRESCRIBED:
         assert _wire_power(listed, layout) >= designed
         bound = _bounding(plugin, protocol, PRESCRIBED[name])
         designed = _last_tr_power(bound, LAST_TR_BLOCKS.get(name))
-    assert _wire_power(listed, layout) == pytest.approx(designed, rel=POWER_RTOL)
+    stated = _stated_power(
+        designed, main.definitions["TR"][0], _repeating_prescans(plugin, protocol)
+    )
+    assert _wire_power(listed, layout) == pytest.approx(stated, rel=POWER_RTOL)
 
 
 @pytest.mark.parametrize("name", ["fse3d+NAVIGATOR", "mprage3d+NAVIGATOR"])
@@ -1235,26 +1280,34 @@ def _wire_block(changes):
 
 
 @pytest.mark.parametrize(("name", "changes"), CALIBRATED)
-def test_an_epi_layout_plays_the_rf_power_of_its_calibration(zoo, name, changes):
+def test_an_epi_layout_plays_the_rf_power_of_its_strongest_prescan(zoo, name, changes):
     listed = parse_rf_definitions(_reply("list", name, rf_definitions=True))
     validated = _reply("validate", name, block=_wire_block(changes), rf_layout=True)
     assert validated.startswith("VALID"), validated
     layout = parse_rf_layout(validated)
     plugin = zoo[name]
     protocol = _protocol(plugin, changes)
-    (calibration,) = _prescans(plugin, protocol)
-    rate = len(calibration.rf_instances().definition) / calibration.duration()[0]
-    own = calibration.calc_rf_power()[3] / calibration.duration()[0]
+    prescan = max(
+        _repeating_prescans(plugin, protocol),
+        key=lambda seq: seq.calc_rf_power()[3] / seq.duration()[0],
+    )
+    rate = len(prescan.rf_instances().definition) / prescan.duration()[0]
+    own = prescan.calc_rf_power()[3] / prescan.duration()[0]
 
-    # The calibration's pulses over the period, rounded up to a whole pulse.
+    # The prescan's pulses over the period, rounded up to a whole pulse, its
+    # strongest first: at least the prescan's power at every TR.
     count = len(layout.definition)
     assert own > _last_tr_power(_main(plugin, protocol))
     assert count == np.ceil(layout.period * rate)
     assert _wire_power(listed, layout) == pytest.approx(
-        own * count / (layout.period * rate), rel=POWER_RTOL
+        _stated_power(0.0, layout.period, [prescan]), rel=POWER_RTOL
     )
+    assert _wire_power(listed, layout) >= own * (1 - POWER_RTOL)
     assert set(layout.control) == {None}
-    assert {listed[number].use for number in layout.definition} == {"excitation"}
+    instances = prescan.rf_instances()
+    assert {listed[number].use for number in layout.definition} == {
+        instances.definitions[number].use for number in instances.definition
+    }
 
 
 @pytest.mark.parametrize("fat_saturation", [True, False])

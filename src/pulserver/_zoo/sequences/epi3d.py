@@ -32,6 +32,7 @@ from pulserver._zoo._evaluation import (
     dummies,
     pixel_bandwidth,
     rf_layout,
+    stack_prescans,
 )
 from pulserver._zoo._slab import slab
 from pulserver._zoo._user import OPTIONS, OWN, user_entries
@@ -276,6 +277,11 @@ class Epi3D(SequencePlugin):
                     pulse.period,
                 )
             )
+        # The field pair and the full-k reference image the whole slab at
+        # their own shortest TR, so they are designed at the prescription.
+        stack_volumes = stack_prescans(list(self.app(system, **protocol.arguments)))
+        duration += sequences.duration(stack_volumes)
+        prescans += [RfLayout.of(seq, None) for seq in stack_volumes]
         values = {
             UIParam.TE: epi.echo_time,
             UIParam.TR: tr,
