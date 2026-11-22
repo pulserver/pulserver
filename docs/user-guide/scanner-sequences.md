@@ -408,7 +408,8 @@ every `--plugins` directory, so a file of the same name there replaces it:
 
 | Plugin | Paired reconstruction |
 | --- | --- |
-| `gre2d`, `se2d`, `gre_multiecho2d`, `gre3d`, `se3d`, `bssfp3d` | `pics` |
+| `gre2d`, `se2d`, `gre_multiecho2d`, `gre3d`, `se3d` | `pics` |
+| `bssfp3d` | `phase_cycles` |
 | `bssfp2d` | `cine` |
 | `gre_multiecho3d` | `qsm` |
 | `fse3d`, `fse_pd3d`, `mprage3d` | `pmc` |
@@ -443,7 +444,9 @@ function takes, at the same user entry in every plugin, each as a
 | `user35` | TTL output per volume: 0, the default, off; 1 plays a digital output on trigger channel `ext1`, 1 ms or the excitation if shorter, at the first excitation of every volume of the time series, dummy volumes included, and none in the reference volume or the calibration (`epi2d`, `epi3d`) |
 
 `bssfp3d` takes its number of phase cycles, each a train with its own RF phase
-increment, as `user12`.
+increment, as `user12`. Its reconstruction, `phase_cycles`, combines the cycles
+by their root sum of squares into one image whose off-resonance bands are
+filled in; two cycles are CISS.
 
 `bssfp2d` takes its frames from the console's number of frames. Ungated, each
 slice's k-space is acquired that many times back to back, a free-running series

@@ -5,7 +5,7 @@
 #: the reconstruction proxy do not read it.
 ZOO_PAIRS: dict[str, str] = {
     "bssfp2d": "cine",
-    "bssfp3d": "pics",
+    "bssfp3d": "phase_cycles",
     "epi2d": "epi",
     "epi3d": "epi",
     "fse3d": "pmc",
