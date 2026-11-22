@@ -215,10 +215,14 @@ the scanner's {obj}`~pulserver.virtual.COILS` instead, fixed in the physical fra
 named `transmit/receive`: the body coil both ways, taken to be one channel of
 unit sensitivity each way; the body coil transmitting to a 48-channel receive
 head array, `body/head48`; and an 8-channel head coil for parallel transmission
-with a 32-channel receive head array, `head8/head32`. The head coils'
-sensitivities are BART's coil models rather than electromagnetic simulations:
-the 8-channel coil is `HEAD_2D_8CH`, constant along $z$, and the arrays are the
-first 48 and 32 channels of `HEAD_3D_64CH`, each sampled by bartorch over a cube
+with a 32-channel receive head array, `head8/head32`. The 8-channel coil is
+BART's `HEAD_2D_8CH` model, constant along $z$. The receive arrays are
+arrays of 48 and 32 circular loops of
+7 cm diameter, their centres spread evenly over an ellipsoidal helmet about the
+head, and each sensitivity is $B_x + jB_y$ of its loop by the Biot-Savart law.
+The loops sit as close to the head as a product array's do, so their
+sensitivities fall off from the scalp inwards and unfold parallel-imaging
+aliasing with the g-factors of such an array. Each model is sampled over a cube
 25.6 cm wide about the isocentre and interpolated linearly between the samples.
 The receive sensitivities $s_c$ have a root sum of squares of 1 at the
 isocentre. The transmit sensitivities $s^+_c$ are the complex conjugates of the
