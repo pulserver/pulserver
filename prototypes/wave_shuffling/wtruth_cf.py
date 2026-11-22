@@ -6,7 +6,7 @@ rows = pickle.load(open(f"{case}/dump.pkl", "rb")); nro = rows[0]["data"].shape[
 ift = lambda d: np.fft.fftshift(np.fft.ifft(np.fft.ifftshift(d, -1), axis=-1), -1)[..., nro // 2 - nx // 2: nro // 2 + nx // 2]
 R = np.stack([ift(r["data"]) for r in rows if r["flags"] & (1 << 19)])
 T = np.load(tpath); E = T["echoes"]; nz, ny, _ = E.shape[1:]
-zz, yy, xx = [(np.arange(n) - n // 2) * f / n for n, f in ((nz, .24), (ny, .28), (nx, .256))]
+zz, yy, xx = [(np.arange(n) - n // 2 + 0.5) * f / n for n, f in ((nz, .24), (ny, .28), (nx, .256))]
 Z, Y, X = np.meshgrid(zz, yy, xx, indexing="ij")
 S = np.asarray(COILS["head8/head32"].receive(np.stack([X.ravel(), Y.ravel(), Z.ravel()], 1))).T.reshape(-1, nz, ny, nx)
 w = np.zeros((nz, ny, nx))

@@ -23,7 +23,7 @@ cc = np.linalg.svd(Rr.transpose(1, 0, 2).reshape(Rr.shape[1], -1), full_matrices
 img = [r for r in rows if not r["flags"] & (1 << 19)]
 # Wave k-space along (z, y), cycles/m: a waved line's trajectory minus its nominal phase encode.
 w = img[0]["traj"]
-wk = np.stack([w[:, 2] - w[:, 2].mean(), w[:, 1] - w[:, 1].mean()], -1) if w.size else None
+wk = np.stack([w[:, 2] - (img[0]["e2"] - NZ // 2) / FOVZ, w[:, 1] - (img[0]["e1"] - NY // 2) / FOVY], -1) if w.size else None  # wave about the nominal encode: its y component has a non-zero mean
 if wk is not None and os.environ.get("DELAY"):
     _t = np.arange(len(wk)); _dl = float(os.environ["DELAY"])
     wk = np.stack([np.interp(_t - _dl, _t, wk[:, a]) for a in range(2)], -1)
@@ -48,12 +48,21 @@ else:
     psf = linop.wave_psf(sign * wk, (NZ, NY, nx), (FOVZ, FOVY), centred=True).to(torch.complex64)
 basis = torch.load(bpath)[:, :rank].T.contiguous().to(torch.complex64)
 A = linop.WaveSense(maps, (rank, NZ, NY, nx), nro, positions=torch.from_numpy(pos), basis=basis, centred=True, psf=psf)
+if os.environ.get("REFSOLVE"):
+    # The wave-free calibration trains join the solve, each line at its own echo, through an operator without the wave.
+    rby = [[r for r in ref if r["con"] == f] for f in range(frames)]; rshots = max(1, max(len(b) for b in rby))
+    rpos = -np.ones((frames, rshots, 2), np.int64); ry = np.zeros((VC, frames, rshots, nro), np.complex64)
+    for f, b in enumerate(rby):
+        for s_, r in enumerate(b): rpos[f, s_] = (r["e2"], r["e1"]); ry[:, f, s_] = cc @ r["data"]
+    Aref = linop.WaveSense(maps, (rank, NZ, NY, nx), nro, positions=torch.from_numpy(rpos), basis=basis, centred=True, psf=torch.ones(NZ, NY, nro, dtype=torch.complex64))
+    A = linop.concatenate([A, Aref], axis=2); y = np.concatenate([y, ry], axis=2)
+    print(f"calibration trains in the solve: {sum(len(b) for b in rby)} lines")
 d = torch.from_numpy(y); s = optim.data_scaling(d, A=A) or 1.0
 t1 = time.perf_counter()
 if lam == 0:
     a = optim.CG(1e-6, maxiter=iters)(d / s, A) * s
 else:
-    a = optim.FISTA(priors.LocallyLowRank((-3, -2, -1), lam, joint_axes=(0,), block=8), maxiter=iters, step=0.95 / float(optim.maxeigen(A)))(d / s, A) * s
+    a = optim.FISTA(priors.LocallyLowRank((-3, -2) if os.environ.get("LLR2D") else (-3, -2, -1), lam, joint_axes=(0,), block=8), maxiter=iters, step=0.95 / float(optim.maxeigen(A)))(d / s, A) * s
 el = time.perf_counter() - t1
 res = float((A(a) - d).norm() / d.norm())
 out = torch.einsum("kf,kzyx->fzyx", basis[:, KEEP], a).numpy()
