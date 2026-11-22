@@ -559,12 +559,48 @@ N4_FITTING_LEVELS = 4
 #: intensities; a head or a phantom in a bath is one part.
 N4_MIN_CONNECTED_FRACTION = 0.5
 
+#: Iterations of each N4 fitting level. Above :data:`N4_STOPPING_LEVELS`
+#: every one runs: the several-fold shading of a close-fitting array is still
+#: being removed when the change between iterations falls below SimpleITK's
+#: default threshold.
+N4_ITERATIONS = 100
+
+#: Fitting levels up to which N4 stops at SimpleITK's default convergence
+#: threshold. Running every iteration at so coarse a mesh keeps sharpening the
+#: histogram and drifts the intensity ratios between separate compartments
+#: that those levels are chosen to keep.
+N4_STOPPING_LEVELS = 2
+
+#: Fraction of the image's maximum below which the magnitude is raised before
+#: its logarithm is thresholded for N4's mask.
+N4_LOG_FLOOR = 1e-3
+
 #: Least fraction of the image N4's Otsu mask must hold.
 N4_MIN_MASK_FRACTION = 0.01
 
 
 #: Most fitting levels :data:`INTENSITY_CORRECTION_LEVELS` may state.
 N4_MAX_LEVELS = 4
+
+
+def _object_mask(image: np.ndarray) -> np.ndarray:
+    """Return Otsu's threshold of the logarithm of a magnitude image, its holes filled, kept to its largest connected part where that holds most of it."""
+    import SimpleITK as sitk
+
+    floor = max(float(image.max()) * N4_LOG_FLOOR, np.finfo(np.float32).tiny)
+    logged = np.log(np.maximum(image, floor)).astype(np.float32)
+    mask = sitk.OtsuThreshold(sitk.GetImageFromArray(logged), 0, 1, 200)
+    filled = sitk.GetArrayFromImage(sitk.BinaryFillhole(mask)).astype(bool)
+    parts = sitk.GetArrayFromImage(
+        sitk.RelabelComponent(
+            sitk.ConnectedComponent(sitk.GetImageFromArray(filled.astype(np.uint8))),
+            sortByObjectSize=True,
+        )
+    )
+    largest = parts == 1
+    return (
+        largest if largest.sum() >= N4_MIN_CONNECTED_FRACTION * filled.sum() else filled
+    )
 
 
 def _largest_part(mask: np.ndarray) -> int:
@@ -617,19 +653,20 @@ def receive_field(
 ) -> np.ndarray | None:
     """Return the N4 field of a 2D or 3D magnitude image, mean 1 inside its Otsu mask and clipped to its range there.
 
-    The field is fitted at ``levels`` B-spline levels. ``None`` where the mask
-    holds fewer than 64 pixels or 128 voxels, or less than
+    The field is fitted at ``levels`` B-spline levels, each running its
+    :data:`N4_ITERATIONS` in full above :data:`N4_STOPPING_LEVELS`, over Otsu's threshold of the logarithm of
+    the magnitude with its holes filled: a close-fitting array makes the scalp
+    several times brighter than the centre of the brain, and Otsu's threshold of
+    the magnitude itself keeps little more than that bright rim. ``None`` where
+    the mask holds fewer than 64 pixels or 128 voxels, or less than
     :data:`N4_MIN_MASK_FRACTION` of the image, or whose largest connected part
     holds less than :data:`N4_MIN_CONNECTED_FRACTION` of it.
     """
-    import SimpleITK as sitk
     import torch
     from bartorch.tools import bias_field_correct
 
     image = np.ascontiguousarray(magnitude, dtype=np.float32)
-    mask = sitk.GetArrayFromImage(
-        sitk.OtsuThreshold(sitk.GetImageFromArray(image), 0, 1, 200)
-    ).astype(bool)
+    mask = _object_mask(image)
     if mask.sum() < max(16 * 2**image.ndim, N4_MIN_MASK_FRACTION * mask.size):
         return None
     if _largest_part(mask) < N4_MIN_CONNECTED_FRACTION * mask.sum():
@@ -637,7 +674,8 @@ def receive_field(
     _, field = bias_field_correct(
         torch.from_numpy(image),
         mask=torch.from_numpy(mask.astype(np.uint8)),
-        iterations=(50,) * int(levels),
+        iterations=(N4_ITERATIONS,) * int(levels),
+        convergence_threshold=0.0 if levels > N4_STOPPING_LEVELS else 1e-3,
         return_field=True,
     )
     field = field.numpy().astype(np.float64)
