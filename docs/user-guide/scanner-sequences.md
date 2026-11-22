@@ -481,8 +481,8 @@ cines need the physiological record (`opuser1`): the reconstruction places
 each readout in its beat by the recorded triggers and rejects beats whose
 interval differs from the median by more than `ARRHYTHMIA_REJECTION` of it,
 filling from them only the cardiac phases of a line no regular beat reaches;
-a prospective cine drops the readouts of such beats where the record is
-there. No timing re-acquires a rejected beat, so an arrhythmia costs image
+where the record is there, a prospective cine stretches such a beat to the
+median beat and drops its readouts played after the next trigger. No timing re-acquires a rejected beat, so an arrhythmia costs image
 quality rather than scan time.
 
 ### Console controls

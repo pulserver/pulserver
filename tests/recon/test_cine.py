@@ -1,5 +1,7 @@
 """The cine reconstruction: cardiac phases from the trigger stamps, the binning of the lines, and the frames of a beating heart."""
 
+from types import SimpleNamespace
+
 import _cine
 import numpy as np
 import pytest
@@ -10,6 +12,7 @@ from pulserver.recon.handlers.cine import (
     REALTIME_TEMPORAL,
     TEMPORAL,
     CineRecon,
+    Readouts,
     binned,
     cardiac_phases,
     realtime,
@@ -222,6 +225,36 @@ def test_a_prospective_cine_makes_one_image_per_cardiac_phase(device):
     play(plugin, header, acquisitions, device=device)
 
     assert _images(plugin).shape == (3, MATRIX, MATRIX)
+
+
+def _triggered(openings, beats, n_phases=10, step=80.0):
+    """Readouts of a prospective cine: ``n_phases`` phases from each opening trigger, stamped with the last of ``beats``."""
+    times = np.concatenate([o + step * np.arange(n_phases) for o in openings])
+    stamps = np.asarray(beats, float)[np.searchsorted(beats, times, side="right") - 1]
+    count = times.size
+    return Readouts(
+        np.zeros((count, 1, 1), np.complex64),
+        np.zeros(count, int),
+        times,
+        np.stack([stamps, np.zeros(count), np.zeros(count)], axis=1),
+        np.tile(np.arange(n_phases), len(openings)),
+        [None] * count,
+    )
+
+
+def test_a_premature_beat_of_a_prospective_cine_is_stretched_to_the_median_beat():
+    beats = [0.0, 1000.0, 2000.0, 2600.0, 4000.0, 5000.0]
+    readouts = _triggered([0.0, 1000.0, 2000.0, 4000.0, 5000.0], beats)
+
+    kept = CineRecon()._regular_beats(readouts, SimpleNamespace(counters={}))
+
+    premature = (kept.times >= 2000.0) & (kept.times < 2600.0)
+    assert kept.phase[premature].tolist() == [0, 2, 3, 5, 7, 8]
+    assert np.all(
+        kept.times[~premature] - kept.physiology[~premature, 0]
+        == 80.0 * kept.phase[~premature]
+    )
+    assert not np.any((kept.times >= 2600.0) & (kept.times < 4000.0))
 
 
 def test_a_golden_free_running_series_makes_real_time_frames_of_consecutive_readouts(

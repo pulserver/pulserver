@@ -311,7 +311,9 @@ class CineRecon(PicsRecon):
 
     ``Gating`` ``prospective``, or ``none`` with ``Ordering`` ``sequential``
         Each frame is a ``PHS`` counter: a cardiac phase after the trigger,
-        or a frame of a free-running series.
+        or a frame of a free-running series. Where the triggers were
+        recorded, a heartbeat off the median is stretched to the median beat
+        and its readouts after the next trigger dropped.
     ``Gating`` ``retrospective``
         Every readout is placed in its beat by the physiological triggers it
         is stamped with (:func:`cardiac_phases`), beats off the median
@@ -533,7 +535,15 @@ class CineRecon(PicsRecon):
         return image, references
 
     def _regular_beats(self, readouts: Readouts, data: ReconData) -> Readouts:
-        """Return the readouts of a prospective cine less those of beats off the median, where the triggers were recorded."""
+        """Return the readouts of a prospective cine in the cardiac phase they image, where the triggers were recorded.
+
+        A heartbeat's readouts run in rising ``PHS`` from the trigger that
+        opened them. Readouts stamped with a later trigger lie in the next
+        heartbeat and are dropped. A heartbeat whose interval differs from
+        the median by more than ``rejection`` of it has its phases stretched
+        to the median beat, as the retrospective cine places its readouts,
+        and loses those stretched past the last phase.
+        """
         stamped = [
             c
             for c in range(3)
@@ -543,23 +553,36 @@ class CineRecon(PicsRecon):
         if not stamped:
             return readouts
         channel = CHANNELS.index(self.binning) if self.binning else stamped[0]
-        phases, _ = cardiac_phases(
-            readouts.times, readouts.physiology[:, channel], self.rejection
-        )
-        kept = np.isfinite(phases) | (readouts.physiology[:, channel] == 0)
+        stamps = readouts.physiology[:, channel]
+        opened = np.r_[True, np.diff(readouts.phase) < 0]
+        opening = stamps[np.flatnonzero(opened)[np.cumsum(opened) - 1]]
+        kept = stamps == opening
+        beats = np.unique(stamps[stamps > 0])
+        intervals = np.diff(beats)
+        median = np.median(intervals)
+        following = np.searchsorted(beats, opening, side="right")
+        interval = np.full(stamps.shape, median)
+        known = following < beats.size
+        interval[known] = beats[following[known]] - opening[known]
+        irregular = np.abs(interval - median) > self.rejection * median
+        phase = readouts.phase.copy()
+        phase[irregular] = np.rint(phase[irregular] * median / interval[irregular])
+        kept &= phase <= readouts.phase.max()
         _log.info(
-            "slice %d: %d of %d readouts in beats off the median %s interval rejected",
+            "slice %d: %d of %d readouts in heartbeats off the median %s interval "
+            "restretched, %d past the next trigger or the last phase dropped",
             int(data.counters.get("slice", 0)),
-            int((~kept).sum()),
+            int(irregular.sum()),
             kept.size,
             CHANNELS[channel],
+            int((~kept).sum()),
         )
         return Readouts(
             readouts.kspace[kept],
             readouts.lines[kept],
             readouts.times[kept],
             readouts.physiology[kept],
-            readouts.phase[kept],
+            phase[kept],
             [h for h, k in zip(readouts.headers, kept, strict=True) if k],
         )
 
