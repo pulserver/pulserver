@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 __all__ = [
+    "CALIBRATION_FIELD_LEVELS",
     "GRADIENT_UNWARP",
     "INTENSITY_CORRECTION",
     "INTENSITY_CORRECTION_LEVELS",
     "KSPACE_FILTER",
+    "RECEIVE_FIELDS",
     "Corrections",
     "IntensityCorrection",
+    "ReceiveFields",
     "fermi_filtered",
     "gradient_unwarped",
     "states_gradient_coefficients",
@@ -457,7 +460,8 @@ class IntensityCorrection:
     calibration's proton-density image gives (:meth:`prescribe`), divides
     every image of its slice in place of the estimate: N4 cannot tell a
     smooth receive field from the contrast of an image that nulls a tissue,
-    such as grey matter in a T1-FLAIR.
+    such as grey matter in a T1-FLAIR. A series without a calibration of its
+    own takes the field of its slice from the exam (:class:`ReceiveFields`).
 
     A magnitude image that is not 2D or 3D once its axes of one point are
     dropped, or whose mask holds fewer than 64 pixels or 128 voxels or less
@@ -711,6 +715,84 @@ def receive_field(
     return (np.clip(field, inside.min(), inside.max()) / inside.mean()).astype(
         np.float32
     )
+
+
+#: Fitting levels of N4 in a proton-density weighted calibration image: its
+#: contrast is flat enough for the finer level to follow the receive field
+#: rather than the anatomy.
+CALIBRATION_FIELD_LEVELS = 5
+
+#: Key of the exam's :class:`ReceiveFields`.
+RECEIVE_FIELDS = "receive_fields"
+
+
+class ReceiveFields:
+    """The receive fields an exam's calibrations measured, one per slice, for every later series to divide its images by.
+
+    A field is N4's estimate (:func:`receive_field`) in a proton-density
+    weighted calibration image, stored as an
+    :class:`~pulserver.recon.ExamImage` with the geometry it was measured on.
+    A later series takes the field of the plane its slice lies in, the
+    nearest along its slice direction within half a slice thickness,
+    resampled onto its own grid: a series that nulls a tissue or weights one
+    heavily, such as a T2-weighted single-shot FSE with its bright CSF, is
+    divided by a field N4 measured where the contrast is flat.
+    """
+
+    def __init__(self) -> None:
+        self.planes: dict[tuple[float, ...], Any] = {}
+
+    def add(self, field: Any) -> None:
+        """Keep ``field``, an :class:`~pulserver.recon.ExamImage` of one plane, in place of any field of the same plane."""
+        geometry = field.geometry
+        key = tuple(
+            round(float(v), 2)
+            for name in ("position", "slice_dir")
+            for v in geometry[name]
+        )
+        self.planes[key] = field
+
+    def on(self, context: Any, unit: Any) -> np.ndarray | None:
+        """Return the field of the plane of ``unit``'s slice on its reconstruction grid, mean 1; ``None`` where no plane is that close.
+
+        Parameters
+        ----------
+        context : pulserver.recon.ReconContext
+            The series' context.
+        unit : pulserver.recon.ReconData
+            The unit whose grid the field is resampled onto.
+
+        Returns
+        -------
+        numpy.ndarray or None
+            ``(y, x)`` field, divided by its mean over the points the stored
+            plane covers, and 1 beyond them.
+        """
+        from ._exam_image import _unit_geometry
+
+        target = _unit_geometry(context, unit)
+        normal = np.asarray(target["slice_dir"], float)
+        centre = np.asarray(target["position"], float)
+        best, nearest = None, np.inf
+        for field in self.planes.values():
+            geometry = field.geometry
+            if abs(float(np.dot(geometry["slice_dir"], normal))) < 0.999:
+                continue
+            distance = abs(
+                float(np.dot(np.asarray(geometry["position"]) - centre, normal))
+            )
+            reach = 0.5 * max(geometry["field_of_view"][2], target["field_of_view"][2])
+            if distance <= reach and distance < nearest:
+                best, nearest = field, distance
+        if best is None:
+            return None
+        values = np.asarray(best.on(context, unit, fill=np.nan), dtype=np.float64)
+        values = values.reshape(values.shape[-2:])
+        covered = np.isfinite(values) & (values > 0)
+        if not covered.any():
+            return None
+        values = np.where(covered, values / values[covered].mean(), 1.0)
+        return values.astype(np.float32)
 
 
 def _host(array: Any) -> np.ndarray:

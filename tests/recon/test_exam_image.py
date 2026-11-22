@@ -71,3 +71,41 @@ def test_a_map_stores_the_geometry_of_the_image_its_unit_reconstructs():
     assert stored.geometry["position"] == (1.0, 2.0, 3.0)
     assert stored.geometry["field_of_view"] == (FOV, FOV, 5.0)
     assert stored.geometry["matrix_size"] == (16, 16, 1)
+
+
+def test_a_series_reads_the_receive_field_of_its_own_plane_with_mean_one():
+    from pulserver.recon._correct import ReceiveFields
+
+    fields = ReceiveFields()
+    for z in (0.0, 5.0):
+        position = (0.0, 0.0, z)
+        fields.add(
+            recon.ExamImage.measured(
+                (1.0 + z) * (3.0 + ramp(16, position)[0]), *unit(16, position)
+            )
+        )
+
+    field = fields.on(*unit(32, (12.0, -6.0, 5.0)))
+
+    expected = 3.0 + ramp(32, (12.0, -6.0, 0.0))[0]
+    inside = (slice(4, -4), slice(4, -4))
+    assert field.shape == (32, 32)
+    np.testing.assert_allclose(field.mean(), 1.0, rtol=1e-3)
+    np.testing.assert_allclose(
+        field[inside] / field[inside].mean(),
+        expected[inside] / expected[inside].mean(),
+        rtol=1e-3,
+    )
+
+
+def test_a_series_whose_slice_no_stored_plane_covers_reads_no_receive_field():
+    from pulserver.recon._correct import ReceiveFields
+
+    fields = ReceiveFields()
+    fields.add(
+        recon.ExamImage.measured(
+            ramp(16, (0.0, 0.0, 0.0))[0], *unit(16, (0.0, 0.0, 0.0))
+        )
+    )
+
+    assert fields.on(*unit(16, (0.0, 0.0, 10.0))) is None

@@ -14,7 +14,7 @@ from ...mrd._acquisitions import AcquisitionFlag
 from ...mrd._images import center_crop
 from .._buffers import ReconBuffer, ReconData
 from .._calibration import CoilCompression, MissingCalibration, coil_maps
-from .._correct import Corrections
+from .._correct import RECEIVE_FIELDS, Corrections
 from ..gadgets import (
     AsymmetricEcho,
     CompressChannels,
@@ -218,6 +218,8 @@ class PicsRecon(ReconPlugin):
                 ),
             ]
         if corrections is not None:
+            if corrections.intensity is not None:
+                _prescribe_exam_field(context, data, corrections.intensity)
             results = corrections.intensity_corrected(results, data)
         return results if len(results) > 1 else results[0]
 
@@ -408,6 +410,16 @@ class PicsRecon(ReconPlugin):
 
 
 PLUGIN = PicsRecon()
+
+
+def _prescribe_exam_field(context: ReconContext, data: ReconData, intensity) -> None:
+    """Hand the receive field an earlier calibration of the exam measured in the unit's slice to the intensity correction."""
+    fields = context.exam.get(RECEIVE_FIELDS)
+    if fields is None:
+        return
+    field = fields.on(context, data)
+    if field is not None:
+        intensity.prescribe(int(data.counters.get("slice", 0)), field)
 
 
 def nlinv_estimate(

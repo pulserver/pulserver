@@ -20,8 +20,14 @@ from .._calibration import (
     _zero_filled,
     coil_maps,
 )
-from .._correct import receive_field
+from .._correct import (
+    CALIBRATION_FIELD_LEVELS,
+    RECEIVE_FIELDS,
+    ReceiveFields,
+    receive_field,
+)
 from .._diffusion import DiffusionMaps
+from .._exam_image import ExamImage
 from ..gadgets import (
     AsymmetricEcho,
     CompressChannels,
@@ -615,7 +621,7 @@ class EpiRecon(PicsRecon):
                 maps = coil_maps(context, unit, estimate=epi_nlinv_estimate)
                 kspace = _zero_filled(unit.ref)
                 if int(np.prod(kspace.shape[1:-2])) == 1 and polarity == 0:
-                    self._measure_receive_field(unit, kspace, maps)
+                    self._measure_receive_field(context, unit, kspace, maps)
                 if int(np.prod(kspace.shape[1:-2])) == 1:
                     self.slice_calibrations.append(
                         (
@@ -626,8 +632,8 @@ class EpiRecon(PicsRecon):
                     )
         self.calibrations = {}
 
-    def _measure_receive_field(self, unit, kspace, maps) -> None:
-        """Keep the receive field N4 finds in the calibration image of a slice, for its images to be divided by."""
+    def _measure_receive_field(self, context, unit, kspace, maps) -> None:
+        """Keep the receive field N4 finds in the calibration image of a slice, for its images and the exam's later series to be divided by."""
         import torch
 
         if self.corrections is None or self.corrections.intensity is None:
@@ -638,7 +644,7 @@ class EpiRecon(PicsRecon):
         image = sense_combined(volume, maps.reshape(volume.shape)).abs().numpy()[0]
         image = np.array(center_crop(image, unit.ref.image_shape[-2:]))
         start = time.perf_counter()
-        field = receive_field(image, self.corrections.intensity.levels)
+        field = receive_field(image, CALIBRATION_FIELD_LEVELS)
         location = int(unit.counters.get("slice", 0))
         _log.info(
             "receive field of slice %d %s from its %s calibration image in %.1f s",
@@ -654,6 +660,11 @@ class EpiRecon(PicsRecon):
                 field,
                 tuple(unit.ref.space.recon_fov[-2:]),
             )
+            stored = ExamImage.measured(field, context, unit)
+            if stored.data.shape[-2:] == tuple(stored.geometry["matrix_size"][1::-1]):
+                fields = context.exam.get(RECEIVE_FIELDS) or ReceiveFields()
+                fields.add(stored)
+                context.exam.set(RECEIVE_FIELDS, fields)
 
     def _prescribe_receive_field(self, data, shape) -> None:
         """Hand the slice's calibration receive field, on the grid of its images, to the intensity correction."""
