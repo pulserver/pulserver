@@ -348,8 +348,8 @@ def test_without_pyhysco_the_field_raises_rather_than_passing_the_image_on(
         susceptibility_field(np.ones((6, 8)), np.ones((6, 8)), (2.0, 3.0))
 
 
-def _stack_recon(monkeypatch, images, *, hysco=None):
-    """An EpiRecon whose units are ``images[(slice, set)]``, started on an offline stream.
+def _stack_recon(monkeypatch, images, *, hysco=None, context=None):
+    """An EpiRecon whose units are ``images[(slice, set)]``, started on an offline stream, or on ``context``.
 
     ``hysco`` is the reason the susceptibility correction is unavailable;
     ``None`` makes it available.
@@ -357,7 +357,7 @@ def _stack_recon(monkeypatch, images, *, hysco=None):
     from pulserver.recon import ReconContext
     from pulserver.recon.handlers import epi
 
-    context = ReconContext.offline()
+    context = ReconContext.offline() if context is None else context
     plugin = epi.EpiRecon(
         gradient_unwarp=False, intensity_correction=False, kspace_filter=False
     )
@@ -379,7 +379,12 @@ def _unit(location, set_index):
     )
     return SimpleNamespace(
         counters={"slice": location, "set": set_index},
-        data=SimpleNamespace(space=space, reference=reference),
+        data=SimpleNamespace(
+            space=space,
+            reference=reference,
+            mask=np.ones((1, 6, 8), dtype=bool),
+            sample_time=2e-6,
+        ),
     )
 
 
@@ -678,3 +683,64 @@ def test_a_spin_echo_field_pair_is_sent_as_no_image_and_its_field_corrects_every
     for result in (first, later):
         np.testing.assert_allclose(result.data, np.roll(images[(0, 0)], -1, axis=0))
         assert "HYSCO" in result.attributes["ImageProcessingHistory"]
+
+
+def test_a_series_without_a_field_pair_takes_the_exam_field_of_a_pair_sampled_as_it_is(
+    monkeypatch, correction
+):
+    from pulserver.recon.handlers.epi import FIELD_EDGE_PARTITIONS
+
+    images = _images(2, polarities=(0, 2, 3))
+    first, context = _stack_recon(monkeypatch, images)
+    for location in (0, 1):
+        for set_index in (2, 3):
+            first.recon(context, "", _unit(location, set_index))
+    first.recon(context, "", _unit(0, 0))
+    later, _ = _stack_recon(monkeypatch, images, context=context)
+
+    (result,) = later.recon(context, "", _unit(1, 0))
+
+    assert len(correction.calls) == 1
+    shift = 1 + FIELD_EDGE_PARTITIONS
+    np.testing.assert_allclose(result.data, np.roll(images[(1, 0)], -shift, axis=0))
+
+
+def test_a_series_sampled_otherwise_than_the_field_pair_is_left_uncorrected_saying_so(
+    monkeypatch, correction, caplog
+):
+    import logging
+
+    images = _images(1, polarities=(0, 2, 3))
+    first, context = _stack_recon(monkeypatch, images)
+    for set_index in (2, 3):
+        first.recon(context, "", _unit(0, set_index))
+    first.recon(context, "", _unit(0, 0))
+    later, _ = _stack_recon(monkeypatch, images, context=context)
+    unit = _unit(0, 0)
+    unit.data.sample_time = 4e-6
+
+    with caplog.at_level(logging.WARNING, logger="pulserver.recon"):
+        (result,) = later.recon(context, "", unit)
+
+    np.testing.assert_array_equal(result.data, images[(0, 0)])
+    assert any("phase-encode sampling" in r.getMessage() for r in caplog.records)
+
+
+def test_a_plane_between_those_of_a_stack_field_takes_their_linear_interpolation():
+    from pulserver.recon.handlers.epi import PlaneField
+
+    fields = np.stack([np.zeros((7, 8)), np.ones((7, 8)), 3 * np.ones((7, 8))])
+    field = PlaneField(
+        positions=np.array([0.0, 2.0, 4.0]),
+        fields=fields,
+        voxel=(2.0, 2.0),
+        slice_dir=(0.0, 0.0, 1.0),
+        train=None,
+    )
+
+    displacement, reason = field.at([0.5, 3.0, 4.8], None, (0, 0, 1), (6, 8))
+    outside, why = field.at([5.5], None, (0, 0, 1), (6, 8))
+
+    assert reason is None
+    np.testing.assert_allclose(displacement[:, 0, 0], [0.25, 2.0, 3.0])
+    assert outside is None and "outside" in why
