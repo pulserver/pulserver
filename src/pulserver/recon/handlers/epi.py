@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import NamedTuple
+
 __all__ = ["PLUGIN", "EpiPhaseCorrection", "EpiRecon", "RampSampling"]
 
 import importlib.util
@@ -451,7 +453,14 @@ class EpiRecon(PicsRecon):
     reversed reference volume (``SET`` 1), also differs in the intensity the
     field gradient moves along the phase encode at 7T, and gives no field;
     the reversed reference volume is sent as no image. The field is
-    estimated once and applied to every image of every slice
+    estimated once, on the planes of the pair at their positions along the
+    slice direction (:class:`PlaneField`), and applied to every image of
+    every slice, a plane between the pair's taking the linear interpolation
+    of the two, so a 3D slab takes the field of a 2D pair over it. It is
+    kept for the exam: a later series without a pair of its own takes it
+    where its slices are parallel to the pair's and it shares the pair's
+    in-plane matrix, field of view, dwell time and phase-encode line step,
+    and so its distortion
     (:func:`bartorch.tools.apply_susceptibility`, as FSL's ``applytopup
     --method=jac``), history ``HYSCO``. The correction is logged as the other
     corrections are, and an image left uncorrected, for want of PyHySCO or of
@@ -700,23 +709,27 @@ class EpiRecon(PicsRecon):
                 np.abs(image),
                 buffer.space,
                 buffer.reference,
+                _train(buffer),
             )
             return None
         if self.field_pair:
-            self._field_from_pair()
+            self._field_from_pair(context)
         if polarity in (1, FULL_K_REFERENCE_SET):
             # The reversed and the full-k reference volumes are no images of
             # the series.
             return None
-        return self._results(context, data, self._corrected(np.abs(image), location))
+        return self._results(
+            context, data, self._corrected(context, np.abs(image), location, buffer)
+        )
 
-    def _field_from_pair(self) -> None:
-        """Estimate the stack's field from its spin-echo field pair."""
+    def _field_from_pair(self, context) -> None:
+        """Estimate the stack's field from its spin-echo field pair and keep it for the exam."""
         forward_set, reversed_set = FIELD_PAIR_SETS
         pairs = []
+        train = None
         for location, by_set in sorted(self.field_pair.items()):
             if {forward_set, reversed_set} <= set(by_set):
-                image, space, acquisition = by_set[forward_set]
+                image, space, acquisition, train = by_set[forward_set]
                 pairs.append(
                     (location, space, acquisition, image, by_set[reversed_set][0])
                 )
@@ -724,6 +737,9 @@ class EpiRecon(PicsRecon):
         if not pairs or self.hysco is not None:
             return
         self._estimate_field(pairs, "its spin-echo field pair")
+        if self.field is not None:
+            self.field = self.field._replace(train=train)
+            context.exam.set(SUSCEPTIBILITY_FIELD, self.field)
 
     def _results(self, context, data, image):
         """Return the image's results, its geometry its own unit's whatever unit closed."""
@@ -799,19 +815,15 @@ class EpiRecon(PicsRecon):
             self.hysco = "its field could not be estimated"
             return
         field = field if field.ndim == 3 else field[None]
-        by_location = {}
-        for (_, location, index, _, _), plane in zip(planes, field, strict=True):
-            by_location.setdefault(location, {})[index] = plane
-        depth = voxel[0] if len(voxel) == 3 else 1.0
-        volumes = {pair[0]: pair[3].ndim == 3 for pair in pairs}
-        self.field = {
-            location: (
-                (np.stack([fields[i] for i in sorted(fields)]), (depth, *voxel[-2:]))
-                if volumes[location]
-                else (fields[0], voxel[-2:])
-            )
-            for location, fields in by_location.items()
-        }
+        self.field = PlaneField(
+            positions=np.array([plane[0] for plane in planes]),
+            fields=np.asarray(field),
+            voxel=tuple(voxel[-2:]),
+            slice_dir=tuple(
+                float(v) for v in getattr(pairs[0][2], "slice_dir", (0, 0, 1))
+            ),
+            train=None,
+        )
         _log.info(
             "susceptibility displacement field of a stack of %d planes %s "
             "estimated in %.2f s against %s",
@@ -821,24 +833,35 @@ class EpiRecon(PicsRecon):
             against,
         )
 
-    def _corrected(self, image, location):
-        """Return ``image`` corrected by the stack's field, or as it is with the reason logged."""
-        if self.field is not None and location in self.field:
-            field, voxel = self.field[location]
-            if self.corrections is not None:
-                self.corrections.ran(
-                    "HYSCO",
-                    "susceptibility distortion of a %s image corrected by the "
-                    "stack's displacement field",
-                    image.shape,
-                )
-            return undistorted(image, field, voxel)
-        if self.hysco is not None:
+    def _corrected(self, context, image, location, buffer):
+        """Return ``image`` corrected by the stack's field, the exam's where the stack has none, or as it is with the reason logged."""
+        field = self.field
+        if field is None and self.hysco is None:
+            field = context.exam.get(SUSCEPTIBILITY_FIELD)
+        if field is not None and self.hysco is None:
+            planes = image if image.ndim == 3 else image[None]
+            displacement, reason = field.at(
+                plane_positions(buffer.reference, buffer.space, planes.shape[0]),
+                _train(buffer),
+                getattr(buffer.reference, "slice_dir", (0, 0, 1)),
+                planes.shape[-2:],
+            )
+            if displacement is not None:
+                if self.corrections is not None:
+                    self.corrections.ran(
+                        "HYSCO",
+                        "susceptibility distortion of a %s image corrected by the "
+                        "stack's displacement field",
+                        image.shape,
+                    )
+                if image.ndim == 3:
+                    depth = 1e3 * float(buffer.space.recon_fov[0]) / image.shape[0]
+                    return undistorted(image, displacement, (depth, *field.voxel))
+                return undistorted(image, displacement[0], field.voxel)
+        elif self.hysco is not None:
             reason = self.hysco
-        elif self.field is None:
-            reason = "no spin-echo field pair (sets 2 and 3) came before it"
         else:
-            reason = f"the stack's field holds no slice {location}"
+            reason = "no spin-echo field pair (sets 2 and 3) came before it"
         level = logging.DEBUG if reason in self._skips_logged else logging.WARNING
         self._skips_logged.add(reason)
         _log.log(
@@ -848,6 +871,82 @@ class EpiRecon(PicsRecon):
             reason,
         )
         return image
+
+
+class PlaneField(NamedTuple):
+    """A susceptibility displacement field on the planes of a stack, at their positions along its slice direction.
+
+    Attributes
+    ----------
+    positions : numpy.ndarray
+        Position (mm) of each plane along ``slice_dir``, ascending.
+    fields : numpy.ndarray
+        Displacement (mm) along the phase encode of each plane, as
+        :func:`susceptibility_field` gives it.
+    voxel : tuple of float
+        In-plane voxel size (mm), phase encode then readout.
+    slice_dir : tuple of float
+        Slice direction of the stack.
+    train : tuple
+        :func:`_train` of the field pair, which a series has to share to
+        take the field.
+    """
+
+    positions: np.ndarray
+    fields: np.ndarray
+    voxel: tuple
+    slice_dir: tuple
+    train: tuple | None
+
+    def at(self, positions, train, slice_dir, shape):
+        """Return the displacement at the planes ``positions`` (mm) along ``slice_dir``, linear between this field's planes, and ``None`` with the reason where it holds none.
+
+        A plane takes the nearest plane of the field within half the field's
+        spacing beyond its end planes.
+        """
+        if self.train is not None and train != self.train:
+            return (
+                None,
+                "its phase-encode sampling or geometry differs from the field pair's",
+            )
+        if abs(abs(float(np.dot(slice_dir, self.slice_dir))) - 1.0) > 1e-3:
+            return None, "its slices are not parallel to the field pair's"
+        if self.fields.shape[-1] != shape[-1]:
+            return None, "its matrix differs from the field pair's"
+        positions = np.asarray(positions, float)
+        if len(self.positions) == 1:
+            spacing = np.inf
+        else:
+            spacing = float(np.median(np.diff(self.positions)))
+        margin = 0.5 * spacing if np.isfinite(spacing) else 0.5
+        low, high = self.positions[0] - margin, self.positions[-1] + margin
+        if np.any(positions < low - 1e-6) or np.any(positions > high + 1e-6):
+            return None, "it lies outside the field pair's stack"
+        if len(self.positions) == 1:
+            return np.repeat(self.fields[:1], len(positions), axis=0), None
+        upper = np.clip(
+            np.searchsorted(self.positions, positions), 1, len(self.positions) - 1
+        )
+        lower = upper - 1
+        weight = (positions - self.positions[lower]) / (
+            self.positions[upper] - self.positions[lower]
+        )
+        weight = np.clip(weight, 0.0, 1.0)[:, None, None]
+        return (1 - weight) * self.fields[lower] + weight * self.fields[upper], None
+
+
+def _train(buffer) -> tuple:
+    """Return what a series shares with a field pair whose field it takes: in-plane matrix and field of view, dwell time and phase-encode line step."""
+    profile = buffer.mask.reshape(-1, *buffer.mask.shape[-2:]).any(axis=(0, 2))
+    lines = np.flatnonzero(profile)
+    step = int(np.diff(lines).min()) if lines.size > 1 else 1
+    space = buffer.space
+    return (
+        tuple(int(n) for n in space.recon_matrix[-2:]),
+        tuple(round(float(f), 6) for f in space.recon_fov[-2:]),
+        None if buffer.sample_time is None else round(float(buffer.sample_time), 9),
+        step,
+    )
 
 
 def plane_positions(acquisition, space, count) -> list[float]:
@@ -1188,6 +1287,9 @@ def undistorted(image, field, voxel_size):
 
 #: ``SET`` of the forward and of the reversed volume of a spin-echo field pair.
 FIELD_PAIR_SETS = (2, 3)
+
+#: Exam key of the last spin-echo field pair's :class:`PlaneField`.
+SUSCEPTIBILITY_FIELD = "susceptibility_field"
 
 #: ``SET`` of the full-k phase reference volume.
 FULL_K_REFERENCE_SET = 4
