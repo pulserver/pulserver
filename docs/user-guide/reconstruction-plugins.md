@@ -326,9 +326,7 @@ so that they are estimated in the basis of the data they are used with.
 holds the leading calibration readouts until the first imaging-only readout,
 estimates the basis from those of the first contrast, and gives them on
 projected. Navigator and odd/even phase-reference readouts are held and
-projected with the readouts around them. A scan whose first readout of
-neither kind is not calibration passes it unchanged,
-and a `CoilCompression` step in `recon` then compresses each unit.
+projected with the readouts around them. A Cartesian scan that opens without calibration holds its readouts up to the k-space centre line its header states, and they give the basis; a non-Cartesian one passes unchanged, and a `CoilCompression` step in `recon` then compresses each unit.
 
 `apps.pics` computes where the maps are, here the host. An encoding built with
 `device=context.device`, such as {func}`bartorch.linop.CartesianSense`, computes

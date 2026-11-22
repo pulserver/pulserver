@@ -162,10 +162,13 @@ class CompressChannels(Gadget):
 
     Navigator and odd/even phase-reference readouts are held, projected and
     given on with the readouts around them, so every readout of a buffer or a
-    phase fit has the same channels; they give no basis. A stream whose
-    first readout of neither kind is not a calibration readout, or whose
-    readouts have no more than ``n_virtual`` channels, passes unchanged, as
-    do noise readouts. Place the gadget after
+    phase fit has the same channels; they give no basis. A Cartesian stream
+    whose first readout of neither kind is not a calibration readout holds
+    its readouts up to the k-space centre line of their encoding space, the
+    header's ``center``, and they give the basis. A stream of an encoding
+    space the header does not state as Cartesian that opens without
+    calibration, or whose readouts have no more than ``n_virtual`` channels,
+    passes unchanged, as do noise readouts. Place the gadget after
     :class:`Prewhiten`, so the basis is that of whitened channels, and before
     any gadget that changes the header of a readout: a held readout is given
     on with its acquisition as this gadget received it.
@@ -188,6 +191,7 @@ class CompressChannels(Gadget):
         super().startup(context)
         self._held: list[tuple[Any, np.ndarray]] = []
         self._passing = False
+        self._centres = _kspace_centres(getattr(context, "header", None))
 
     def __call__(self, acquisition: Any, data: np.ndarray) -> Any:
         if self._passing or carries(acquisition, AcquisitionFlag.IS_NOISE_MEASUREMENT):
@@ -198,13 +202,33 @@ class CompressChannels(Gadget):
         if data.shape[0] <= self.n_virtual:
             self._passing = True
             return self._unchanged(acquisition, data)
+        self._held.append((acquisition, np.array(data)))
         if carries(acquisition, CALIBRATION | _FOLLOWING):
-            self._held.append((acquisition, np.array(data)))
             return None
         if not any(carries(a, CALIBRATION) for a, _ in self._held):
-            self._passing = True
-            return self._unchanged(acquisition, data)
-        return [*self.release(), (acquisition, projected_readout(data, self._basis()))]
+            # A Cartesian scan that opens with no calibration gives the basis
+            # from its own readouts, up to its k-space centre.
+            centre = self._at_centre(acquisition)
+            if centre is None:
+                self._passing = True
+                return self._unchanged(*self._held.pop())
+            if not centre:
+                return None
+        return self.release()
+
+    def _at_centre(self, acquisition: Any) -> bool | None:
+        """Return whether ``acquisition`` reads the k-space centre line of its encoding space; ``None`` where the header states no Cartesian space for it."""
+        space = int(acquisition_label(acquisition, "encoding_space_ref", 0) or 0)
+        if space not in self._centres:
+            return None
+        line, partition = self._centres[space]
+        if int(acquisition_label(acquisition, "kspace_encode_step_1", 0) or 0) != line:
+            return False
+        return (
+            partition is None
+            or int(acquisition_label(acquisition, "kspace_encode_step_2", 0) or 0)
+            == partition
+        )
 
     def _unchanged(self, acquisition: Any, data: np.ndarray) -> Any:
         """Return ``data``, after the readouts held as they arrived when there are any."""
@@ -228,6 +252,10 @@ class CompressChannels(Gadget):
                 (acquisition, data)
                 for acquisition, data in self._held
                 if carries(acquisition, CALIBRATION)
+            ] or [
+                (acquisition, data)
+                for acquisition, data in self._held
+                if not carries(acquisition, _FOLLOWING)
             ]
             first = [
                 data
@@ -341,6 +369,26 @@ def _oversampling(encoding: Any) -> float:
     encoded = readout_fov(getattr(encoding, "encodedSpace", None))
     recon = readout_fov(getattr(encoding, "reconSpace", None))
     return encoded / recon if encoded > 0 and recon > 0 else 1.0
+
+
+def _kspace_centres(header: Any) -> dict[int, tuple[int | None, int | None]]:
+    """Return the k-space centre line and, in a volume, partition of each Cartesian encoding space of ``header``."""
+    if header is None or not getattr(header, "encoding", None):
+        return {}
+    from ..mrd._header import EncodingSpace
+
+    centres = {}
+    for space in EncodingSpace.all_from_header(header):
+        if not space.cartesian:
+            continue
+        line = space.phase_center
+        line = space.phase_encodes // 2 if line is None else line
+        partition = None
+        if space.partitions > 1:
+            partition = space.partition_center
+            partition = space.partitions // 2 if partition is None else partition
+        centres[space.index] = (line, partition)
+    return centres
 
 
 def _off_line(acquisition: Any) -> bool:

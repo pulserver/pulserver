@@ -429,15 +429,20 @@ def test_the_basis_comes_from_the_calibration_readouts_of_the_first_contrast():
     )
 
 
-def test_a_stream_led_by_an_imaging_readout_passes_its_channels_unchanged():
+def test_a_stream_led_by_imaging_readouts_is_held_to_its_kspace_centre_and_gives_the_basis():
     _, _, kspace = coil_phantom(8, MATRIX)
     context = streaming_context()
     gadget = started(recon.CompressChannels(4), context)
+    lines = readouts(kspace, lines=range(MATRIX))
 
-    passed = [gadget(a, np.asarray(a.data)) for a in acs_readouts(kspace, acs=ACS)]
+    given = [gadget(a, np.asarray(a.data)) for a in lines]
 
-    assert all(readout.shape == (8, MATRIX) for readout in passed)
-    assert context.coil_compression is None
+    centre = MATRIX // 2
+    assert all(out is None for out in given[:centre])
+    assert [acquisition for acquisition, _ in given[centre]] == lines[: centre + 1]
+    assert all(data.shape == (4, MATRIX) for _, data in given[centre])
+    assert all(out.shape == (4, MATRIX) for out in given[centre + 1 :])
+    assert context.coil_compression.n_virtual == 4
 
 
 @pytest.mark.parametrize(
@@ -469,17 +474,18 @@ def test_navigator_and_phase_reference_readouts_take_the_virtual_channels_in_the
     assert projected.shape == (4, MATRIX)
 
 
-def test_navigators_ahead_of_an_imaging_stream_pass_unchanged_with_it():
+def test_navigators_ahead_of_an_uncalibrated_stream_are_given_on_projected_at_its_centre():
     _, _, kspace = coil_phantom(8, MATRIX)
     gadget = started(recon.CompressChannels(4), streaming_context())
     (navigator,) = readouts(kspace, "ACQ_IS_NAVIGATION_DATA", lines=[0])
-    (imaging,) = readouts(kspace, lines=[2])
+    lines = readouts(kspace, lines=range(MATRIX // 2 + 1))
 
     assert gadget(navigator, np.asarray(navigator.data)) is None
-    given = gadget(imaging, np.asarray(imaging.data))
+    *held, given = [gadget(a, np.asarray(a.data)) for a in lines]
 
-    assert [acquisition for acquisition, _ in given] == [navigator, imaging]
-    assert all(data.shape == (8, MATRIX) for _, data in given)
+    assert all(out is None for out in held)
+    assert [acquisition for acquisition, _ in given] == [navigator, *lines]
+    assert all(data.shape == (4, MATRIX) for _, data in given)
 
 
 def test_readouts_held_when_the_stream_ends_reach_their_unit_projected(device):
