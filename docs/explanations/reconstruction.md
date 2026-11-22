@@ -40,9 +40,9 @@ write such a plugin.
 - **Prewhitens on arrival, from the series' noise readouts or the exam's noise covariance.**
 
   Code: {class}`~pulserver.recon.Prewhiten`. Test: *noise readouts whiten the imaging readouts* (`test_prewhiten.py`).
-- **Compresses coils with one basis per stream, as the readouts arrive or as a unit closes.**
+- **Compresses coils as the readouts arrive, with one basis per stream, or as a unit closes, with one basis per slice location.**
 
-  Code: {class}`~pulserver.recon.CompressChannels`, {class}`~pulserver.recon.CoilCompression`. Tests: *virtual channels are uncorrelated and carry the leading eigenvalues*; *compressed data and maps reconstruct the uncompressed image*; *calibration readouts are held then given on projected ahead of the first imaging readout*; *the basis comes from the calibration readouts of the first contrast* (`test_coil_compression.py`); *contrasts open together are buffered with the virtual channels and lose nothing* (`test_pics.py`).
+  Code: {class}`~pulserver.recon.CompressChannels`, {class}`~pulserver.recon.CoilCompression`. Tests: *virtual channels are uncorrelated and carry the leading eigenvalues*; *compressed data and maps reconstruct the uncompressed image*; *calibration readouts are held then given on projected ahead of the first imaging readout*; *the basis comes from the calibration readouts of the first contrast*; *a slice seen by channels the first slice does not see keeps its signal* (`test_coil_compression.py`); *contrasts open together are buffered with the virtual channels and lose nothing* (`test_pics.py`).
 - **Finds coil maps in the unit, the stream or the exam, and refuses maps that differ in any recorded field.**
 
   Code: {func}`~pulserver.recon.coil_maps`, {class}`~pulserver.recon.CoilSensitivities`. Tests: *a later unit without calibration readouts is given the maps of its slice*; *maps that differ in a field are refused naming it with both values*; *exam maps at another matrix are refused not resampled* (`test_calibration.py`).

@@ -14,6 +14,7 @@ from ...mrd._header import EncodingSpace
 from ...mrd._metadata import acquisition_label, has_acquisition_flag
 from .._buffers import ReconData, discards, echo_centre
 from .._calibration import (
+    CoilCompression,
     MissingCalibration,
     _zero_filled,
     coil_maps,
@@ -388,8 +389,11 @@ class EpiRecon(PicsRecon):
     blip-free reference train ``ACQ_IS_PHASECORR_DATA`` the sequence plays in
     a dummy shot, else from the navigator) on arrival, so the k-space is
     Cartesian, forward-ordered and at the reconstruction matrix when its slice
-    closes. Each unit's channels are compressed to ``virtual_coils``
-    (:class:`~pulserver.recon.CompressChannels`).
+    closes. Each unit's channels are compressed to ``virtual_coils`` by one
+    basis for the stack, pooled from the calibration of every slice
+    (:meth:`~pulserver.recon.CoilCompression.pool`), so the bands of a
+    multiband unit and the slices its kernels are trained on share their
+    virtual channels.
 
     Coil sensitivities come from the calibration the scan opens with, once
     for the whole stack: the calibration units of every slice, held until the
@@ -514,13 +518,15 @@ class EpiRecon(PicsRecon):
         )
 
     def unit_image(self, context, data):
-        data = compressed(context, data, self.virtual_coils)
-        buffer = data.data
-        if buffer is None:
+        if data.data is None:
             if data.ref is not None:
                 polarity = int(data.counters.get("set", 0))
                 self.calibrations.setdefault(polarity, []).append(data)
             return None
+        if self.calibrations:
+            self._pool(context)
+        data = compressed(context, data, self.virtual_coils, by_slice=False)
+        buffer = data.data
         if self.calibrations:
             self._calibrate(context)
         image = self.image(averaged(buffer), buffer.image_shape, context, data)
@@ -552,11 +558,23 @@ class EpiRecon(PicsRecon):
             image = image[0]
         return self._filtered(np.array(center_crop(image, shape[-image.ndim :])))
 
+    def _pool(self, context):
+        """Estimate the stream's channel compression from the held calibration of every slice and polarity together."""
+        units = [unit for held in self.calibrations.values() for unit in held]
+        if (
+            self.virtual_coils is None
+            or None in context.coil_compressions
+            or units[0].ref.coils <= self.virtual_coils
+        ):
+            return
+        CoilCompression(self.virtual_coils, by_slice=False).pool(context, units)
+
     def _calibrate(self, context):
         """Estimate the maps of each held calibration slice on its own, keep its k-space for split-slice GRAPPA, and fit the stack's field to its polarities."""
         polarities = {}
         for polarity, units in self.calibrations.items():
             for unit in units:
+                unit = compressed(context, unit, self.virtual_coils, by_slice=False)
                 coil_maps(context, unit, estimate=epi_nlinv_estimate)
                 kspace = _zero_filled(unit.ref)
                 polarities.setdefault(int(unit.counters.get("slice", 0)), {})[

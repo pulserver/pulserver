@@ -317,9 +317,10 @@ PLUGIN = Pics()
 readout with them, or with the noise covariance a noise series left in the
 exam. Without either it passes readouts unchanged and logs a warning once;
 `Prewhiten(required=True)` raises instead. `CoilCompression(n)` keeps `n`
-virtual channels, at most the channels of the first unit, with the basis of
-that unit's calibration k-space (its imaging k-space where it has none), and
-projects every later unit onto it. Compress a unit before requesting its maps,
+virtual channels per slice location, with the basis of the calibration
+k-space of the first unit of that location (its imaging k-space where it has
+none), and projects every later unit of the location onto it;
+`by_slice=False` keeps one basis for the stream. Compress a unit before requesting its maps,
 so that they are estimated in the basis of the data they are used with.
 `CompressChannels(n)`, placed after `Prewhiten` and before `AsymmetricEcho`,
 holds the leading calibration readouts until the first imaging-only readout,

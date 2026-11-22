@@ -178,7 +178,7 @@ NOISE_COVARIANCE = "noise_covariance"
 
 #: The attributes of a :class:`ReconContext` that hold the state of one stream
 #: and that a hook may assign.
-_STREAM = ("coil_maps", "noise", "coil_compression")
+_STREAM = ("coil_maps", "noise", "coil_compression", "coil_compressions")
 
 
 class ExamCache(MutableMapping[Hashable, Any]):
@@ -455,9 +455,11 @@ class ReconContext:
     maps a slice counter to the :class:`CoilSensitivities` the stream holds for
     it, and ``(slice, set)`` to those estimated from calibration readouts of a
     later set, such as a FLEET calibration's reversed phase encode;
-    :attr:`noise` is the prewhitening a :class:`Prewhiten` applies and
-    :attr:`coil_compression` the basis a :class:`CoilCompression` applies; the
-    last two are ``None`` until the stream has them. A hook may assign them.
+    :attr:`noise` is the prewhitening a :class:`Prewhiten` applies,
+    :attr:`coil_compressions` the bases a :class:`CoilCompression` holds by
+    slice location and :attr:`coil_compression` the one it applied last; the
+    noise and the applied basis are ``None`` until the stream has them. A
+    hook may assign them.
 
     The scan context itself does not change once built: assigning to
     :attr:`header`, :attr:`exam`, :attr:`config` or :attr:`device` raises.
@@ -500,6 +502,9 @@ class ReconContext:
     )
     noise: Any = field(default=None, init=False, repr=False)
     coil_compression: Any = field(default=None, init=False, repr=False)
+    coil_compressions: dict[int | None, Any] = field(
+        default_factory=dict, init=False, repr=False
+    )
 
     def __getattr__(self, name: str) -> Any:
         # Reached only where normal lookup failed, so never for a field.

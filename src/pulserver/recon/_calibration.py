@@ -401,58 +401,89 @@ def volume_coil_maps(
 class CoilCompression:
     """Reduce the receive channels of a unit's k-space to virtual channels.
 
-    The basis is estimated once per stream, from the first unit it is given,
-    and applied to every unit. It consists of the eigenvectors of the channel
-    covariance over every placed sample of the unit's calibration k-space, or
-    of its imaging k-space where it holds no calibration data
-    (:func:`bartorch.tools.cc`), of which the ``n_virtual`` with the largest
-    eigenvalues are kept: the virtual channels are uncorrelated and ordered by
-    decreasing power. :func:`bartorch.tools.ccapply` projects the k-space of
-    ``data.data`` and ``data.ref`` onto it. The basis is stored in
-    ``context.coil_compression``, and :func:`coil_maps` records it with the
-    maps it estimates, which only units compressed by the same basis reuse:
-    compress a unit before asking for its maps.
+    Each slice location has a basis of its own, estimated from the first unit
+    of that location and applied to every later unit of it, so a slice keeps
+    the channels that see it whatever slice the stream opens with. With
+    ``by_slice`` false the stream has one basis for every location: the one
+    :meth:`pool` estimated, else that of the first unit. A basis consists of
+    the eigenvectors of the channel covariance over every placed sample of
+    the calibration k-space, or of the imaging k-space where there is no
+    calibration data (:func:`bartorch.tools.cc`), of which the ``n_virtual``
+    with the largest eigenvalues are kept: the virtual channels are
+    uncorrelated and ordered by decreasing power.
+    :func:`bartorch.tools.ccapply` projects the k-space of ``data.data`` and
+    ``data.ref`` onto it. The bases are stored in
+    ``context.coil_compressions`` by location (``None`` for the stream's
+    one), and the basis applied last in ``context.coil_compression``, which
+    :func:`coil_maps` records with the maps it estimates and which only units
+    compressed by the same basis reuse: compress a unit before asking for its
+    maps.
 
     The returned unit holds new buffers with ``n_virtual`` channels, and shares
     its ``counters`` and ``acquisitions`` with the unit it was made from. The
     basis and the projection are computed on the host. bartorch is imported
     when a unit is compressed.
 
-    Corresponds to Gadgetron's ``GenericReconEigenChannelGadget``.
+    Corresponds to Gadgetron's ``GenericReconEigenChannelGadget``, its basis
+    computed per slice.
 
     Parameters
     ----------
     n_virtual : int
-        Virtual channels kept, at most the number of channels of the first
-        unit.
+        Virtual channels kept, at most the number of channels of the units.
+    by_slice : bool, default=True
+        Estimate a basis per slice location rather than one for the stream.
     """
 
-    def __init__(self, n_virtual: int) -> None:
+    def __init__(self, n_virtual: int, *, by_slice: bool = True) -> None:
         if n_virtual < 1:
             raise ValueError(f"n_virtual is {n_virtual}; it has to be at least 1")
         self.n_virtual = int(n_virtual)
+        self.by_slice = bool(by_slice)
 
-    def __call__(self, context: ReconContext, data: ReconData) -> ReconData:
-        """Return ``data`` with its k-space projected onto the stream's basis.
+    def pool(self, context: ReconContext, units: list[ReconData]) -> None:
+        """Estimate the stream's one basis from the samples of every unit of ``units`` together.
+
+        Each unit gives its calibration k-space, or its imaging k-space where
+        it holds none.
 
         Raises
         ------
         ValueError
-            If the stream's basis was made for another ``n_virtual`` or
-            another number of channels, or the first unit holds no k-space.
+            If no unit holds k-space.
         """
-        basis = context.coil_compression
+        sources = [u.ref if u.ref is not None else u.data for u in units]
+        samples = [b.kspace[:, b.mask] for b in sources if b is not None]
+        if not samples:
+            raise ValueError("units with no k-space cannot give the basis")
+        basis = basis_of(np.concatenate(samples, axis=1), self.n_virtual)
+        context.coil_compressions[None] = basis
+
+    def __call__(self, context: ReconContext, data: ReconData) -> ReconData:
+        """Return ``data`` with its k-space projected onto the basis of its location.
+
+        Raises
+        ------
+        ValueError
+            If the stream's bases were made for another ``n_virtual`` or
+            another number of channels, or the unit that has to give the basis
+            holds no k-space.
+        """
+        for stored in context.coil_compressions.values():
+            if stored.n_virtual != self.n_virtual:
+                raise ValueError(
+                    f"the stream's basis keeps {stored.n_virtual} virtual channels, "
+                    f"not the {self.n_virtual} this step keeps"
+                )
+        key = int(data.counters.get("slice", 0)) if self.by_slice else None
+        basis = context.coil_compressions.get(key)
         if basis is None:
             source = data.ref if data.ref is not None else data.data
             if source is None:
                 raise ValueError("a unit with no k-space cannot give the basis")
             basis = _basis(source, self.n_virtual)
-            context.coil_compression = basis
-        elif basis.n_virtual != self.n_virtual:
-            raise ValueError(
-                f"the stream's basis keeps {basis.n_virtual} virtual channels, "
-                f"not the {self.n_virtual} this step keeps"
-            )
+            context.coil_compressions[key] = basis
+        context.coil_compression = basis
         return dataclasses.replace(
             data,
             data=_compressed(data.data, basis),

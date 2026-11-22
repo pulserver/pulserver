@@ -416,9 +416,13 @@ def nlinv_estimate(
 
 
 def compressed(
-    context: ReconContext, data: ReconData, virtual_coils: int | None
+    context: ReconContext,
+    data: ReconData,
+    virtual_coils: int | None,
+    *,
+    by_slice: bool = True,
 ) -> ReconData:
-    """Return ``data`` with its receive channels compressed to ``virtual_coils`` (:class:`~pulserver.recon.CoilCompression`).
+    """Return ``data`` with its receive channels compressed to ``virtual_coils`` (:class:`~pulserver.recon.CoilCompression`, ``by_slice`` as there).
 
     ``data`` is returned as it is when it holds no more channels than that, or
     ``virtual_coils`` is ``None``.
@@ -426,7 +430,7 @@ def compressed(
     buffer = data.data if data.data is not None else data.ref
     if virtual_coils is None or buffer is None or buffer.coils <= virtual_coils:
         return data
-    return CoilCompression(virtual_coils)(context, data)
+    return CoilCompression(virtual_coils, by_slice=by_slice)(context, data)
 
 
 def pics_image(

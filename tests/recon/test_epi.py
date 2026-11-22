@@ -641,9 +641,15 @@ def _calibration_unit(location, polarity, kspace):
         position=(0.0, 0.0, 5.0 * location), slice_dir=(0.0, 0.0, 1.0)
     )
     ref = SimpleNamespace(
-        space=space, reference=reference, image_shape=(6, 8), kspace=kspace
+        space=space,
+        reference=reference,
+        image_shape=(6, 8),
+        kspace=kspace,
+        coils=kspace.shape[0],
     )
-    return SimpleNamespace(counters={"slice": location, "set": polarity}, ref=ref)
+    return SimpleNamespace(
+        counters={"slice": location, "set": polarity}, ref=ref, data=None
+    )
 
 
 def test_a_fleet_calibration_of_both_polarities_gives_the_stack_field_that_a_later_reference_keeps(

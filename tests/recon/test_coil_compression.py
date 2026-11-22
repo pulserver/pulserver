@@ -128,14 +128,11 @@ def test_compression_leaves_the_unit_it_is_given_as_it_was(device):
     assert virtual.acquisitions is original.acquisitions
 
 
-def test_the_basis_of_the_first_unit_is_applied_to_the_later_ones(device):
-    """A later unit whose channels lie in the span of the basis keeps its norm."""
-    image, maps, kspace = coil_phantom(COILS, MATRIX)
-    later = centred_kspace(maps * np.roll(image, 5, axis=0))
-    ids = []
+def _two_slices(by_slice, ids, first, second, *, device="cpu"):
+    """Compress a unit of slice 0, one of slice 1 and slice 0 again; return the compressed units."""
 
     def step(context, data):
-        compressed = recon.CoilCompression(3)(context, data)
+        compressed = recon.CoilCompression(3, by_slice=by_slice)(context, data)
         ids.append(context.coil_compression.id)
         return compressed
 
@@ -143,16 +140,81 @@ def test_the_basis_of_the_first_unit_is_applied_to_the_later_ones(device):
     play(
         plugin,
         calibration_header(COILS, MATRIX, slices=2),
-        acs_readouts(kspace, slice_index=0) + acs_readouts(later, slice_index=1),
+        acs_readouts(first, slice_index=0)
+        + acs_readouts(second, slice_index=1)
+        + acs_readouts(first, slice_index=0),
         device=device,
     )
+    return plugin.results
 
-    _, second = plugin.results
-    assert ids[0] == ids[1]
+
+def _on_channels(channels):
+    """Calibration k-space of the phantom received by ``channels`` only."""
+    _, _, kspace = coil_phantom(COILS, MATRIX)
+    kept = np.zeros_like(kspace)
+    kept[list(channels)] = kspace[list(channels)]
+    return kept
+
+
+def test_each_slice_location_keeps_a_basis_of_its_own(device):
+    ids = []
+
+    _two_slices(
+        True, ids, _on_channels(range(3)), _on_channels([0, 4, 5]), device=device
+    )
+
+    assert ids[0] != ids[1]
+    assert ids[2] == ids[0]
+
+
+def test_a_slice_seen_by_channels_the_first_slice_does_not_see_keeps_its_signal(
+    device,
+):
+    first, second = _on_channels(range(3)), _on_channels(range(3, COILS))
+
+    _, kept, _ = _two_slices(True, [], first, second, device=device)
+
+    np.testing.assert_allclose(
+        np.linalg.norm(kept.data.kspace), np.linalg.norm(second), rtol=ROUND_OFF
+    )
+
+
+def test_one_basis_for_the_stream_is_that_of_the_first_unit(device):
+    """A later unit whose channels lie in the span of the basis keeps its norm."""
+    image, maps, kspace = coil_phantom(COILS, MATRIX)
+    later = centred_kspace(maps * np.roll(image, 5, axis=0))
+    ids = []
+
+    _, second, _ = _two_slices(False, ids, kspace, later, device=device)
+
+    assert ids[0] == ids[1] == ids[2]
     assert second.data.kspace.shape[0] == 3
     np.testing.assert_allclose(
         np.linalg.norm(second.data.kspace), np.linalg.norm(later), rtol=ROUND_OFF
     )
+
+
+def test_a_pooled_basis_keeps_the_signal_of_every_slice_it_was_pooled_from():
+    from pulserver.recon import ReconContext
+
+    first, second = _on_channels(range(2)), _on_channels(range(2, 3))
+    context = ReconContext.offline()
+    units = []
+    plugin = stream_plugin(lambda context, data: units.append(data))
+    play(
+        plugin,
+        calibration_header(COILS, MATRIX, slices=2),
+        acs_readouts(first, slice_index=0) + acs_readouts(second, slice_index=1),
+    )
+    compression = recon.CoilCompression(3, by_slice=False)
+
+    compression.pool(context, units)
+
+    for unit, kspace in zip(units, (first, second), strict=True):
+        kept = compression(context, unit)
+        np.testing.assert_allclose(
+            np.linalg.norm(kept.data.kspace), np.linalg.norm(kspace), rtol=ROUND_OFF
+        )
 
 
 @pytest.mark.parametrize("n_virtual", [3, 4])

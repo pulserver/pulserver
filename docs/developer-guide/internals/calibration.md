@@ -67,9 +67,9 @@ readouts of every unit are whitened alike.
 ## Coil compression
 
 The basis $A$ is that of the channel covariance
-$\sum_k \mathbf{y}_k\mathbf{y}_k^H$ over calibration samples. One basis is
-estimated per stream, and every readout or unit is projected onto it, so the
-virtual channels of successive units are the same. The basis and the
+$\sum_k \mathbf{y}_k\mathbf{y}_k^H$ over calibration samples. Every
+readout or unit of a slice is projected onto the same basis, so the virtual
+channels of successive units of that slice are the same. The basis and the
 projection are computed on the host. It is estimated in one of two places:
 
 - as the readouts arrive, by the gadget
@@ -79,11 +79,16 @@ projection are computed on the host. It is estimated in one of two places:
   ahead of it; every later readout is projected as it arrives. The buffers then
   hold $n$ channels, which is what lets the units of every echo of a
   multi-echo volume be open together;
-- as a unit closes, by {class}`~pulserver.recon.CoilCompression`, from the
-  placed samples of the calibration k-space of the first unit the stream
-  compresses, or of its imaging k-space where that unit holds none. This is
-  the place for a scan whose calibration lines are spread among its imaging
-  lines, such as an echo train.
+- as a unit closes, by {class}`~pulserver.recon.CoilCompression`, one basis
+  per slice location, from the placed samples of the calibration k-space of
+  the first unit of that location, or of its imaging k-space where that unit
+  holds none. A slice far from the first one played is seen by other
+  channels, and a basis fitted to the first would drop them. This is the place
+  for a scan whose calibration lines are spread among its imaging lines, such
+  as an echo train. With `by_slice=False` the stream has one basis, pooled
+  from the calibration of every slice ({meth}`~pulserver.recon.CoilCompression.pool`)
+  or else the first unit's: the bands of a multiband unit and the slices its
+  kernels are trained on have to share their virtual channels.
 
 If the signal of the channels lies in a subspace of dimension at most $n$,
 compression discards none of it, and SENSE with compressed data and compressed
