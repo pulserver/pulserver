@@ -82,11 +82,11 @@ class SubspaceRecon(PicsRecon):
     ----------
     rank : int, default=RANK
         Temporal basis functions.
-    llr : float, default=0.005
+    llr : float, default=0.003
         ``lambda``, relative to the data scaling.
-    iterations : int, default=100
+    iterations : int, default=40
         FISTA iterations.
-    virtual_coils : int | None, default=8
+    virtual_coils : int | None, default=6
         Receive channels beyond this many are compressed to it.
     block : int, default=BLOCK
         Block edge of the locally low-rank penalty.
@@ -97,9 +97,9 @@ class SubspaceRecon(PicsRecon):
     def __init__(
         self,
         rank: int = RANK,
-        llr: float = 0.005,
-        iterations: int = 100,
-        virtual_coils: int | None = 8,
+        llr: float = 0.003,
+        iterations: int = 40,
+        virtual_coils: int | None = 6,
         block: int = BLOCK,
         *,
         kspace_filter: bool = True,

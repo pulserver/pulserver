@@ -123,7 +123,9 @@ class Mprage3D(SequencePlugin):
             train_length=length,
         )
         trains = -(-(calibrating + imaging) // length)
-        references = -(-calibrating // length) if waved(a) else 0
+        references = (
+            -(-calibrating // length) if waved(a) or a["ordering"] == "shuffling" else 0
+        )
         one = {
             "n_dummy": 0,
             "ordering": "radial",

@@ -365,7 +365,11 @@ class FsePd3D(SequencePlugin):
         )
         raster = system.block_duration_raster
         times = [pp.round_to_raster(time, raster) for time in times]
-        references = -(-calibrating // lengths[0]) if waved(a) else 0
+        references = (
+            -(-calibrating // lengths[0])
+            if waved(a) or a["ordering"] == "shuffling"
+            else 0
+        )
         leading = dummies(a, times[0]) + references
         # The effective TE a train reaches follows from its angles.
         values = achieved(self, train)
