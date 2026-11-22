@@ -13,7 +13,7 @@ import numpy as np
 from ...mrd._acquisitions import AcquisitionFlag
 from ...mrd._images import center_crop
 from .._buffers import ReconBuffer, ReconData
-from .._calibration import CoilCompression, MissingCalibration, coil_maps
+from .._calibration import CoilCompression, MissingCalibration, _id, coil_maps
 from .._correct import Corrections
 from ..gadgets import (
     AsymmetricEcho,
@@ -34,6 +34,11 @@ WAVELET_MIN_POINTS = 4
 #: 2 along its partitions, about 5 % of the object; at 48 it is as faint as
 #: GRAPPA leaves it.
 CALIBRATION_LINES = 48
+
+#: Gauss-Newton step of :func:`nlinv_estimate` after which the phase poles the
+#: maps share are detected and moved into the image, once: two of BART's eight
+#: steps remain to refine the maps around them.
+PHASE_POLE_STEP = 6
 
 #: Virtual channels the receive channels are compressed to before the maps
 #: and the solve (:class:`~pulserver.recon.CompressChannels`).
@@ -75,8 +80,10 @@ class PicsRecon(ReconPlugin):
     with :func:`nlinv_estimate` as the estimate: from the unit's calibration
     readouts, else the maps stored for its slice, else the exam's. A unit for
     which none of these has maps takes them from the low-resolution centre of
-    its own k-space (``bart nlinv -m 1 --phase-pole 0``), with unit
-    sensitivity for one coil. A unit that holds calibration readouts and no
+    the k-space of the first such unit of its slice and set (``bart nlinv -m 1
+    --phase-pole 0``), fitted once and kept for the rest of the stream
+    (:meth:`~pulserver.recon.ReconContext.memoized`), with unit sensitivity
+    for one coil. A unit that holds calibration readouts and no
     imaging readouts makes no image; its maps are stored for the later units
     of its slice. The image minimises
     ``|P F S x - y|^2 + lambda |W x|_1`` over the maps (``bart pics -R W``),
@@ -256,8 +263,18 @@ class PicsRecon(ReconPlugin):
                 volume.shape
             )
         except MissingCalibration as missing:
-            self._self_calibrated(context, data, missing)
-            maps = nlinv_estimate(volume)
+            reason = missing
+            maps = context.memoized(
+                (
+                    "pics own maps",
+                    int(data.counters.get("slice", 0)),
+                    int(data.counters.get("set", 0)),
+                    _id(context.noise),
+                    _id(context.coil_compression),
+                    tuple(volume.shape),
+                ),
+                lambda: self._own_maps(context, data, reason, volume),
+            )
         sampled = volume.abs().sum(dim=0) > 0
         image = pics_image(
             volume, maps, sampled, self.wavelet, self.iterations, context.device
@@ -266,6 +283,17 @@ class PicsRecon(ReconPlugin):
         if kspace.ndim == 3:
             image = image[0]
         return self._filtered(np.array(center_crop(image, shape[-image.ndim :])))
+
+    def _own_maps(
+        self,
+        context: ReconContext,
+        data: ReconData,
+        missing: MissingCalibration,
+        volume: Any,
+    ) -> Any:
+        """Return the maps fitted to the k-space centre of the first unit of a slice and set, which its later units reuse."""
+        self._self_calibrated(context, data, missing)
+        return nlinv_estimate(volume)
 
     def _self_calibrated(
         self, context: ReconContext, data: ReconData, missing: MissingCalibration
@@ -386,11 +414,11 @@ def nlinv_estimate(
 ) -> Any:
     """Return the coil maps :func:`bartorch.apps.nlinv_maps` fits to ``kspace``, with phase-pole correction.
 
-    ``bart nlinv -m 1 --phase-pole 0`` on a calibration grid of
+    ``bart nlinv -m 1 --phase-pole PHASE_POLE_STEP`` on a calibration grid of
     ``CALIBRATION_LINES`` points an axis, capped at the axis: the central
     lines of Cartesian k-space, or the samples of a trajectory within half
-    that of the centre, the maps of which are on ``shape``. After every
-    Gauss-Newton step the phase poles the maps share are moved into the
+    that of the centre, the maps of which are on ``shape``. After Gauss-Newton
+    step ``PHASE_POLE_STEP`` the phase poles the maps share are moved into the
     image, where they would otherwise drive every coil's sensitivity towards
     zero and leave a dark spot in the image. BART refuses the detection on a
     grid with an axis no longer than a twentieth of its longest, rounded up;
@@ -410,7 +438,7 @@ def nlinv_estimate(
         size=CALIBRATION_LINES,
         radius=CALIBRATION_LINES / 2,
         shape=shape,
-        phase_pole=0 if detectable else None,
+        phase_pole=PHASE_POLE_STEP if detectable else None,
         **({} if sobolev is None else {"sobolev": sobolev}),
     )
 

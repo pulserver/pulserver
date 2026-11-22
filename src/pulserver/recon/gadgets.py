@@ -156,9 +156,12 @@ class CompressChannels(Gadget):
     ``n_virtual`` channels. Readouts held when the stream ends are given on
     by :meth:`release`.
 
-    A stream whose first readout is not a calibration readout, or whose
-    readouts have no more than ``n_virtual`` channels, passes unchanged, as
-    do navigator and noise readouts. Place the gadget after
+    A stream whose first readout is not a calibration readout passes
+    unchanged unless ``train_readouts`` is given: its first ``train_readouts``
+    readouts are then held instead and give the basis, as a non-Cartesian
+    scan's do, each of its shots crossing the k-space centre. A stream whose
+    readouts have no more than ``n_virtual`` channels passes unchanged, as do
+    navigator and noise readouts. Place the gadget after
     :class:`Prewhiten`, so the basis is that of whitened channels, and before
     any gadget that changes the header of a readout: a held readout is given
     on with its acquisition as this gadget received it.
@@ -170,17 +173,26 @@ class CompressChannels(Gadget):
     ----------
     n_virtual : int
         Virtual channels kept.
+    train_readouts : int, default=None
+        Readouts held to give the basis of a stream that leads with no
+        calibration readouts; ``None`` passes such a stream unchanged.
     """
 
-    def __init__(self, n_virtual: int) -> None:
+    def __init__(self, n_virtual: int, train_readouts: int | None = None) -> None:
         if n_virtual < 1:
             raise ValueError(f"n_virtual is {n_virtual}; it has to be at least 1")
+        if train_readouts is not None and train_readouts < 1:
+            raise ValueError(
+                f"train_readouts is {train_readouts}; it has to be at least 1"
+            )
         self.n_virtual = int(n_virtual)
+        self.train_readouts = None if train_readouts is None else int(train_readouts)
 
     def startup(self, context):
         super().startup(context)
         self._held: list[tuple[Any, np.ndarray]] = []
         self._passing = False
+        self._training = False
 
     def __call__(self, acquisition: Any, data: np.ndarray) -> Any:
         if self._passing or carries(acquisition, _OFF_GRID):
@@ -191,6 +203,18 @@ class CompressChannels(Gadget):
         if data.shape[0] <= self.n_virtual:
             self._passing = True
             return data
+        if self._training or (
+            not self._held
+            and self.train_readouts is not None
+            and not carries(acquisition, CALIBRATION)
+        ):
+            self._training = True
+            self._held.append((acquisition, np.array(data)))
+            if len(self._held) < self.train_readouts:
+                return None
+            self._training = False
+            self._basis()
+            return self.release()
         if carries(acquisition, CALIBRATION):
             self._held.append((acquisition, np.array(data)))
             return None

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import sys
 
+from ._threads import serial_blas
+
 _USAGE = (
     "usage: pulserver design {list,validate,generate,import,prune,push,serve} ...\n"
     "       pulserver scan (--seq FILE | --plugin NAME --plugins DIR) --limits FILE ...\n"
@@ -40,11 +42,13 @@ def main(argv: list[str] | None = None) -> int:
         proxy(argv[1:])
         return 0
     if argv and argv[0] == "recon":
+        serial_blas()
         from .recon.__main__ import main as recon
 
         recon(argv[1:])
         return 0
     if argv and argv[0] == "replay":
+        serial_blas()
         from .recon._replay import main as replay
 
         return replay(argv[1:])

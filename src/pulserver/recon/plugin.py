@@ -51,6 +51,7 @@ import numbers
 import os
 import pickle
 import threading
+import time
 import warnings
 from abc import ABC, abstractmethod
 from collections.abc import (
@@ -500,6 +501,47 @@ class ReconContext:
     )
     noise: Any = field(default=None, init=False, repr=False)
     coil_compression: Any = field(default=None, init=False, repr=False)
+    memos: dict[Hashable, Any] = field(default_factory=dict, init=False, repr=False)
+
+    def memoized(
+        self, key: Hashable, compute: Callable[[], Any], *, what: str | None = None
+    ) -> Any:
+        """Return what this stream computed for ``key``, calling ``compute`` the first time.
+
+        The calibration of a series -- coil maps, a density compensation, the
+        largest eigenvalue of an encoding, a GRAPPA kernel, a distortion field
+        -- is the same for every unit that shares what it was computed from,
+        so it is computed for the first such unit and reused for the rest of
+        the stream. ``key`` names everything the value depends on; an array
+        enters it as a digest of its bytes. The values live in
+        :attr:`memos`, on the host, for the stream alone.
+
+        Parameters
+        ----------
+        key : Hashable
+            What the value depends on.
+        compute : Callable[[], Any]
+            Computes the value.
+        what : str, default=None
+            Names the value in the ``INFO`` record logged, with the time it
+            took, when it is computed; ``None`` logs nothing.
+
+        Returns
+        -------
+        Any
+            The value computed for ``key``.
+        """
+        if key in self.memos:
+            return self.memos[key]
+        start = time.perf_counter()
+        value = self.memos[key] = compute()
+        if what is not None:
+            logging.getLogger("pulserver.recon").info(
+                "%s computed in %.2f s and kept for the rest of the series",
+                what,
+                time.perf_counter() - start,
+            )
+        return value
 
     def __getattr__(self, name: str) -> Any:
         # Reached only where normal lookup failed, so never for a field.

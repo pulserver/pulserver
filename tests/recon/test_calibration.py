@@ -769,3 +769,32 @@ def test_imaging_with_no_calibration_anywhere_fits_its_own_maps_without_a_warnin
         record for record in caplog.records if "own k-space" in record.getMessage()
     ]
     assert [record.levelno for record in fitted] == [logging.INFO]
+
+
+def test_imaging_with_no_calibration_fits_its_own_maps_once_for_every_repetition_of_a_slice(
+    monkeypatch,
+):
+    pytest.importorskip("bartorch")
+    from pulserver.recon.handlers import pics
+
+    calls = []
+    estimate = pics.nlinv_estimate
+
+    def counted(*args, **kwargs):
+        calls.append(None)
+        return estimate(*args, **kwargs)
+
+    monkeypatch.setattr(pics, "nlinv_estimate", counted)
+    _, _, kspace = coil_phantom(COILS, MATRIX)
+
+    play(
+        _pics(),
+        calibration_header(COILS, MATRIX),
+        [
+            *readouts(kspace, repetition=0, last=LAST),
+            *readouts(kspace, repetition=1, last=LAST),
+            *readouts(kspace, slice_index=1, last=LAST),
+        ],
+    )
+
+    assert len(calls) == 2
