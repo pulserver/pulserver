@@ -36,6 +36,10 @@ NAVIGATOR = AcquisitionFlag.IS_NAVIGATION_DATA | AcquisitionFlag.IS_RTFEEDBACK_D
 #: as they are.
 _OFF_GRID = NAVIGATOR | AcquisitionFlag.IS_NOISE_MEASUREMENT
 
+#: Readouts that take the channels of the scan they are played in: navigators
+#: and odd/even phase references.
+_FOLLOWING = NAVIGATOR | AcquisitionFlag.IS_PHASECORR_DATA
+
 #: The flags either of which marks a calibration readout: pypulseqpp's ``REF``
 #: and ``IMA`` labels.
 CALIBRATION = (
@@ -156,9 +160,12 @@ class CompressChannels(Gadget):
     ``n_virtual`` channels. Readouts held when the stream ends are given on
     by :meth:`release`.
 
-    A stream whose first readout is not a calibration readout, or whose
+    Navigator and odd/even phase-reference readouts are held, projected and
+    given on with the readouts around them, so every readout of a buffer or a
+    phase fit has the same channels; they give no basis. A stream whose
+    first readout of neither kind is not a calibration readout, or whose
     readouts have no more than ``n_virtual`` channels, passes unchanged, as
-    do navigator and noise readouts. Place the gadget after
+    do noise readouts. Place the gadget after
     :class:`Prewhiten`, so the basis is that of whitened channels, and before
     any gadget that changes the header of a readout: a held readout is given
     on with its acquisition as this gadget received it.
@@ -183,21 +190,26 @@ class CompressChannels(Gadget):
         self._passing = False
 
     def __call__(self, acquisition: Any, data: np.ndarray) -> Any:
-        if self._passing or carries(acquisition, _OFF_GRID):
+        if self._passing or carries(acquisition, AcquisitionFlag.IS_NOISE_MEASUREMENT):
             return data
         basis = self.context.coil_compression
         if basis is not None:
             return projected_readout(data, basis)
         if data.shape[0] <= self.n_virtual:
             self._passing = True
-            return data
-        if carries(acquisition, CALIBRATION):
+            return self._unchanged(acquisition, data)
+        if carries(acquisition, CALIBRATION | _FOLLOWING):
             self._held.append((acquisition, np.array(data)))
             return None
-        if not self._held:
+        if not any(carries(a, CALIBRATION) for a, _ in self._held):
             self._passing = True
-            return data
+            return self._unchanged(acquisition, data)
         return [*self.release(), (acquisition, projected_readout(data, self._basis()))]
+
+    def _unchanged(self, acquisition: Any, data: np.ndarray) -> Any:
+        """Return ``data``, after the readouts held as they arrived when there are any."""
+        held, self._held = self._held, []
+        return [*held, (acquisition, data)] if held else data
 
     def release(self) -> list[tuple[Any, np.ndarray]]:
         """Return the readouts held, projected onto the basis they give, in the order they arrived."""
@@ -212,12 +224,17 @@ class CompressChannels(Gadget):
     def _basis(self) -> Any:
         """Return the stream's basis, estimated from the held readouts when it has none."""
         if self.context.coil_compression is None:
+            calibration = [
+                (acquisition, data)
+                for acquisition, data in self._held
+                if carries(acquisition, CALIBRATION)
+            ]
             first = [
                 data
-                for acquisition, data in self._held
+                for acquisition, data in calibration
                 if int(acquisition_label(acquisition, "contrast", 0) or 0) == 0
             ]
-            readouts = first or [data for _, data in self._held]
+            readouts = first or [data for _, data in calibration]
             self.context.coil_compression = basis_of(
                 np.concatenate(readouts, axis=1), self.n_virtual
             )

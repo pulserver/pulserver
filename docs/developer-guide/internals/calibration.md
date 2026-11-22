@@ -85,9 +85,8 @@ projection are computed on the host. It is estimated in one of two places:
   holds none. A slice far from the first one played is seen by other
   channels, and a basis fitted to the first would drop them. This is the place
   for a scan whose calibration lines are spread among its imaging lines, such
-  as an echo train. With `by_slice=False` the stream has one basis, pooled
-  from the calibration of every slice ({meth}`~pulserver.recon.CoilCompression.pool`)
-  or else the first unit's: the bands of a multiband unit and the slices its
+  as an echo train. With `by_slice=False` the stream has one basis, the
+  first unit's: the bands of a multiband unit and the slices its
   kernels are trained on have to share their virtual channels.
 
 If the signal of the channels lies in a subspace of dimension at most $n$,

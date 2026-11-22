@@ -441,24 +441,6 @@ class CoilCompression:
         self.n_virtual = int(n_virtual)
         self.by_slice = bool(by_slice)
 
-    def pool(self, context: ReconContext, units: list[ReconData]) -> None:
-        """Estimate the stream's one basis from the samples of every unit of ``units`` together.
-
-        Each unit gives its calibration k-space, or its imaging k-space where
-        it holds none.
-
-        Raises
-        ------
-        ValueError
-            If no unit holds k-space.
-        """
-        sources = [u.ref if u.ref is not None else u.data for u in units]
-        samples = [b.kspace[:, b.mask] for b in sources if b is not None]
-        if not samples:
-            raise ValueError("units with no k-space cannot give the basis")
-        basis = basis_of(np.concatenate(samples, axis=1), self.n_virtual)
-        context.coil_compressions[None] = basis
-
     def __call__(self, context: ReconContext, data: ReconData) -> ReconData:
         """Return ``data`` with its k-space projected onto the basis of its location.
 
