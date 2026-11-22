@@ -464,6 +464,7 @@ def pics_image(
     wavelet: float,
     iterations: int,
     device: str | None,
+    x0: Any = None,
 ) -> Any:
     """Return the complex image ``(z, y, x)`` of ``bart pics -S -R W`` over host k-space ``(coils, z, y, x)``.
 
@@ -476,7 +477,9 @@ def pics_image(
     ``wavelet`` along the axes of at least ``WAVELET_MIN_POINTS`` points. A
     volume of one partition is solved as a plane. The k-space, the maps and
     the iteration's vectors stay on the host, and the encoding computes on
-    ``device``; ``None`` is the host. The image is on the host.
+    ``device``; ``None`` is the host. FISTA starts from the image ``x0``,
+    ``(z, y, x)``, when one is given, and from zero otherwise. The image is
+    on the host.
     """
     import bartorch
     import torch
@@ -496,7 +499,8 @@ def pics_image(
     axes = wavelet_axes(grid, tuple(range(-1, -len(grid) - 1, -1)))
     solve = optim.FISTA(priors.Wavelet(axes, wavelet), maxiter=iterations)
     data = (measured * (1.0 / scaling)).reshape(kspace.shape[0], *grid)
-    return (scaling * solve(data, encoding)).reshape(kspace.shape[1:])
+    start = {} if x0 is None else {"x0": (x0 * (1.0 / scaling)).reshape(grid)}
+    return (scaling * solve(data, encoding, **start)).reshape(kspace.shape[1:])
 
 
 def partial_fourier(image: Any, sampled: Any) -> Any:

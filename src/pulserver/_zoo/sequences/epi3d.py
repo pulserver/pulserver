@@ -197,9 +197,10 @@ class Epi3D(SequencePlugin):
             pad += pp.round_to_raster(per_shot - shortest, raster)
         shot = shortest - raster + pad
         tr = volume * shot
-        # The time series and the reference volume, with the phase encode
-        # reversed, each play their dummies first: whole volumes in a series,
-        # shots otherwise.
+        # The time series, and the reference volume with the phase encode
+        # reversed that follows a calibration without FLEET's two
+        # polarities, each play their dummies first: whole volumes in a
+        # series, shots otherwise.
         n_dummy = a["n_dummy"]
         if n_dummy is None:
             # As the function plays them: every shot excites the slab.
@@ -209,7 +210,7 @@ class Epi3D(SequencePlugin):
         if not NAVIGATOR:
             # The reference plays in the last dummy shot, so there is one.
             dummy_shots = max(dummy_shots, 1)
-        duration = (2 * dummy_shots + (1 + a["n_frames"]) * volume) * shot
+        duration = (dummy_shots + a["n_frames"] * volume) * shot
         excitation = pp.Sequence(system)
         excitation.add_block(exc.rf, *gz)
         excitation.set_definition(key="TR", value=tr)
@@ -258,6 +259,8 @@ class Epi3D(SequencePlugin):
             )
             period = gre.duration
             repeats = _centre(n_y, a["n_acs_y"]) * partitions
+        if not (CALIBRATION == "fleet" and repeats):
+            duration += (dummy_shots + volume) * shot
         if repeats:
             duration += repeats * period
             pulse = RfLayout.of(excitation, None, period=period)

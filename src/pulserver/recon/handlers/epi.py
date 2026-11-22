@@ -412,7 +412,8 @@ class EpiRecon(PicsRecon):
     wavelet-regularised ``pics`` solve of
     :class:`~pulserver.recon.handlers.pics.PicsRecon` at its ``wavelet`` on
     maps carrying the smooth phase (:func:`smooth_phase`) of its
-    ``iterations``-step conjugate-gradient image, so the prior acts on a near-real image, or
+    ``iterations``-step conjugate-gradient image, so the prior acts on a
+    near-real image, started from that image, or
     with ``wavelet`` zero the solution of ``min |P F S x - y|^2`` by
     ``iterations`` conjugate-gradient steps (:class:`bartorch.optim.CG`). A
     partial-Fourier phase encode is completed by ``pocs_iterations`` of POCS
@@ -424,14 +425,19 @@ class EpiRecon(PicsRecon):
     solved as a slice of its own, with its slice's maps. A multiband unit
     without that calibration is solved as one volume of its bands.
 
-    The phase-encode-reversed reference volume (``SET`` 1) is reconstructed and
+    When PyHySCO is installed (bartorch's ``pyhysco`` extra, GPL-3.0), one
+    susceptibility displacement field is estimated for the whole stack
+    (:func:`bartorch.tools.correct_susceptibility`, :func:`stack_field`) from
+    the root-sum-of-squares images of the FLEET calibration's two
+    phase-encode polarities. They share the imaging's echo spacing, and so
+    its distortion, at the calibration's short echo time, where the
+    signal near air-tissue interfaces has not yet dephased. Without them,
+    the phase-encode-reversed reference volume (``SET`` 1), reconstructed and
     kept, Fermi filtered as the images are, but sent as no image of the
-    series. When PyHySCO is installed (bartorch's ``pyhysco`` extra, GPL-3.0),
-    the first image of every slice of the stack is held until the stack is
-    complete; that volume and the reference volume give one susceptibility
-    displacement field for the whole stack
-    (:func:`bartorch.tools.correct_susceptibility`, :func:`stack_field`),
-    estimated once and applied to every image of every slice
+    series, is the reference: the first image of every slice of the stack is
+    held until the stack is complete, and that volume and the reference
+    volume give the field. The field is estimated once and applied to every
+    image of every slice
     (:func:`bartorch.tools.apply_susceptibility`, as FSL's ``applytopup
     --method=jac``), history ``HYSCO``. The correction is logged as the other
     corrections are, and an image left uncorrected, for want of PyHySCO or of
@@ -494,6 +500,7 @@ class EpiRecon(PicsRecon):
         self.slice_calibrations = []
         self.references = {}
         self.field = None
+        self.calibration_field = False
         self.held = []
         self._skips_logged = set()
         self.hysco = (
@@ -548,11 +555,15 @@ class EpiRecon(PicsRecon):
         return self._filtered(np.array(center_crop(image, shape[-image.ndim :])))
 
     def _calibrate(self, context):
-        """Estimate the maps of each held calibration slice on its own, and keep its k-space for split-slice GRAPPA."""
+        """Estimate the maps of each held calibration slice on its own, keep its k-space for split-slice GRAPPA, and fit the stack's field to its polarities."""
+        polarities = {}
         for polarity, units in self.calibrations.items():
             for unit in units:
                 coil_maps(context, unit, estimate=epi_nlinv_estimate)
                 kspace = _zero_filled(unit.ref)
+                polarities.setdefault(int(unit.counters.get("slice", 0)), {})[
+                    polarity
+                ] = (unit, kspace)
                 if int(np.prod(kspace.shape[1:-2])) == 1:
                     self.slice_calibrations.append(
                         (
@@ -562,6 +573,47 @@ class EpiRecon(PicsRecon):
                         )
                     )
         self.calibrations = {}
+        pairs = [
+            (location, by_polarity[0], by_polarity[1])
+            for location, by_polarity in polarities.items()
+            if {0, 1} <= set(by_polarity)
+        ]
+        if pairs and self.hysco is None:
+            self._estimate_field(
+                [
+                    (
+                        location,
+                        forward.ref.space,
+                        forward.ref.reference,
+                        self._calibration_image(forward.ref, forward_kspace),
+                        self._calibration_image(reverse.ref, reverse_kspace),
+                    )
+                    for location, (forward, forward_kspace), (
+                        reverse,
+                        reverse_kspace,
+                    ) in pairs
+                ],
+                "its FLEET calibration's two phase-encode polarities",
+            )
+            self.calibration_field = self.field is not None
+
+    def _calibration_image(self, ref, kspace):
+        """Return the root-sum-of-squares image of zero-filled calibration k-space on the grid of the images, Fermi filtered."""
+        import bartorch
+        import torch
+
+        axes = tuple(range(-1, -kspace.ndim, -1))
+        coils = bartorch.fft(
+            torch.from_numpy(np.ascontiguousarray(kspace, dtype=np.complex64)),
+            axes,
+            inverse=True,
+            unitary=True,
+        ).reshape(kspace.shape)
+        image = bartorch.rss(coils, 0).numpy()
+        if image.ndim == 3 and image.shape[0] == 1:
+            image = image[0]
+        image = center_crop(image, ref.image_shape[-image.ndim :])
+        return np.abs(self._filtered(np.array(image)))
 
     def _wavelet(self, volume):
         """Return the wavelet ``lambda`` of ``(coils, z, y, x)`` k-space."""
@@ -575,9 +627,8 @@ class EpiRecon(PicsRecon):
         if _fills_acquired_range(sampled.numpy()):
             image = sense_combined(volume, maps)
         elif self._wavelet(volume) > 0:
-            phase = smooth_phase(
-                cg_sense(volume, maps, sampled, self.iterations, context.device)
-            )
+            start = cg_sense(volume, maps, sampled, self.iterations, context.device)
+            phase = smooth_phase(start)
             image = phase * pics_image(
                 volume,
                 maps * phase,
@@ -585,6 +636,7 @@ class EpiRecon(PicsRecon):
                 self._wavelet(volume),
                 self.iterations,
                 context.device,
+                x0=start * phase.conj(),
             )
         else:
             image = cg_sense(
@@ -628,7 +680,8 @@ class EpiRecon(PicsRecon):
             # The reference only corrects the images (_corrected); it is not
             # an image of the series.
             self.references[location] = (np.abs(image), buffer.reference)
-            self.field = None
+            if not self.calibration_field:
+                self.field = None
             return None
         image = np.abs(image)
         if self.hysco is not None or not self.references or self.field is not None:
@@ -639,7 +692,14 @@ class EpiRecon(PicsRecon):
         ):
             return None
         held, self.held = self.held, []
-        self._estimate_field(held)
+        pairs = []
+        for unit_data, unit_image in held:
+            location = int(unit_data.counters.get("slice", 0))
+            reference, acquisition = self.references[location]
+            pairs.append(
+                (location, unit_data.data.space, acquisition, unit_image, reference)
+            )
+        self._estimate_field(pairs, "its phase-encode-reversed reference")
         results = []
         for unit_data, unit_image in held:
             location = int(unit_data.counters.get("slice", 0))
@@ -686,22 +746,21 @@ class EpiRecon(PicsRecon):
             results = corrections.intensity_corrected(results, data)
         return results
 
-    def _estimate_field(self, held) -> None:
-        """Estimate the stack's displacement field from its held first volume and its reference volume.
+    def _estimate_field(self, pairs, against) -> None:
+        """Estimate the stack's displacement field from pairs of images of opposite phase-encode polarity.
 
-        Every plane of the held units, a slice, a band of a multiband group or
-        a partition of a 3D volume, is placed at its position along the slice
-        direction (:func:`plane_positions`); the planes are stacked in that
-        order and corrected as one volume, the median spacing of their
-        positions its third voxel size, and each unit takes the field of its
-        own planes.
+        ``pairs`` holds ``(slice, space, acquisition, image, reference)`` per
+        slice of the stack, ``reference`` read with the phase encode reversed;
+        ``against`` names the reference in the log. Every plane of the pairs,
+        a slice, a band of a multiband group or a partition of a 3D volume, is
+        placed at its position along the slice direction
+        (:func:`plane_positions`); the planes are stacked in that order and
+        corrected as one volume, the median spacing of their positions its
+        third voxel size, and each slice takes the field of its own planes.
         """
         start = time.perf_counter()
         planes = []
-        for data, image in held:
-            location = int(data.counters.get("slice", 0))
-            reference, acquisition = self.references[location]
-            space = data.data.space
+        for location, space, acquisition, image, reference in pairs:
             if not space.recon_fov:
                 self.hysco = "the header states no reconstruction field of view"
                 return
@@ -714,7 +773,7 @@ class EpiRecon(PicsRecon):
                     (position, location, index, images[index], references[index])
                 )
         planes.sort(key=lambda plane: plane[0])
-        space = held[0][0].data.space
+        space = pairs[0][1]
         voxel = tuple(
             1e3 * fov / n
             for fov, n in zip(space.recon_fov, space.recon_matrix, strict=False)
@@ -743,9 +802,7 @@ class EpiRecon(PicsRecon):
         for (_, location, index, _, _), plane in zip(planes, field, strict=True):
             by_location.setdefault(location, {})[index] = plane
         depth = voxel[0] if len(voxel) == 3 else 1.0
-        volumes = {
-            int(d.counters.get("slice", 0)): image.ndim == 3 for d, image in held
-        }
+        volumes = {pair[0]: pair[3].ndim == 3 for pair in pairs}
         self.field = {
             location: (
                 (np.stack([fields[i] for i in sorted(fields)]), (depth, *voxel[-2:]))
@@ -756,10 +813,11 @@ class EpiRecon(PicsRecon):
         }
         _log.info(
             "susceptibility displacement field of a stack of %d planes %s "
-            "estimated in %.2f s against its phase-encode-reversed reference",
+            "estimated in %.2f s against %s",
             len(planes),
             image.shape,
             time.perf_counter() - start,
+            against,
         )
 
     def _corrected(self, image, location):

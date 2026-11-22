@@ -532,6 +532,81 @@ def test_a_scan_read_span_by_span_reads_what_it_reads_whole(
         np.testing.assert_allclose(span, readout, rtol=0, atol=1e-5 * scale)
 
 
+def test_a_scan_acquired_in_batches_under_a_small_budget_reads_what_it_reads_whole(
+    tmp_path, device, monkeypatch
+):
+    sequence = _steady("fid", tmp_path / "fid.seq", selective=False)
+    tissue = virtual.Phantom(
+        [virtual.Ellipse((0.0, 0.0, 0.0), (0.03, 0.03), t1=0.8, t2=0.08)], coils=2
+    ).tissue(2e-3, field_t=3.0)
+    reference = virtual.FourierPlayer(sequence, tissue, device=device)
+    whole = list(reference.readouts(0, reference.blocks))
+    monkeypatch.setattr(_fourier, "_BUDGET", 1 << 12)
+    player = virtual.FourierPlayer(sequence, tissue, device=device)
+    batched = list(player.readouts(0, player.blocks))
+
+    assert len(batched) == len(whole) > 2
+    scale = max(np.abs(readout).max() for readout in whole)
+    for part, readout in zip(batched, whole, strict=True):
+        np.testing.assert_allclose(part, readout, rtol=0, atol=1e-5 * scale)
+
+
+def test_a_3d_image_sampled_only_on_its_kz_zero_plane_transforms_as_in_3d(device):
+    from bartorch import linop
+
+    generator = torch.Generator().manual_seed(0)
+    images = torch.randn(3, 6, 8, 10, dtype=torch.complex64, generator=generator)
+    planar = torch.zeros(1, 50, 3)
+    planar[..., :2] = (torch.rand(1, 50, 2, generator=generator) - 0.5) * 8
+    tilted = planar.clone()
+    tilted[..., 2] = 1e-6
+    images, planar, tilted = images.to(device), planar.to(device), tilted.to(device)
+
+    flat = _fourier._transform(planar, tuple(images.shape))(images)
+    whole = linop.NUFFT(tilted, tuple(images.shape), toeplitz=False)(images)
+
+    np.testing.assert_allclose(
+        flat.reshape(3, -1).cpu().numpy(),
+        whole.reshape(3, -1).cpu().numpy(),
+        rtol=0,
+        atol=1e-2 * float(whole.abs().max()),
+    )
+
+
+def test_a_direction_holding_a_fraction_of_a_percent_of_many_equal_rows_is_kept(device):
+    generator = torch.Generator().manual_seed(0)
+    common, rare = torch.linalg.qr(
+        torch.randn(1344, 2, dtype=torch.complex64, generator=generator)
+    ).Q.T
+    rows = 16384
+    values = torch.cat([common.expand(rows, -1), rare[None] * (0.003 * rows) ** 0.5])
+
+    _, kept = _fourier._leading(values.to(device), 1e-2)
+
+    assert kept.shape[0] == 2
+
+
+def test_the_temporal_basis_spans_a_class_holding_most_magnetization_among_many_small_ones(
+    device,
+):
+    generator = torch.Generator().manual_seed(0)
+    shared, own = torch.linalg.qr(
+        torch.randn(64, 2, dtype=torch.complex64, generator=generator)
+    ).Q.T
+    many = 20000
+    signals = torch.cat([shared.expand(many, -1), (shared + 0.3 * own)[None]])
+    carried = torch.cat([torch.ones(many), torch.tensor([float(many)])])
+    player = SimpleNamespace(_tolerance=1e-2)
+
+    rows = _fourier.FourierPlayer._spanning(
+        player, signals[None].to(device), carried.to(device), 64
+    )
+
+    bulk = signals[-1:].to(device)
+    left = bulk - (bulk @ rows.mH) @ rows
+    assert float(left.norm() / bulk.norm()) <= 1e-2
+
+
 def test_a_rare_group_of_flip_angles_joins_the_nearest_one_the_same_pulses_turn(
     device,
 ):

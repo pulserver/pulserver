@@ -417,3 +417,24 @@ def test_a_fast_image_phase_adds_little_to_the_error_of_the_wavelet_solve(device
         return np.linalg.norm(residual) / np.linalg.norm(magnitude)
 
     assert error(6) < 1.25 * error(0)
+
+
+def test_the_wavelet_solve_starts_from_the_conjugate_gradient_image(device):
+    from pulserver.recon.handlers.epi import EpiRecon, cg_sense
+
+    shape = (1, 48, 48)
+    _, y, x = np.meshgrid(*(np.arange(n) - n // 2 for n in shape), indexing="ij")
+    image = ((y / 21.0) ** 2 + (x / 17.0) ** 2 < 1).astype(np.complex64)
+    maps = _maps(shape, coils=12)
+    sampled = torch.zeros(shape, dtype=torch.bool)
+    sampled[:, 1::3] = True
+    kspace = _kspace(image, maps) * sampled
+    plugin = EpiRecon(1e-6, iterations=4)
+
+    solved = plugin._solved(
+        kspace, torch.from_numpy(maps), SimpleNamespace(device=device)
+    )
+    start = cg_sense(kspace, torch.from_numpy(maps), sampled, 4, device)
+
+    error = np.linalg.norm(np.abs(solved.cpu().numpy()) - np.abs(start.numpy()))
+    assert error / np.linalg.norm(np.abs(start.numpy())) < 0.05
