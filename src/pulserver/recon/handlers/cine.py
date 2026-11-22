@@ -356,10 +356,9 @@ class CineRecon(PicsRecon):
         Undersampling of a real-time frame.
     rejection : float, default=ARRHYTHMIA_REJECTION
         Fraction of the median beat a beat may differ from it by.
-    virtual_coils : int | None, default=VIRTUAL_COILS
-        Receive channels beyond this many are compressed to it.
-    kspace_filter, gradient_unwarp, intensity_correction : bool, default=True
-        The corrections of :class:`~pulserver.recon.Corrections`.
+    **kwargs
+        As :class:`~pulserver.recon.handlers.pics.PicsRecon`: the virtual
+        coils and the corrections.
     """
 
     def __init__(
