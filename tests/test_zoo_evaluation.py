@@ -655,6 +655,7 @@ def test_flip_entries_bind_excitation_or_explicit_refocusing_controls(
     assert {name for name in SHIPPED if UIParam.FLIP in zoo[name].protocol} == {
         *FLIPPED,
         "fse_pd3d",
+        "epi2d",
     }
 
 
