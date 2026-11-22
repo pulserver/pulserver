@@ -7,6 +7,7 @@ from pypulseqpp import sequences
 from pypulseqpp.sequences.sequence.bssfp2D_sequence import (
     ORDERINGS,
     PROSPECTIVE_DUMMIES,
+    RETROSPECTIVE_WINDOW,
     STEADY_STATE_TOLERANCE,
     bssfp2d,
     prospective_starts,
@@ -33,8 +34,9 @@ from pulserver.design import (
 )
 from pulserver.protocol import ImagingMode, TriggerType, TRPreset, UIParam
 
-#: ECG gating is retrospective: each segment cycled over a heartbeat, binned
-#: into cardiac phases by the reconstruction from the recorded ECG.
+#: ECG gating is retrospective: each segment cycled over ``RETROSPECTIVE_WINDOW``
+#: heartbeats, binned into cardiac phases by the reconstruction from the
+#: recorded ECG.
 #: Prospective otherwise: each slice triggered once, on its first excitation,
 #: then every nominal heartbeat acquired once per cardiac phase, the slice one
 #: train with no rest in it; with a trigger window, every heartbeat waits for
@@ -162,7 +164,9 @@ class Bssfp2D(SequencePlugin):
                 played = starts[-1] + a["n_phases"] * segments[-1]
                 train = once + (played - 1) * tr
             else:
-                per_segment = max(1, round(rr / (g["views_per_segment"] * tr)))
+                per_segment = math.ceil(
+                    RETROSPECTIVE_WINDOW * rr / (g["views_per_segment"] * tr)
+                )
                 cycles = per_segment * sum(segments)
                 train = once + (n_dummy + cycles - 1) * tr
         return Evaluation(

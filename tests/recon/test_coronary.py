@@ -102,13 +102,13 @@ def test_undoing_each_segments_navigator_displacement_removes_the_breathing_ghos
 ):
     still, _ = _reconstructed(PicsRecon, [(0.0, 0.0)] * SEGMENTS, device)
     moving, _ = _reconstructed(PicsRecon, SHIFTS, device)
-    corrected, _ = _reconstructed(CoronaryRecon, SHIFTS, device)
+    corrected, _ = _reconstructed(CoronaryRecon, SHIFTS, device, region=1.0)
 
     assert _error(corrected, still) < 0.3 * _error(moving, still)
 
 
 def test_the_navigator_measures_each_segments_displacement_in_millimetres():
-    _, plugin = _reconstructed(CoronaryRecon, SHIFTS)
+    _, plugin = _reconstructed(CoronaryRecon, SHIFTS, region=1.0)
 
     [motion] = [g for g in plugin.gadgets if isinstance(g, SegmentMotion)]
     voxel = 220.0 / MATRIX

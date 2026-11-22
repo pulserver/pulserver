@@ -24,17 +24,19 @@ class SegmentMotion(Gadget):
     The navigator of a segment is the run of navigator readouts (``NAV``)
     that precede its imaging readouts: lines of the central partition, the
     projection of the slab along the partition axis. They are consumed. Its
-    image, the root sum of squares over the coils of the lines' transform
-    along the readout and the phase encodes, is matched to the first
-    segment's over the central ``region`` of the readout field of view of the
-    reconstruction, a template that, narrowed to the heart, leaves out the
-    chest wall and back that do not move with it: the displacement is the
-    move of the image of largest normalised correlation with the template,
-    refined to a fraction of a pixel. Each imaging
-    readout of the segment is then multiplied by the linear phase that moves
-    its image back by that displacement, along the readout and the phase
-    encodes; the partition axis, which the navigator projects out, is left
-    as it is. Readouts of a scan without navigators pass unchanged.
+    image is the root sum of squares over the coils of the lines' transform,
+    the lines placed on the reconstruction's phase-encode grid, so that the
+    few central lines give an image sinc-interpolated to its voxels. It is
+    matched to the first segment's over the central ``region`` of the field
+    of view along the readout and the phase encodes, a template that,
+    narrowed to the heart, leaves out the chest wall and back that do not
+    move with it: the displacement is the move of the image of largest
+    normalised correlation with the template, refined to a fraction of a
+    voxel. Each imaging readout of the segment is then multiplied by the
+    linear phase that moves its image back by that displacement, along the
+    readout and the phase encodes; the partition axis, which the navigator
+    projects out, is left as it is. Readouts of a scan without navigators
+    pass unchanged.
 
     The displacements from the first segment are kept in :attr:`shifts`, in
     mm along the readout and the phase encodes, by segment.
@@ -42,8 +44,9 @@ class SegmentMotion(Gadget):
     Parameters
     ----------
     region : float, default=0.5
-        Fraction of the readout field of view of the reconstruction the
-        navigator is registered over, about its centre.
+        Fraction of the field of view of the reconstruction, along the
+        readout and the phase encodes, the navigator is registered over,
+        about its centre.
 
     Raises
     ------
@@ -91,34 +94,39 @@ class SegmentMotion(Gadget):
         return (data * phase).astype(data.dtype, copy=False)
 
     def _register(self, acquisition: Any) -> None:
-        """Measure the displacement of the navigator held, in its pixels, and forget its lines."""
+        """Measure the displacement of the navigator held, in voxels of the reconstruction, and forget its lines."""
         lines, self._lines = self._lines, []
         segment = self._segment
-        order = sorted(range(len(lines)), key=lambda i: lines[i][0])
-        first = lines[order[0]][0]
-        span = lines[order[-1]][0] - first + 1
+        space = int(acquisition_label(acquisition, "encoding_space_ref", 0) or 0)
+        matrix = _phase_encodes(self.context.header, space)
         coils, samples = lines[0][1].shape
-        kspace = np.zeros((coils, span, samples), np.complex64)
-        for i in order:
-            kspace[:, lines[i][0] - first] = lines[i][1]
+        # The navigator's lines on the reconstruction's phase-encode grid:
+        # its image is sinc-interpolated to the voxels the displacement is
+        # undone in.
+        kspace = np.zeros((coils, matrix, samples), np.complex64)
+        for line, data in lines:
+            kspace[:, min(max(line, 0), matrix - 1)] = data
         images = np.fft.fftshift(
             np.fft.ifft2(np.fft.ifftshift(kspace, axes=(1, 2))), axes=(1, 2)
         )
         image = np.sqrt((np.abs(images) ** 2).sum(axis=0))
-        space = int(acquisition_label(acquisition, "encoding_space_ref", 0) or 0)
         if self._reference is None:
             ratio = (
                 self._oversampling[space] if space < len(self._oversampling) else 1.0
             )
             kept = max(2, round(samples * self.region / ratio))
-            self._window = slice((samples - kept) // 2, (samples - kept) // 2 + kept)
+            rows = max(3, round(matrix * self.region))
+            self._window = (
+                slice((matrix - rows) // 2, (matrix - rows) // 2 + rows),
+                slice((samples - kept) // 2, (samples - kept) // 2 + kept),
+            )
             self._reference = image
             shift_y, shift_x = 0.0, 0.0
         else:
             shift_y, shift_x = _matched(self._reference, image, self._window)
-        self._pixels[segment] = (shift_x, shift_y, span)
+        self._pixels[segment] = (shift_x, shift_y, matrix)
         fov = self._fov[space] if space < len(self._fov) else (0.0, 0.0)
-        self.shifts[segment] = (shift_x * fov[0] / samples, shift_y * fov[1] / span)
+        self.shifts[segment] = (shift_x * fov[0] / samples, shift_y * fov[1] / matrix)
         LOGGER.debug(
             "segment %d displaced %.2f mm along the readout, %.2f mm along the phase encodes",
             segment,
@@ -166,26 +174,26 @@ class CoronaryRecon(PicsRecon):
 
 
 def _matched(
-    reference: np.ndarray, image: np.ndarray, window: slice
+    reference: np.ndarray, image: np.ndarray, window: tuple[slice, slice]
 ) -> tuple[float, float]:
-    """Return the displacement ``(y, x)`` of ``image`` from ``reference``, in pixels, by matching the reference's ``window`` of columns.
+    """Return the displacement ``(y, x)`` of ``image`` from ``reference``, in pixels, by matching the reference's ``window`` of rows and columns.
 
     The template is the reference over ``window``; the image is moved by
-    every whole pixel up to a quarter of the window along the columns and
-    two pixels along the rows, and the move of the largest normalised
+    every whole pixel up to a quarter of the window along each axis, and
+    the move of the largest normalised
     correlation with the template is refined by a parabola through its
     neighbours along each axis.
     """
-    template = reference[:, window]
+    template = reference[window]
     template = template - template.mean()
-    reach_x = max(1, (window.stop - window.start) // 4)
-    reach_y = min(2, (image.shape[0] - 1) // 2)
+    reach_x = max(1, (window[1].stop - window[1].start) // 4)
+    reach_y = max(1, (window[0].stop - window[0].start) // 4)
     moves_y = np.arange(-reach_y, reach_y + 1)
     moves_x = np.arange(-reach_x, reach_x + 1)
     score = np.empty((moves_y.size, moves_x.size))
     for i, dy in enumerate(moves_y):
         for j, dx in enumerate(moves_x):
-            part = np.roll(image, (-dy, -dx), axis=(0, 1))[:, window]
+            part = np.roll(image, (-dy, -dx), axis=(0, 1))[window]
             part = part - part.mean()
             norm = np.linalg.norm(part) * np.linalg.norm(template)
             score[i, j] = float(np.sum(part * template) / norm) if norm > 0 else 0.0
@@ -208,6 +216,11 @@ def _encoded_fov(encoding: Any) -> tuple[float, float]:
     """Return the encoded field of view along the readout and the phase encodes in mm; 0 where not stated."""
     fov = getattr(getattr(encoding, "encodedSpace", None), "fieldOfView_mm", None)
     return float(getattr(fov, "x", 0) or 0), float(getattr(fov, "y", 0) or 0)
+
+
+def _phase_encodes(header: Any, space: int) -> int:
+    """Return the phase encodes of the encoding space's grid."""
+    return int(header.encoding[space].encodedSpace.matrixSize.y)
 
 
 def _centre_line(header: Any, acquisition: Any) -> int:

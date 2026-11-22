@@ -499,7 +499,7 @@ and the trigger window select:
 |---|---|---|---|
 | None | `ordering` `"sequential"` | Every frame in k-space order | One image per frame |
 | None | `ordering` `"golden"` | Every line of the grid once a frame, in golden-ratio order, so any run of readouts is an undersampled frame | Real-time frames of an eighth of the lines; or, with `binning`, cardiac phases from the recorded ECG or pulse |
-| ECG | `retrospective` on | Each segment cycled over a heartbeat at the heart rate entered | Each readout placed in its beat by the recorded triggers, each line interpolated to every cardiac phase |
+| ECG | `retrospective` on | Each segment cycled over `RETROSPECTIVE_WINDOW` heartbeats at the heart rate entered, so a line spans a whole beat a fifth longer than the nominal one | Each readout placed in its beat by the recorded triggers, each line interpolated to every cardiac phase |
 | ECG, respiratory | `retrospective` off, window 0 | Each slice's first excitation waits for one trigger; the slice then runs free at the heart rate entered | One image per cardiac phase |
 | ECG, respiratory | `retrospective` off, window > 0 | Every heartbeat (breath) waits for its own trigger, opens with the catalyst and dummies again, and leaves the trigger window free for the next trigger | One image per cardiac phase |
 
@@ -599,7 +599,7 @@ GE scanner:
 | `gre_multiecho3d` | `sampling` | `user12` | `"lattice"`, the CAIPIRINHA lattice, the default; or `"poisson"`: a variable-density Poisson-disc draw at the undersampling `ry * rz`, for the compressed-sensing `pics` solve | None |
 | `zte3d` | `scheme` | `user43` | Spokes ordered `"spiral"`, at a constant step across many rings; `"meridian"`; or `"quiet"`, the default: the spiral's directions in steps about a ring gap long, every other shell played backwards | None |
 | `epi2d`, `epi3d` | `calibration` | `user12` | `"fleet"` (0, the default): the central `n_acs_y` lines read by `n_shots * ry` interleaved EPI shots with the imaging train's read lobe, blip, echo spacing and echo time, a slice's (`epi3d`: a partition's) shots in rapid succession at 10 degrees, once in each phase-encode polarity, so each polarity of the EPI is unfolded by coil sensitivities distorted as its image is (Polimeni et al., Magn Reson Med 2016); `"gre"` (1): a gradient echo per line, undistorted | None |
-| `bssfp2d` | `retrospective` | `user44` | ECG gating: off, prospective, each slice triggered once, or every heartbeat with a trigger window, and acquired once per cardiac phase; on, retrospective, each segment cycled over a heartbeat and binned into cardiac phases by the reconstruction | None |
+| `bssfp2d` | `retrospective` | `user44` | ECG gating: off, prospective, each slice triggered once, or every heartbeat with a trigger window, and acquired once per cardiac phase; on, retrospective, each segment cycled over `RETROSPECTIVE_WINDOW` heartbeats and binned into cardiac phases by the reconstruction | None |
 | `bssfp2d` | `ordering` | `user39` | Ungated: `"sequential"`, every frame in k-space order, or `"golden"`, every line once a frame in golden-ratio order, for real-time or binned frames | None |
 | `gre_spiral2d`, `se_spiral2d`, `gre_stack_of_spirals3d`, `se_stack_of_spirals3d`, `mprage_stack_of_spirals3d` | `variable_density` | `user42` | Variable-density spirals | `user12`: periphery undersampling |
 
