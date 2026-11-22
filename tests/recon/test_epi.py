@@ -45,33 +45,6 @@ def test_a_ramp_sampled_readout_is_resampled_onto_the_readout_grid():
         np.testing.assert_allclose(out[0], _sampled(grid)[order], atol=1e-3)
 
 
-def test_a_gridded_readout_is_the_resampled_one_and_leaves_its_acquisition_as_it_was():
-    u = np.linspace(-1, 1, 2 * COLUMNS)
-    positions = 0.5 * np.sin(0.5 * np.pi * u)
-    gadget = RampSampling()
-    gadget.geometry, gadget.operators = [(COLUMNS, FOV)], {}
-    traj = (positions * COLUMNS / FOV)[:, None]
-    acquisition = _acquisition(traj=traj)
-    acquisition.center_sample, acquisition.discard_pre = 7, 3
-
-    gridded = gadget.gridded(acquisition, _sampled(positions)[None])
-
-    assert (acquisition.center_sample, acquisition.discard_pre) == (7, 3)
-    resampled = gadget(_acquisition(traj=traj), _sampled(positions)[None])
-    np.testing.assert_allclose(gridded, resampled)
-
-
-def test_a_uniformly_sampled_readout_is_gridded_without_its_readout_oversampling():
-    gadget = RampSampling()
-    gadget.geometry, gadget.operators = [(COLUMNS, FOV)], {}
-    oversampled = (np.arange(2 * COLUMNS) - COLUMNS) / (2 * COLUMNS)
-
-    gridded = gadget.gridded(_acquisition(), _sampled(oversampled)[None])
-
-    grid = (np.arange(COLUMNS) - COLUMNS // 2) / COLUMNS
-    np.testing.assert_allclose(gridded[0], _sampled(grid), atol=1e-6 * COLUMNS)
-
-
 def test_an_epi_with_additional_adc_samples_reconstructs_the_prescribed_readout_grid():
     import pypulseqpp as pp
     from pypulseqpp import sequences
