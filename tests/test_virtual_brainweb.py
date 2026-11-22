@@ -230,10 +230,40 @@ def test_tissues_without_in_vivo_fits_keep_brainweb_s_relaxation_at_1_5_t():
     for name in ("fat", "muscle and skin", "background", "skull"):
         assert relaxed[name][:2] == _brainweb.TISSUES[name][:2]
     assert relaxed["CSF"][1] == _brainweb.TISSUES["CSF"][1]
-    # R2' = R2* - R2 at BrainWeb's T2 and T2*, 83 ms and 69 ms for grey matter.
-    assert relaxed["grey matter"][2] == pytest.approx(1.0 / (1.0 / 0.069 - 1.0 / 0.083))
-    assert relaxed["CSF"][2] == pytest.approx(1.0 / (1.0 / 0.058 - 1.0 / 0.329))
+    # R2' = R2* - R2 at BrainWeb's T2 and T2*, 70 ms and 30 ms for muscle.
+    assert relaxed["muscle and skin"][2] == pytest.approx(
+        1.0 / (1.0 / 0.030 - 1.0 / 0.047)
+    )
+    assert relaxed["skin"][2] == pytest.approx(1.0 / (1.0 / 0.058 - 1.0 / 0.329))
     assert relaxed["skull"][2] == math.inf
+
+
+@pytest.mark.parametrize("field_t", [0.5, 1.5, 3.0, 7.0, 9.4])
+def test_csf_has_no_static_dephasing_at_any_field(field_t):
+    assert virtual.BrainWeb().relaxation(field_t)["CSF"][2] == math.inf
+
+
+@pytest.mark.parametrize(
+    ("field_t", "grey", "white"),
+    [(1.5, 0.0840, 0.0662), (3.0, 0.0660, 0.0532), (7.0, 0.0332, 0.0268)],
+)
+def test_brain_t2_star_matches_peters_at_the_fields_they_measured(field_t, grey, white):
+    relaxed = virtual.BrainWeb().relaxation(field_t)
+
+    for name, t2_star in (("grey matter", grey), ("white matter", white)):
+        t2, t2_prime = relaxed[name][1:]
+        assert 1.0 / (1.0 / t2 + 1.0 / t2_prime) == pytest.approx(t2_star)
+    assert relaxed["glial matter"][2] == relaxed["grey matter"][2]
+    assert relaxed["connective tissue"][2] == relaxed["white matter"][2]
+
+
+def test_grey_matter_outlasts_white_matter_in_t2_star_at_7_t():
+    relaxed = virtual.BrainWeb().relaxation(7.0)
+
+    def t2_star(name):
+        return 1.0 / (1.0 / relaxed[name][1] + 1.0 / relaxed[name][2])
+
+    assert t2_star("grey matter") > t2_star("white matter")
 
 
 @pytest.mark.parametrize("field_t", [0.2, 1.5, 3.0, 7.0])
@@ -287,7 +317,9 @@ def test_muscle_and_fat_t1_follow_their_power_laws_and_r2_prime_the_field():
     )
     assert high["fat"][0] == pytest.approx(low["fat"][0] * ratio**0.1743)
     assert high["fat"][1] == low["fat"][1]
-    assert high["grey matter"][2] == pytest.approx(low["grey matter"][2] / ratio)
+    assert high["muscle and skin"][2] == pytest.approx(
+        low["muscle and skin"][2] / ratio
+    )
     assert high["white matter"][2] == low["white matter"][2] == 0.2
     with pytest.raises(ValueError, match="above zero"):
         brain.relaxation(0.0)
