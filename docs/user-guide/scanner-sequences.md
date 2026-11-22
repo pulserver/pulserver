@@ -409,7 +409,8 @@ every `--plugins` directory, so a file of the same name there replaces it:
 | Plugin | Paired reconstruction |
 | --- | --- |
 | `gre2d`, `se2d`, `gre_multiecho2d`, `gre3d`, `se3d` | `pics` |
-| `bssfp3d` | `phase_cycles` |
+| `bssfp3d`, `inflow_mra3d` | `phase_cycles` |
+| `coronary_mra3d` | `coronary` |
 | `bssfp2d` | `cine` |
 | `gre_multiecho3d` | `qsm` |
 | `fse3d`, `fse_pd3d`, `mprage3d` | `pmc` |
@@ -447,6 +448,35 @@ function takes, at the same user entry in every plugin, each as a
 increment, as `user12`. Its reconstruction, `phase_cycles`, combines the cycles
 into one image whose off-resonance bands are filled in: two cycles by their
 larger magnitude, which is CISS, and more by their root sum of squares.
+
+`coronary_mra3d` and `inflow_mra3d` play the 3D balanced SSFP in segments, one
+per trigger. Each segment opens from rest with its preparations and a catalyst
+of ten excitations whose flip angle ramps up to the one prescribed, then reads
+its share of the views: they are dealt to the segments by angle in the ky-kz
+plane and each segment reads its wedge from the k-space centre outwards, so the
+centre is read right after the preparations. The scan lasts its number of
+segments times the nominal trigger period, which the console states as the
+heart rate or the breathing rate, and a segment longer than that period is
+refused. The RF the console checks is that of one trigger period.
+
+| Plugin | Trigger | Preparations | Segment (`user12`) |
+| --- | --- | --- | --- |
+| `coronary_mra3d` | ECG; the trigger delay places the segment in mid-diastole | T2 preparation (preparation time), fat saturation | Views per heartbeat |
+| `inflow_mra3d` | Respiratory | Slab-selective adiabatic inversion, the preparation time its inversion time, then fat saturation | Views per breath; `user13` and `user14` the inversion slab's thickness and offset along the readout, in mm |
+
+The coronary scan's catalyst reads neighbouring lines of the central partition,
+an image navigator: the projection of the slab along the partition axis, from
+which the `coronary` reconstruction measures each segment's respiratory
+displacement and undoes it. Prescribe a coronal slab with the readout
+superior–inferior, so the navigator resolves the motion along it; motion along
+the partition axis is not measured. The `navigator` option turns the navigator
+off. Where the peak B1 is too low for the T2 preparation's adiabatic pulses at
+their own adiabaticity, they are designed at a lower one, above an
+inversion's. The inflow scan inverts a slab over the imaged volume and the veins
+on one side of it: arterial blood that flows in from the other side during the
+inversion time is bright against the suppressed background and veins. The PSD maps every trigger to the ECG input,
+so `inflow_mra3d` needs a respiratory trigger on the scanner side before it can
+run there.
 
 `bssfp2d` takes its frames from the console's number of frames. Ungated, each
 slice's k-space is acquired that many times back to back, a free-running series

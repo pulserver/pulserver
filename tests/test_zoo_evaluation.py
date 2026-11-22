@@ -55,6 +55,8 @@ POWER_RTOL = 1e-3
 CHANGED = {
     "bssfp2d": {"flip": 30.0, "ny": 48},
     "bssfp3d": {"flip": 30.0, "ny": 32, "nslices": 8},
+    "coronary_mra3d": {"flip": 60.0, "ny": 32, "nslices": 8},
+    "inflow_mra3d": {"flip": 70.0, "ny": 32, "nslices": 8},
     "epi2d": {"flip": 60.0, "nx": 64, "ny": 32},
     "epi3d": {"flip": 60.0, "nx": 64, "ny": 32, "nslices": 8},
     "fse3d": {"nx": 64, "ny": 32, "nslices": 16, "etl": 16},
@@ -418,6 +420,13 @@ TRAINS: dict[str, list[str]] = {
     "mprage3d": ["inversion"] + ["excitation"] * 256,
     "mprage_stack_of_spirals3d": ["inversion"] + ["excitation"] * 16,
     "mprage_stack_of_stars3d": ["inversion"] + ["excitation"] * 403,
+    # One trigger period: T2 preparation, fat saturation, the catalyst ramp
+    # and a segment of views.
+    "coronary_mra3d": ["preparation", "refocusing", "refocusing", "preparation"]
+    + ["saturation"]
+    + ["excitation"] * 40,
+    # One breath: slab inversion, fat saturation, ramp and segment.
+    "inflow_mra3d": ["inversion", "saturation"] + ["excitation"] * 90,
 }
 
 #: The layouts of the banded sequences with both their bands placed.
@@ -552,12 +561,33 @@ def _wire_power(listed, layout):
     return _mean_power(layout.period, layout.amplitude, peak[which], energy[which])
 
 
+def _period(main):
+    """The period the RF of ``main`` repeats in: its trigger period if it waits for a trigger, its ``TR`` otherwise."""
+    definitions = main.definitions
+    return definitions.get("TriggerPeriod", definitions["TR"])[0]
+
+
+def _first_segment(main):
+    """The blocks of ``main`` from its first trigger to its second, with its trigger period as their ``TR``."""
+    blocks = [main.get_block(i) for i in range(1, len(main.block_events) + 1)]
+    triggered = [i for i, block in enumerate(blocks) if getattr(block, "trig", None)]
+    segment = pp.Sequence(main.system)
+    for block in blocks[triggered[0] : triggered[1]]:
+        segment.add_block(block)
+    segment.set_definition("TR", _period(main))
+    return segment
+
+
 def _last_tr_power(main, blocks=None):
     """The RF energy of the last TR of ``main``, over its ``TR``, in Hz².
 
     The last TR is the last ``blocks`` blocks, or those that end within a
-    ``TR`` of the end.
+    ``TR`` of the end. A triggered scan repeats its first segment, which plays
+    every view of a segment, over its trigger period.
     """
+    if "TriggerPeriod" in main.definitions:
+        segment = _first_segment(main)
+        return segment.calc_rf_power()[3] / _period(main)
     tr = main.definitions["TR"][0]
     ends = np.cumsum(main.libraries().block_durations)
     first = (
@@ -620,6 +650,17 @@ def test_an_evaluation_states_the_values_and_the_scan_time_of_the_design(
 
     expected = protocol.replace(achieved(plugin, chain[-1]))
     assert evaluation.protocol.to_wire() == expected.to_wire()
+    if "TriggerPeriod" in chain[-1].definitions:
+        # A segment waits for its trigger after it ends: the scan lasts a
+        # trigger period per segment however long the segment plays.
+        definitions = chain[-1].definitions
+        segments, period = (
+            definitions["NumSegments"][0],
+            definitions["TriggerPeriod"][0],
+        )
+        assert definitions["SegmentDuration"][0] <= period
+        assert evaluation.duration == pytest.approx(segments * period)
+        return
     # The delay closing a TR is rounded up to the block raster, so each TR the
     # design plays lasts the TR it states or one raster more.
     played = sum(sequence.duration()[0] for sequence in chain)
@@ -676,6 +717,8 @@ def test_an_evaluation_states_as_its_layout_a_regular_tr_of_the_design(
         main = _bounding(plugin, protocol, PRESCRIBED[name])
     else:
         main = _main(plugin, protocol)
+    if "TriggerPeriod" in main.definitions:
+        main = _first_segment(main)
     # The first TR holds the largest packet of slices; a balanced steady state
     # opens with its half-angle pulse, so its last TR is the regular one.
     balanced = name.startswith("bssfp")
@@ -817,6 +860,12 @@ def test_a_zoo_evaluation_designs_a_few_trs_however_large_the_prescription(
     assert len(designed) <= 2
     for chain in designed:
         main = _chain(chain)[-1]
+        if "TriggerPeriod" in main.definitions:
+            # ... or one segment of the centre and edge views after its ramp.
+            assert main.definitions["NumSegments"][0] == 1
+            ramp = main.definitions["CatalystRamp"][0]
+            assert _excitations(main) <= ramp + 45
+            continue
         tr = main.definitions["TR"][0]
         rounding = SYSTEM.block_duration_raster * _excitations(main)
         # ... or a readout in eight directions, up to fifteen where their
@@ -878,9 +927,7 @@ def test_each_zoo_layout_is_one_tr_of_an_excitation_and_a_spin_echo_refocusing_p
 
     instances = layout.instances
     uses = [instances.definitions[number].use for number in instances.definition]
-    assert layout.period == pytest.approx(
-        _main(plugin, protocol).definitions["TR"][0], rel=1e-12
-    )
+    assert layout.period == pytest.approx(_period(_main(plugin, protocol)), rel=1e-12)
     single = ["excitation", "refocusing"] if name in SPIN_ECHO else ["excitation"]
     assert uses == TRAINS.get(name, single)
 

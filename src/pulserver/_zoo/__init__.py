@@ -6,6 +6,8 @@
 ZOO_PAIRS: dict[str, str] = {
     "bssfp2d": "cine",
     "bssfp3d": "phase_cycles",
+    "coronary_mra3d": "coronary",
+    "inflow_mra3d": "phase_cycles",
     "epi2d": "epi",
     "epi3d": "epi",
     "fse3d": "pmc",
