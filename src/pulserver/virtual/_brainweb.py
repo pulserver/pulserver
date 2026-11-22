@@ -76,6 +76,18 @@ T2_MEASURED = {
     "connective tissue": (0.080, 0.071, 0.047),
 }
 
+#: Fields, in T, at which Peters et al. measured brain T2* in vivo (Magn
+#: Reson Imaging 25:748, 2007), and the T2*, in s, of cortical grey matter and
+#: of white matter at each: T2* falls linearly with field between them. Grey
+#: matter's is taken for glial matter, white matter's for connective tissue.
+T2_STAR_FIELDS_T = (1.5, 3.0, 7.0)
+T2_STAR_MEASURED = {
+    "grey matter": (0.0840, 0.0660, 0.0332),
+    "glial matter": (0.0840, 0.0660, 0.0332),
+    "white matter": (0.0662, 0.0532, 0.0268),
+    "connective tissue": (0.0662, 0.0532, 0.0268),
+}
+
 #: Volume magnetic susceptibility, in ppm (SI), of air, and of water, which
 #: every tissue class of the head is taken to have (Schenck, Med Phys 23:815,
 #: 1996).
@@ -210,12 +222,15 @@ class BrainWeb:
         (:data:`T1_EXPONENTS`). T2 of the brain's tissue classes is Cox and
         Gowland's, interpolated linearly in field between the fields they
         measured at and held at the nearer end outside them
-        (:data:`T2_MEASURED`); of the other classes, BrainWeb's. T2' is the one
-        BrainWeb's T2 and T2* leave at 1.5 T, ``1 / (1/T2* - 1/T2)``, times
-        ``1.5 / field_t``, as the static dephasing regime makes R2'
-        proportional to the field (Yablonskiy and Haacke, Magn Reson Med
-        32:749, 1994), or the one :attr:`t2_prime` gives the class; infinite
-        for a class without T2 or T2*.
+        (:data:`T2_MEASURED`); of the other classes, BrainWeb's. T2' of the
+        brain's tissue classes is the one their T2 and Peters et al.'s T2*
+        leave, ``1 / (1/T2* - 1/T2)``, with T2* interpolated as T2 is
+        (:data:`T2_STAR_MEASURED`); CSF has no mesoscopic inhomogeneity, so
+        its T2' is infinite; of the other classes, the one BrainWeb's T2 and
+        T2* leave at 1.5 T times ``1.5 / field_t``, as the static dephasing
+        regime makes R2' proportional to the field (Yablonskiy and Haacke,
+        Magn Reson Med 32:749, 1994). :attr:`t2_prime` overrides any class;
+        T2' is infinite for a class without T2 or T2*.
 
         Raises
         ------
@@ -237,6 +252,15 @@ class BrainWeb:
                 t1 *= ratio ** T1_EXPONENTS.get(name, 0.0)
             if name in T2_MEASURED:
                 t2 = float(np.interp(field_t, T2_FIELDS_T, T2_MEASURED[name]))
+            if name in self.t2_prime:
+                pass
+            elif name in T2_STAR_MEASURED:
+                t2_star = float(
+                    np.interp(field_t, T2_STAR_FIELDS_T, T2_STAR_MEASURED[name])
+                )
+                t2_prime = _t2_prime(t2, t2_star)
+            elif name == "CSF":
+                t2_prime = math.inf
             relaxed[name] = (t1, t2, t2_prime)
         return relaxed
 
