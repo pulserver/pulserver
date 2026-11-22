@@ -970,17 +970,18 @@ def plane_positions(acquisition, space, count) -> list[float]:
 EPI_WAVELET_SLAB = 0.1
 EPI_WAVELET_SLICE = 0.03
 
-#: Sobolev weight of the coil maps of a 3D EPI slab on their calibration
-#: grid. Below BART's, the maps follow the sensitivity across the end
-#: partitions of a slab whose signal reaches them and wraps onto each other,
-#: where the partition and in-plane aliases are unfolded.
+#: Sobolev weight of the EPI coil maps on their calibration grid. Below
+#: BART's, the maps follow the steep sensitivity next to the coil elements:
+#: along the scalp of a close-fitting array, where the scalp is far brighter
+#: than the brain and smoother maps fold it into the brain at R=3, and across
+#: the end partitions of a slab whose signal reaches them and wraps onto each
+#: other.
 EPI_SOBOLEV = 1.0
 
 
 def epi_nlinv_estimate(kspace):
-    """Return the coil maps of EPI calibration k-space by :func:`~pulserver.recon.handlers.pics.nlinv_estimate`: a slab's at ``EPI_SOBOLEV``, a slice's at BART's weight."""
-    slab = kspace.ndim == 4 and kspace.shape[1] > 1
-    if not slab or EPI_SOBOLEV is None:
+    """Return the coil maps of EPI calibration k-space by :func:`~pulserver.recon.handlers.pics.nlinv_estimate` at ``EPI_SOBOLEV``."""
+    if EPI_SOBOLEV is None:
         return nlinv_estimate(kspace)
     return nlinv_estimate(kspace, sobolev=EPI_SOBOLEV)
 
