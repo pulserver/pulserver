@@ -4,7 +4,7 @@
 #: scanner-sequence plugin with when a scan names none. The stored design and
 #: the reconstruction proxy do not read it.
 ZOO_PAIRS: dict[str, str] = {
-    "bssfp2d": "pics",
+    "bssfp2d": "cine",
     "bssfp3d": "pics",
     "epi2d": "epi",
     "epi3d": "epi",

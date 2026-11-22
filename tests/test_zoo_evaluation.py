@@ -436,6 +436,7 @@ LAST_TR_BLOCKS = {"zte3d": 2}
 #: Shipped sequences loaded with options, by the name the scans below use.
 TOGGLED = {
     "bssfp2d+RETROSPECTIVE": ("bssfp2d", {"retrospective": True}),
+    "bssfp2d+GOLDEN": ("bssfp2d", {"ordering": "golden"}),
     "fse3d+OPTIMIZED": ("fse3d", {"refocusing": "optimized"}),
     "fse3d+DUAL_REGION": ("fse3d", {"refocusing": "dual_region"}),
     "fse3d+NAVIGATOR": ("fse3d", {"navigator": True}),
@@ -1454,10 +1455,92 @@ def _phase_labels(sequence):
     return set(np.asarray(sequence.evaluate_labels(evolution="adc")["PHS"]).tolist())
 
 
-def test_the_cine_refuses_respiratory_triggering(zoo):
-    validation = zoo["bssfp2d"].validate(SYSTEM, {"trigger_type": "physio1"})
-    assert not validation.valid
-    assert "respiratory" in validation.info
+def test_a_respiratory_trigger_opens_every_segment_of_the_cine(zoo):
+    plugin = zoo["bssfp2d"]
+    module = SimpleNamespace(**type(plugin).generate.__globals__)
+    protocol = _protocol(plugin, {"trigger_type": "physio1", "num_frames": 4})
+
+    evaluation = plugin.evaluate(SYSTEM, protocol)
+    gated = module._gated(plugin, SYSTEM, protocol)
+    main = _main(plugin, protocol)
+    segments = module._segments(
+        _arguments(plugin, protocol), gated["views_per_segment"]
+    )
+    triggered = [
+        main.get_block(b).trig
+        for b in range(1, main.num_blocks + 1)
+        if getattr(main.get_block(b), "trig", None)
+    ]
+    breath = 60.0 / module.RESPIRATORY_RATE_BPM
+
+    assert gated["gating"] == "prospective"
+    assert gated["trigger_window"] >= module.RESPIRATORY_WINDOW
+    assert len(triggered) == len(segments)
+    assert {trig[0].channel for trig in triggered} == {"physio1"}
+    assert (len(segments) - 1) * breath < evaluation.duration < len(segments) * breath
+
+
+def test_an_ecg_trigger_window_has_every_heartbeat_wait_for_its_trigger(zoo):
+    plugin = zoo["bssfp2d"]
+    module = SimpleNamespace(**type(plugin).generate.__globals__)
+    changes = {"trigger_type": "physio2", "num_frames": 8, "trigger_window": 150.0}
+    protocol = _protocol(plugin, changes)
+
+    evaluation = plugin.evaluate(SYSTEM, protocol)
+    gated = module._gated(plugin, SYSTEM, protocol)
+    main = _main(plugin, protocol)
+    segments = module._segments(
+        _arguments(plugin, protocol), gated["views_per_segment"]
+    )
+    tr = main.definitions["TR"][0]
+
+    assert _triggers(main) == len(segments)
+    leading = module.PROSPECTIVE_DUMMIES * tr
+    assert leading + 8 * gated["views_per_segment"] * tr <= 1.0 - 0.15
+    assert _phase_labels(main) == set(range(8))
+    assert (len(segments) - 1) * 1.0 < evaluation.duration < len(segments) * 1.0
+
+
+def test_a_golden_free_running_cine_reads_every_line_each_frame(zoo):
+    plugin = zoo["bssfp2d+GOLDEN"]
+    protocol = _protocol(plugin, CHANGED["bssfp2d"] | {"num_frames": 3, "Ry": 2})
+
+    evaluation = plugin.evaluate(SYSTEM, protocol)
+    main = _main(plugin, protocol)
+    labels = main.evaluate_labels(evolution="adc")
+    lines = np.asarray(labels["LIN"])
+
+    assert sorted(lines[: lines.size // 3].tolist()) == list(range(48))
+    assert lines[:4].tolist() != [0, 1, 2, 3]
+    assert main.definitions["Ordering"] == "golden"
+    assert evaluation.frame_time == pytest.approx(48 * main.definitions["TR"][0])
+
+
+@pytest.mark.parametrize(
+    ("name", "changes", "stated"),
+    [
+        ("bssfp2d", {}, ("none", "sequential")),
+        ("bssfp2d+GOLDEN", {}, ("none", "golden")),
+        ("bssfp2d", {"trigger_type": "physio2"}, ("prospective", "sequential")),
+        (
+            "bssfp2d+RETROSPECTIVE",
+            {"trigger_type": "physio2"},
+            ("retrospective", "sequential"),
+        ),
+    ],
+)
+def test_the_cine_states_its_gating_and_view_order_to_the_reconstruction(
+    zoo, name, changes, stated
+):
+    plugin = zoo[name]
+    protocol = _protocol(plugin, CHANGED["bssfp2d"] | {"num_frames": 6} | changes)
+
+    main = _main(plugin, protocol)
+    listed = str(main.definitions["ReconParameters"]).split()
+
+    assert {"Gating", "Ordering", "CardiacPhases"} <= set(listed)
+    assert (main.definitions["Gating"], main.definitions["Ordering"]) == stated
+    assert np.atleast_1d(main.definitions["CardiacPhases"])[0] == 6
 
 
 @pytest.mark.parametrize("name", SHIPPED)

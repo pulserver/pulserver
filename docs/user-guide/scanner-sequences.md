@@ -408,7 +408,8 @@ every `--plugins` directory, so a file of the same name there replaces it:
 
 | Plugin | Paired reconstruction |
 | --- | --- |
-| `gre2d`, `se2d`, `bssfp2d`, `gre_multiecho2d`, `gre3d`, `se3d`, `bssfp3d` | `pics` |
+| `gre2d`, `se2d`, `gre_multiecho2d`, `gre3d`, `se3d`, `bssfp3d` | `pics` |
+| `bssfp2d` | `cine` |
 | `gre_multiecho3d` | `qsm` |
 | `fse3d`, `fse_pd3d`, `mprage3d` | `pmc` |
 | `gre_radial2d`, `gre_spiral2d`, `se_radial2d`, `se_spiral2d`, `gre_propeller2d`, `se_propeller2d`, `se_epi_propeller2d`, `zte3d` | `nufft` |
@@ -446,23 +447,40 @@ increment, as `user12`.
 
 `bssfp2d` takes its frames from the console's number of frames. Ungated, each
 slice's k-space is acquired that many times back to back, a free-running series
-that keeps its steady state from one frame to the next and is reconstructed as
-one image per frame; under prospective ECG gating they are the cardiac phases of
-each heartbeat, and retrospective gating sets its own from the heart rate.
-Each slice opens with a catalyst, its first dummies ramping the flip angle
-linearly up to the one prescribed, and its default dummies bring the steady
-state within 5 %. Ungated, each slice is two files of the chain, its catalyst
-and dummies and then its frames, and every repetition rests at its ends: the
-scanner plays one repetition per segment, the same segment for every line of
-every frame, and adds its segment start time to every repetition time alike,
-so the played TR, which validation reports, is longer than the designed one
-but the same throughout and the steady state is undisturbed. Under prospective
-gating each slice's first excitation waits for one trigger, and the slice then
-runs free at the heart rate entered: every gated slice is one train with no rest in it, and repetitions
-that do not acquire fill the trigger delay and each heartbeat after its
-cardiac phases. The train waits for its trigger itself, so the scanner sets
-the whole slice up before the trigger arrives rather than in the time between
-the trigger and the train.
+that keeps its steady state from one frame to the next; under prospective
+gating they are the cardiac phases of each heartbeat, and under retrospective
+gating the cardiac phases the reconstruction bins. Each slice opens with a
+catalyst, its first dummies ramping the flip angle linearly up to the one
+prescribed, and its default dummies bring the steady state within 5 %.
+Ungated, each slice is two files of the chain, its catalyst and dummies and
+then its frames, and every repetition rests at its ends: the scanner plays one
+repetition per segment, the same segment for every line of every frame, and
+adds its segment start time to every repetition time alike, so the played TR,
+which validation reports, is longer than the designed one but the same
+throughout and the steady state is undisturbed.
+
+The cine has three timings, which the trigger type, the `retrospective` option
+and the trigger window select:
+
+| Trigger | Option | Acquisition | Reconstruction (`cine`) |
+|---|---|---|---|
+| None | `ordering` `"sequential"` | Every frame in k-space order | One image per frame |
+| None | `ordering` `"golden"` | Every line of the grid once a frame, in golden-ratio order, so any run of readouts is an undersampled frame | Real-time frames of an eighth of the lines; or, with `binning`, cardiac phases from the recorded ECG or pulse |
+| ECG | `retrospective` on | Each segment cycled over a heartbeat at the heart rate entered | Each readout placed in its beat by the recorded triggers, each line interpolated to every cardiac phase |
+| ECG, respiratory | `retrospective` off, window 0 | Each slice's first excitation waits for one trigger; the slice then runs free at the heart rate entered | One image per cardiac phase |
+| ECG, respiratory | `retrospective` off, window > 0 | Every heartbeat (breath) waits for its own trigger, opens with the catalyst and dummies again, and leaves the trigger window free for the next trigger | One image per cardiac phase |
+
+Under a respiratory trigger each breath acquires one segment of every cardiac
+phase, timed to 15 breaths a minute with at least 1.5 s left for the next
+trigger. A gated slice is one train with no rest in it between its triggers,
+and repetitions that do not acquire fill the trigger delay and each nominal
+heartbeat after its cardiac phases. The train waits for its trigger itself, so
+the scanner sets the whole slice up before the trigger arrives rather than in
+the time between the trigger and the train. Retrospective and golden binned
+cines need the physiological record (`opuser1`): the reconstruction rejects
+readouts of beats whose interval differs from the median by more than 20 %,
+and leaves a line empty in a cardiac phase no readout reaches; a prospective
+cine drops the readouts of such beats where the record is there.
 
 ### Console controls
 
@@ -545,7 +563,8 @@ GE scanner:
 | `gre_multiecho3d` | `sampling` | `user12` | `"lattice"`, the CAIPIRINHA lattice, the default; or `"poisson"`: a variable-density Poisson-disc draw at the undersampling `ry * rz`, for the compressed-sensing `pics` solve | None |
 | `zte3d` | `scheme` | `user43` | Spokes ordered `"spiral"`, at a constant step across many rings; `"meridian"`; or `"quiet"`, the default: the spiral's directions in steps about a ring gap long, every other shell played backwards | None |
 | `epi2d`, `epi3d` | `calibration` | `user12` | `"fleet"` (0, the default): the central `n_acs_y` lines read by `n_shots * ry` interleaved EPI shots with the imaging train's read lobe, blip, echo spacing and echo time, a slice's (`epi3d`: a partition's) shots in rapid succession at 10 degrees, once in each phase-encode polarity, so each polarity of the EPI is unfolded by coil sensitivities distorted as its image is (Polimeni et al., Magn Reson Med 2016); `"gre"` (1): a gradient echo per line, undistorted | None |
-| `bssfp2d` | `retrospective` | `user44` | ECG gating: off, prospective, each slice triggered once and every heartbeat of the heart rate entered acquired once per cardiac phase; on, retrospective, each segment cycled over a heartbeat and binned into cardiac phases by the reconstruction | None |
+| `bssfp2d` | `retrospective` | `user44` | ECG gating: off, prospective, each slice triggered once, or every heartbeat with a trigger window, and acquired once per cardiac phase; on, retrospective, each segment cycled over a heartbeat and binned into cardiac phases by the reconstruction | None |
+| `bssfp2d` | `ordering` | `user39` | Ungated: `"sequential"`, every frame in k-space order, or `"golden"`, every line once a frame in golden-ratio order, for real-time or binned frames | None |
 | `gre_spiral2d`, `se_spiral2d`, `gre_stack_of_spirals3d`, `se_stack_of_spirals3d`, `mprage_stack_of_spirals3d` | `variable_density` | `user42` | Variable-density spirals | `user12`: periphery undersampling |
 
 Every 3D FSE train is packed: the read prephaser shares the excitation block
