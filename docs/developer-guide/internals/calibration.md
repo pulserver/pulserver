@@ -74,9 +74,11 @@ projection are computed on the host. It is estimated in one of two places:
 
 - as the readouts arrive, by the gadget
   {class}`~pulserver.recon.CompressChannels`, from the calibration readouts
-  (`REF` or `IMA`) of the first contrast that lead the scan. They are held
-  until the first readout that is not calibration, then placed, projected,
-  ahead of it; every later readout is projected as it arrives. The buffers then
+  (`REF` or `IMA`) of the first contrast that lead the scan, or from the
+  first `leading` readouts of a scan that opens with none, as the
+  non-Cartesian `nufft` plugin's readouts all cross the k-space centre. They
+  are held until the first readout that is not calibration, or until
+  `leading` have arrived, then placed, projected, ahead of what follows; every later readout is projected as it arrives. The buffers then
   hold $n$ channels, which is what lets the units of every echo of a
   multi-echo volume be open together;
 - as a unit closes, by {class}`~pulserver.recon.CoilCompression`, from the

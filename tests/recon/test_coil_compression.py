@@ -441,3 +441,36 @@ def test_a_unit_of_streamed_readouts_holds_the_virtual_channels_in_arrival_order
     assert unit.data.coils == 4
     assert unit.acquisitions == acquisitions
     assert unit.data.mask.all()
+
+
+def test_a_stream_with_no_calibration_takes_its_basis_from_its_leading_readouts():
+    _, _, kspace = coil_phantom(8, MATRIX)
+    context = streaming_context()
+    gadget = started(recon.CompressChannels(3, leading=ACS), context)
+    acquisitions = acs_readouts(kspace, acs=ACS)
+
+    held = [gadget(a, np.asarray(a.data)) for a in acquisitions[: ACS - 1]]
+    given = gadget(acquisitions[ACS - 1], np.asarray(acquisitions[ACS - 1].data))
+
+    assert held == [None] * (ACS - 1)
+    assert [acquisition for acquisition, _ in given] == acquisitions[:ACS]
+    samples = np.concatenate([np.asarray(a.data) for a in acquisitions[:ACS]], axis=1)
+    eigenvalues = np.sort(np.linalg.eigvalsh(samples @ samples.conj().T))[::-1][:3]
+    virtual = context.coil_compression.matrix[:3].conj() @ samples
+    np.testing.assert_allclose(
+        np.real(np.diag(virtual @ virtual.conj().T)), eigenvalues, rtol=1e-3
+    )
+    later = acquisitions[ACS]
+    assert gadget(later, np.asarray(later.data)).shape == (3, MATRIX)
+
+
+def test_leading_readouts_held_when_the_stream_ends_are_given_on_projected():
+    _, _, kspace = coil_phantom(8, MATRIX)
+    gadget = started(recon.CompressChannels(4, leading=10**6), streaming_context())
+    acquisitions = acs_readouts(kspace, acs=ACS)
+
+    assert all(gadget(a, np.asarray(a.data)) is None for a in acquisitions)
+    given = gadget.release()
+
+    assert [acquisition for acquisition, _ in given] == acquisitions
+    assert all(readout.shape == (4, MATRIX) for _, readout in given)

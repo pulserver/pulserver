@@ -31,9 +31,21 @@ SCHEME = option(
     "scheme", "quiet", choices=("spiral", "meridian", "quiet"), **OPTIONS["scheme"]
 )
 
+#: Order of the shells, ``"sequential"``, ``"golden"`` or ``"raga"``: under golden ratio
+#: order every run of consecutive shells covers the sphere evenly, for a
+#: sliding-window reconstruction, and ``r`` keeps the first shells. ``"raga"``
+#: plays the same order on the nearest generalized Fibonacci number of shells,
+#: where it also stays golden from one repetition of the set into the next.
+ORDERING = option(
+    "ordering",
+    "sequential",
+    choices=("sequential", "golden", "raga"),
+    **OPTIONS["ordering"],
+)
+
 
 class Zte3D(SequencePlugin):
-    app = functools.partial(zte3d, scheme=SCHEME)
+    app = functools.partial(zte3d, scheme=SCHEME, ordering=ORDERING)
     protocol = {
         UIParam.IMAGING_MODE: StatedParam(ImagingMode.THREE_D),
         UIParam.FLIP: FloatParam(
@@ -64,6 +76,8 @@ class Zte3D(SequencePlugin):
         n_shots = a["n_shots"]
         if n_shots is None:
             n_shots = max(1, math.ceil(math.pi * (a["n"] - 1)))
+            if a["ordering"] == "raga":
+                n_shots = pp.calc_raga_size(n_shots, tiny_index=a["tiny_index"])
         n_views = max(3, -(-math.ceil(math.pi * a["n"] ** 2) // n_shots))
         directions, _ = pp.calc_projection_shell(n_views, n_shots, scheme=a["scheme"])
         widest = int(np.argmax(np.linalg.norm(np.diff(directions, axis=0), axis=1)))

@@ -10,16 +10,24 @@ from ...mrd._acquisitions import AcquisitionFlag
 from ...mrd._images import center_crop
 from .._buffers import ReconBuffer, ReconData
 from .._correct import Corrections
-from ..gadgets import Prewhiten
+from ..gadgets import CompressChannels, Prewhiten
 from ..plugin import ReconContext, ReconPlugin, ReconResult
-from .pics import VIRTUAL_COILS, averaged, compressed, nlinv_estimate, wavelet_axes
+from .pics import VIRTUAL_COILS, averaged, nlinv_estimate, wavelet_axes
+
+#: Readouts that open a stream with no calibration readout and give its
+#: virtual channels: each crosses the k-space centre.
+LEADING_READOUTS = 64
 
 
 class NufftRecon(ReconPlugin):
     """Image of each slice, contrast, cardiac phase, set and repetition of a non-Cartesian scan, a ``pics`` solve made as each closes.
 
     Each readout is whitened with the noise measurement of the stream
-    (:class:`~pulserver.recon.Prewhiten`); noise readouts are consumed by the
+    (:class:`~pulserver.recon.Prewhiten`) and projected, as it arrives, onto
+    ``virtual_coils`` channels (:class:`~pulserver.recon.CompressChannels`),
+    by one basis for the stream from its calibration readouts or, where it
+    has none, from its first ``LEADING_READOUTS`` readouts, so no later step
+    holds every receive channel; noise readouts are consumed by the
     whitening and phase-correction readouts are rejected. The coil
     sensitivities are fitted by nonlinear inversion to the samples of the unit
     near the k-space centre, on a grid of those samples
@@ -37,9 +45,7 @@ class NufftRecon(ReconPlugin):
     et al., Magn Reson Med 2018). The step is the reciprocal of the largest
     eigenvalue of the normal operator (``bart pics -e``). An image is its
     averages summed, and its values are those of the solve but for the
-    corrections below. A unit
-    of more receive channels than ``virtual_coils`` is compressed to that many
-    virtual channels first (:func:`~pulserver.recon.handlers.pics.compressed`).
+    corrections below.
 
     The samples, the maps, the density and the vectors of the solve stay on
     the host, where the maps and the density are estimated. The encoding is
@@ -96,8 +102,13 @@ class NufftRecon(ReconPlugin):
         gradient_unwarp: bool = True,
         intensity_correction: bool = True,
     ) -> None:
+        compression = (
+            ()
+            if virtual_coils is None
+            else (CompressChannels(virtual_coils, leading=LEADING_READOUTS),)
+        )
         super().__init__(
-            gadgets=[Prewhiten()],
+            gadgets=[Prewhiten(), *compression],
             triggers={
                 "imaging": AcquisitionFlag.LAST_IN_SLICE
                 | AcquisitionFlag.LAST_IN_SEGMENT
@@ -127,7 +138,6 @@ class NufftRecon(ReconPlugin):
         del branch
         if data.data is None:
             return None
-        data = compressed(context, data, self.virtual_coils)
         buffer = data.data
         grid = buffer.grid_trajectory()
         if grid is None:
