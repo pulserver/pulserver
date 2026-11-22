@@ -1378,10 +1378,12 @@ def susceptibility_field(image, reverse, voxel_size):
 FIELD_EDGE_PARTITIONS = 2
 
 #: PyHySCO smoothness weight of a volume's field, on the intensity scale of
-#: :func:`bartorch.tools.correct_susceptibility`. A 7T spin-echo pair of a
-#: 2 mm stack is corrected best near this weight; ten times stiffer, the field
-#: recovers under half of the displacement near the sinuses.
-SLAB_FIELD_SMOOTHNESS = 300.0
+#: :func:`bartorch.tools.correct_susceptibility`. The field of a noisy 7T
+#: spin-echo pair of a 2 mm stack is closest to the true field in the brain
+#: near this weight. Three times looser it takes up the ventricles and the
+#: noise of the pair, and its steps draw dark lines in the corrected image;
+#: three times stiffer it recovers less of the displacement near the sinuses.
+SLAB_FIELD_SMOOTHNESS = 1000.0
 
 #: PyHySCO smoothness weight of a slice's field, on the same scale. A slice
 #: has no neighbours to constrain its field, and at PyHySCO's own weight the
