@@ -1,10 +1,11 @@
-"""RF coils of the virtual scanner, with the sensitivities of BART's coil models or of each coil's field maps."""
+"""RF coils of the virtual scanner, with the sensitivities of coil models or of each coil's field maps."""
 
 from __future__ import annotations
 
 __all__ = ["COILS", "Coil", "coils"]
 
 import functools
+import itertools
 import json
 import tempfile
 from dataclasses import dataclass
@@ -21,6 +22,32 @@ MODEL_FOV = 0.256
 
 #: Samples per axis of the grid a model is evaluated on and interpolated from.
 _SAMPLES = 32
+
+#: Model name of a receive array of circular loops on a helmet about the head,
+#: whose sensitivities are the loops' quasi-static Biot-Savart fields.
+HELMET = "HELMET"
+
+#: Semi-axes, in m, left-right, anterior-posterior and head-foot, of the
+#: ellipsoid the loop centres of :data:`HELMET` lie on, centred on the
+#: isocentre; loops sit no lower than ``HELMET_LOWEST`` of the head-foot
+#: semi-axis below the centre.
+HELMET_SEMI_AXES = (0.095, 0.115, 0.12)
+HELMET_LOWEST = 0.45
+
+#: Radius, in m, of each loop of :data:`HELMET`.
+HELMET_LOOP_RADIUS = 0.035
+
+#: Samples per axis of the grid :data:`HELMET` is evaluated on: a pitch of
+#: 4 mm over :data:`MODEL_FOV`, fine against the centimetre scale on which a
+#: loop's field varies inside the head.
+_HELMET_SAMPLES = 64
+
+#: Straight segments each loop of :data:`HELMET` is integrated over.
+_HELMET_SEGMENTS = 48
+
+#: Distance, in m, below which the field of a segment is evaluated as at this
+#: distance; the grid points this reaches lie outside the head.
+_HELMET_NEAREST = 0.005
 
 #: Largest relative difference allowed between the frequency a coil's maps
 #: were solved at and the Larmor frequency of the magnet they are used in.
@@ -45,14 +72,14 @@ class Coil:
     """The transmit and receive RF coils of an exam, fixed in the physical frame.
 
     ``name`` is ``transmit/receive``, or one coil's name where it does both.
-    Each side is BART's coil model (``HEAD_2D_8CH`` or ``HEAD_3D_64CH``) and
-    the number of its channels the coil takes, the first ones, as ``phantom
-    -S`` selects them, or the file of the coil's field maps :func:`coils`
-    reads; a side without either is one channel of unit sensitivity
-    everywhere, as a body coil is taken to be. A model is sampled by bartorch
-    on first use, over :data:`MODEL_FOV`
-    along the physical axes; ``HEAD_2D_8CH`` is constant along z. Either is
-    interpolated linearly.
+    Each side is a coil model and the number of its channels the coil takes,
+    or the file of the coil's field maps :func:`coils` reads; a side without
+    either is one channel of unit sensitivity everywhere, as a body coil is
+    taken to be. A model is BART's ``HEAD_2D_8CH`` or ``HEAD_3D_64CH``, of
+    which the coil takes the first channels, as ``phantom -S`` selects them,
+    or :data:`HELMET`, an array of that many loops close about the head. A
+    model is sampled on first use over :data:`MODEL_FOV` along the physical
+    axes and interpolated linearly; ``HEAD_2D_8CH`` is constant along z.
 
     Receive sensitivities are scaled to a root sum of squares of 1 at the
     isocentre, and transmit sensitivities so that the :attr:`default_shim`
@@ -148,8 +175,8 @@ COILS = {
     coil.name: coil
     for coil in (
         Coil("body"),
-        Coil("body/head48", receive_model=("HEAD_3D_64CH", 48)),
-        Coil("head8/head32", ("HEAD_2D_8CH", 8), ("HEAD_3D_64CH", 32)),
+        Coil("body/head48", receive_model=(HELMET, 48)),
+        Coil("head8/head32", ("HEAD_2D_8CH", 8), (HELMET, 32)),
     )
 }
 
@@ -253,6 +280,8 @@ def _sampled(model: str, channels: int) -> np.ndarray:
     Sample ``i`` along an axis lies at ``(i - n // 2) / n`` of the model's
     field of view, as BART's ``phantom`` places it.
     """
+    if model == HELMET:
+        return _helmet(channels)
     from bartorch.tools import phantom
 
     three = model == "HEAD_3D_64CH"
@@ -260,6 +289,68 @@ def _sampled(model: str, channels: int) -> np.ndarray:
     return np.asarray(maps.cpu().numpy(), dtype=np.complex64).reshape(
         channels, -1, _SAMPLES, _SAMPLES
     )
+
+
+def _helmet_centres(channels: int) -> tuple[np.ndarray, np.ndarray]:
+    """Return the ``(channels, 3)`` centres and outward unit normals of the loops of :data:`HELMET`.
+
+    The centres are spread over the helmet's cap by farthest-point sampling of
+    a dense golden-angle spiral, starting from its vertex.
+    """
+    semi = np.asarray(HELMET_SEMI_AXES)
+    count = 4000
+    height = 1.0 - (np.arange(count) + 0.5) * 2.0 / count
+    height = height[height >= -HELMET_LOWEST]
+    turn = np.pi * (1.0 + np.sqrt(5.0)) * (np.arange(height.size) + 0.5)
+    ring = np.sqrt(1.0 - height**2)
+    dense = np.stack([ring * np.cos(turn), ring * np.sin(turn), height], 1) * semi
+    chosen = [int(np.argmax(dense[:, 2]))]
+    distance = np.linalg.norm(dense - dense[chosen[0]], axis=1)
+    for _ in range(channels - 1):
+        chosen.append(int(np.argmax(distance)))
+        distance = np.minimum(
+            distance, np.linalg.norm(dense - dense[chosen[-1]], axis=1)
+        )
+    centres = dense[chosen]
+    normals = centres / semi**2
+    return centres, normals / np.linalg.norm(normals, axis=1, keepdims=True)
+
+
+def _helmet(channels: int) -> np.ndarray:
+    """Return the receive sensitivities of :data:`HELMET` of ``channels`` loops: ``(channels, z, y, x)``.
+
+    Each is ``Bx + j By`` of a unit current around its loop, by the
+    Biot-Savart law over straight segments, at the points of a grid of
+    :data:`_HELMET_SAMPLES` per axis placed as BART's models are.
+    """
+    n = _HELMET_SAMPLES
+    axis = (np.arange(n) - n // 2) * (MODEL_FOV / n)
+    z, y, x = np.meshgrid(axis, axis, axis, indexing="ij")
+    points = np.stack([x.ravel(), y.ravel(), z.ravel()], 1)
+    angles = np.linspace(0.0, 2.0 * np.pi, _HELMET_SEGMENTS + 1)
+    maps = np.empty((channels, points.shape[0]), dtype=np.complex64)
+    centres, normals = _helmet_centres(channels)
+    for channel, (centre, normal) in enumerate(zip(centres, normals, strict=True)):
+        across = np.cross(
+            normal, [0.0, 0.0, 1.0] if abs(normal[2]) < 0.9 else [1.0, 0.0, 0.0]
+        )
+        across /= np.linalg.norm(across)
+        wire = centre + HELMET_LOOP_RADIUS * (
+            np.cos(angles)[:, None] * across
+            + np.sin(angles)[:, None] * np.cross(normal, across)
+        )
+        bx = np.zeros(points.shape[0])
+        by = np.zeros(points.shape[0])
+        for start, end in itertools.pairwise(wire):
+            dx, dy, dz = (points - 0.5 * (start + end)).T
+            scale = (
+                np.maximum(np.sqrt(dx * dx + dy * dy + dz * dz), _HELMET_NEAREST) ** -3
+            )
+            lx, ly, lz = end - start
+            bx += (ly * dz - lz * dy) * scale
+            by += (lz * dx - lx * dz) * scale
+        maps[channel] = bx + 1j * by
+    return maps.reshape(channels, n, n, n)
 
 
 def _map(path: Path, component: str) -> _Grid:

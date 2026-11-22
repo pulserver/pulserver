@@ -22,7 +22,7 @@ SYSTEM = pp.Opts(B0=3.0)
 
 @pytest.fixture
 def modelled(monkeypatch):
-    """Synthetic sensitivities in place of BART's models."""
+    """Synthetic sensitivities in place of the coil models."""
     monkeypatch.setattr(_coils, "_sampled", synthetic_sensitivities)
     _coils._receive.cache_clear()
     _coils._transmit.cache_clear()
@@ -89,7 +89,7 @@ def test_transmit_sensitivities_are_the_conjugates_of_the_receive_ones_of_their_
 
 def test_sensitivities_are_interpolated_linearly_and_held_beyond_the_grid(modelled):
     step = _coils.MODEL_FOV / _coils._SAMPLES
-    maps = _coils._receive(("HEAD_3D_64CH", 32)).values
+    maps = _coils._receive((_coils.HELMET, 32)).values
     centre = _coils._SAMPLES // 2
     head32 = virtual.COILS["head8/head32"]
 
@@ -104,7 +104,9 @@ def test_sensitivities_are_interpolated_linearly_and_held_beyond_the_grid(modell
     np.testing.assert_allclose(beyond, maps[:, -1, centre, centre], rtol=1e-6)
 
 
-@pytest.mark.parametrize("model", [("HEAD_3D_64CH", 32), ("HEAD_2D_8CH", 8)])
+@pytest.mark.parametrize(
+    "model", [("HEAD_3D_64CH", 32), ("HEAD_2D_8CH", 8), (_coils.HELMET, 32)]
+)
 def test_sensitivities_are_the_trilinear_interpolation_of_their_grid(modelled, model):
     grid = _coils._receive(model)
     rng = np.random.default_rng(3)
@@ -290,3 +292,45 @@ def test_a_coil_of_barts_models_has_no_vops():
 def test_maps_solved_at_another_field_are_refused(fields):
     with pytest.raises(ValueError, match="solved at"):
         _coils.coils(fields, field_t=1.5)
+
+
+def _g_factors(maps, reduction):
+    """Return the SENSE g-factor of each pixel of ``(coils, y, x)`` maps for ``reduction``-fold aliasing along y; 0 where a pixel aliases onto nothing but empty space."""
+    ny = maps.shape[1]
+    g = np.zeros(maps.shape[1:])
+    for y in range(ny // reduction):
+        rows = [y + i * ny // reduction for i in range(reduction)]
+        for x in range(maps.shape[2]):
+            encoding = maps[:, rows, x]
+            inside = np.abs(encoding).sum(0) > 0
+            if not inside.any():
+                continue
+            gram = encoding[:, inside].conj().T @ encoding[:, inside]
+            g[np.array(rows)[inside], x] = np.sqrt(
+                np.abs(np.diag(np.linalg.inv(gram)) * np.diag(gram))
+            )
+    return g
+
+
+def test_the_32_loop_helmet_unfolds_threefold_anterior_posterior_aliasing_of_an_axial_head_slice():
+    n, fov = 60, 0.24
+    y, x = np.meshgrid(*(2 * ((np.arange(n) - n // 2) * fov / n,)), indexing="ij")
+    head = (x / 0.075) ** 2 + (y / 0.095) ** 2 < 1.0
+    points = np.stack([x.ravel(), y.ravel(), np.full(x.size, 0.02)], 1)
+    received = virtual.COILS["head8/head32"].receive(points).T.reshape(-1, n, n)
+
+    g = _g_factors(received * head, 3)
+
+    assert np.percentile(g[head], 95) < 1.5
+
+
+def test_each_helmet_loop_off_the_vertex_is_most_sensitive_where_the_head_is_nearest_it():
+    centres, normals = _coils._helmet_centres(32)
+    inside = centres - 0.03 * normals
+    tilted = np.abs(normals[:, 2]) < 0.9
+
+    received = np.abs(virtual.COILS["head8/head32"].receive(inside))
+
+    np.testing.assert_array_equal(
+        np.argmax(received, axis=0)[tilted], np.arange(32)[tilted]
+    )
