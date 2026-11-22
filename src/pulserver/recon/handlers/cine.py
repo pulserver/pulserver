@@ -276,6 +276,76 @@ class Readouts:
         )
 
 
+def _centred_fft(x: Any, dim: int, inverse: bool = False) -> Any:
+    """Return the orthonormal centred DFT of ``x`` along ``dim``, sample ``n // 2`` the centre."""
+    import torch
+
+    transform = torch.fft.ifft if inverse else torch.fft.fft
+    return torch.fft.fftshift(
+        transform(torch.fft.ifftshift(x, dim=dim), dim=dim, norm="ortho"), dim=dim
+    )
+
+
+def acquired_lines(kspace: Any) -> slice:
+    """Return the span of phase-encode lines that any frame of k-space ``(coils, frames, y, x)`` samples."""
+    sampled = (kspace.abs().sum(dim=(0, 1, 3)) > 0).nonzero().flatten()
+    if sampled.numel() == 0:
+        return slice(0, kspace.shape[2])
+    return slice(int(sampled[0]), int(sampled[-1]) + 1)
+
+
+def readout_cropped(kspace: Any, samples: int) -> Any:
+    """Return k-space ``(..., x)`` whose readout spans the field of view of ``samples`` image columns.
+
+    The readout is cut to the central ``samples`` columns of its image, so a
+    readout oversampled against the field of view reconstructs on the image
+    grid with the same pixel values.
+    """
+    if kspace.shape[-1] <= samples:
+        return kspace
+    columns = _centred_fft(kspace, -1, inverse=True)
+    start = kspace.shape[-1] // 2 - samples // 2
+    return _centred_fft(columns[..., start : start + samples].contiguous(), -1)
+
+
+def maps_resampled(maps: Any, lines: slice, samples: int) -> Any:
+    """Return coil maps ``(coils, ..., y, x)`` on the grid of the phase-encode ``lines`` and ``samples`` columns.
+
+    The columns are the central ``samples`` of the maps; along the phase
+    encode the maps are low-passed to ``lines`` of their k-space, the
+    sensitivities keeping their magnitude.
+    """
+    import math
+
+    ny, nx = maps.shape[-2:]
+    if nx > samples:
+        start = nx // 2 - samples // 2
+        maps = maps[..., start : start + samples]
+    kept = lines.stop - lines.start
+    if kept == ny:
+        return maps.contiguous()
+    spectrum = _centred_fft(maps, -2)[..., lines, :]
+    return _centred_fft(spectrum, -2, inverse=True) * math.sqrt(kept / ny)
+
+
+def phase_encodes_padded(image: Any, lines: slice, n_lines: int) -> Any:
+    """Return frames ``(..., y, x)`` reconstructed from phase-encode ``lines`` on the grid of ``n_lines``.
+
+    The frames' k-space takes its place among the lines and the lines
+    outside it are zero, so the frames are sinc-interpolated to the
+    acquisition's matrix.
+    """
+    import torch
+
+    if lines.stop - lines.start == n_lines:
+        return image
+    spectrum = _centred_fft(image, -2)
+    shape = (*image.shape[:-2], n_lines, image.shape[-1])
+    padded = torch.zeros(shape, dtype=spectrum.dtype, device=spectrum.device)
+    padded[..., lines, :] = spectrum
+    return _centred_fft(padded, -2, inverse=True)
+
+
 def cine_image(
     kspace: Any,
     maps: Any,
@@ -531,6 +601,9 @@ class CineRecon(PicsRecon):
                 kspace[:, np.searchsorted(labels, p), y] = readouts.kspace[r]
         volume = torch.from_numpy(np.ascontiguousarray(kspace, dtype=np.complex64))
         maps = self._maps(context, data, volume)
+        lines = acquired_lines(volume)
+        volume = readout_cropped(volume[:, :, lines], buffer.image_shape[-1])
+        maps = maps_resampled(maps, lines, buffer.image_shape[-1])
         image = cine_image(
             volume,
             maps,
@@ -538,7 +611,8 @@ class CineRecon(PicsRecon):
             temporal,
             self.cine_iterations,
             context.device,
-        ).numpy()
+        )
+        image = phase_encodes_padded(image, lines, n_lines).numpy()
         image = np.array(center_crop(image, buffer.image_shape[-2:]))
         image = np.stack([self._filtered(frame) for frame in image])
         references = [

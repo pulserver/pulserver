@@ -14,8 +14,12 @@ from pulserver.recon.handlers.cine import (
     TEMPORAL,
     CineRecon,
     Readouts,
+    acquired_lines,
     binned,
     cardiac_phases,
+    maps_resampled,
+    phase_encodes_padded,
+    readout_cropped,
     realtime,
 )
 
@@ -338,3 +342,63 @@ def test_real_time_frames_take_the_real_time_temporal_prior_unless_one_is_given(
 def test_binning_by_an_unknown_channel_is_refused():
     with pytest.raises(ValueError, match="binning"):
         CineRecon(binning="eeg")
+
+
+def _centred(x, axes, inverse=False):
+    transform = np.fft.ifftn if inverse else np.fft.fftn
+    return np.fft.fftshift(
+        transform(np.fft.ifftshift(x, axes=axes), axes=axes, norm="ortho"), axes=axes
+    )
+
+
+def test_a_readout_cut_to_the_field_of_view_reconstructs_the_central_columns_unchanged(
+    device,
+):
+    import torch
+
+    rng = np.random.default_rng(0)
+    image = rng.standard_normal((2, 3, 16, 32)) + 1j * rng.standard_normal(
+        (2, 3, 16, 32)
+    )
+    kspace = torch.from_numpy(_centred(image, (-2, -1)).astype(np.complex64))
+
+    cropped = readout_cropped(kspace.to(device), 16).cpu().numpy()
+
+    assert cropped.shape == (2, 3, 16, 16)
+    assert _centred(cropped, (-2, -1), inverse=True) == pytest.approx(
+        image[..., 8:24], abs=1e-5
+    )
+
+
+def test_frames_solved_on_the_acquired_lines_return_as_the_zero_filled_image_of_the_full_matrix(
+    device,
+):
+    import torch
+
+    rng = np.random.default_rng(1)
+    kspace = np.zeros((2, 3, 16, 8), np.complex64)
+    kspace[:, :, 5:12] = rng.standard_normal((2, 3, 7, 8))
+    volume = torch.from_numpy(kspace).to(device)
+    lines = acquired_lines(volume)
+    small = torch.from_numpy(
+        _centred(kspace[:, :, lines], (-2, -1), inverse=True).astype(np.complex64)
+    ).to(device)
+
+    padded = phase_encodes_padded(small, lines, 16).cpu().numpy()
+
+    assert lines == slice(5, 12)
+    assert padded == pytest.approx(_centred(kspace, (-2, -1), inverse=True), abs=1e-5)
+
+
+def test_coil_maps_resampled_to_the_acquired_lines_keep_a_smooth_sensitivity(device):
+    import torch
+
+    y, x = np.meshgrid(np.arange(32) - 16, np.arange(24) - 12, indexing="ij")
+    maps = np.exp(-(x**2 + y**2) / 60.0) * np.exp(0.05j * y)
+    maps = torch.from_numpy(maps[None, None].astype(np.complex64)).to(device)
+
+    resampled = maps_resampled(maps, slice(8, 24), 12).cpu().numpy()
+
+    coarse = np.exp(-(x[::2, 6:18] ** 2 + y[::2, 6:18] ** 2) / 60.0)
+    assert resampled.shape == (1, 1, 16, 12)
+    assert np.abs(resampled[0, 0]) == pytest.approx(coarse, abs=0.01)
