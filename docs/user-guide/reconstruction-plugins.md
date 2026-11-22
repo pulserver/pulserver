@@ -278,7 +278,8 @@ conditions for reuse). {class}`~pulserver.recon.Prewhiten` is a gadget and
 {class}`~pulserver.recon.CoilCompression` a step called from `recon`; all three
 compute with bartorch. The gadget {class}`~pulserver.recon.CompressChannels`
 compresses each readout as it arrives instead, from the calibration readouts
-that lead the scan, so the buffers never hold the full set of channels.
+that lead the scan, or from its first `leading` readouts where it has none,
+so the buffers never hold the full set of channels.
 
 ```python
 # recon/gre.py
@@ -547,9 +548,10 @@ transform or solve, unscaled but for the corrections below. They are searched af
 plugin directory, so a client can name one, such as `nufft`, without a file of
 its own, and a file of the same name in a `--plugins` directory replaces it.
 Each whitens its readouts with {class}`~pulserver.recon.Prewhiten`, compresses
-more than six receive channels to six virtual channels (`pics` as the readouts
-arrive, {class}`~pulserver.recon.CompressChannels`; the others a unit at a
-time, {class}`~pulserver.recon.CoilCompression`), and sends a volume as one
+more than six receive channels to six virtual channels (`pics` and `nufft` as
+the readouts arrive, {class}`~pulserver.recon.CompressChannels`, `nufft` from
+its first readouts where the scan has no calibration readouts; the others a
+unit at a time, {class}`~pulserver.recon.CoilCompression`), and sends a volume as one
 image per partition.
 
 Every shipped plugin corrects each image in three steps, in this order

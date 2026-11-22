@@ -156,9 +156,13 @@ class CompressChannels(Gadget):
     ``n_virtual`` channels. Readouts held when the stream ends are given on
     by :meth:`release`.
 
-    A stream whose first readout is not a calibration readout, or whose
-    readouts have no more than ``n_virtual`` channels, passes unchanged, as
-    do navigator and noise readouts. Place the gadget after
+    A stream whose first readout is not a calibration readout takes its
+    basis from its first ``leading`` readouts instead, held and given on
+    projected as the calibration readouts are, as a non-Cartesian scan whose
+    every readout crosses the k-space centre does; with ``leading`` 0 it
+    passes unchanged. A stream whose readouts have no more than ``n_virtual``
+    channels passes unchanged, as do navigator and noise readouts. Place the
+    gadget after
     :class:`Prewhiten`, so the basis is that of whitened channels, and before
     any gadget that changes the header of a readout: a held readout is given
     on with its acquisition as this gadget received it.
@@ -170,17 +174,29 @@ class CompressChannels(Gadget):
     ----------
     n_virtual : int
         Virtual channels kept.
+    leading : int, default=0
+        Readouts that give the basis of a stream that opens with no
+        calibration readout.
+
+    Raises
+    ------
+    ValueError
+        If ``n_virtual`` is below 1 or ``leading`` is negative.
     """
 
-    def __init__(self, n_virtual: int) -> None:
+    def __init__(self, n_virtual: int, leading: int = 0) -> None:
         if n_virtual < 1:
             raise ValueError(f"n_virtual is {n_virtual}; it has to be at least 1")
+        if leading < 0:
+            raise ValueError(f"leading is {leading}; it cannot be negative")
         self.n_virtual = int(n_virtual)
+        self.leading = int(leading)
 
     def startup(self, context):
         super().startup(context)
         self._held: list[tuple[Any, np.ndarray]] = []
         self._passing = False
+        self._leading = False
 
     def __call__(self, acquisition: Any, data: np.ndarray) -> Any:
         if self._passing or carries(acquisition, _OFF_GRID):
@@ -191,13 +207,18 @@ class CompressChannels(Gadget):
         if data.shape[0] <= self.n_virtual:
             self._passing = True
             return data
-        if carries(acquisition, CALIBRATION):
+        if carries(acquisition, CALIBRATION) and not self._leading:
             self._held.append((acquisition, np.array(data)))
             return None
-        if not self._held:
+        if self._held and not self._leading:
+            basis = self._basis()
+            return [*self.release(), (acquisition, projected_readout(data, basis))]
+        if not self.leading:
             self._passing = True
             return data
-        return [*self.release(), (acquisition, projected_readout(data, self._basis()))]
+        self._leading = True
+        self._held.append((acquisition, np.array(data)))
+        return self.release() if len(self._held) >= self.leading else None
 
     def release(self) -> list[tuple[Any, np.ndarray]]:
         """Return the readouts held, projected onto the basis they give, in the order they arrived."""

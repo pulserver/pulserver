@@ -23,8 +23,8 @@ MATRIX, FOV_MM, COILS, SAMPLES, LINES = 16, 220.0, 2, 24, 4
 class Solves(NufftRecon):
     """Keeps what each solve of a stream is given in the list the stream's copy shares, and returns zeros; Fermi filter off unless asked for."""
 
-    def __init__(self, kspace_filter=False):
-        super().__init__(kspace_filter=kspace_filter)
+    def __init__(self, kspace_filter=False, **options):
+        super().__init__(kspace_filter=kspace_filter, **options)
         self.solved = []
 
     def _solved(self, samples, points, device, volume=None):
@@ -402,8 +402,7 @@ def test_channels_beyond_the_virtual_coils_are_compressed_before_the_solve():
     segments = 4
     points = blades(segments)
     _, data = phantom(points)
-    plugin = Solves()
-    plugin.virtual_coils = 1
+    plugin = Solves(virtual_coils=1)
 
     play(plugin, header(segments=segments), stream(data, points))
 
