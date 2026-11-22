@@ -21,6 +21,7 @@ from pulserver.recon.handlers.pics import (
     PicsRecon,
     partial_fourier_axes,
     pics_image,
+    symmetric_phase,
 )
 from pulserver.recon.handlers.pics_train import PicsTrainRecon
 
@@ -805,3 +806,19 @@ def test_an_axis_is_partial_fourier_only_where_lines_are_missing_at_one_end():
     assert not partial_fourier_axes(sampled)
     assert not partial_fourier_axes(undersampled)
     assert partial_fourier_axes(partial)
+
+
+def test_the_symmetric_phase_of_a_partial_fourier_image_is_its_phase_where_that_varies_slowly():
+    import torch
+
+    magnitude, kspace = ellipsoid(32)
+    image, sampled = truncated(kspace, (1,))
+    z, y, x = np.meshgrid(*(np.linspace(-1, 1, 32),) * 3, indexing="ij")
+    true = np.exp(1j * (0.8 * y + 0.5 * z + 0.3 * x * y))
+
+    phase = symmetric_phase(image, sampled).numpy()
+
+    inside = magnitude > 0.5 * magnitude.max()
+    np.testing.assert_allclose(np.abs(phase), 1.0, atol=1e-5)
+    assert np.abs(np.angle(phase * np.conj(true)))[inside].max() < 0.1
+    assert torch.is_tensor(symmetric_phase(image, sampled))

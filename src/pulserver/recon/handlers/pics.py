@@ -102,7 +102,8 @@ class PicsRecon(ReconPlugin):
     ``WAVELET_MIN_POINTS`` points. An encoded axis is partial Fourier where
     the lines missing at one end outnumber the widest gap between sampled
     lines. A unit with such an axis is solved again for a real image times
-    the smooth phase (:func:`smooth_phase`) of its first solve, the maps
+    the phase of its first solve over the k-space sampled on both sides of
+    the centre (:func:`symmetric_phase`), the maps
     carrying the phase (:func:`pics_image` with ``phase``), so the k-space it
     leaves unsampled is the conjugate of what it samples. bartorch is
     imported when the first unit is reconstructed.
@@ -110,8 +111,8 @@ class PicsRecon(ReconPlugin):
     The magnitude image is series ``MAGNITUDE_SERIES``. A scan of more than
     one contrast, such as a multi-echo gradient echo, also sends the real and
     imaginary parts of each image as series ``REAL_SERIES`` and
-    ``IMAGINARY_SERIES``; where an axis is partial Fourier their phase is the
-    smooth phase.
+    ``IMAGINARY_SERIES``; where an axis is partial Fourier their phase is
+    that symmetric phase.
 
     The k-space, the maps and the vectors of the solve stay on the host. The
     encoding is built on ``context.device`` and brings them over a coil at a
@@ -283,7 +284,7 @@ class PicsRecon(ReconPlugin):
             volume, maps, sampled, self.wavelet, self.iterations, context.device
         )
         if partial_fourier_axes(sampled.numpy()):
-            phase = smooth_phase(image)
+            phase = symmetric_phase(image, sampled)
             image = pics_image(
                 volume,
                 maps,
@@ -563,6 +564,54 @@ def smooth_phase(image):
     kspace = bartorch.fft(image, axes, unitary=True).reshape(image.shape)
     smooth = bartorch.fft(kspace * window, axes, inverse=True, unitary=True)
     return torch.exp(1j * torch.angle(smooth.reshape(image.shape))).to(torch.complex64)
+
+
+def symmetric_phase(image: Any, sampled: Any) -> Any:
+    """Return the unit-magnitude phase of ``image`` from the k-space a partial-Fourier ``sampled`` holds on both sides of the centre.
+
+    Along each partial-Fourier axis (:func:`_acquired_range`) the k-space of
+    ``image`` is kept where both a sample and its conjugate lie in the
+    acquired range, the phase of a homodyne reconstruction.
+
+    Parameters
+    ----------
+    image : torch.Tensor
+        Complex ``(z, y, x)`` image, the transform centred.
+    sampled : torch.Tensor
+        Boolean mask of the acquired samples, with the shape of ``image``.
+
+    Returns
+    -------
+    torch.Tensor
+        ``exp(i angle(image_low))``, complex64.
+    """
+    import bartorch
+    import torch
+
+    mask = sampled.cpu().numpy()
+    kept = np.ones(mask.shape, dtype=bool)
+    for axis in range(mask.ndim):
+        lines = _acquired_range(mask, axis)
+        if lines is None:
+            continue
+        inside = np.zeros(mask.shape[axis], dtype=bool)
+        inside[lines[0] : lines[1] + 1] = True
+        shape = [1] * mask.ndim
+        shape[axis] = mask.shape[axis]
+        kept = kept & inside.reshape(shape)
+    axes = tuple(range(-1, -mask.ndim - 1, -1))
+    # Index i of a centred axis of n points holds the conjugate of index
+    # 2 (n // 2) - i, the mirror image shifted by one point where n is even.
+    mirrored = np.roll(np.flip(kept), [1 - n % 2 for n in mask.shape], axis=axes)
+    symmetric = torch.from_numpy((kept & mirrored).astype(np.float32))
+    kspace = bartorch.fft(image.to(torch.complex64), axes, unitary=True)
+    low = bartorch.fft(
+        kspace.reshape(image.shape) * symmetric.to(image.device),
+        axes,
+        inverse=True,
+        unitary=True,
+    ).reshape(image.shape)
+    return torch.exp(1j * torch.angle(low)).to(torch.complex64)
 
 
 def partial_fourier_axes(sampled: np.ndarray) -> bool:
