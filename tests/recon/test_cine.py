@@ -10,6 +10,7 @@ from conftest import play
 from pulserver.recon.handlers import cine
 from pulserver.recon.handlers.cine import (
     REALTIME_TEMPORAL,
+    SYSTOLE_FRACTION,
     TEMPORAL,
     CineRecon,
     Readouts,
@@ -47,6 +48,21 @@ def test_the_readouts_of_a_premature_beat_and_its_compensatory_pause_are_rejecte
     rejected = (beats == waves[2]) | (beats == waves[3])
     assert np.isnan(phases[rejected]).all()
     assert np.isfinite(phases[~rejected & (beats < waves[-1])]).all()
+
+
+def test_the_end_of_systole_of_a_longer_or_shorter_beat_lands_at_the_same_cardiac_phase():
+    waves = np.cumsum([100.0, 800, 900, 720, 800, 800])
+    median = 800.0
+    ends = [
+        waves[b]
+        + SYSTOLE_FRACTION * median * np.sqrt((waves[b + 1] - waves[b]) / median)
+        for b in range(len(waves) - 1)
+    ]
+
+    phases, rr = cardiac_phases(np.array(ends), waves[:-1])
+
+    assert rr == pytest.approx(median)
+    assert phases == pytest.approx(SYSTOLE_FRACTION)
 
 
 def test_readouts_before_the_first_trigger_are_rejected():

@@ -36,6 +36,9 @@ CARDIAC_PHASES = 25
 #: Fraction of the median beat-to-beat interval a beat may differ from it by
 #: before its readouts are rejected as arrhythmic.
 ARRHYTHMIA_REJECTION = 0.2
+#: Fraction of the median beat systole lasts. Systole lengthens with the
+#: square root of the beat-to-beat interval (Bazett), diastole takes the rest.
+SYSTOLE_FRACTION = 0.38
 
 #: Undersampling of a real-time frame of a golden free-running series: a frame
 #: is this fraction of the lines of a fully sampled frame, in consecutive
@@ -51,12 +54,17 @@ def cardiac_phases(
     times: np.ndarray,
     beats: np.ndarray,
     rejection: float = ARRHYTHMIA_REJECTION,
+    systole: float = SYSTOLE_FRACTION,
 ) -> tuple[np.ndarray, float]:
-    """Return each readout's place in its beat, from 0 to 1, and the median beat-to-beat interval.
+    """Return each readout's place in the median beat, from 0 to 1, and the median beat-to-beat interval.
 
     Each readout's beat is the last trigger at or before it, as the scanner
     stamps it; its interval runs to the next trigger any readout was stamped
-    with. A beat whose interval differs from the median by more than
+    with. A beat's systole, ``systole`` of the median beat scaled by the
+    square root of the ratio of its interval to the median, is mapped onto
+    the median beat's systole and its diastole onto the median beat's
+    diastole, so that a readout keeps its place in the contraction whatever
+    the heart rate. A beat whose interval differs from the median by more than
     ``rejection`` of it, the last beat when its readouts lie further past it
     than the median allows, and readouts stamped before the first trigger, are
     rejected: their place is ``nan``. Times and triggers are in the same unit.
@@ -69,6 +77,8 @@ def cardiac_phases(
         Last trigger at or before each readout; 0 where none had arrived.
     rejection : float, default=ARRHYTHMIA_REJECTION
         Fraction of the median interval a beat may differ from it by.
+    systole : float, default=SYSTOLE_FRACTION
+        Fraction of the median beat systole lasts.
 
     Returns
     -------
@@ -107,7 +117,13 @@ def cardiac_phases(
     interval = np.full(times.shape, rr)
     inner = known & (which < intervals.size)
     interval[inner] = intervals[which[inner]]
-    phases = (times - beats) / interval
+    since = times - beats
+    contraction = systole * rr * np.sqrt(interval / rr)
+    phases = np.where(
+        since < contraction,
+        systole * since / contraction,
+        systole + (1.0 - systole) * (since - contraction) / (interval - contraction),
+    )
     regular = np.abs(interval - rr) <= rejection * rr
     accepted = known & regular & (phases >= 0.0) & (phases < 1.0)
     phases = np.where(accepted, phases, np.nan)
