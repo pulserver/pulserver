@@ -1,10 +1,12 @@
 import sys, numpy as np
 import os
 z=np.load(os.environ.get("TRUTH","h_ref")+"/truth.npz"); T=z["echoes"]; K=list(z["keep"])
+CORR = np.maximum(np.load(os.environ["CORR"]), 0.5) if os.environ.get("CORR") else 1.0
+T = T / CORR
 from scipy.ndimage import binary_erosion
 m = binary_erosion(T[0] > 0.1*T[0].max(), iterations=4)
 def score(f):
-    z_=np.load(f); R=np.abs(z_["echoes"]); fr=list(z_["frames"]) if "frames" in z_ else list(range(len(R))); R=R[[fr.index(k) for k in K]]
+    z_=np.load(f); R=np.abs(z_["echoes"]) / CORR; fr=list(z_["frames"]) if "frames" in z_ else list(range(len(R))); R=R[[fr.index(k) for k in K]]
     s=(R[:, m]*T[:, m]).sum()/(R[:, m]**2).sum()
     return [round(float(np.linalg.norm((s*R[j]-T[j])[m])/np.linalg.norm(T[j][m])),3) for j in range(len(K))]
 if __name__ == "__main__":

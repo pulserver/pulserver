@@ -9,13 +9,15 @@ from scipy.ndimage import binary_erosion
 
 out, title, truth, *cols = sys.argv[1:]
 z = np.load(truth); T = z["echoes"]; keep = list(z["keep"])
+CORR = np.maximum(np.load(os.environ["CORR"]), 0.5) if os.environ.get("CORR") else 1.0
+T = T / CORR
 rows_at = [int(r) for r in os.environ.get("ROWS", ",".join(map(str, range(len(keep))))).split(",")]
 labels = os.environ.get("TIMES", "").split(",") if os.environ.get("TIMES") else [f"{os.environ.get('XLABEL', 'echo')} {k + 1}" for k in keep]
 cols = [c.split(":", 1) for c in cols]
 mask = binary_erosion(T.max(0) > 0.1 * T.max(), iterations=4)
 ims = []
 for f, _ in cols:
-    q = np.load(f); R = np.abs(q["echoes"]); fr = list(q["frames"]) if "frames" in q else list(range(len(R)))
+    q = np.load(f); R = np.abs(q["echoes"]) / CORR; fr = list(q["frames"]) if "frames" in q else list(range(len(R)))
     R = R[[fr.index(k) for k in keep]]
     s = (R[:, mask] * T[:, mask]).sum() / (R[:, mask] ** 2).sum()
     ims.append(s * R)
