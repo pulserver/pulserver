@@ -270,15 +270,19 @@ def test_a_volume_is_estimated_as_one_its_phase_encode_first_its_end_partitions_
         np.testing.assert_allclose(corrected[k], np.roll(volume[k], -shift, axis=0))
 
 
-def test_a_volume_field_is_fitted_at_the_slab_smoothness_and_a_slice_at_pyhysco_s(
+def test_a_volume_field_is_fitted_at_the_slab_smoothness_and_a_slice_at_the_slice_smoothness(
     correction,
 ):
-    from pulserver.recon.handlers.epi import SLAB_FIELD_SMOOTHNESS, susceptibility_field
+    from pulserver.recon.handlers.epi import (
+        SLAB_FIELD_SMOOTHNESS,
+        SLICE_FIELD_SMOOTHNESS,
+        susceptibility_field,
+    )
 
     susceptibility_field(np.ones((4, 6, 8)), np.ones((4, 6, 8)), (5.0, 2.0, 3.0))
     susceptibility_field(np.ones((6, 8)), np.ones((6, 8)), (2.0, 3.0))
 
-    assert correction.smoothness == [SLAB_FIELD_SMOOTHNESS, None]
+    assert correction.smoothness == [SLAB_FIELD_SMOOTHNESS, SLICE_FIELD_SMOOTHNESS]
 
 
 def _oversampled_header(columns, oversampling):

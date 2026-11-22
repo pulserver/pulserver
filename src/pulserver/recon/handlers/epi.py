@@ -549,6 +549,7 @@ class EpiRecon(PicsRecon):
         self.slice_calibrations = []
         self.own_maps = {}
         self.receive_fields = {}
+        self.full_resolution_maps = {}
         self.field = None
         self.field_pair = {}
         self.phase_references = {}
@@ -759,9 +760,13 @@ class EpiRecon(PicsRecon):
         return None
 
     def _maps(self, context, data, volume):
-        """Return the unit's coil maps shaped as ``volume``: its slice's, its bands' slices', else fitted once to it and kept."""
+        """Return the unit's coil maps shaped as ``volume``: its slice's, its bands' slices', else fitted once to it and kept.
+
+        From a slice's full-k phase reference on, its maps are those
+        :func:`full_resolution_maps` draws from the reference.
+        """
         try:
-            return coil_maps(context, data, estimate=epi_nlinv_estimate).reshape(
+            maps = coil_maps(context, data, estimate=epi_nlinv_estimate).reshape(
                 volume.shape
             )
         except MissingCalibration as missing:
@@ -773,6 +778,46 @@ class EpiRecon(PicsRecon):
                 self._self_calibrated(context, data, missing)
                 self.own_maps[key] = epi_nlinv_estimate(volume)
             return self.own_maps[key]
+        if volume.shape[1] != 1:
+            return maps
+        location = int(data.counters.get("slice", 0))
+        if location in self.full_resolution_maps:
+            return self.full_resolution_maps[location]
+        calibration = self._slice_calibration(data)
+        if (
+            int(data.counters.get("set", 0)) != FULL_K_REFERENCE_SET
+            or calibration is None
+        ):
+            return maps
+        start = time.perf_counter()
+        import torch
+
+        refined = full_resolution_maps(
+            volume[:, 0],
+            torch.from_numpy(np.ascontiguousarray(calibration, dtype=np.complex64)),
+            maps[:, 0],
+            context.device,
+        )[:, None]
+        self.full_resolution_maps[location] = refined
+        _log.info(
+            "coil maps of slice %d drawn at full resolution from its phase "
+            "reference by SPIRiT in %.2f s",
+            location,
+            time.perf_counter() - start,
+        )
+        return refined
+
+    def _slice_calibration(self, data):
+        """Return the ``(coils, y, x)`` calibration k-space of the unit's slice, set 0's where there are several; ``None`` where there is none."""
+        if data.data is None:
+            return None
+        position = _along_slice(data.data.reference)
+        found = [
+            (entry_set != 0, values)
+            for entry_set, along, values in self.slice_calibrations
+            if abs(along - position) <= BAND_TOLERANCE_MM
+        ]
+        return min(found, key=lambda entry: entry[0])[1] if found else None
 
     def recon(self, context: ReconContext, branch: str, data: ReconData):
         del branch
@@ -1052,9 +1097,10 @@ def plane_positions(acquisition, space, count) -> list[float]:
 
 #: Wavelet ``lambda`` of an undersampled 3D EPI slab and 2D EPI slice, on
 #: data scaled as ``pics`` scales them. A slab's partition and CAIPI
-#: unfolding amplifies noise and converges slowly without the prior.
+#: unfolding amplifies noise and converges slowly without the prior; a
+#: slice's prior is weak enough to keep the cortex and the deep grey nuclei.
 EPI_WAVELET_SLAB = 0.1
-EPI_WAVELET_SLICE = 0.03
+EPI_WAVELET_SLICE = 0.003
 
 #: Sobolev weight of the EPI coil maps on their calibration grid. Below
 #: BART's, the maps follow the steep sensitivity next to the coil elements:
@@ -1063,6 +1109,78 @@ EPI_WAVELET_SLICE = 0.03
 #: the end partitions of a slab whose signal reaches them and wraps onto each
 #: other.
 EPI_SOBOLEV = 1.0
+
+
+#: Kernel extent, consistency weight and conjugate-gradient steps of the
+#: SPIRiT reconstruction :func:`full_resolution_maps` draws coil maps from.
+SPIRIT_KERNEL = 5
+SPIRIT_WEIGHT = 1.0
+SPIRIT_ITERATIONS = 100
+
+#: Root-sum-of-squares, as a fraction of its 99th percentile, at which the
+#: maps of :func:`full_resolution_maps` weigh the reference's coil images and
+#: the calibration's maps equally.
+SPIRIT_MAPS_FLOOR = 0.05
+
+
+def full_resolution_maps(kspace, calibration, maps, device):
+    """Return coil maps of a slice at the resolution of its fully encoded k-space.
+
+    ``kspace`` is reconstructed coil by coil by SPIRiT, its kernel fitted to
+    the slice's calibration; its coil images divided by their
+    root-sum-of-squares are the maps where there is signal. Elsewhere the
+    maps fall back to ``maps``, given the phase of the coil images. Maps the
+    calibration's few central lines resolve are too smooth next to the
+    elements of a close-fitting array, where the steep sensitivity of the
+    bright scalp folds it into the brain at ``R=3``.
+
+    Parameters
+    ----------
+    kspace : torch.Tensor
+        ``(coils, y, x)`` centred k-space of a slice, zero where not sampled,
+        its lines spread over the whole of k-space.
+    calibration : torch.Tensor
+        ``(coils, y, x)`` calibration k-space of the slice, zero outside its
+        central lines.
+    maps : torch.Tensor
+        ``(coils, y, x)`` maps of the slice from its calibration.
+    device : str or torch.device
+        Device of the conjugate-gradient solve.
+
+    Returns
+    -------
+    torch.Tensor
+        ``(coils, y, x)`` maps, of unit root-sum-of-squares.
+    """
+    import bartorch
+    import torch
+    from bartorch import linop, optim, tools
+
+    lines = torch.nonzero(calibration.abs().sum(dim=(0, 2)) > 0)[:, 0]
+    region = calibration[:, int(lines[0]) : int(lines[-1]) + 1].contiguous()
+    kernel = tools.spirit_kernel(region.to(torch.complex64), SPIRIT_KERNEL)
+    grid = tuple(kspace.shape[1:])
+    shape = tuple(kspace.shape)
+    sampling = linop.Diagonal(
+        (kspace.abs().sum(dim=0, keepdim=True) > 0).to(torch.complex64), shape
+    )
+    solve = optim.CG(
+        terms=optim.Tikhonov(
+            SPIRIT_WEIGHT, operator=linop.spirit_consistency(kernel, grid)
+        ),
+        maxiter=SPIRIT_ITERATIONS,
+        device=device,
+    )
+    filled = solve(kspace.to(torch.complex64), sampling).reshape(shape).cpu()
+    images = bartorch.fft(filled, (-1, -2), inverse=True, unitary=True).reshape(shape)
+    rss = images.abs().square().sum(dim=0).sqrt()
+    weight = rss / (rss + SPIRIT_MAPS_FLOOR * torch.quantile(rss.flatten(), 0.99))
+    drawn = images / rss.clamp_min(1e-12)
+    phase = torch.exp(1j * torch.angle((maps.conj() * drawn).sum(dim=0)))
+    blended = weight * drawn + (1 - weight) * maps * phase
+    return (blended / blended.abs().square().sum(dim=0).sqrt().clamp_min(1e-12)).to(
+        maps.dtype
+    )
 
 
 def epi_nlinv_estimate(kspace):
@@ -1302,8 +1420,8 @@ def susceptibility_field(image, reverse, voxel_size):
     on the cell edges of the phase encode, in the axes of ``image``: one row
     (a volume: one phase-encode line) longer. A volume is corrected as one,
     its phase encode first, at the smoothness weight
-    ``SLAB_FIELD_SMOOTHNESS``, and a slice in its plane, at PyHySCO's own
-    weight.
+    ``SLAB_FIELD_SMOOTHNESS``, and a slice in its plane, at
+    ``SLICE_FIELD_SMOOTHNESS``.
 
     Raises
     ------
@@ -1316,8 +1434,8 @@ def susceptibility_field(image, reverse, voxel_size):
     image = np.asarray(image, dtype=np.float64)
     reverse = np.asarray(reverse, dtype=np.float64)
     scale = np.sum(image) / max(np.sum(reverse), 1e-30)
-    smoothness = {}
     if image.ndim == 2:
+        smoothness = {"alpha": SLICE_FIELD_SMOOTHNESS}
         up, down, voxel = image, reverse, tuple(voxel_size)
     else:
         smoothness = {"alpha": SLAB_FIELD_SMOOTHNESS}
@@ -1350,6 +1468,11 @@ FIELD_EDGE_PARTITIONS = 2
 #: 2 mm stack is corrected best near this weight; ten times stiffer, the field
 #: recovers under half of the displacement near the sinuses.
 SLAB_FIELD_SMOOTHNESS = 300.0
+
+#: PyHySCO smoothness weight of a slice's field, on the same scale. A slice
+#: has no neighbours to constrain its field, and at PyHySCO's own weight the
+#: field of a 3T spin-echo pair takes up the anatomy of the pair's images.
+SLICE_FIELD_SMOOTHNESS = 3000.0
 
 
 def undistorted(image, field, voxel_size):

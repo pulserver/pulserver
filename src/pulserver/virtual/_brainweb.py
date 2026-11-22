@@ -192,12 +192,17 @@ class BrainWeb:
     def field_ppm(self) -> np.ndarray:
         """The field the head adds to B0 at each voxel, ``(z, y, x)``, in ppm of B0, as a first-order shim leaves it.
 
-        The head is water, and the background air, each voxel in proportion to
-        the fraction of it the background fills. The field along B0, the
-        physical z axis, is the susceptibility convolved with the dipole
-        kernel, the Lorentz sphere's third included (Marques and Bowtell,
-        Concepts Magn Reson B 25:65, 2005), whose constant and linear terms
-        over the voxels at least half head are then removed.
+        The head is water, and the background air where the head ends: at a
+        voxel mostly background and at its neighbours, each in proportion to
+        the fraction of it the background fills. The fuzzy model's small
+        background fractions inside the scalp and the skull are no air. The
+        field along B0, the physical z axis, is the susceptibility convolved
+        with the dipole kernel, the Lorentz sphere's third included (Marques
+        and Bowtell, Concepts Magn Reson B 25:65, 2005). The field steps
+        across the surface of the head, so a voxel the surface crosses, and
+        the voxel beneath it, take the field of the tissue deeper in, which
+        is the field their tissue is in. The constant and linear terms over
+        the voxels at least half head are then removed.
         """
         return _susceptibility_field(self.fractions[..., 0])
 
@@ -387,7 +392,8 @@ def _susceptibility_field(background: np.ndarray) -> np.ndarray:
     """Return the shimmed field, in ppm, of a head whose voxels ``(z, y, x)`` the background fills the fraction ``background`` of."""
     from scipy import fft
 
-    contrast = ((1.0 - background) * (WATER_PPM - AIR_PPM)).astype(np.float32)
+    air = _air(background)
+    contrast = ((1.0 - air) * (WATER_PPM - AIR_PPM)).astype(np.float32)
     shape = [fft.next_fast_len(3 * size // 2, real=True) for size in contrast.shape]
     kz = np.fft.fftfreq(shape[0]).astype(np.float32)[:, None, None]
     ky = np.fft.fftfreq(shape[1]).astype(np.float32)[None, :, None]
@@ -400,11 +406,55 @@ def _susceptibility_field(background: np.ndarray) -> np.ndarray:
     spectrum *= kernel
     field = fft.irfftn(spectrum, shape, workers=-1)
     field = field[tuple(slice(0, size) for size in contrast.shape)]
+    field = _tissue_side(field, air)
     grid = np.indices(field.shape, dtype=np.float32)
     head = background <= 0.5
     basis = np.column_stack([np.ones(head.sum()), *(axis[head] for axis in grid)])
     shim, *_ = np.linalg.lstsq(basis, field[head], rcond=None)
     return (field - shim[0] - np.tensordot(shim[1:], grid, axes=1)).astype(np.float32)
+
+
+#: Background fraction above which a voxel is air, and the width, in voxels,
+#: of the Gaussian weights with which a voxel at the surface of the head
+#: takes the field of the tissue beneath it.
+_AIR_FRACTION, _SURFACE_REACH = 0.5, 1.5
+
+
+def _air(background: np.ndarray) -> np.ndarray:
+    """Return the fraction of each voxel that is air: the background's at a voxel mostly background and at the 26 around it, none elsewhere."""
+    from scipy import ndimage
+
+    beside = ndimage.binary_dilation(
+        background > _AIR_FRACTION, structure=np.ones((3, 3, 3), dtype=bool)
+    )
+    return np.where(beside, background, 0.0).astype(np.float32)
+
+
+def _tissue_side(field: np.ndarray, air: np.ndarray) -> np.ndarray:
+    """Return ``field`` with every voxel that holds both tissue and air, and every voxel of tissue beside air, at the field of the tissue beneath it.
+
+    The field of a voxel of tissue not beside air is kept; the others take
+    the mean of those within reach, weighted by a Gaussian ``_SURFACE_REACH``
+    voxels wide, or the nearest one where none is within reach. A voxel of
+    air alone keeps its field.
+    """
+    from scipy import ndimage
+
+    cube = np.ones((3, 3, 3), dtype=bool)
+    deep = ~ndimage.binary_dilation(air > 0.0, structure=cube)
+    if not deep.any():
+        return field
+    weight = ndimage.gaussian_filter(deep.astype(np.float32), _SURFACE_REACH)
+    spread = ndimage.gaussian_filter(np.where(deep, field, 0.0), _SURFACE_REACH)
+    beneath = spread / np.maximum(weight, 1e-6)
+    out_of_reach = weight < 1e-3
+    if out_of_reach.any():
+        nearest = ndimage.distance_transform_edt(
+            ~deep, return_distances=False, return_indices=True
+        )
+        beneath = np.where(out_of_reach, field[tuple(nearest)], beneath)
+    surface = ~deep & (air < 1.0)
+    return np.where(surface, beneath, field).astype(np.float32)
 
 
 def _cubes(fractions: np.ndarray, step: int) -> np.ndarray:
