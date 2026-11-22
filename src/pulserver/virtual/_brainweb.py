@@ -39,20 +39,53 @@ TISSUES = {
 #: The field, in T, at which BrainWeb's simulator gives :data:`TISSUES`.
 TISSUES_FIELD_T = 1.5
 
-#: Exponents ``b`` of the power laws ``T1 ~ B0**b``, by the tissue classes
-#: BrainWeb gives their relaxation: those white matter and grey matter follow
-#: from 0.2 T to 7 T (Rooney et al., Magn Reson Med 57:308, 2007), and those
-#: Bottomley et al. fit to skeletal muscle and adipose tissue from 1 MHz to
-#: 100 MHz (Med Phys 11:425, 1984). CSF's T1 does not change with the field
-#: from 0.2 T to 7 T, and neither does that of skin, to which BrainWeb gives
-#: CSF's relaxation; skull and background hold no protons.
+#: T1 of the brain's tissue classes as Rooney et al. fit it in vivo from 0.2 T
+#: to 7 T (Magn Reson Med 57:308, 2007), ``T1 = a * B0**b`` with T1 in s and
+#: B0 in T, as ``(a, b)``: white matter's for white matter and connective
+#: tissue, internal grey matter's for grey and glial matter.
+T1_FITS = {
+    "white matter": (0.583, 0.382),
+    "connective tissue": (0.583, 0.382),
+    "grey matter": (0.857, 0.376),
+    "glial matter": (0.857, 0.376),
+}
+
+#: T1, in s, of ventricular CSF, which Rooney et al. found the same at every
+#: field from 0.2 T to 7 T. BrainWeb gives skin CSF's relaxation, so skin
+#: takes it too.
+CSF_T1 = 4.3
+
+#: Exponents ``b`` of the power laws ``T1 ~ B0**b`` that Bottomley et al. fit
+#: to skeletal muscle and adipose tissue from 1 MHz to 100 MHz (Med Phys
+#: 11:425, 1984), applied to BrainWeb's T1 at 1.5 T.
 T1_EXPONENTS = {
-    "white matter": 0.382,
-    "connective tissue": 0.382,
-    "grey matter": 0.376,
-    "glial matter": 0.376,
     "muscle and skin": 0.4203,
     "fat": 0.1743,
+}
+
+#: Fields, in T, at which Cox and Gowland measured brain T2 in vivo with
+#: gradient-echo sampling of a spin echo (Magn Reson Med 64:1440, 2010), and
+#: the T2, in s, of frontal grey matter and of white matter at each: T2 falls
+#: linearly with field between them. Grey matter's is taken for glial matter,
+#: white matter's for connective tissue.
+T2_FIELDS_T = (1.5, 3.0, 7.0)
+T2_MEASURED = {
+    "grey matter": (0.087, 0.076, 0.047),
+    "glial matter": (0.087, 0.076, 0.047),
+    "white matter": (0.080, 0.071, 0.047),
+    "connective tissue": (0.080, 0.071, 0.047),
+}
+
+#: Fields, in T, at which Peters et al. measured brain T2* in vivo (Magn
+#: Reson Imaging 25:748, 2007), and the T2*, in s, of cortical grey matter and
+#: of white matter at each: T2* falls linearly with field between them. Grey
+#: matter's is taken for glial matter, white matter's for connective tissue.
+T2_STAR_FIELDS_T = (1.5, 3.0, 7.0)
+T2_STAR_MEASURED = {
+    "grey matter": (0.0840, 0.0660, 0.0332),
+    "glial matter": (0.0840, 0.0660, 0.0332),
+    "white matter": (0.0662, 0.0532, 0.0268),
+    "connective tissue": (0.0662, 0.0532, 0.0268),
 }
 
 #: Volume magnetic susceptibility, in ppm (SI), of air, and of water, which
@@ -75,10 +108,11 @@ class BrainWeb:
     lying head first and supine, with the origin of its MNI coordinates, the
     anterior commissure, at the isocentre: the physical x axis points to the
     subject's left, y posterior and z superior. Each tissue class relaxes with
-    the T1, T2 and T2' :meth:`relaxation` derives at the field it is scanned
-    at from the parameters BrainWeb's simulator gives it at 1.5 T (Kwan et
-    al., IEEE Trans Med Imaging 18:1085, 1999), and has the proton density
-    the simulator gives it. Fat precesses at pypulseqpp's fat shift, and every
+    the T1, T2 and T2' :meth:`relaxation` gives it at the field it is scanned
+    at, from in vivo measurements across fields where they exist and from the
+    parameters BrainWeb's simulator gives it at 1.5 T (Kwan et al., IEEE Trans
+    Med Imaging 18:1085, 1999) elsewhere, and has the proton density the
+    simulator gives it. Fat precesses at pypulseqpp's fat shift, and every
     voxel at the field :attr:`field_ppm` its head adds. The coils are those of
     :class:`~pulserver.virtual.Phantom`, fixed in the physical frame.
 
@@ -187,13 +221,21 @@ class BrainWeb:
     def relaxation(self, field_t: float) -> dict[str, tuple[float, float, float]]:
         """Return the T1, T2 and T2', in s, of each tissue class at ``field_t`` T.
 
-        T1 is BrainWeb's, at 1.5 T, times ``(field_t / 1.5)**b`` with the
-        class's exponent in :data:`T1_EXPONENTS`, or BrainWeb's without one; T2
-        is BrainWeb's. T2' is the one BrainWeb's T2 and T2* leave at 1.5 T,
-        ``1 / (1/T2* - 1/T2)``, times ``1.5 / field_t``, as the static
-        dephasing regime makes R2' proportional to the field (Yablonskiy and
-        Haacke, Magn Reson Med 32:749, 1994), or the one :attr:`t2_prime`
-        gives the class; infinite for a class without T2 or T2*.
+        T1 of white, grey, glial matter and connective tissue is Rooney et al.'s
+        fit (:data:`T1_FITS`); of CSF and skin, :data:`CSF_T1` at every field;
+        of muscle and fat, BrainWeb's at 1.5 T times ``(field_t / 1.5)**b``
+        (:data:`T1_EXPONENTS`). T2 of the brain's tissue classes is Cox and
+        Gowland's, interpolated linearly in field between the fields they
+        measured at and held at the nearer end outside them
+        (:data:`T2_MEASURED`); of the other classes, BrainWeb's. T2' of the
+        brain's tissue classes is the one their T2 and Peters et al.'s T2*
+        leave, ``1 / (1/T2* - 1/T2)``, with T2* interpolated as T2 is
+        (:data:`T2_STAR_MEASURED`); CSF has no mesoscopic inhomogeneity, so
+        its T2' is infinite; of the other classes, the one BrainWeb's T2 and
+        T2* leave at 1.5 T times ``1.5 / field_t``, as the static dephasing
+        regime makes R2' proportional to the field (Yablonskiy and Haacke,
+        Magn Reson Med 32:749, 1994). :attr:`t2_prime` overrides any class;
+        T2' is infinite for a class without T2 or T2*.
 
         Raises
         ------
@@ -206,7 +248,25 @@ class BrainWeb:
         relaxed = {}
         for name, (t1, t2, t2_star, _) in TISSUES.items():
             t2_prime = self.t2_prime.get(name, _t2_prime(t2, t2_star) / ratio)
-            relaxed[name] = (t1 * ratio ** T1_EXPONENTS.get(name, 0.0), t2, t2_prime)
+            if name in T1_FITS:
+                a, b = T1_FITS[name]
+                t1 = a * field_t**b
+            elif name in ("CSF", "skin"):
+                t1 = CSF_T1
+            else:
+                t1 *= ratio ** T1_EXPONENTS.get(name, 0.0)
+            if name in T2_MEASURED:
+                t2 = float(np.interp(field_t, T2_FIELDS_T, T2_MEASURED[name]))
+            if name in self.t2_prime:
+                pass
+            elif name in T2_STAR_MEASURED:
+                t2_star = float(
+                    np.interp(field_t, T2_STAR_FIELDS_T, T2_STAR_MEASURED[name])
+                )
+                t2_prime = _t2_prime(t2, t2_star)
+            elif name == "CSF":
+                t2_prime = math.inf
+            relaxed[name] = (t1, t2, t2_prime)
         return relaxed
 
     def proton_density(

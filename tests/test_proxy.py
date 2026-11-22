@@ -1930,3 +1930,27 @@ def test_a_series_too_large_for_the_hosts_memory_is_kept_and_refused_without_rec
     texts = [item for item in received if isinstance(item, str)]
     assert "more than this host's memory holds" in texts[-1]
     assert len(sorted(kept.glob("*.h5"))) == 1
+
+
+def test_series_replayed_with_one_exam_directory_share_what_the_exam_stores(
+    bucket, tmp_path, monkeypatch
+):
+    root, series = bucket
+    path = _recorded(tmp_path / "scan.h5", series["gre2d"], flat)
+    plugin = load_plugin(RECON_PLUGINS / "gre2d.py")
+    started = type(plugin).startup
+    found = []
+
+    def startup(self, context):
+        found.append(context.exam.get("marker"))
+        context.exam["marker"] = "stored"
+        started(self, context)
+
+    monkeypatch.setattr(type(plugin), "startup", startup)
+    exam = tmp_path / "exam"
+    exam.mkdir()
+    plugin.run(path, store=root, exam_directory=str(exam))
+    plugin.run(path, store=root, exam_directory=str(exam))
+    plugin.run(path, store=root)
+
+    assert found == [None, "stored", None]

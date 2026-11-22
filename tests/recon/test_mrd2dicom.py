@@ -926,6 +926,30 @@ def test_a_diffusion_image_states_its_table_row_in_the_patient_frame(
     assert "DiffusionGradientOrientation" not in unweighted
 
 
+def test_a_trace_weighted_image_is_isotropic_and_an_adc_map_states_no_b_value(
+    parsed_mrd_header,
+):
+    from pulserver.recon._diffusion import ADC_SERIES, TRACE_SERIES
+
+    parsed_mrd_header.userParameters = ismrmrd.xsd.userParametersType(
+        userParameterString=[
+            ismrmrd.xsd.userParameterStringType(
+                name="diffusion_table", value="0 0 0 0\n0 1 0 1000\n0 0 1 1000"
+            )
+        ]
+    )
+    builder = MrdDicomBuilder(parsed_mrd_header)
+    trace_image, adc_image = _diffusion_image(1), _diffusion_image(0)
+    trace_image.image_series_index = TRACE_SERIES
+    adc_image.image_series_index = ADC_SERIES
+    trace, adc = builder(trace_image).dset, builder(adc_image).dset
+
+    assert trace.DiffusionBValue == 1000.0
+    assert trace.DiffusionDirectionality == "ISOTROPIC"
+    assert "DiffusionGradientOrientation" not in trace
+    assert "DiffusionBValue" not in adc
+
+
 def test_an_image_without_a_diffusion_table_states_no_diffusion(parsed_mrd_header):
     dicom = MrdDicomBuilder(parsed_mrd_header)(_diffusion_image(1)).dset
     assert "DiffusionBValue" not in dicom

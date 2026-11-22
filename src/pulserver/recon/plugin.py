@@ -929,6 +929,7 @@ class ReconPlugin(ABC):
         *,
         group: str = "dataset",
         exam_id: Hashable | None = None,
+        exam_directory: str | None = None,
         config: Any = None,
         store: str | None = None,
         design: str | None = None,
@@ -951,6 +952,11 @@ class ReconPlugin(ABC):
             HDF5 group holding the scan.
         exam_id : Hashable, default=None
             Identifier of the exam cache; ``path`` when not given.
+        exam_directory : str, default=None
+            Directory the exam cache shares with the runs of the exam's other
+            series (:class:`ExamCache`), so a series takes the coil maps or
+            the susceptibility field an earlier one stored, as on the scanner;
+            the cache is held in memory only when not given.
         config : str, default=None
             Configuration payload, as a stream would carry it.
         store : str, default=None
@@ -993,6 +999,7 @@ class ReconPlugin(ABC):
             path,
             group=group,
             exam_id=exam_id,
+            exam_directory=exam_directory,
             config=config,
             store=store,
             design=design,

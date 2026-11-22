@@ -271,3 +271,18 @@ def test_a_shaded_object_a_few_per_cent_of_a_wide_field_of_view_is_corrected():
 
     assert corrected.attributes["ImageProcessingHistory"][-1] == "N4"
     assert spread(corrected.data, inside) < 0.5 * spread(image, inside)
+
+
+def test_a_prescribed_field_divides_every_image_of_its_slice_in_place_of_n4():
+    image = np.zeros((48, 48), dtype=np.float32)
+    image[8:40, 8:40] = 1.0
+    image[20:28, 20:28] = 0.05
+    field = np.linspace(0.5, 1.5, 48, dtype=np.float32)[None, :].repeat(48, axis=0)
+    correction = IntensityCorrection()
+    correction.prescribe(3, field)
+
+    for counters in ({"slice": 3, "set": 0}, {"slice": 3, "set": 1}):
+        result = correction(ReconResult(image * field), unit(**counters))
+        np.testing.assert_allclose(result.data, image, rtol=1e-5, atol=1e-6)
+    other = correction(ReconResult(image * field), unit(slice=4, set=0))
+    assert not np.allclose(other.data, image, atol=1e-3)

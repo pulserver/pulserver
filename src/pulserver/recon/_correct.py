@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 __all__ = [
+    "CALIBRATION_FIELD_LEVELS",
     "GRADIENT_UNWARP",
     "INTENSITY_CORRECTION",
     "INTENSITY_CORRECTION_LEVELS",
     "KSPACE_FILTER",
+    "RECEIVE_FIELDS",
     "Corrections",
     "IntensityCorrection",
+    "ReceiveFields",
     "fermi_filtered",
     "gradient_unwarped",
     "states_gradient_coefficients",
@@ -453,6 +456,13 @@ class IntensityCorrection:
     of mean 1 inside its own mask, so ratios between slices are not kept.
     Make one instance per stream.
 
+    A field measured apart from the images, such as the one an EPI
+    calibration's proton-density image gives (:meth:`prescribe`), divides
+    every image of its slice in place of the estimate: N4 cannot tell a
+    smooth receive field from the contrast of an image that nulls a tissue,
+    such as grey matter in a T1-FLAIR. A series without a calibration of its
+    own takes the field of its slice from the exam (:class:`ReceiveFields`).
+
     A magnitude image that is not 2D or 3D once its axes of one point are
     dropped, or whose mask holds fewer than 64 pixels or 128 voxels or less
     than :data:`N4_MIN_MASK_FRACTION` of the image, or that falls apart into
@@ -469,6 +479,19 @@ class IntensityCorrection:
     def __init__(self, levels: int | None = None) -> None:
         self.levels = N4_FITTING_LEVELS if levels is None else int(levels)
         self.fields: dict[tuple[Any, ...], np.ndarray | None] = {}
+        self.prescribed: dict[int, np.ndarray] = {}
+
+    def prescribe(self, location: int, field: np.ndarray) -> None:
+        """Divide the magnitude images of slice ``location`` by ``field`` rather than by a field N4 estimates from them.
+
+        Parameters
+        ----------
+        location : int
+            Slice counter of the images.
+        field : numpy.ndarray
+            Receive field on the grid of the images, mean 1 over the object.
+        """
+        self.prescribed[int(location)] = np.asarray(field, dtype=np.float32)
 
     def __call__(self, results: Any, data: Any) -> Any:
         """Return ``results``, a :class:`~pulserver.recon.ReconResult` or a list of them, with their magnitude images divided by the field.
@@ -521,6 +544,15 @@ class IntensityCorrection:
         )
         if key in self.fields:
             return self.fields[key]
+        prescribed = self.prescribed.get(key[0])
+        if prescribed is not None and prescribed.size == magnitude.size:
+            self.fields[key] = prescribed.reshape(magnitude.shape)
+            _log.info(
+                "slice %d, set %d is divided by the receive field its calibration measured",
+                key[0],
+                key[1],
+            )
+            return self.fields[key]
         squeezed = tuple(n for n in magnitude.shape if n > 1)
         if len(squeezed) not in (2, 3):
             _log.info(
@@ -559,12 +591,48 @@ N4_FITTING_LEVELS = 4
 #: intensities; a head or a phantom in a bath is one part.
 N4_MIN_CONNECTED_FRACTION = 0.5
 
+#: Iterations of each N4 fitting level. Above :data:`N4_STOPPING_LEVELS`
+#: every one runs: the several-fold shading of a close-fitting array is still
+#: being removed when the change between iterations falls below SimpleITK's
+#: default threshold.
+N4_ITERATIONS = 100
+
+#: Fitting levels up to which N4 stops at SimpleITK's default convergence
+#: threshold. Running every iteration at so coarse a mesh keeps sharpening the
+#: histogram and drifts the intensity ratios between separate compartments
+#: that those levels are chosen to keep.
+N4_STOPPING_LEVELS = 2
+
+#: Fraction of the image's maximum below which the magnitude is raised before
+#: its logarithm is thresholded for N4's mask.
+N4_LOG_FLOOR = 1e-3
+
 #: Least fraction of the image N4's Otsu mask must hold.
 N4_MIN_MASK_FRACTION = 0.01
 
 
 #: Most fitting levels :data:`INTENSITY_CORRECTION_LEVELS` may state.
 N4_MAX_LEVELS = 4
+
+
+def _object_mask(image: np.ndarray) -> np.ndarray:
+    """Return Otsu's threshold of the logarithm of a magnitude image, its holes filled, kept to its largest connected part where that holds most of it."""
+    import SimpleITK as sitk
+
+    floor = max(float(image.max()) * N4_LOG_FLOOR, np.finfo(np.float32).tiny)
+    logged = np.log(np.maximum(image, floor)).astype(np.float32)
+    mask = sitk.OtsuThreshold(sitk.GetImageFromArray(logged), 0, 1, 200)
+    filled = sitk.GetArrayFromImage(sitk.BinaryFillhole(mask)).astype(bool)
+    parts = sitk.GetArrayFromImage(
+        sitk.RelabelComponent(
+            sitk.ConnectedComponent(sitk.GetImageFromArray(filled.astype(np.uint8))),
+            sortByObjectSize=True,
+        )
+    )
+    largest = parts == 1
+    return (
+        largest if largest.sum() >= N4_MIN_CONNECTED_FRACTION * filled.sum() else filled
+    )
 
 
 def _largest_part(mask: np.ndarray) -> int:
@@ -617,19 +685,20 @@ def receive_field(
 ) -> np.ndarray | None:
     """Return the N4 field of a 2D or 3D magnitude image, mean 1 inside its Otsu mask and clipped to its range there.
 
-    The field is fitted at ``levels`` B-spline levels. ``None`` where the mask
-    holds fewer than 64 pixels or 128 voxels, or less than
+    The field is fitted at ``levels`` B-spline levels, each running its
+    :data:`N4_ITERATIONS` in full above :data:`N4_STOPPING_LEVELS`, over Otsu's threshold of the logarithm of
+    the magnitude with its holes filled: a close-fitting array makes the scalp
+    several times brighter than the centre of the brain, and Otsu's threshold of
+    the magnitude itself keeps little more than that bright rim. ``None`` where
+    the mask holds fewer than 64 pixels or 128 voxels, or less than
     :data:`N4_MIN_MASK_FRACTION` of the image, or whose largest connected part
     holds less than :data:`N4_MIN_CONNECTED_FRACTION` of it.
     """
-    import SimpleITK as sitk
     import torch
     from bartorch.tools import bias_field_correct
 
     image = np.ascontiguousarray(magnitude, dtype=np.float32)
-    mask = sitk.GetArrayFromImage(
-        sitk.OtsuThreshold(sitk.GetImageFromArray(image), 0, 1, 200)
-    ).astype(bool)
+    mask = _object_mask(image)
     if mask.sum() < max(16 * 2**image.ndim, N4_MIN_MASK_FRACTION * mask.size):
         return None
     if _largest_part(mask) < N4_MIN_CONNECTED_FRACTION * mask.sum():
@@ -637,7 +706,8 @@ def receive_field(
     _, field = bias_field_correct(
         torch.from_numpy(image),
         mask=torch.from_numpy(mask.astype(np.uint8)),
-        iterations=(50,) * int(levels),
+        iterations=(N4_ITERATIONS,) * int(levels),
+        convergence_threshold=0.0 if levels > N4_STOPPING_LEVELS else 1e-3,
         return_field=True,
     )
     field = field.numpy().astype(np.float64)
@@ -645,6 +715,84 @@ def receive_field(
     return (np.clip(field, inside.min(), inside.max()) / inside.mean()).astype(
         np.float32
     )
+
+
+#: Fitting levels of N4 in a proton-density weighted calibration image: its
+#: contrast is flat enough for the finer level to follow the receive field
+#: rather than the anatomy.
+CALIBRATION_FIELD_LEVELS = 5
+
+#: Key of the exam's :class:`ReceiveFields`.
+RECEIVE_FIELDS = "receive_fields"
+
+
+class ReceiveFields:
+    """The receive fields an exam's calibrations measured, one per slice, for every later series to divide its images by.
+
+    A field is N4's estimate (:func:`receive_field`) in a proton-density
+    weighted calibration image, stored as an
+    :class:`~pulserver.recon.ExamImage` with the geometry it was measured on.
+    A later series takes the field of the plane its slice lies in, the
+    nearest along its slice direction within half a slice thickness,
+    resampled onto its own grid: a series that nulls a tissue or weights one
+    heavily, such as a T2-weighted single-shot FSE with its bright CSF, is
+    divided by a field N4 measured where the contrast is flat.
+    """
+
+    def __init__(self) -> None:
+        self.planes: dict[tuple[float, ...], Any] = {}
+
+    def add(self, field: Any) -> None:
+        """Keep ``field``, an :class:`~pulserver.recon.ExamImage` of one plane, in place of any field of the same plane."""
+        geometry = field.geometry
+        key = tuple(
+            round(float(v), 2)
+            for name in ("position", "slice_dir")
+            for v in geometry[name]
+        )
+        self.planes[key] = field
+
+    def on(self, context: Any, unit: Any) -> np.ndarray | None:
+        """Return the field of the plane of ``unit``'s slice on its reconstruction grid, mean 1; ``None`` where no plane is that close.
+
+        Parameters
+        ----------
+        context : pulserver.recon.ReconContext
+            The series' context.
+        unit : pulserver.recon.ReconData
+            The unit whose grid the field is resampled onto.
+
+        Returns
+        -------
+        numpy.ndarray or None
+            ``(y, x)`` field, divided by its mean over the points the stored
+            plane covers, and 1 beyond them.
+        """
+        from ._exam_image import _unit_geometry
+
+        target = _unit_geometry(context, unit)
+        normal = np.asarray(target["slice_dir"], float)
+        centre = np.asarray(target["position"], float)
+        best, nearest = None, np.inf
+        for field in self.planes.values():
+            geometry = field.geometry
+            if abs(float(np.dot(geometry["slice_dir"], normal))) < 0.999:
+                continue
+            distance = abs(
+                float(np.dot(np.asarray(geometry["position"]) - centre, normal))
+            )
+            reach = 0.5 * max(geometry["field_of_view"][2], target["field_of_view"][2])
+            if distance <= reach and distance < nearest:
+                best, nearest = field, distance
+        if best is None:
+            return None
+        values = np.asarray(best.on(context, unit, fill=np.nan), dtype=np.float64)
+        values = values.reshape(values.shape[-2:])
+        covered = np.isfinite(values) & (values > 0)
+        if not covered.any():
+            return None
+        values = np.where(covered, values / values[covered].mean(), 1.0)
+        return values.astype(np.float32)
 
 
 def _host(array: Any) -> np.ndarray:
