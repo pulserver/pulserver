@@ -748,3 +748,90 @@ def test_a_plane_between_those_of_a_stack_field_takes_their_linear_interpolation
     assert reason is None
     np.testing.assert_allclose(displacement[:, 0, 0], [0.25, 2.0, 3.0])
     assert outside is None and "outside" in why
+
+
+def _slab_maps(context, polarity, centre_mm, partitions):
+    from pulserver.recon._calibration import CoilSensitivities
+
+    maps = np.zeros((2, partitions, 6, 8), dtype=np.complex64)
+    maps[:] = (np.arange(partitions) + 10 * polarity)[None, :, None, None]
+    key = (0, polarity) if polarity else 0
+    context.coil_maps[key] = CoilSensitivities(
+        maps=maps,
+        coils=("0", "1"),
+        noise=None,
+        basis=None,
+        geometry={
+            "position": (0.0, 0.0, centre_mm),
+            "slice_dir": (0.0, 0.0, 1.0),
+            "extent": (2.0 * partitions, 200.0, 200.0),
+        },
+        method="stand-in",
+        source=None,
+    )
+
+
+def _plane(position_mm, set_index):
+    unit = _unit(0, set_index)
+    unit.data.reference.position = (0.0, 0.0, position_mm)
+    unit.data.image_shape = (6, 8)
+    return unit
+
+
+def test_a_plane_on_a_slab_partition_takes_that_partitions_maps_of_its_polarity():
+    from pulserver.recon import ReconContext
+    from pulserver.recon.handlers.epi import FIELD_PAIR_SETS, slab_plane_maps
+
+    context = ReconContext.offline()
+    for polarity in (0, 1):
+        _slab_maps(context, polarity, centre_mm=10.0, partitions=4)
+    forward, reversed_ = FIELD_PAIR_SETS
+
+    # Partition p of 4 lies at 10 + (p - 2) * 2 mm.
+    assert slab_plane_maps(context, _plane(8.0, forward))[0, 0, 0, 0] == 1
+    assert slab_plane_maps(context, _plane(12.0, reversed_))[0, 0, 0, 0] == 13
+    assert slab_plane_maps(context, _plane(9.0, forward)) is None
+    assert slab_plane_maps(context, _plane(20.0, forward)) is None
+
+
+def test_field_pair_planes_read_before_the_slab_calibration_wait_for_its_maps(
+    monkeypatch, correction
+):
+    from pulserver.recon import ReconContext
+    from pulserver.recon.handlers import epi
+
+    context = ReconContext.offline()
+    plugin = epi.EpiRecon(
+        gradient_unwarp=False, intensity_correction=False, kspace_filter=False
+    )
+    plugin.startup(context)
+    plugin.hysco = None
+    images = _images(1, polarities=(0, 2, 3))
+    unfolded = []
+
+    def image(kspace, shape, context_, data):
+        key = (data.counters["slice"], data.counters["set"])
+        if key[1] == 0:
+            _slab_maps(context, 0, centre_mm=0.0, partitions=4)
+        else:
+            unfolded.append(int(epi.slab_plane_maps(context, data)[0, 0, 0, 0]))
+        return images[key]
+
+    monkeypatch.setattr(plugin, "image", image)
+    monkeypatch.setattr(epi, "averaged", lambda buffer: buffer.kspace)
+    monkeypatch.setattr(epi, "coil_maps", lambda *args, **kwargs: None)
+
+    def unit(set_index):
+        data = _plane(0.0, set_index)
+        data.ref = None
+        data.data.kspace = np.zeros((2, 6, 8), dtype=np.complex64)
+        return data
+
+    assert plugin.recon(context, "", unit(2)) is None
+    assert plugin.recon(context, "", unit(3)) is None
+    assert unfolded == []
+    (result,) = plugin.recon(context, "", unit(0))
+
+    assert unfolded == [2, 2]
+    assert len(correction.calls) == 1
+    assert "HYSCO" in result.attributes["ImageProcessingHistory"]

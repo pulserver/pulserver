@@ -534,6 +534,8 @@ class EpiRecon(PicsRecon):
         self.full_resolution_maps = {}
         self.field = None
         self.field_pair = {}
+        self.held_pairs = []
+        self.releasing = False
         self.phase_references = {}
         self._skips_logged = set()
         self.hysco = (
@@ -551,8 +553,39 @@ class EpiRecon(PicsRecon):
         buffer = data.data
         if self.calibrations:
             self._calibrate(context)
+        if self._awaits_slab_maps(context, data):
+            self.held_pairs.append(data)
+            return None
         image = self.image(averaged(buffer), buffer.image_shape, context, data)
         return buffer, data, image
+
+    def _awaits_slab_maps(self, context, data) -> bool:
+        """Return whether a plane of a field pair has no coil maps yet and waits for the slab it is played for.
+
+        The planes of a 3D scan's field pair lie on the partitions of its slab,
+        whose calibration is estimated with the slab's first volume, after the
+        pair is read. A plane the stream holds no maps for is reconstructed
+        once those maps are stored, unfolded by the slab's maps at its
+        partition (:func:`slab_plane_maps`).
+        """
+        if self.releasing or int(data.counters.get("set", 0)) not in FIELD_PAIR_SETS:
+            return False
+        if data.data.kspace.ndim == 4 and data.data.kspace.shape[1] > 1:
+            return False
+        if data.ref is not None:
+            return False
+        stored = coil_maps(context, data, estimate=epi_nlinv_estimate, required=False)
+        return stored is None and slab_plane_maps(context, data) is None
+
+    def _release_pairs(self, context) -> None:
+        """Reconstruct the held planes of the field pair now that the stream holds the slab's maps."""
+        held, self.held_pairs = self.held_pairs, []
+        self.releasing = True
+        try:
+            for data in held:
+                self.recon(context, "", data)
+        finally:
+            self.releasing = False
 
     def image(self, kspace, shape, context, data):
         """Return the complex image of ``(coils, [partitions,] phase encodes, readout)`` k-space, cropped to ``shape`` and Fermi filtered."""
@@ -696,6 +729,9 @@ class EpiRecon(PicsRecon):
             bands = band_maps(context, data, volume.shape)
             if bands is not None:
                 return bands
+            plane = slab_plane_maps(context, data)
+            if plane is not None and plane.shape == volume.shape:
+                return plane
             key = (int(data.counters.get("slice", 0)), int(data.counters.get("set", 0)))
             if key not in self.own_maps:
                 self._self_calibrated(context, data, missing)
@@ -750,6 +786,8 @@ class EpiRecon(PicsRecon):
         buffer, data, image = unit
         location = int(data.counters.get("slice", 0))
         polarity = int(data.counters.get("set", 0))
+        if self.held_pairs and polarity not in FIELD_PAIR_SETS:
+            self._release_pairs(context)
         if polarity in FIELD_PAIR_SETS:
             self.field_pair.setdefault(location, {})[polarity] = (
                 np.abs(image),
@@ -1125,6 +1163,61 @@ def band_maps(context, data, shape):
         stored.append((key_set, along, maps.maps))
     planes = _band_planes(stored, data, shape)
     return None if planes is None else torch.from_numpy(planes)
+
+
+def slab_plane_maps(context, data):
+    """Return the coil maps of a single-plane unit drawn from a slab's maps at its partition; ``None`` where the stream holds no slab through it.
+
+    A slab's maps ``(coils, partitions, y, x)`` stored in the stream serve a
+    plane parallel to the slab, on the same in-plane grid, lying within
+    ``PARTITION_TOLERANCE`` of a partition's centre (:func:`plane_positions`).
+    A plane of the reversed field-pair set takes the maps of the slab's
+    reversed calibration (set 1) where the stream holds them, every other
+    plane those of set 0.
+
+    Returns
+    -------
+    torch.Tensor or None
+        ``(coils, 1, y, x)`` complex64 maps on the host.
+    """
+    import torch
+
+    buffer = data.data
+    if buffer is None:
+        return None
+    reversed_set = FIELD_PAIR_SETS[1]
+    wanted = 1 if int(data.counters.get("set", 0)) == reversed_set else 0
+    along = _along_slice(buffer.reference)
+    normal = np.asarray(getattr(buffer.reference, "slice_dir", (0, 0, 1)), float)
+    plane = tuple(buffer.image_shape[-2:])
+    found = {}
+    for key, stored in context.coil_maps.items():
+        maps = np.asarray(getattr(stored, "maps", None))
+        geometry = getattr(stored, "geometry", {})
+        extent = geometry.get("extent")
+        if maps.ndim != 4 or maps.shape[1] < 2 or extent is None:
+            continue
+        if tuple(maps.shape[-2:]) != plane:
+            continue
+        slab_normal = np.asarray(geometry.get("slice_dir") or (0, 0, 1), float)
+        if abs(abs(float(slab_normal @ normal)) - 1.0) > 1e-3:
+            continue
+        centre = float(np.asarray(geometry.get("position") or (0, 0, 0)) @ slab_normal)
+        depth = float(extent[0]) / maps.shape[1]
+        offset = (along * float(slab_normal @ normal) - centre) / depth
+        index = round(offset) + maps.shape[1] // 2
+        if abs(offset - round(offset)) > PARTITION_TOLERANCE or not (
+            0 <= index < maps.shape[1]
+        ):
+            continue
+        key_set = key[1] if isinstance(key, tuple) else 0
+        found[key_set] = maps[:, index : index + 1]
+    chosen = found.get(wanted, found.get(0))
+    return None if chosen is None else torch.from_numpy(np.ascontiguousarray(chosen))
+
+
+#: Fraction of a partition within which a plane lies on its centre.
+PARTITION_TOLERANCE = 0.1
 
 
 def band_calibration(stored, data, shape):
