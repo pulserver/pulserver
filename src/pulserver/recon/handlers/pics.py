@@ -39,6 +39,12 @@ CALIBRATION_LINES = 48
 #: and the solve (:class:`~pulserver.recon.CompressChannels`).
 VIRTUAL_COILS = 6
 
+#: Least Tikhonov weight of a conjugate-gradient SENSE solve, on data scaled
+#: as ``pics`` scales them. Lines a unit leaves out, such as the ends of a
+#: partial-Fourier phase encode, make the normal operator singular, and in
+#: single precision the iterate grows without bound along them.
+CG_MIN_L2 = 1e-6
+
 #: Least Tikhonov weight of the real-image conjugate-gradient solve, on data
 #: scaled as ``pics`` scales them. Two partial-Fourier axes leave out k-space
 #: whose conjugate is not sampled either, and without a weight the solve
@@ -520,7 +526,7 @@ def pics_image(
             lambda_=max(float(l2), REAL_SOLVE_MIN_L2), maxiter=int(iterations)
         )
     else:
-        solve = optim.CG(lambda_=float(l2), maxiter=int(iterations))
+        solve = optim.CG(lambda_=max(float(l2), CG_MIN_L2), maxiter=int(iterations))
     data = (measured * (1.0 / scaling)).reshape(kspace.shape[0], *grid)
     start = {} if x0 is None else {"x0": (x0 * (1.0 / scaling)).reshape(grid)}
     image = (scaling * solve(data, encoding, **start)).reshape(kspace.shape[1:])

@@ -28,6 +28,7 @@ from ..gadgets import (
 )
 from ..plugin import Gadget, ReconContext, ReconResult
 from .pics import (
+    CG_MIN_L2,
     VIRTUAL_COILS,
     PicsRecon,
     averaged,
@@ -1181,7 +1182,7 @@ def sense_combined(kspace, maps):
 
 
 def cg_sense(kspace, maps, sampled, iterations, device, *, l2=0.0):
-    """Return the image ``(z, y, x)`` minimising ``|P F S x - y|^2 + l2 |x|^2`` by conjugate gradients from zero.
+    """Return the image ``(z, y, x)`` minimising ``|P F S x - y|^2 + l2 |x|^2``, ``l2`` at least ``CG_MIN_L2``, by conjugate gradients from zero.
 
     The encoding is :class:`bartorch.linop.CartesianSense` of ``maps`` over
     the ``sampled`` lines, on ``device``; stopping after ``iterations`` steps
@@ -1201,7 +1202,7 @@ def cg_sense(kspace, maps, sampled, iterations, device, *, l2=0.0):
     scaling = optim.data_scaling(shifted.reshape(kspace.shape[0], *grid), A=encoding)
     scaling = scaling or 1.0
     data = (measured * (1.0 / scaling)).reshape(kspace.shape[0], *grid)
-    solve = optim.CG(lambda_=float(l2), maxiter=int(iterations))
+    solve = optim.CG(lambda_=max(float(l2), CG_MIN_L2), maxiter=int(iterations))
     return (scaling * solve(data, encoding)).reshape(kspace.shape[1:])
 
 
