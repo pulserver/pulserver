@@ -194,29 +194,6 @@ def test_one_basis_for_the_stream_is_that_of_the_first_unit(device):
     )
 
 
-def test_a_pooled_basis_keeps_the_signal_of_every_slice_it_was_pooled_from():
-    from pulserver.recon import ReconContext
-
-    first, second = _on_channels(range(2)), _on_channels(range(2, 3))
-    context = ReconContext.offline()
-    units = []
-    plugin = stream_plugin(lambda context, data: units.append(data))
-    play(
-        plugin,
-        calibration_header(COILS, MATRIX, slices=2),
-        acs_readouts(first, slice_index=0) + acs_readouts(second, slice_index=1),
-    )
-    compression = recon.CoilCompression(3, by_slice=False)
-
-    compression.pool(context, units)
-
-    for unit, kspace in zip(units, (first, second), strict=True):
-        kept = compression(context, unit)
-        np.testing.assert_allclose(
-            np.linalg.norm(kept.data.kspace), np.linalg.norm(kspace), rtol=ROUND_OFF
-        )
-
-
 @pytest.mark.parametrize("n_virtual", [3, 4])
 def test_compressed_data_and_maps_reconstruct_the_uncompressed_image(device, n_virtual):
     """SENSE over the virtual channels, with maps estimated from the compressed calibration data, gives the image of all the channels."""
@@ -452,24 +429,63 @@ def test_the_basis_comes_from_the_calibration_readouts_of_the_first_contrast():
     )
 
 
-def test_a_stream_led_by_an_imaging_readout_passes_its_channels_unchanged():
+def test_a_stream_led_by_imaging_readouts_is_held_to_its_kspace_centre_and_gives_the_basis():
     _, _, kspace = coil_phantom(8, MATRIX)
     context = streaming_context()
     gadget = started(recon.CompressChannels(4), context)
+    lines = readouts(kspace, lines=range(MATRIX))
 
-    passed = [gadget(a, np.asarray(a.data)) for a in acs_readouts(kspace, acs=ACS)]
+    given = [gadget(a, np.asarray(a.data)) for a in lines]
 
-    assert all(readout.shape == (8, MATRIX) for readout in passed)
-    assert context.coil_compression is None
+    centre = MATRIX // 2
+    assert all(out is None for out in given[:centre])
+    assert [acquisition for acquisition, _ in given[centre]] == lines[: centre + 1]
+    assert all(data.shape == (4, MATRIX) for _, data in given[centre])
+    assert all(out.shape == (4, MATRIX) for out in given[centre + 1 :])
+    assert context.coil_compression.n_virtual == 4
 
 
-@pytest.mark.parametrize("flag", ["ACQ_IS_NAVIGATION_DATA", "ACQ_IS_RTFEEDBACK_DATA"])
-def test_navigator_readouts_pass_unchanged_and_are_never_held(flag):
+@pytest.mark.parametrize(
+    "flag",
+    ["ACQ_IS_NAVIGATION_DATA", "ACQ_IS_RTFEEDBACK_DATA", "ACQ_IS_PHASECORR_DATA"],
+)
+def test_navigator_and_phase_reference_readouts_take_the_virtual_channels_in_their_place(
+    flag,
+):
     _, _, kspace = coil_phantom(8, MATRIX)
     gadget = started(recon.CompressChannels(4), streaming_context())
-    (navigator,) = readouts(kspace, flag, "ACQ_IS_PARALLEL_CALIBRATION", lines=[0])
+    (navigator,) = readouts(kspace, flag, lines=[0])
+    calibration = readouts(kspace, "ACQ_IS_PARALLEL_CALIBRATION", lines=range(8, 24))
+    (imaging,) = readouts(kspace, lines=[2])
 
-    assert gadget(navigator, np.asarray(navigator.data)) is not None
+    assert gadget(navigator, np.asarray(navigator.data)) is None
+    for readout in calibration:
+        assert gadget(readout, np.asarray(readout.data)) is None
+    given = gadget(imaging, np.asarray(imaging.data))
+    (later,) = readouts(kspace, flag, lines=[0])
+    projected = gadget(later, np.asarray(later.data))
+
+    assert [acquisition for acquisition, _ in given] == [
+        navigator,
+        *calibration,
+        imaging,
+    ]
+    assert all(data.shape == (4, MATRIX) for _, data in given)
+    assert projected.shape == (4, MATRIX)
+
+
+def test_navigators_ahead_of_an_uncalibrated_stream_are_given_on_projected_at_its_centre():
+    _, _, kspace = coil_phantom(8, MATRIX)
+    gadget = started(recon.CompressChannels(4), streaming_context())
+    (navigator,) = readouts(kspace, "ACQ_IS_NAVIGATION_DATA", lines=[0])
+    lines = readouts(kspace, lines=range(MATRIX // 2 + 1))
+
+    assert gadget(navigator, np.asarray(navigator.data)) is None
+    *held, given = [gadget(a, np.asarray(a.data)) for a in lines]
+
+    assert all(out is None for out in held)
+    assert [acquisition for acquisition, _ in given] == [navigator, *lines]
+    assert all(data.shape == (4, MATRIX) for _, data in given)
 
 
 def test_readouts_held_when_the_stream_ends_reach_their_unit_projected(device):

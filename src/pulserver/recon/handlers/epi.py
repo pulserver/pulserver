@@ -14,22 +14,27 @@ from ...mrd._header import EncodingSpace
 from ...mrd._metadata import acquisition_label, has_acquisition_flag
 from .._buffers import ReconData, discards, echo_centre
 from .._calibration import (
-    CoilCompression,
     MissingCalibration,
     _zero_filled,
     coil_maps,
 )
 from .._diffusion import DiffusionMaps
-from ..gadgets import AsymmetricEcho, Prewhiten, RemoveReadoutOversampling
+from ..gadgets import (
+    AsymmetricEcho,
+    CompressChannels,
+    Prewhiten,
+    RemoveReadoutOversampling,
+)
 from ..plugin import Gadget, ReconContext, ReconResult
 from .pics import (
     VIRTUAL_COILS,
     PicsRecon,
     averaged,
     center_crop,
-    compressed,
     nlinv_estimate,
+    partial_fourier_axes,
     pics_image,
+    smooth_phase,
 )
 
 _log = logging.getLogger("pulserver.recon")
@@ -384,17 +389,17 @@ MAX_DELAY_S = 20e-6
 class EpiRecon(PicsRecon):
     """Images of EPI readouts: coil sensitivities of the whole stack from its calibration, a linear SENSE solve, one distortion field for every image.
 
-    Each readout is whitened (:class:`~pulserver.recon.Prewhiten`),
+    Each readout is whitened (:class:`~pulserver.recon.Prewhiten`), projected
+    onto ``virtual_coils`` channels (:class:`~pulserver.recon.CompressChannels`,
+    one basis for the stream from the calibration of every slice, so the
+    bands of a multiband unit and the slices its kernels are trained on share
+    their virtual channels, and no later step holds every receive channel),
     ramp-resampled along its k-space trajectory (:class:`RampSampling`) and
     has its odd/even phase removed (:class:`EpiPhaseCorrection`, from the
     blip-free reference train ``ACQ_IS_PHASECORR_DATA`` the sequence plays in
     a dummy shot, else from the navigator) on arrival, so the k-space is
     Cartesian, forward-ordered and at the reconstruction matrix when its slice
-    closes. Each unit's channels are compressed to ``virtual_coils`` by one
-    basis for the stack, pooled from the calibration of every slice
-    (:meth:`~pulserver.recon.CoilCompression.pool`), so the bands of a
-    multiband unit and the slices its kernels are trained on share their
-    virtual channels.
+    closes.
 
     Coil sensitivities come from the calibration the scan opens with, once
     for the whole stack: the calibration units of every slice, held until the
@@ -414,13 +419,22 @@ class EpiRecon(PicsRecon):
     ``sum_c conj(S_c) F^-1 y_c / sum_c |S_c|^2``; an undersampled one is the
     wavelet-regularised ``pics`` solve of
     :class:`~pulserver.recon.handlers.pics.PicsRecon` at its ``wavelet`` on
-    maps carrying the smooth phase (:func:`smooth_phase`) of its
+    maps carrying the smooth phase (:func:`~pulserver.recon.handlers.pics.smooth_phase`) of its
     ``iterations``-step conjugate-gradient image, so the prior acts on a
     near-real image, started from that image, or
     with ``wavelet`` zero the solution of ``min |P F S x - y|^2`` by
     ``iterations`` conjugate-gradient steps (:class:`bartorch.optim.CG`). A
-    partial-Fourier phase encode is completed by ``pocs_iterations`` of POCS
-    (:func:`pocs`), which keeps the image phase.
+    partial-Fourier unit is solved for a real image times a known phase
+    (``pics_image`` with ``phase``), so the k-space it leaves unsampled is the
+    conjugate of what it samples. The phase is that of the full-k phase
+    reference volume of its slice (``SET`` 4, played at the echo time of the
+    scan, reconstructed and kept but sent as no image) times the smooth phase
+    of the unit's own image against it, which follows the drift of the field
+    from volume to volume. Without a reference it is the smooth phase of the
+    unit's image, the phase of a spin echo; where that image keeps more than
+    ``SMOOTH_PHASE_RESIDUAL`` of its energy in quadrature to it, as a
+    gradient echo at 7T does near air-tissue interfaces, the unit is left
+    zero-filled and a warning says why.
 
     A multiband unit whose bands each lie on a calibrated slice has its bands
     separated by split-slice GRAPPA (:func:`slice_grappa_bands`), with kernels
@@ -430,25 +444,19 @@ class EpiRecon(PicsRecon):
 
     When PyHySCO is installed (bartorch's ``pyhysco`` extra, GPL-3.0), one
     susceptibility displacement field is estimated for the whole stack
-    (:func:`bartorch.tools.correct_susceptibility`, :func:`stack_field`).
-    A spin-echo field pair (``SET`` 2 forward, 3 reversed), reconstructed and
-    kept but sent as no image of the series, gives it in preference to any
-    other: its two volumes are displaced in opposite directions by the field
-    and, refocused, differ in nothing else. Without one, the root-sum-of-squares
-    images of the FLEET calibration's two phase-encode polarities give it.
-    They share the imaging's echo spacing, and so its distortion, at the
-    calibration's short echo time, where the signal near air-tissue
-    interfaces has not yet dephased. Without either,
-    the phase-encode-reversed reference volume (``SET`` 1), reconstructed and
-    kept, Fermi filtered as the images are, but sent as no image of the
-    series, is the reference: the first image of every slice of the stack is
-    held until the stack is complete, and that volume and the reference
-    volume give the field. The field is estimated once and applied to every
-    image of every slice
+    (:func:`bartorch.tools.correct_susceptibility`) from its spin-echo field
+    pair (``SET`` 2 forward, 3 reversed), reconstructed and kept but sent as
+    no image of the series: refocused, its two volumes are displaced in
+    opposite directions by the field and differ in nothing else. A pair of
+    gradient echoes, such as the FLEET calibration's two polarities or the
+    reversed reference volume (``SET`` 1), also differs in the intensity the
+    field gradient moves along the phase encode at 7T, and gives no field;
+    the reversed reference volume is sent as no image. The field is
+    estimated once and applied to every image of every slice
     (:func:`bartorch.tools.apply_susceptibility`, as FSL's ``applytopup
     --method=jac``), history ``HYSCO``. The correction is logged as the other
     corrections are, and an image left uncorrected, for want of PyHySCO or of
-    its reference, is logged with the reason at ``WARNING``. Each image is
+    the field pair, is logged with the reason at ``WARNING``. Each image is
     Fermi filtered before its magnitude is taken, and corrected for gradient
     nonlinearity and divided by the receive field after the distortion
     correction (:class:`~pulserver.recon.Corrections`).
@@ -469,8 +477,6 @@ class EpiRecon(PicsRecon):
         slice.
     iterations : int, default=30
         Conjugate-gradient steps, or ``pics`` iterations with ``wavelet``.
-    pocs_iterations : int, default=8
-        POCS iterations of a partial-Fourier unit.
     l2 : float, default=0.0
         Tikhonov weight ``lambda`` of the conjugate-gradient solve, on data
         scaled as ``pics`` scales them.
@@ -485,7 +491,6 @@ class EpiRecon(PicsRecon):
         wavelet: float | None = None,
         iterations: int = 30,
         *,
-        pocs_iterations: int = 8,
         l2: float = 0.0,
         virtual_coils: int | None = VIRTUAL_COILS,
         kspace_filter: bool = True,
@@ -501,9 +506,20 @@ class EpiRecon(PicsRecon):
             intensity_correction=intensity_correction,
         )
         self.automatic_wavelet = wavelet is None
-        self.pocs_iterations = int(pocs_iterations)
         self.l2 = float(l2)
-        self.gadgets = (Prewhiten(), RampSampling(), EpiPhaseCorrection())
+        self.phase_references = {}
+        self._skips_logged = set()
+        compression = (
+            ()
+            if self.virtual_coils is None
+            else (CompressChannels(self.virtual_coils),)
+        )
+        self.gadgets = (
+            Prewhiten(),
+            *compression,
+            RampSampling(),
+            EpiPhaseCorrection(),
+        )
         # The odd/even phase reference is consumed by EpiPhaseCorrection.
         self.reject_flags = ()
 
@@ -513,11 +529,9 @@ class EpiRecon(PicsRecon):
         self.calibrations = {}
         self.slice_calibrations = []
         self.own_maps = {}
-        self.references = {}
         self.field = None
-        self.calibration_field = False
         self.field_pair = {}
-        self.held = []
+        self.phase_references = {}
         self._skips_logged = set()
         self.diffusion = DiffusionMaps.from_header(context.header)
         self.hysco = (
@@ -532,9 +546,6 @@ class EpiRecon(PicsRecon):
                 polarity = int(data.counters.get("set", 0))
                 self.calibrations.setdefault(polarity, []).append(data)
             return None
-        if self.calibrations:
-            self._pool(context)
-        data = compressed(context, data, self.virtual_coils, by_slice=False)
         buffer = data.data
         if self.calibrations:
             self._calibrate(context)
@@ -548,47 +559,40 @@ class EpiRecon(PicsRecon):
         volume = kspace if kspace.ndim == 4 else kspace[:, None]
         volume = torch.from_numpy(np.ascontiguousarray(volume, dtype=np.complex64))
         maps = self._maps(context, data, volume)
+        location = int(data.counters.get("slice", 0))
+        reference = self.phase_references.get(location)
         bands = None
         if volume.shape[1] > 1:
             training = band_calibration(self.slice_calibrations, data, volume.shape)
             if training is not None:
                 bands = slice_grappa_bands(volume, torch.from_numpy(training))
         if bands is None:
-            image = self._solved(volume, maps, context)
+            image = self._solved(volume, maps, context, reference)
         else:
             image = torch.cat(
                 [
-                    self._solved(bands[:, b : b + 1], maps[:, b : b + 1], context)
+                    self._solved(
+                        bands[:, b : b + 1],
+                        maps[:, b : b + 1],
+                        context,
+                        None if reference is None else reference[b : b + 1],
+                    )
                     for b in range(bands.shape[1])
                 ]
             )
+        if int(data.counters.get("set", 0)) == FULL_K_REFERENCE_SET:
+            self.phase_references[location] = image
         image = image.numpy()
         if kspace.ndim == 3:
             image = image[0]
         return self._filtered(np.array(center_crop(image, shape[-image.ndim :])))
 
-    def _pool(self, context):
-        """Estimate the stream's channel compression from the held calibration of every slice and polarity together."""
-        units = [unit for held in self.calibrations.values() for unit in held]
-        if (
-            self.virtual_coils is None
-            or None in context.coil_compressions
-            or units[0].ref.coils <= self.virtual_coils
-        ):
-            return
-        CoilCompression(self.virtual_coils, by_slice=False).pool(context, units)
-
     def _calibrate(self, context):
-        """Estimate the maps of each held calibration slice on its own, keep its k-space for split-slice GRAPPA, and fit the stack's field to its polarities."""
-        polarities = {}
+        """Estimate the maps of each held calibration slice on its own, and keep its k-space for split-slice GRAPPA."""
         for polarity, units in self.calibrations.items():
             for unit in units:
-                unit = compressed(context, unit, self.virtual_coils, by_slice=False)
                 coil_maps(context, unit, estimate=epi_nlinv_estimate)
                 kspace = _zero_filled(unit.ref)
-                polarities.setdefault(int(unit.counters.get("slice", 0)), {})[
-                    polarity
-                ] = (unit, kspace)
                 if int(np.prod(kspace.shape[1:-2])) == 1:
                     self.slice_calibrations.append(
                         (
@@ -598,47 +602,6 @@ class EpiRecon(PicsRecon):
                         )
                     )
         self.calibrations = {}
-        pairs = [
-            (location, by_polarity[0], by_polarity[1])
-            for location, by_polarity in polarities.items()
-            if {0, 1} <= set(by_polarity)
-        ]
-        if pairs and self.hysco is None:
-            self._estimate_field(
-                [
-                    (
-                        location,
-                        forward.ref.space,
-                        forward.ref.reference,
-                        self._calibration_image(forward.ref, forward_kspace),
-                        self._calibration_image(reverse.ref, reverse_kspace),
-                    )
-                    for location, (forward, forward_kspace), (
-                        reverse,
-                        reverse_kspace,
-                    ) in pairs
-                ],
-                "its FLEET calibration's two phase-encode polarities",
-            )
-            self.calibration_field = self.field is not None
-
-    def _calibration_image(self, ref, kspace):
-        """Return the root-sum-of-squares image of zero-filled calibration k-space on the grid of the images, Fermi filtered."""
-        import bartorch
-        import torch
-
-        axes = tuple(range(-1, -kspace.ndim, -1))
-        coils = bartorch.fft(
-            torch.from_numpy(np.ascontiguousarray(kspace, dtype=np.complex64)),
-            axes,
-            inverse=True,
-            unitary=True,
-        ).reshape(kspace.shape)
-        image = bartorch.rss(coils, 0).numpy()
-        if image.ndim == 3 and image.shape[0] == 1:
-            image = image[0]
-        image = center_crop(image, ref.image_shape[-image.ndim :])
-        return np.abs(self._filtered(np.array(image)))
 
     def _wavelet(self, volume):
         """Return the wavelet ``lambda`` of ``(coils, z, y, x)`` k-space."""
@@ -646,28 +609,76 @@ class EpiRecon(PicsRecon):
             return self.wavelet
         return EPI_WAVELET_SLAB if volume.shape[1] > 1 else EPI_WAVELET_SLICE
 
-    def _solved(self, volume, maps, context):
-        """Return the image of ``(coils, z, y, x)`` k-space by the solve its sampling calls for, partial Fourier completed."""
+    def _solved(self, volume, maps, context, reference=None):
+        """Return the image of ``(coils, z, y, x)`` k-space by the solve its sampling calls for, a partial-Fourier unit solved for a real image times its phase."""
         sampled = volume.abs().sum(dim=0) > 0
-        if _fills_acquired_range(sampled.numpy()):
-            image = sense_combined(volume, maps)
-        elif self._wavelet(volume) > 0:
-            start = cg_sense(volume, maps, sampled, self.iterations, context.device)
-            phase = smooth_phase(start)
-            image = phase * pics_image(
-                volume,
-                maps * phase,
-                sampled,
-                self._wavelet(volume),
-                self.iterations,
-                context.device,
-                x0=start * phase.conj(),
+        partial = partial_fourier_axes(sampled.numpy())
+        if _fills_acquired_range(sampled.numpy()) and not partial:
+            return sense_combined(volume, maps)
+        wavelet = self._wavelet(volume)
+        start = cg_sense(
+            volume,
+            maps,
+            sampled,
+            self.iterations,
+            context.device,
+            l2=0.0 if wavelet > 0 else self.l2,
+        )
+        if partial:
+            phase = self._phase(start, reference, sampled)
+            if phase is not None:
+                return pics_image(
+                    volume,
+                    maps,
+                    sampled,
+                    wavelet,
+                    self.iterations,
+                    context.device,
+                    x0=(start * phase.conj()).real.to(start.dtype),
+                    phase=phase,
+                    l2=self.l2,
+                )
+        if wavelet <= 0:
+            return start
+        phase = smooth_phase(start)
+        return phase * pics_image(
+            volume,
+            maps * phase,
+            sampled,
+            wavelet,
+            self.iterations,
+            context.device,
+            x0=start * phase.conj(),
+        )
+
+    def _phase(self, start, reference, sampled):
+        """Return the phase of a partial-Fourier unit whose zero-filled image is ``start``; ``None`` where it has none to take.
+
+        The drift against the reference is the smooth phase of ``start``
+        against the reference cut to the same range of k-space, so the two
+        share the blur of the lines the unit leaves out.
+        """
+        import torch
+
+        if reference is not None:
+            unit = torch.exp(1j * torch.angle(reference)).to(torch.complex64)
+            cut = _within_acquired_range(reference.to(torch.complex64), sampled)
+            return unit * smooth_phase(start * cut.conj())
+        phase = smooth_phase(start)
+        energy = float((start.abs() ** 2).sum())
+        quadrature = float(((start * phase.conj()).imag ** 2).sum())
+        if energy > 0 and quadrature <= SMOOTH_PHASE_RESIDUAL * energy:
+            return phase
+        if "phase" not in self._skips_logged:
+            self._skips_logged.add("phase")
+            _log.warning(
+                "a partial-Fourier image keeps %.3f of its energy in quadrature to "
+                "its smooth phase and the scan played no full-k phase reference "
+                "(set %d): its unsampled k-space is left empty",
+                quadrature / max(energy, 1e-30),
+                FULL_K_REFERENCE_SET,
             )
-        else:
-            image = cg_sense(
-                volume, maps, sampled, self.iterations, context.device, l2=self.l2
-            )
-        return pocs(image, sampled, self.pocs_iterations)
+        return None
 
     def _maps(self, context, data, volume):
         """Return the unit's coil maps shaped as ``volume``: its slice's, its bands' slices', else fitted once to it and kept."""
@@ -702,40 +713,14 @@ class EpiRecon(PicsRecon):
             return None
         if self.field_pair:
             self._field_from_pair()
-        if polarity == 1:
-            # The reference only corrects the images (_corrected); it is not
-            # an image of the series.
-            self.references[location] = (np.abs(image), buffer.reference)
-            if not self.calibration_field:
-                self.field = None
+        if polarity in (1, FULL_K_REFERENCE_SET):
+            # The reversed and the full-k reference volumes are no images of
+            # the series.
             return None
-        image = np.abs(image)
-        if self.hysco is not None or not self.references or self.field is not None:
-            return self._results(context, data, self._corrected(image, location))
-        self.held.append((data, image))
-        if {int(d.counters.get("slice", 0)) for d, _ in self.held} < set(
-            self.references
-        ):
-            return None
-        held, self.held = self.held, []
-        pairs = []
-        for unit_data, unit_image in held:
-            location = int(unit_data.counters.get("slice", 0))
-            reference, acquisition = self.references[location]
-            pairs.append(
-                (location, unit_data.data.space, acquisition, unit_image, reference)
-            )
-        self._estimate_field(pairs, "its phase-encode-reversed reference")
-        results = []
-        for unit_data, unit_image in held:
-            location = int(unit_data.counters.get("slice", 0))
-            results += self._results(
-                context, unit_data, self._corrected(unit_image, location)
-            )
-        return results
+        return self._results(context, data, self._corrected(np.abs(image), location))
 
     def _field_from_pair(self) -> None:
-        """Estimate the stack's field from its spin-echo field pair; it takes the place of any other."""
+        """Estimate the stack's field from its spin-echo field pair."""
         forward_set, reversed_set = FIELD_PAIR_SETS
         pairs = []
         for location, by_set in sorted(self.field_pair.items()):
@@ -748,23 +733,6 @@ class EpiRecon(PicsRecon):
         if not pairs or self.hysco is not None:
             return
         self._estimate_field(pairs, "its spin-echo field pair")
-        self.calibration_field = self.field is not None
-
-    def finish(self, context):
-        if self.held:
-            _log.warning(
-                "the stack never completed its first volume; %d images are sent "
-                "without susceptibility distortion correction",
-                len(self.held),
-            )
-        return super().finish(context)
-
-    def flush(self, context):
-        emitted = super().flush(context)
-        held, self.held = self.held, []
-        for data, image in held:
-            emitted.append((data, self._results(context, data, image)))
-        return emitted
 
     def _results(self, context, data, image):
         """Return the image's results, its geometry its own unit's whatever unit closed."""
@@ -883,11 +851,8 @@ class EpiRecon(PicsRecon):
             return undistorted(image, field, voxel)
         if self.hysco is not None:
             reason = self.hysco
-        elif location not in self.references:
-            reason = (
-                f"no phase-encode-reversed reference (set 1) of slice {location} "
-                "came before it"
-            )
+        elif self.field is None:
+            reason = "no spin-echo field pair (sets 2 and 3) came before it"
         else:
             reason = f"the stack's field holds no slice {location}"
         level = logging.DEBUG if reason in self._skips_logged else logging.WARNING
@@ -920,12 +885,6 @@ def plane_positions(acquisition, space, count) -> list[float]:
 #: unfolding amplifies noise and converges slowly without the prior.
 EPI_WAVELET_SLAB = 0.1
 EPI_WAVELET_SLICE = 0.03
-
-#: Standard deviation, in lines, of the in-plane Gaussian k-space window that
-#: smooths that phase. At 7T the off-resonance phase near the sinuses wraps
-#: within a few voxels by a BOLD echo time; a wavelet prior on that complex
-#: image turns each wrap into a ring.
-PHASE_SMOOTHING_LINES = 8.0
 
 #: Sobolev weight of the coil maps of a 3D EPI slab on their calibration
 #: grid. Below BART's, the maps follow the sensitivity across the end
@@ -1096,6 +1055,30 @@ def _fills_acquired_range(sampled: np.ndarray) -> bool:
     return bool(np.array_equal(lines, inside))
 
 
+def _within_acquired_range(image, sampled):
+    """Return ``image``, ``(z, y, x)``, with its k-space outside the range of lines ``sampled`` acquires along each axis removed."""
+    import bartorch
+    import torch
+
+    from .pics import _acquired_range
+
+    mask = sampled.cpu().numpy()
+    kept = np.ones(mask.shape, dtype=bool)
+    for axis in range(mask.ndim):
+        lines = _acquired_range(mask, axis)
+        if lines is None:
+            continue
+        inside = np.zeros(mask.shape[axis], dtype=bool)
+        inside[lines[0] : lines[1] + 1] = True
+        shape = [1] * mask.ndim
+        shape[axis] = mask.shape[axis]
+        kept = kept & inside.reshape(shape)
+    axes = tuple(range(-1, -mask.ndim - 1, -1))
+    kspace = bartorch.fft(image, axes, unitary=True).reshape(image.shape)
+    kspace = kspace * torch.from_numpy(kept).to(kspace.device)
+    return bartorch.fft(kspace, axes, inverse=True, unitary=True).reshape(image.shape)
+
+
 def sense_combined(kspace, maps):
     """Return the least-squares SENSE image ``sum_c conj(S_c) F^-1 y_c / sum_c |S_c|^2`` of fully sampled k-space.
 
@@ -1137,108 +1120,6 @@ def cg_sense(kspace, maps, sampled, iterations, device, *, l2=0.0):
     data = (measured * (1.0 / scaling)).reshape(kspace.shape[0], *grid)
     solve = optim.CG(lambda_=float(l2), maxiter=int(iterations))
     return (scaling * solve(data, encoding)).reshape(kspace.shape[1:])
-
-
-def smooth_phase(image):
-    """Return the unit-magnitude phase of ``image`` low-passed in plane.
-
-    Parameters
-    ----------
-    image : torch.Tensor
-        Complex ``(z, y, x)`` image, the transform centred.
-
-    Returns
-    -------
-    torch.Tensor
-        ``exp(i angle(g * image))``, complex64, ``g`` a Gaussian k-space
-        window of ``PHASE_SMOOTHING_LINES`` lines over ``y`` and ``x``.
-    """
-    import bartorch
-    import torch
-
-    image = image.to(torch.complex64)
-    ny, nx = image.shape[-2:]
-    y = torch.arange(ny, dtype=torch.float32, device=image.device) - ny // 2
-    x = torch.arange(nx, dtype=torch.float32, device=image.device) - nx // 2
-    window = torch.exp(
-        -(y[:, None] ** 2 + x[None, :] ** 2) / (2 * PHASE_SMOOTHING_LINES**2)
-    )
-    axes = (-1, -2)
-    kspace = bartorch.fft(image, axes, unitary=True).reshape(image.shape)
-    smooth = bartorch.fft(kspace * window, axes, inverse=True, unitary=True)
-    return torch.exp(1j * torch.angle(smooth.reshape(image.shape))).to(torch.complex64)
-
-
-def pocs(image, sampled, iterations):
-    """Return ``image`` completed by POCS over every partial-Fourier axis of ``sampled``; ``image`` where none is.
-
-    The partial-Fourier axes and the acquired range ``R`` along each are those
-    :func:`~pulserver.recon.handlers.pics.partial_fourier` finds. The phase
-    is that of the image of the samples whose conjugates are also in ``R``;
-    each iteration imposes it on the image's magnitude and restores the
-    k-space of ``image`` inside ``R``. The image keeps its phase.
-
-    Parameters
-    ----------
-    image : torch.Tensor
-        Complex ``(z, y, x)`` image of the sampled k-space, the transform
-        centred.
-    sampled : torch.Tensor
-        Boolean ``(z, y, x)`` mask of the acquired samples.
-    iterations : int
-        POCS iterations.
-    """
-    import bartorch
-    import torch
-
-    from .pics import _acquired_range
-
-    mask = sampled.cpu().numpy()
-    kept = np.ones(mask.shape, dtype=bool)
-    axes = []
-    for axis in range(mask.ndim):
-        lines = _acquired_range(mask, axis)
-        if lines is None:
-            continue
-        axes.append(axis)
-        shape = [1] * mask.ndim
-        shape[axis] = mask.shape[axis]
-        inside = np.zeros(mask.shape[axis], dtype=bool)
-        inside[lines[0] : lines[1] + 1] = True
-        kept = kept & inside.reshape(shape)
-    if not axes or iterations < 1:
-        return image
-    every = tuple(range(-1, -mask.ndim - 1, -1))
-    mirrored = np.roll(np.flip(kept), [1 - n % 2 for n in mask.shape], axis=every)
-    symmetric = torch.from_numpy((kept & mirrored).astype(np.float32)).to(image.device)
-    inside = torch.from_numpy(kept).to(image.device)
-
-    from bartorch import optim
-
-    def forward(x):
-        return bartorch.fft(x, every, unitary=True).reshape(x.shape)
-
-    def inverse(k):
-        return bartorch.fft(k, every, inverse=True, unitary=True).reshape(k.shape)
-
-    measured = forward(image.to(torch.complex64))
-    phase = torch.exp(1j * torch.angle(inverse(measured * symmetric)))
-    return optim.POCS(
-        [
-            lambda x: x.abs() * phase,
-            lambda x: inverse(torch.where(inside, measured, forward(x))),
-        ],
-        maxiter=int(iterations),
-    )(measured, x0=image.to(torch.complex64))
-
-
-#: ``SET`` of the forward and of the reversed volume of a spin-echo field pair.
-FIELD_PAIR_SETS = (2, 3)
-
-#: The package PyHySCO installs, which the susceptibility correction imports.
-PYHYSCO_PACKAGE = "EPI_MRI"
-
-PLUGIN = EpiRecon()
 
 
 def susceptibility_field(image, reverse, voxel_size):
@@ -1319,3 +1200,21 @@ def undistorted(image, field, voxel_size):
         phase_encoding_axis=image.ndim - 2,
     )
     return np.clip(corrected.cpu().numpy(), 0.0, None)
+
+
+#: ``SET`` of the forward and of the reversed volume of a spin-echo field pair.
+FIELD_PAIR_SETS = (2, 3)
+
+#: ``SET`` of the full-k phase reference volume.
+FULL_K_REFERENCE_SET = 4
+
+#: Fraction of a partial-Fourier image's energy in quadrature to its smooth
+#: phase above which that phase does not describe the image. A spin echo
+#: keeps about 0.001 there, a gradient echo at 7T near air-tissue interfaces
+#: 0.015 or more.
+SMOOTH_PHASE_RESIDUAL = 0.01
+
+#: The package PyHySCO installs, which the susceptibility correction imports.
+PYHYSCO_PACKAGE = "EPI_MRI"
+
+PLUGIN = EpiRecon()

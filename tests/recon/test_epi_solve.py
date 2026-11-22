@@ -1,4 +1,4 @@
-"""The EPI reconstruction's coil combination, partial-Fourier completion and stack coil maps."""
+"""The EPI reconstruction's coil combination, partial-Fourier solve and stack coil maps."""
 
 from types import SimpleNamespace
 
@@ -89,41 +89,91 @@ def test_the_default_iterations_unfold_a_threefold_undersampled_object_filling_t
     assert error < 0.05
 
 
-def test_pocs_restores_the_missing_lines_of_a_partial_fourier_unit_and_keeps_its_phase(
-    device,
+def _gradient_echo(shape=(1, 48, 48)):
+    """A disc whose phase wraps several times within a few voxels of one spot, as a gradient echo's near an air cavity."""
+    _, y, x = np.meshgrid(*(np.arange(n) - n // 2 for n in shape), indexing="ij")
+    magnitude = ((y / 18.0) ** 2 + (x / 15.0) ** 2 < 1).astype(np.float32)
+    cavity = 6 * np.pi * np.exp(-((x**2 + (y - 10) ** 2) / (2 * 3.0**2)))
+    return magnitude, cavity, x, y
+
+
+def _partial_fourier(shape, ry=1):
+    sampled = torch.zeros(shape, dtype=torch.bool)
+    sampled[:, shape[1] // 4 :: ry] = True
+    return sampled
+
+
+def _magnitude_error(solved, magnitude):
+    residual = np.abs(solved.cpu().numpy()) - magnitude
+    return np.linalg.norm(residual) / np.linalg.norm(magnitude)
+
+
+@pytest.mark.parametrize("ry", [1, 2])
+def test_a_partial_fourier_unit_takes_the_phase_of_its_full_k_reference_and_its_drift(
+    device, ry
 ):
-    import bartorch
+    from pulserver.recon.handlers.epi import EpiRecon, cg_sense
 
-    from pulserver.recon.handlers.epi import pocs
+    shape = (1, 48, 48)
+    magnitude, cavity, x, y = _gradient_echo(shape)
+    drift = 0.6 * np.pi * x / 48 - 0.4 * np.pi * y / 48
+    image = (magnitude * np.exp(1j * (cavity + drift))).astype(np.complex64)
+    reference = torch.from_numpy((magnitude * np.exp(1j * cavity)).astype(np.complex64))
+    maps = torch.from_numpy(_maps(shape, coils=12))
+    sampled = _partial_fourier(shape, ry)
+    kspace = _kspace(image, maps.numpy()) * sampled
+    plugin = EpiRecon(0.0)
 
-    image = _phantom()
-    kspace = bartorch.fft(torch.from_numpy(image), (-1, -2), unitary=True).reshape(
-        image.shape
+    solved = plugin._solved(kspace, maps, SimpleNamespace(device=device), reference)
+    zero_filled = cg_sense(kspace, maps, sampled, plugin.iterations, device)
+
+    assert _magnitude_error(solved, magnitude) < 0.3 * _magnitude_error(
+        zero_filled, magnitude
     )
-    sampled = torch.zeros(1, 16, 16, dtype=torch.bool)
-    sampled[:, 5:] = True
-    zero_filled = bartorch.fft(
-        kspace * sampled, (-1, -2), inverse=True, unitary=True
-    ).reshape(image.shape)
-
-    completed = pocs(zero_filled.to(device), sampled.to(device), 20).cpu().numpy()
-
-    before = np.linalg.norm(zero_filled.numpy() - image)
-    after = np.linalg.norm(completed - image)
-    assert after < 0.3 * before
-    inside = np.abs(image) > 0
-    phase_error = np.angle(completed[inside] * np.conj(image[inside]))
-    assert np.abs(phase_error).max() < 0.1
 
 
-def test_a_unit_without_a_partial_fourier_axis_passes_pocs_unchanged():
-    from pulserver.recon.handlers.epi import pocs
+def test_a_spin_echo_partial_fourier_unit_takes_its_own_smooth_phase(device):
+    from pulserver.recon.handlers.epi import EpiRecon, cg_sense
 
-    image = torch.from_numpy(_phantom())
-    sampled = torch.zeros(1, 16, 16, dtype=torch.bool)
-    sampled[:, ::2] = True
+    shape = (1, 48, 48)
+    magnitude, _, x, _ = _gradient_echo(shape)
+    image = (magnitude * np.exp(1j * np.pi * (x / 48) ** 2)).astype(np.complex64)
+    maps = torch.from_numpy(_maps(shape, coils=12))
+    sampled = _partial_fourier(shape)
+    kspace = _kspace(image, maps.numpy()) * sampled
+    plugin = EpiRecon(0.0)
 
-    assert pocs(image, sampled, 8) is image
+    solved = plugin._solved(kspace, maps, SimpleNamespace(device=device))
+    zero_filled = cg_sense(kspace, maps, sampled, plugin.iterations, device)
+
+    assert _magnitude_error(solved, magnitude) < 0.3 * _magnitude_error(
+        zero_filled, magnitude
+    )
+
+
+def test_a_gradient_echo_partial_fourier_unit_without_a_reference_is_left_zero_filled_with_a_warning(
+    device, caplog
+):
+    import logging
+
+    from pulserver.recon.handlers.epi import EpiRecon, cg_sense
+
+    shape = (1, 48, 48)
+    magnitude, cavity, _, _ = _gradient_echo(shape)
+    image = (magnitude * np.exp(1j * cavity)).astype(np.complex64)
+    maps = torch.from_numpy(_maps(shape, coils=12))
+    sampled = _partial_fourier(shape)
+    kspace = _kspace(image, maps.numpy()) * sampled
+    plugin = EpiRecon(0.0)
+
+    with caplog.at_level(logging.WARNING, logger="pulserver.recon"):
+        solved = plugin._solved(kspace, maps, SimpleNamespace(device=device))
+
+    zero_filled = cg_sense(
+        kspace, maps, sampled, plugin.iterations, device, l2=plugin.l2
+    )
+    np.testing.assert_allclose(solved.cpu().numpy(), zero_filled.cpu().numpy())
+    assert any("no full-k phase reference" in r.getMessage() for r in caplog.records)
 
 
 @pytest.mark.parametrize(
@@ -351,7 +401,7 @@ def test_an_undersampled_unit_takes_the_wavelet_of_a_slab_or_a_slice_unless_one_
 
 
 def test_the_smooth_phase_has_unit_magnitude_and_keeps_a_slowly_varying_phase(device):
-    from pulserver.recon.handlers.epi import smooth_phase
+    from pulserver.recon.handlers.pics import smooth_phase
 
     shape = (2, 32, 32)
     _, y, x = np.meshgrid(*(np.arange(n) - n // 2 for n in shape), indexing="ij")

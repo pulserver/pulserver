@@ -392,14 +392,20 @@ def _images(count, polarities=(0, 1)):
     }
 
 
-def test_the_reversed_reference_is_kept_and_sent_as_no_image(monkeypatch):
+def test_the_reversed_reference_volume_is_sent_as_no_image_and_gives_no_field(
+    monkeypatch, correction
+):
     plugin, context = _stack_recon(monkeypatch, _images(1))
 
     assert plugin.recon(context, "", _unit(0, 1)) is None
-    assert 0 in plugin.references
+    (result,) = plugin.recon(context, "", _unit(0, 0))
+
+    assert correction.calls == []
+    assert plugin.field is None
+    assert "HYSCO" not in result.attributes.get("ImageProcessingHistory", [])
 
 
-def test_without_a_reference_each_image_is_sent_at_once_with_one_warning(
+def test_without_a_field_pair_each_image_is_sent_at_once_with_one_warning(
     monkeypatch, caplog
 ):
     import logging
@@ -417,10 +423,7 @@ def test_without_a_reference_each_image_is_sent_at_once_with_one_warning(
         if "not corrected for susceptibility" in r.getMessage()
     ]
     assert [r.levelno for r in skipped] == [logging.WARNING, logging.DEBUG]
-    assert (
-        "no phase-encode-reversed reference (set 1) of slice 0"
-        in skipped[0].getMessage()
-    )
+    assert "no spin-echo field pair" in skipped[0].getMessage()
 
 
 def test_without_pyhysco_each_image_is_sent_at_once_uncorrected_saying_so(
@@ -442,18 +445,19 @@ def test_without_pyhysco_each_image_is_sent_at_once_uncorrected_saying_so(
     assert "PyHySCO is not installed" in warning.getMessage()
 
 
-def test_the_first_volume_is_held_until_the_stack_is_complete_and_one_field_corrects_it(
+def test_the_field_pair_of_a_stack_gives_one_field_that_corrects_every_slice(
     monkeypatch, correction
 ):
     from pulserver.recon.handlers.epi import FIELD_EDGE_PARTITIONS
 
-    images = _images(2)
+    images = _images(2, polarities=(0, 2, 3))
     plugin, context = _stack_recon(monkeypatch, images)
     for location in (1, 0):
-        assert plugin.recon(context, "", _unit(location, 1)) is None
+        for set_index in (2, 3):
+            assert plugin.recon(context, "", _unit(location, set_index)) is None
 
-    assert plugin.recon(context, "", _unit(1, 0)) is None
-    first, second = plugin.recon(context, "", _unit(0, 0))
+    (first,) = plugin.recon(context, "", _unit(1, 0))
+    (second,) = plugin.recon(context, "", _unit(0, 0))
 
     # One field for the stack, the slices in the order of their positions,
     # the end slices repeated; the stand-in displaces slice k by k voxels.
@@ -466,24 +470,6 @@ def test_the_first_volume_is_held_until_the_stack_is_complete_and_one_field_corr
             result.data, np.roll(images[(location, 0)], -shift, axis=0)
         )
         assert "HYSCO" in result.attributes["ImageProcessingHistory"]
-
-
-def test_every_later_image_takes_the_stack_field_and_a_new_reference_estimates_again(
-    monkeypatch, correction
-):
-    images = _images(1)
-    plugin, context = _stack_recon(monkeypatch, images)
-    plugin.recon(context, "", _unit(0, 1))
-    plugin.recon(context, "", _unit(0, 0))
-
-    (later,) = plugin.recon(context, "", _unit(0, 0))
-
-    assert len(correction.calls) == 1
-    np.testing.assert_allclose(later.data, np.roll(images[(0, 0)], -1, axis=0))
-
-    plugin.recon(context, "", _unit(0, 1))
-    plugin.recon(context, "", _unit(0, 0))
-    assert len(correction.calls) == 2
 
 
 def _hybrid(data, inverse):
@@ -652,15 +638,12 @@ def _calibration_unit(location, polarity, kspace):
     )
 
 
-def test_a_fleet_calibration_of_both_polarities_gives_the_stack_field_that_a_later_reference_keeps(
-    monkeypatch, correction
-):
+def test_a_fleet_calibration_of_both_polarities_gives_no_field(monkeypatch, correction):
     from pulserver.recon.handlers import epi
 
     monkeypatch.setattr(epi, "coil_maps", lambda *args, **kwargs: None)
     monkeypatch.setattr(epi, "_zero_filled", lambda ref: ref.kspace)
-    images = _images(1)
-    plugin, context = _stack_recon(monkeypatch, images)
+    plugin, context = _stack_recon(monkeypatch, _images(1))
     rng = np.random.default_rng(3)
     plugin.calibrations = {
         polarity: [
@@ -672,14 +655,10 @@ def test_a_fleet_calibration_of_both_polarities_gives_the_stack_field_that_a_lat
     }
 
     plugin._calibrate(context)
-    (first,) = plugin.recon(context, "", _unit(0, 0))
-    plugin.recon(context, "", _unit(0, 1))
-    (later,) = plugin.recon(context, "", _unit(0, 0))
+    plugin.recon(context, "", _unit(0, 0))
 
-    assert len(correction.calls) == 1
-    for result in (first, later):
-        np.testing.assert_allclose(result.data, np.roll(images[(0, 0)], -1, axis=0))
-        assert "HYSCO" in result.attributes["ImageProcessingHistory"]
+    assert correction.calls == []
+    assert plugin.field is None
 
 
 def test_a_spin_echo_field_pair_is_sent_as_no_image_and_its_field_corrects_every_image(
@@ -699,31 +678,3 @@ def test_a_spin_echo_field_pair_is_sent_as_no_image_and_its_field_corrects_every
     for result in (first, later):
         np.testing.assert_allclose(result.data, np.roll(images[(0, 0)], -1, axis=0))
         assert "HYSCO" in result.attributes["ImageProcessingHistory"]
-
-
-def test_a_spin_echo_field_pair_takes_the_place_of_the_fleet_calibration_field(
-    monkeypatch, correction
-):
-    from pulserver.recon.handlers import epi
-
-    monkeypatch.setattr(epi, "coil_maps", lambda *args, **kwargs: None)
-    monkeypatch.setattr(epi, "_zero_filled", lambda ref: ref.kspace)
-    images = _images(1, polarities=(0, 2, 3))
-    plugin, context = _stack_recon(monkeypatch, images)
-    rng = np.random.default_rng(3)
-    plugin.calibrations = {
-        polarity: [
-            _calibration_unit(
-                0, polarity, rng.random((2, 1, 6, 8)).astype(np.complex64)
-            )
-        ]
-        for polarity in (0, 1)
-    }
-
-    plugin._calibrate(context)
-    plugin.recon(context, "", _unit(0, 2))
-    plugin.recon(context, "", _unit(0, 3))
-    plugin.recon(context, "", _unit(0, 0))
-
-    assert len(correction.calls) == 2
-    np.testing.assert_allclose(correction.blip_up[-1], images[(0, 2)])
