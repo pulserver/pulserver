@@ -809,7 +809,7 @@ class EpiRecon(PicsRecon):
         its bands, divided by its shots, is at most
         ``EPI_WAVELET_SEGMENTED_ACCELERATION`` takes ``EPI_WAVELET_SLICE``;
         any other multiband unit ``EPI_WAVELET_MULTIBAND``. A slab
-        accelerated at most ``EPI_WAVELET_SLAB_ACCELERATION`` takes
+        accelerated at most ``EPI_WAVELET_SLAB_ACCELERATION`` (R3 x 2) takes
         ``EPI_WAVELET_SLICE``, and a slab accelerated further
         ``EPI_WAVELET_SLAB``.
         """
@@ -1387,21 +1387,21 @@ def plane_positions(acquisition, space, count) -> list[float]:
 #: bands and its in-plane aliases together: in a noisy 7T simulation of a
 #: 2 mm stack at MB2 and R 2 to 4 with six virtual channels, its bands are
 #: closest to a fully sampled gradient echo near this weight, a slice's
-#: leaving R 4 aliased. A 2 mm slab of 16 partitions at R3 x 2 with six
-#: virtual channels in the same simulation came out at 0.257 brain NRMSE
-#: against the fully sampled gradient echo at the slab weight, 0.279 at the
-#: slice weight.
+#: leaving R 4 aliased.
 EPI_WAVELET_SLAB = 0.03
 EPI_WAVELET_MULTIBAND = 0.03
 EPI_WAVELET_SLICE = 0.003
 
 #: Largest acceleration of a 3D EPI slab, the encoded lines of its partition
 #: and phase-encode extent over those read, solved at ``EPI_WAVELET_SLICE``
-#: instead of ``EPI_WAVELET_SLAB``. In the 7T simulation, field-free and
-#: noisy, an R2 x 2 slab came out at 0.029 brain NRMSE against the fully
-#: sampled gradient echo at the slice weight, 0.077 at the slab weight and
-#: 0.028 by conjugate gradients; R4 x 1 in the field at 0.120 against 0.135.
-EPI_WAVELET_SLAB_ACCELERATION = 4.0
+#: instead of ``EPI_WAVELET_SLAB``. In the noisy 7T simulation of a 2 mm slab
+#: of 16 partitions in the susceptibility field, unwarped, against the fully
+#: sampled gradient echo: R2 x 2 in 3 shots with six virtual channels came
+#: out at 0.106 brain NRMSE at the slice weight and by conjugate gradients
+#: alike, and R3 x 2 with twelve virtual channels at 0.176 at the slice
+#: weight, 0.188 at the slab weight and 0.185 by conjugate gradients (0.129,
+#: and 0.137 by conjugate gradients, in 2 shots).
+EPI_WAVELET_SLAB_ACCELERATION = 6.0
 
 #: Largest in-plane line step times bands, divided by its shots, of a
 #: segmented multiband unit solved at ``EPI_WAVELET_SLICE`` instead of
