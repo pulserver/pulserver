@@ -123,9 +123,9 @@ class Epi2D(SequencePlugin):
     def evaluate(self, system, protocol):
         # A cycle plays one shot of every slice group of a packet, and a TR
         # the shots of a volume. The design of one group at the shortest TR
-        # plays one cycle of that group per shot, after its calibration. The
-        # calibration repeats at its own TR, which the console's does not set:
-        # where it plays more RF power than a TR, the layout states its power.
+        # plays one cycle of that group per shot. The prescans repeat at their
+        # own TR, which the console's does not set: where one plays more RF
+        # power than a TR, the layout states its power.
         a = arguments(self, protocol)
         multiband = a["multiband"]
         if a["n_slices"] % multiband:
@@ -149,16 +149,20 @@ class Epi2D(SequencePlugin):
         n_shots, n_frames = a["n_shots"], a["n_frames"]
         *prescans, volume = self.app(system, **(protocol.arguments | one))
         stem = volume.definitions["Name"]
-        calibration = [
-            seq for seq in prescans if seq.definitions["Name"] == f"{stem}_calibration"
-        ]
         references = [
             seq for seq in prescans if seq.definitions["Name"] == f"{stem}_reference"
         ]
         volumes = len(references) + n_frames
-        # The field pair and the full-k reference image the whole stack at
-        # their own shortest TR, so they are designed at the prescription.
-        stack_volumes = stack_prescans(list(self.app(system, **protocol.arguments)))
+        # The calibration, the field pair and the full-k reference play every
+        # slice at their own shortest TR, so they are designed at the
+        # prescription, and the layout states the prescan the scan plays.
+        chain = list(self.app(system, **protocol.arguments))
+        calibration = [
+            seq
+            for seq in chain[:-1]
+            if seq.definitions["Name"] == f"{stem}_calibration"
+        ]
+        stack_volumes = stack_prescans(chain)
         shot = volume.definitions["TR"][0] / n_shots
         sizes, cycles = _cycles(
             a | {"n_slices": groups}, shot, system.block_duration_raster
@@ -186,7 +190,7 @@ class Epi2D(SequencePlugin):
         return Evaluation(
             protocol.replace(values),
             played * sum(cycles)
-            + groups * sequences.duration(calibration)
+            + sequences.duration(calibration)
             + sequences.duration(stack_volumes),
             info=bandwidth_note(
                 system, a["readout_bandwidth_hz"], *first_readout(volume)

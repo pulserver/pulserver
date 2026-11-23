@@ -421,7 +421,9 @@ LARGE = {
 # The RF uses of one TR at the default protocol, in play order, where a TR is
 # not one excitation followed, in a spin echo, by one refocusing pulse; by name.
 TRAINS: dict[str, list[str]] = {
-    "epi2d": ["saturation", "excitation"],
+    # The FLEET calibration, its fat saturation before every shot, outweighs a
+    # TR: its pulses as many as it plays in a TR, the strongest first.
+    "epi2d": ["saturation"] * 3 + ["excitation"] * 3 + ["saturation"],
     "epi3d": ["excitation"] * 32,
     "fse3d": ["excitation"] + ["refocusing"] * 45,
     "fse_pd3d": ["excitation"] + ["refocusing"] * 51,
@@ -436,6 +438,12 @@ TRAINS: dict[str, list[str]] = {
     # One breath: slab inversion, fat saturation, ramp and segment.
     "inflow_mra3d": ["inversion", "saturation"] + ["excitation"] * 90,
 }
+
+#: Protocols at which the imaging train outweighs every prescan at its flip
+#: angle and at twice it, by name; the others are tested at their listed
+#: protocol. The FLEET calibration of the 2D EPI outweighs a TR of the listed
+#: protocol, and a TR of a smaller matrix outweighs it.
+FLIP_PROTOCOLS = {"epi2d": {"flip": 40.0, "nx": 64, "ny": 32}}
 
 #: The layouts of the banded sequences with both their bands placed.
 BANDED_TRAINS = {
@@ -529,10 +537,10 @@ def _repeating_prescans(plugin, protocol):
 
 
 def _stated_power(designed, period, prescans):
-    """The mean RF power in Hz² a layout of ``period`` states for a TR of power ``designed`` and the RF of ``prescans``: the strongest prescan's pulses, as many as it plays in the period rounded up, where it plays more."""
+    """The mean RF power in Hz² a layout of ``period`` states for a TR of power ``designed`` and the RF of ``prescans``: the strongest prescan's pulses, as many as it plays in the period rounded up, where it plays more beyond ``POWER_RTOL``."""
     layouts = [RfLayout.of(prescan, None) for prescan in prescans]
     strongest = max(layouts, key=rf_power, default=None)
-    if strongest is None or rf_power(strongest) <= designed:
+    if strongest is None or rf_power(strongest) <= designed * (1 + POWER_RTOL):
         return designed
     played = len(strongest.instances.definition)
     count = int(np.ceil(period * played / strongest.period - 1e-9))
@@ -653,7 +661,6 @@ def test_flip_entries_bind_excitation_or_explicit_refocusing_controls(
     assert {name for name in SHIPPED if UIParam.FLIP in zoo[name].protocol} == {
         *FLIPPED,
         "fse_pd3d",
-        "epi2d",
     }
 
 
@@ -990,13 +997,17 @@ def test_changing_the_flip_angle_scales_exactly_the_instances_a_zoo_layout_marks
 ):
     plugin = zoo[name]
     listed = plugin.listing()[UIParam.FLIP]
+    changes = FLIP_PROTOCOLS.get(name, {})
+    value = changes.get(UIParam.FLIP, listed.value)
     # Raising the flip angle keeps the imaging train the densest: a calibration
     # played at its own fixed flip angle can outweigh a lowered one.
-    factor = 2.0 if 2.0 * listed.value <= listed.range_max else 0.5
-    flip = factor * listed.value
+    factor = 2.0 if 2.0 * value <= listed.range_max else 0.5
+    flip = factor * value
 
-    before = plugin.evaluate(SYSTEM, _protocol(plugin)).rf_layout
-    after = plugin.evaluate(SYSTEM, _protocol(plugin, {UIParam.FLIP: flip})).rf_layout
+    before = plugin.evaluate(SYSTEM, _protocol(plugin, changes)).rf_layout
+    after = plugin.evaluate(
+        SYSTEM, _protocol(plugin, changes | {UIParam.FLIP: flip})
+    ).rf_layout
 
     assert after.control == before.control
     assert after.instances.definition.tolist() == before.instances.definition.tolist()
