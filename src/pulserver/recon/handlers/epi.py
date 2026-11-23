@@ -1765,11 +1765,15 @@ def cg_sense(kspace, maps, sampled, iterations, device, *, l2=0.0, shots=None):
 
 
 #: Degree of the Legendre polynomials in plane, per partition, that a shot's
-#: phase is fitted on (:func:`phase_basis`). In a noisy 7T simulation of
-#: MB2 x R2 and R2 in 2 and 3 shots with six virtual channels, degree 3 left
-#: the images 0.02 to 0.04 from those without shot phase; degree 5 and more
-#: fitted the noise of the multiband units.
-SHOT_PHASE_ORDER = 3
+#: phase is fitted on (:func:`phase_basis`). The fit error turns into frame-
+#: to-frame magnitude change: in a 7T simulation of R2 x MB2 in 3 shots, 20
+#: frames each with its own shot phase (0.04 to 0.2 rad across the head plus
+#: blobs of 0.06 to 0.12 rad), brain tSNR was 73, 88, 93, 95 and 97 at degrees
+#: 2, 3, 4, 6 and 8 against 99 with the true phases and 107 without shot
+#: phase, single-volume NRMSE unchanged (0.069); degree 6 costs 3.4 s per
+#: volume on an A40 against 3.1 s at degree 3 (21 s against 11 s on 4 CPU
+#: threads).
+SHOT_PHASE_ORDER = 6
 
 #: Most alternations of the shot-phase fit and the joint solve of a segmented
 #: unit, and the fraction by which an alternation must lower its data

@@ -770,6 +770,36 @@ def test_the_phase_a_second_shot_adds_is_fitted_against_a_reference_image():
     assert np.abs(error).max() < 1e-3
 
 
+def test_the_default_phase_basis_fits_a_local_shot_phase_that_degree_three_misses():
+    """A blob of phase a fifth of the object wide: the frame-to-frame shot phase of breathing below the head."""
+    from pulserver.recon.handlers.epi import (
+        SHOT_PHASE_ORDER,
+        fit_shot_phases,
+        phase_basis,
+    )
+
+    shape = (1, 48, 48)
+    _, y, x = np.meshgrid(*(np.arange(n) - n // 2 for n in shape), indexing="ij")
+    blob = 0.4 * np.exp(-((x - 4) ** 2 + (y + 3) ** 2) / (2 * 5.0**2))
+    phase = np.stack([np.zeros(shape), 0.5 + 0.6 * x / 48 + blob]).astype(np.float32)
+    image, maps, kspace, masks = _segmented(phase)
+    inside = np.abs(image) > 0
+
+    def error(order):
+        fitted = fit_shot_phases(
+            kspace,
+            maps,
+            masks,
+            torch.from_numpy(image),
+            torch.zeros((2, *shape)),
+            phase_basis(shape, order),
+        )
+        return np.abs(np.angle(np.exp(1j * (fitted.numpy() - phase)))[1][inside]).mean()
+
+    assert error(SHOT_PHASE_ORDER) < 0.02
+    assert error(3) > 0.03
+
+
 def test_a_segmented_unit_is_unaliased_by_the_joint_solve_with_its_shot_phases(
     device,
 ):
