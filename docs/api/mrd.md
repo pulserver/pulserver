@@ -34,6 +34,7 @@ stream from (see {doc}`../explanations/raw-data`).
 | {obj}`~pulserver.mrd.user_parameter` | A header user parameter by name. |
 | {obj}`~pulserver.mrd.max_stored_value` | Largest pixel value of the header's stored bit depth. |
 | {obj}`~pulserver.mrd.diffusion_table` | The b-value and logical direction of each volume, as the proxy states them. |
+| {obj}`~pulserver.mrd.ACCELERATION_PER_SOLVE` | Name of the user parameter string the acceleration per joint solve is stated in. |
 | {obj}`~pulserver.mrd.DIFFUSION_TABLE` | Name of the user parameter string the diffusion table is stated in. |
 
 ## Images
