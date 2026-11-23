@@ -508,6 +508,29 @@ def test_an_undersampled_unit_takes_the_wavelet_of_a_slab_multiband_unit_or_slic
     assert plugin._wavelet(volume, bands) == want
 
 
+@pytest.mark.parametrize(
+    ("step", "shots", "expected"),
+    [
+        (2, 1, "EPI_WAVELET_MULTIBAND"),
+        (2, 2, "EPI_WAVELET_SLICE"),
+        (2, 3, "EPI_WAVELET_SLICE"),
+        (3, 1, "EPI_WAVELET_MULTIBAND"),
+        (3, 2, "EPI_WAVELET_MULTIBAND"),
+        (3, 3, "EPI_WAVELET_SLICE"),
+    ],
+)
+def test_a_segmented_multiband_unit_takes_the_slice_wavelet_at_low_acceleration_per_shot(
+    step, shots, expected
+):
+    from pulserver.recon.handlers import epi
+
+    volume = np.zeros((2, 2, 24, 8), np.complex64)
+    for line in range(0, 24, step):
+        volume[:, (line // step) % 2, line] = 1.0
+
+    assert epi.EpiRecon()._wavelet(volume, True, shots) == getattr(epi, expected)
+
+
 def test_the_smooth_phase_has_unit_magnitude_and_keeps_a_slowly_varying_phase(device):
     from pulserver.recon.handlers.pics import smooth_phase
 

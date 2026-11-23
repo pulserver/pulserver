@@ -482,8 +482,10 @@ class EpiRecon(PicsRecon):
     local weights to cancel as many aliases as the joint solve unfolds pixel
     by pixel, and beyond twofold in plane it fails with six virtual channels.
     A multiband unit whose bands each lie on a calibrated slice is solved at
-    ``EPI_WAVELET_MULTIBAND`` and Fermi filtered, unwarped and divided by its
-    receive field band by band, each in its own plane, as a slice is: the
+    ``EPI_WAVELET_MULTIBAND``, or at ``EPI_WAVELET_SLICE`` where it is read in
+    several shots and its in-plane line step times its bands, per shot, is at
+    most ``EPI_WAVELET_SEGMENTED_ACCELERATION`` (:meth:`_wavelet`), and Fermi
+    filtered, unwarped and divided by its receive field band by band, each in its own plane, as a slice is: the
     bands lie several slices apart, and filtered or resampled across the
     stack a band takes in the others. One without that calibration is solved
     at ``EPI_WAVELET_SLAB`` and filtered and corrected as one volume of its
@@ -522,8 +524,11 @@ class EpiRecon(PicsRecon):
         ``lambda`` of a wavelet ``pics`` solve of undersampled units; zero
         solves them by conjugate gradients. ``None`` takes
         ``EPI_WAVELET_MULTIBAND`` for a multiband unit whose bands lie on
-        calibrated slices, ``EPI_WAVELET_SLAB`` for any other unit of more than
-        one partition and ``EPI_WAVELET_SLICE`` for a slice.
+        calibrated slices (``EPI_WAVELET_SLICE`` for one read in shots enough
+        to bring its acceleration per shot to
+        ``EPI_WAVELET_SEGMENTED_ACCELERATION``), ``EPI_WAVELET_SLAB`` for any
+        other unit of more than one partition and ``EPI_WAVELET_SLICE`` for a
+        slice.
     iterations : int, default=30
         Conjugate-gradient steps, or ``pics`` iterations with ``wavelet``.
     l2 : float, default=0.0
@@ -774,13 +779,25 @@ class EpiRecon(PicsRecon):
                     )
         self.calibrations = {}
 
-    def _wavelet(self, volume, bands=False):
-        """Return the wavelet ``lambda`` of ``(coils, z, y, x)`` k-space, whose partitions are the ``bands`` of a multiband unit or a slab's."""
+    def _wavelet(self, volume, bands=False, shots=1):
+        """Return the wavelet ``lambda`` of ``(coils, z, y, x)`` k-space, whose partitions are the ``bands`` of a multiband unit or a slab's, read in ``shots`` segments.
+
+        A multiband unit read in several shots whose in-plane line step times
+        its bands, divided by its shots, is at most
+        ``EPI_WAVELET_SEGMENTED_ACCELERATION`` takes ``EPI_WAVELET_SLICE``;
+        any other multiband unit ``EPI_WAVELET_MULTIBAND``.
+        """
         if not self.automatic_wavelet:
             return self.wavelet
         if volume.shape[1] == 1:
             return EPI_WAVELET_SLICE
-        return EPI_WAVELET_MULTIBAND if bands else EPI_WAVELET_SLAB
+        if not bands:
+            return EPI_WAVELET_SLAB
+        if shots > 1:
+            per_shot = _line_step(volume) * volume.shape[1] / shots
+            if per_shot <= EPI_WAVELET_SEGMENTED_ACCELERATION:
+                return EPI_WAVELET_SLICE
+        return EPI_WAVELET_MULTIBAND
 
     def _solved(
         self,
@@ -796,7 +813,9 @@ class EpiRecon(PicsRecon):
         sampled = volume.abs().sum(dim=0) > 0
         partial = partial_fourier_axes(sampled.numpy())
         fills = _fills_acquired_range(sampled.numpy()) and not partial
-        wavelet = self._wavelet(volume, bands)
+        wavelet = self._wavelet(
+            volume, bands, 1 if shots is None else int(shots.shape[0])
+        )
         l2 = 0.0 if wavelet > 0 and not fills else self.l2
         segments, start = None, None
         if shots is not None:
@@ -1342,6 +1361,17 @@ EPI_WAVELET_SLAB = 0.1
 EPI_WAVELET_MULTIBAND = 0.03
 EPI_WAVELET_SLICE = 0.003
 
+#: Largest in-plane line step times bands, divided by its shots, of a
+#: segmented multiband unit solved at ``EPI_WAVELET_SLICE`` instead of
+#: ``EPI_WAVELET_MULTIBAND``. A segmented unit's shorter echo train blurs it
+#: less, and the multiband weight's smoothing is then what shows: in the 7T
+#: simulation, R2 x MB2 in 3 shots (4 / 3 per shot) came out at the GRE's
+#: sharpness at the slice weight for a brain NRMSE of 0.073 against 0.070,
+#: and in 2 shots (2 per shot) 0.078 against 0.077, while a single-shot
+#: R2 x MB2 unit (4) lost at it (0.139 against 0.136) and R3 x MB2 (6) needs
+#: the multiband weight against its aliases.
+EPI_WAVELET_SEGMENTED_ACCELERATION = 2.0
+
 #: Sobolev weight of the EPI coil maps on their calibration grid. Below
 #: BART's, the maps follow the steep sensitivity next to the coil elements:
 #: along the scalp of a close-fitting array, where the scalp is far brighter
@@ -1619,6 +1649,15 @@ def _along_slice(acquisition) -> float:
     position = np.asarray(getattr(acquisition, "position", (0, 0, 0)), float)
     normal = np.asarray(getattr(acquisition, "slice_dir", (0, 0, 1)), float)
     return float(position @ normal)
+
+
+def _line_step(volume) -> int:
+    """Return the most common step between the phase-encode lines ``(coils, z, y, x)`` k-space holds, on any partition; 1 where it holds fewer than two."""
+    magnitude = volume.abs().cpu().numpy() if hasattr(volume, "cpu") else np.abs(volume)
+    acquired = np.flatnonzero(magnitude.sum(axis=(0, 1, 3)) > 0)
+    if acquired.size < 2:
+        return 1
+    return int(np.bincount(np.diff(acquired)).argmax())
 
 
 def _fills_acquired_range(sampled: np.ndarray) -> bool:
