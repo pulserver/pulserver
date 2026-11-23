@@ -70,6 +70,7 @@ def reconstruct_file(
     design: Any = None,
     dicom: bool = False,
     dicom_dictionary: Any = None,
+    device: str | None = None,
 ) -> list[Any]:
     """Drive ``plugin`` over one ISMRMRD HDF5 file and return what it emitted.
 
@@ -104,6 +105,7 @@ def reconstruct_file(
             header=header,
             exam=ExamCache(path if exam_id is None else exam_id),
             config=config,
+            device=device,
         )
         connection = _FileConnection(dataset, played, fov_offset_m)
         run_application(plugin, connection, context)

@@ -934,6 +934,7 @@ class ReconPlugin(ABC):
         design: str | None = None,
         dicom: bool = False,
         dicom_dictionary: str | None = None,
+        device: str | None = None,
     ) -> list[Any]:
         """Reconstruct one ISMRMRD HDF5 file in this process, through the same hooks.
 
@@ -967,6 +968,10 @@ class ReconPlugin(ABC):
             Private DICOM dictionary the header's ``dicom:`` attributes are
             resolved against, in place of the one the header names
             (:ref:`dicom-attributes`).
+        device : str, default=None
+            Device the reconstruction may run its operators on, such as
+            ``"cuda"`` or ``"cuda:1"``, as a proxy worker passes the GPU of its
+            slot (:attr:`ReconContext.device`); ``None`` keeps it on the CPU.
 
         Returns
         -------
@@ -998,6 +1003,7 @@ class ReconPlugin(ABC):
             design=design,
             dicom=dicom,
             dicom_dictionary=dicom_dictionary,
+            device=device,
         )
 
     def __call__(self, bucket: AcquisitionBucket, context: ReconContext) -> Any:
