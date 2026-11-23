@@ -247,8 +247,8 @@ def test_the_stack_maps_are_estimated_once_in_slice_position_order_and_stored_pe
         np.testing.assert_allclose(stored, plane * (location + 1), atol=1e-5)
 
 
-def _multiband(device, coils=8, grid=(24, 24)):
-    """Two bands' single-slice k-space and their blipped-CAIPI partition volume."""
+def _multiband(device, coils=8, grid=(24, 24), maps_out=None):
+    """Two bands' single-slice k-space and their blipped-CAIPI partition volume; each band's maps are appended to ``maps_out``."""
     import bartorch
 
     image = _phantom((1, *grid))[0]
@@ -257,6 +257,8 @@ def _multiband(device, coils=8, grid=(24, 24)):
     other = np.roll(maps, coils // 2, axis=0) * np.exp(
         1.1j * np.arange(grid[1]) / grid[1]
     )
+    if maps_out is not None:
+        maps_out += [maps, other.astype(np.complex64)]
     singles = torch.stack(
         [_kspace(image, maps), _kspace(shifted, other.astype(np.complex64))]
     ).to(device)
@@ -329,6 +331,75 @@ def test_the_band_calibration_is_absent_when_a_band_slice_was_not_calibrated():
     stored = [(0, -2.5, np.ones((3, 4, 4), np.complex64))]
 
     assert band_calibration(stored, _band_unit(2.5), (3, 2, 4, 4)) is None
+
+
+def _calibrated_plugin(singles=None, **arguments):
+    """An EPI reconstruction whose stream calibrated the slices at -2.5 and 2.5 mm."""
+    from pulserver.recon import ReconContext
+    from pulserver.recon.handlers import epi
+
+    context = ReconContext.offline()
+    plugin = epi.EpiRecon(
+        gradient_unwarp=False, intensity_correction=False, **arguments
+    )
+    plugin.startup(context)
+    planes = (None, None) if singles is None else singles.numpy()
+    plugin.slice_calibrations = [(0, -2.5, planes[0]), (0, 2.5, planes[1])]
+    return plugin, context
+
+
+def test_each_band_of_a_multiband_unit_is_fermi_filtered_in_its_own_plane():
+    """Filtered across the stack, each band of an MB2 unit took in a quarter of the other: two slices superimposed."""
+    from pulserver.recon._correct import fermi_filtered
+
+    maps = []
+    singles, volume = _multiband("cpu", maps_out=maps)
+    maps = torch.from_numpy(np.stack(maps, axis=1))
+    images = {}
+    for kspace_filter in (False, True):
+        plugin, context = _calibrated_plugin(singles, kspace_filter=kspace_filter)
+        plugin._maps = lambda context, data, volume: maps
+        images[kspace_filter] = plugin.image(
+            volume.numpy(), tuple(volume.shape[1:]), context, _band_unit(2.5)
+        )
+
+    for band in range(2):
+        np.testing.assert_allclose(
+            images[True][band],
+            fermi_filtered(images[False][band]),
+            atol=1e-6 * float(np.abs(images[False]).max()),
+        )
+
+
+def test_the_bands_of_a_multiband_unit_are_unwarped_and_divided_by_a_field_each_in_its_plane():
+    plugin, context = _calibrated_plugin()
+    calls = []
+
+    class Corrections:
+        def unwarped(self, image, context, data, planes=None):
+            calls.append(("unwarped", planes))
+            return image
+
+        def applied(self):
+            return []
+
+        def intensity_corrected(self, results, data, by_plane=False):
+            calls.append(("intensity_corrected", by_plane))
+            return results
+
+    plugin.corrections = Corrections()
+    image = np.ones((2, 4, 4), np.float32)
+
+    plugin._results(context, _band_unit(2.5), image)
+    # A slab: its partitions lie on no calibrated slice.
+    plugin._results(context, _band_unit(12.5), image)
+
+    assert calls == [
+        ("unwarped", [-2.5, 2.5]),
+        ("intensity_corrected", True),
+        ("unwarped", None),
+        ("intensity_corrected", False),
+    ]
 
 
 def test_each_calibration_slice_of_a_stack_is_fitted_its_own_maps(monkeypatch):

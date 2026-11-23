@@ -62,7 +62,11 @@ def _coefficient_parameter(header: Any) -> str | None:
 
 
 def gradient_unwarped(
-    image: Any, context: Any, data: Any, cache: dict | None = None
+    image: Any,
+    context: Any,
+    data: Any,
+    cache: dict | None = None,
+    planes: Any = None,
 ) -> Any:
     """Correct an image for gradient nonlinearity.
 
@@ -73,7 +77,10 @@ def gradient_unwarped(
     and the unit's reference acquisition, so the correction is in the frame the
     series was acquired in, oblique prescriptions included. An encoding of one
     partition, a 2D slice, is corrected in its plane: the displacement across
-    the slice moves the slice, which resampling cannot undo.
+    the slice moves the slice, which resampling cannot undo. So is each of
+    ``planes``, the slices a multiband unit stacks along its partition axis,
+    at its own position: resampled across the stack, a band would take in its
+    neighbour, a gap of several slices away.
 
     Parameters
     ----------
@@ -89,6 +96,10 @@ def gradient_unwarped(
         unit needs is taken from it or added to it. A stream of several units
         of one geometry, the echoes of a multi-echo scan or the volumes of a
         time series, so builds its correction once.
+    planes : sequence of float, default=None
+        Position (mm) along the reference acquisition's slice direction of
+        each partition of ``image`` where the partitions are slices of their
+        own; ``None`` corrects the partitions as one volume.
 
     Returns
     -------
@@ -114,8 +125,19 @@ def gradient_unwarped(
     try:
         import torch
 
-        correction = _correction(header, reference, cache)
-        corrected = correction(torch.as_tensor(image))
+        values = torch.as_tensor(image)
+        if planes is None:
+            corrected = _correction(header, reference, cache)(values)
+        else:
+            corrected = torch.stack(
+                [
+                    _correction(header, _moved(reference, position), cache, True)(
+                        values[..., index, :, :]
+                    )
+                    for index, position in enumerate(planes)
+                ],
+                dim=-3,
+            )
     except Exception as error:
         _log.warning("the image was not corrected for gradient nonlinearity: %s", error)
         return image
@@ -133,8 +155,10 @@ def gradient_unwarped(
 UNWARP_CACHE_VOXELS = 2 * 256**3
 
 
-def _correction(header: Any, reference: Any, cache: dict | None) -> Any:
-    """Return the gradient nonlinearity correction of ``reference``'s geometry, from ``cache`` where it holds it."""
+def _correction(
+    header: Any, reference: Any, cache: dict | None, plane: bool = False
+) -> Any:
+    """Return the gradient nonlinearity correction of ``reference``'s geometry, in its plane where ``plane`` is true or its encoding has one partition, from ``cache`` where it holds it."""
     from bartorch.tools import Gradunwarp
 
     key = (
@@ -143,12 +167,13 @@ def _correction(header: Any, reference: Any, cache: dict | None) -> Any:
             tuple(float(v) for v in getattr(reference, name))
             for name in ("position", "read_dir", "phase_dir", "slice_dir")
         ),
+        plane,
     )
     if cache is not None and key in cache:
         cache[key] = cache.pop(key)
         return cache[key]
     correction = Gradunwarp.from_mrd(header, reference)
-    if correction.shape[0] == 1:
+    if plane or correction.shape[0] == 1:
         correction = _in_plane(correction, header, reference)
     if cache is not None:
         cache[key] = correction
@@ -158,6 +183,21 @@ def _correction(header: Any, reference: Any, cache: dict | None) -> Any:
         ):
             cache.pop(next(iter(cache)))
     return correction
+
+
+def _moved(reference: Any, position: float) -> Any:
+    """Return the geometry of ``reference`` moved along its slice direction to ``position`` (mm), as :meth:`bartorch.tools.Gradunwarp.from_mrd` reads it."""
+    from types import SimpleNamespace
+
+    normal = np.asarray(reference.slice_dir, float)
+    centre = np.asarray(reference.position, float)
+    return SimpleNamespace(
+        encoding_space_ref=int(getattr(reference, "encoding_space_ref", 0) or 0),
+        position=tuple(centre + (float(position) - float(centre @ normal)) * normal),
+        read_dir=tuple(float(v) for v in reference.read_dir),
+        phase_dir=tuple(float(v) for v in reference.phase_dir),
+        slice_dir=tuple(float(v) for v in reference.slice_dir),
+    )
 
 
 def _in_plane(correction: Any, header: Any, reference: Any) -> Any:
@@ -392,12 +432,12 @@ class Corrections:
         shape[axis] = profile.size
         return kspace * profile.reshape(shape)
 
-    def unwarped(self, image: Any, context: Any, data: Any) -> Any:
-        """Return ``image`` corrected for gradient nonlinearity (:func:`gradient_unwarped`) where the correction is on, each geometry's correction built once for the stream."""
+    def unwarped(self, image: Any, context: Any, data: Any, planes: Any = None) -> Any:
+        """Return ``image`` corrected for gradient nonlinearity (:func:`gradient_unwarped`, each of ``planes`` in its own plane) where the correction is on, each geometry's correction built once for the stream."""
         if not self.gradient_unwarp:
             return image
         start = time.perf_counter()
-        corrected = gradient_unwarped(image, context, data, self._unwarps)
+        corrected = gradient_unwarped(image, context, data, self._unwarps, planes)
         if corrected is not image:
             self._ran(
                 "GRADUNWARP",
@@ -407,11 +447,13 @@ class Corrections:
             )
         return corrected
 
-    def intensity_corrected(self, results: Any, data: Any) -> Any:
-        """Return ``results`` with their magnitude images divided by the receive field (:class:`IntensityCorrection`) where the correction is on."""
+    def intensity_corrected(
+        self, results: Any, data: Any, by_plane: bool = False
+    ) -> Any:
+        """Return ``results`` with their magnitude images divided by the receive field (:class:`IntensityCorrection`, of each plane where ``by_plane``) where the correction is on."""
         if self.intensity is None:
             return results
-        return self.intensity(results, data)
+        return self.intensity(results, data, by_plane)
 
     def applied(self) -> list[str]:
         """Return the history tags of the steps applied since the last call, in order, and forget them."""
@@ -450,8 +492,10 @@ class IntensityCorrection:
     repetition and cardiac phase of it: echoes and time points keep their
     intensity ratios, so a T2* fit or a time series is not changed by the
     correction. Each slice of a 2D multi-slice series has a field of its own,
-    of mean 1 inside its own mask, so ratios between slices are not kept.
-    Make one instance per stream.
+    of mean 1 inside its own mask, so ratios between slices are not kept; so
+    has each band of a multiband unit, the slices it stacks along its
+    partition axis, where the call says ``by_plane``. Make one instance per
+    stream.
 
     A magnitude image that is not 2D or 3D once its axes of one point are
     dropped, or whose mask holds fewer than 64 pixels or 128 voxels or less
@@ -470,13 +514,15 @@ class IntensityCorrection:
         self.levels = N4_FITTING_LEVELS if levels is None else int(levels)
         self.fields: dict[tuple[Any, ...], np.ndarray | None] = {}
 
-    def __call__(self, results: Any, data: Any) -> Any:
+    def __call__(self, results: Any, data: Any, by_plane: bool = False) -> Any:
         """Return ``results``, a :class:`~pulserver.recon.ReconResult` or a list of them, with their magnitude images divided by the field.
 
         Each corrected result is a copy whose ``ImageProcessingHistory``
         attribute ends in ``"N4"``. ``data`` is the unit's
         :class:`~pulserver.recon.ReconData`, whose ``slice`` and ``set``
-        counters select the field.
+        counters select the field. With ``by_plane`` each plane along the axis
+        before the last two takes a 2D field of its own, and a plane whose
+        mask is too small is left undivided.
         """
         from .plugin import ReconResult
 
@@ -492,7 +538,7 @@ class IntensityCorrection:
         if magnitude is None:
             return results
         try:
-            field = self._field(_host(magnitude.data), data)
+            field = self._field(_host(magnitude.data), data, by_plane)
             if field is None:
                 return results
             corrected = [
@@ -511,15 +557,21 @@ class IntensityCorrection:
             return results
         return corrected if isinstance(results, list) else corrected[0]
 
-    def _field(self, magnitude: np.ndarray, data: Any) -> np.ndarray | None:
+    def _field(
+        self, magnitude: np.ndarray, data: Any, by_plane: bool = False
+    ) -> np.ndarray | None:
         """Return the field of the slice and set of ``data``, estimating it from ``magnitude`` the first time."""
         counters = getattr(data, "counters", None) or {}
         key = (
             int(counters.get("slice", 0)),
             int(counters.get("set", 0)),
             magnitude.shape,
+            by_plane,
         )
         if key in self.fields:
+            return self.fields[key]
+        if by_plane and magnitude.ndim >= 3:
+            self.fields[key] = self._plane_fields(magnitude, key)
             return self.fields[key]
         squeezed = tuple(n for n in magnitude.shape if n > 1)
         if len(squeezed) not in (2, 3):
@@ -543,6 +595,34 @@ class IntensityCorrection:
             else "; its mask is too small to tell shading from contrast, so it is not corrected",
         )
         return self.fields[key]
+
+    def _plane_fields(self, magnitude: np.ndarray, key: tuple) -> np.ndarray | None:
+        """Return the 2D field of each plane of ``magnitude``, 1 over a plane that has none; ``None`` where no plane has one."""
+        start = time.perf_counter()
+        planes = np.abs(magnitude).reshape(-1, *magnitude.shape[-2:])
+        fields = [receive_field(plane, self.levels) for plane in planes]
+        missing = sum(field is None for field in fields)
+        _log.info(
+            "N4 receive field of each of the %d planes of slice %d, set %d, %s, "
+            "estimated in %.1f s%s",
+            len(planes),
+            key[0],
+            key[1],
+            planes.shape[-2:],
+            time.perf_counter() - start,
+            ""
+            if not missing
+            else f"; the mask of {missing} is too small to tell shading from "
+            "contrast, so they are not corrected",
+        )
+        if missing == len(fields):
+            return None
+        return np.stack(
+            [
+                np.ones(plane.shape, np.float32) if field is None else field
+                for plane, field in zip(planes, fields, strict=True)
+            ]
+        ).reshape(magnitude.shape)
 
 
 #: Fitting levels of the N4 field by default. The B-spline mesh of

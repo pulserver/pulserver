@@ -329,10 +329,12 @@ class PicsRecon(ReconPlugin):
             reason,
         )
 
-    def _filtered(self, image: np.ndarray) -> np.ndarray:
+    def _filtered(
+        self, image: np.ndarray, axes: tuple[int, ...] | None = None
+    ) -> np.ndarray:
         if self.corrections is None:
             return image
-        return self.corrections.filtered(image)
+        return self.corrections.filtered(image, axes)
 
     def wave_image(self, context: ReconContext, data: ReconData) -> np.ndarray:
         """Return the complex image ``(partitions, phase encodes, readout)`` of a wave-CAIPI volume.

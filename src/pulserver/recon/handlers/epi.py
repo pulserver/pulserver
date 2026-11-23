@@ -442,8 +442,12 @@ class EpiRecon(PicsRecon):
     A multiband unit whose bands each lie on a calibrated slice has its bands
     separated by split-slice GRAPPA (:func:`slice_grappa_bands`), with kernels
     trained on those slices' calibration k-space, and each band is then
-    solved as a slice of its own, with its slice's maps. A multiband unit
-    without that calibration is solved as one volume of its bands.
+    solved as a slice of its own, with its slice's maps. Each band is also
+    Fermi filtered, unwarped and divided by its receive field in its own
+    plane, as a slice is: the bands lie several slices apart, and filtered or
+    resampled across the stack a band takes in the others. A multiband unit
+    without that calibration is solved, filtered and corrected as one volume
+    of its bands.
 
     When PyHySCO is installed (bartorch's ``pyhysco`` extra, GPL-3.0), one
     susceptibility displacement field is estimated for the whole stack
@@ -590,7 +594,7 @@ class EpiRecon(PicsRecon):
             self.releasing = False
 
     def image(self, kspace, shape, context, data):
-        """Return the complex image of ``(coils, [partitions,] phase encodes, readout)`` k-space, cropped to ``shape`` and Fermi filtered."""
+        """Return the complex image of ``(coils, [partitions,] phase encodes, readout)`` k-space, cropped to ``shape`` and Fermi filtered, each band of a multiband unit in its plane."""
         import torch
 
         volume = kspace if kspace.ndim == 4 else kspace[:, None]
@@ -599,6 +603,7 @@ class EpiRecon(PicsRecon):
         location = int(data.counters.get("slice", 0))
         reference = self.phase_references.get(location)
         bands = None
+        in_plane = self._band_positions(data, volume.shape[1]) is not None
         if volume.shape[1] > 1:
             training = band_calibration(self.slice_calibrations, data, volume.shape)
             if training is not None:
@@ -622,7 +627,28 @@ class EpiRecon(PicsRecon):
         image = image.numpy()
         if kspace.ndim == 3:
             image = image[0]
-        return self._filtered(np.array(center_crop(image, shape[-image.ndim :])))
+        return self._filtered(
+            np.array(center_crop(image, shape[-image.ndim :])),
+            (-2, -1) if in_plane else None,
+        )
+
+    def _band_positions(self, data, count):
+        """Return the position (mm) of each of a unit's ``count`` planes where they are the bands of a multiband unit; ``None`` for a slice or a slab.
+
+        The planes (:func:`plane_positions`) are bands where each lies within
+        ``BAND_TOLERANCE_MM`` of a slice the scan calibrated on its own.
+        """
+        buffer = data.data
+        if buffer is None or count < 2:
+            return None
+        positions = plane_positions(buffer.reference, buffer.space, count)
+        calibrated = [along for _, along, _ in self.slice_calibrations]
+        if all(
+            any(abs(along - position) <= BAND_TOLERANCE_MM for along in calibrated)
+            for position in positions
+        ):
+            return positions
+        return None
 
     def _calibrate(self, context):
         """Estimate the maps of each held calibration slice on its own, and keep its k-space for split-slice GRAPPA."""
@@ -836,15 +862,16 @@ class EpiRecon(PicsRecon):
             context.exam.set(SUSCEPTIBILITY_FIELD, self.field)
 
     def _results(self, context, data, image):
-        """Return the image's results, its geometry its own unit's whatever unit closed."""
+        """Return the image's results, its geometry its own unit's whatever unit closed, the bands of a multiband unit each corrected in its plane."""
         corrections = self.corrections
         history = [
             "PULSERVER",
             "PYTHON",
             "PICS" if self.automatic_wavelet or self.wavelet > 0 else "SENSE",
         ]
+        planes = self._band_positions(data, image.shape[0]) if image.ndim == 3 else None
         if corrections is not None:
-            image = corrections.unwarped(image, context, data)
+            image = corrections.unwarped(image, context, data, planes)
             history += corrections.applied()
         results = [
             ReconResult(
@@ -854,7 +881,7 @@ class EpiRecon(PicsRecon):
             )
         ]
         if corrections is not None:
-            results = corrections.intensity_corrected(results, data)
+            results = corrections.intensity_corrected(results, data, planes is not None)
         return results
 
     def _estimate_field(self, pairs, against) -> None:
