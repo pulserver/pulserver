@@ -6,7 +6,8 @@ import numpy as np
 import pytest
 
 from pulserver.mrd import AcquisitionFlag
-from pulserver.recon.handlers.epi import EpiPhaseCorrection, RampSampling
+from pulserver.recon._buffers import ReconData
+from pulserver.recon.handlers.epi import EpiPhaseCorrection, RampSampling, _polarity_of
 
 pytest.importorskip("bartorch")
 
@@ -835,3 +836,22 @@ def test_field_pair_planes_read_before_the_slab_calibration_wait_for_its_maps(
     assert unfolded == [2, 2]
     assert len(correction.calls) == 1
     assert "HYSCO" in result.attributes["ImageProcessingHistory"]
+
+
+@pytest.mark.parametrize("unit_set", [3, 5])
+def test_a_reversed_volume_of_a_slab_is_unfolded_by_the_slab_calibrations_reversed_maps(
+    unit_set,
+):
+    data = ReconData("", counters={"slice": 0, "set": unit_set})
+    volume = np.zeros((2, 4, 8, 8), np.complex64)
+
+    assert _polarity_of(data, volume).counters["set"] == 1
+    assert data.counters["set"] == unit_set
+
+
+def test_a_forward_or_single_plane_unit_keeps_its_own_set_for_its_maps():
+    forward = ReconData("", counters={"slice": 0, "set": 2})
+    plane = ReconData("", counters={"slice": 0, "set": 3})
+
+    assert _polarity_of(forward, np.zeros((2, 4, 8, 8))) is forward
+    assert _polarity_of(plane, np.zeros((2, 1, 8, 8))) is plane

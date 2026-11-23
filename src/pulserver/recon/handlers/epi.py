@@ -6,6 +6,7 @@ from typing import NamedTuple
 
 __all__ = ["PLUGIN", "EpiPhaseCorrection", "EpiRecon", "RampSampling"]
 
+import dataclasses
 import importlib.util
 import logging
 import math
@@ -1024,9 +1025,9 @@ class EpiRecon(PicsRecon):
         multiband unit keep their slices' calibration maps.
         """
         try:
-            maps = coil_maps(context, data, estimate=epi_nlinv_estimate).reshape(
-                volume.shape
-            )
+            maps = coil_maps(
+                context, _polarity_of(data, volume), estimate=epi_nlinv_estimate
+            ).reshape(volume.shape)
         except MissingCalibration as missing:
             bands = band_maps(context, data, volume.shape)
             if bands is not None:
@@ -1562,6 +1563,20 @@ def band_maps(context, data, shape):
         stored.append((key_set, along, maps.maps))
     planes = _band_planes(stored, data, shape)
     return None if planes is None else torch.from_numpy(planes)
+
+
+def _polarity_of(data, volume):
+    """Return ``data``, or for a reversed volume of a slab a view of it counted in the slab calibration's reversed set.
+
+    A slab's FLEET calibration stores maps for each phase-encode polarity,
+    set 0 forward and set 1 reversed (:func:`coil_maps`). The field pair's
+    reversed volume and the reversed full-k reference are distorted as the
+    calibration's reversed lines are, so they are unfolded by those maps.
+    """
+    polarity = int(data.counters.get("set", 0))
+    if volume.shape[1] < 2 or data.ref is not None or polarity not in REVERSED_SETS:
+        return data
+    return dataclasses.replace(data, counters={**data.counters, "set": 1})
 
 
 def slab_plane_maps(context, data):
