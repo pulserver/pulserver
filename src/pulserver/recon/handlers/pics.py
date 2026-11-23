@@ -479,6 +479,7 @@ def pics_image(
     x0: Any = None,
     phase: Any = None,
     l2: float = 0.0,
+    shots: Any = None,
 ) -> Any:
     """Return the complex image ``(z, y, x)`` of ``bart pics -S -R W`` over host k-space ``(coils, z, y, x)``.
 
@@ -502,6 +503,12 @@ def pics_image(
     it samples. ``x0`` is then the start of ``m``. With ``wavelet`` 0 the
     solve is conjugate gradients with Tikhonov weight ``l2``, at least
     ``REAL_SOLVE_MIN_L2`` with ``phase``.
+
+    With ``shots``, the ``(masks, phases)`` of a segmented unit, each shot's
+    lines are encoded from the image times that shot's phase
+    (:func:`shot_encoding`), so the phase that changes from shot to shot does
+    not alias the image; with ``phase`` as well, shot ``s`` sees ``phase``
+    times its own.
     """
     import bartorch
     import torch
@@ -516,6 +523,8 @@ def pics_image(
     encoding = linop.CartesianSense(
         maps.reshape(maps.shape[0], *grid), grid, pattern=pattern, device=device
     )
+    if shots is not None:
+        encoding = shot_encoding(encoding, shots, grid)
     if phase is not None:
         encoding = encoding @ linop.Real(grid)
     scaling = optim.data_scaling(shifted) or optim.data_scaling(
@@ -537,6 +546,39 @@ def pics_image(
     if phase is None:
         return image
     return image.real.to(torch.complex64) * phase.reshape(image.shape)
+
+
+def shot_encoding(encoding: Any, shots: Any, grid: tuple[int, ...]) -> Any:
+    """Return the encoding of a segmented unit whose shots each multiply the image by their own phase.
+
+    ``sum_s diag(M_s) E diag(c_s)`` (:func:`bartorch.linop.FieldCorrected`
+    with its coefficients given): shot ``s`` reads the lines ``M_s`` of the
+    image times its phase ``c_s``, as MUSE (Chen et al., NeuroImage 2013,
+    doi:10.1016/j.neuroimage.2013.01.076) encodes them.
+
+    Parameters
+    ----------
+    encoding : bartorch.linop.LinearOperator
+        :class:`bartorch.linop.CartesianSense` over ``grid``.
+    shots : tuple of torch.Tensor
+        ``(masks, phases)``: ``(shots, z, y)`` booleans, the lines each shot
+        placed, and ``(shots, z, y, x)`` unit-magnitude phases.
+    grid : tuple of int
+        The encoding's image grid, ``(y, x)`` for one partition.
+
+    Returns
+    -------
+    bartorch.linop.LinearOperator
+    """
+    import torch
+    from bartorch import linop
+
+    masks, phases = shots
+    count = int(masks.shape[0])
+    rows = masks.reshape(count, 1, *grid[:-1], 1).expand(count, 1, *grid)
+    weights = rows.to(torch.complex64).contiguous()
+    phases = phases.reshape(count, *grid).to(torch.complex64)
+    return linop.FieldCorrected(encoding, coefficients=(weights, phases))
 
 
 def smooth_phase(image):

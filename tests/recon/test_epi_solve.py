@@ -705,3 +705,175 @@ def test_a_slice_takes_the_maps_drawn_from_its_fully_encoded_phase_reference_fro
     assert torch.equal(before, smooth)
     assert _missing(drawn[:, 0].numpy(), steep)[inside].max() < 1e-3
     assert after is drawn
+
+
+def _segmented(phase=None, coils=8, shape=(1, 48, 48), shots=2):
+    """A disc read in ``shots`` interleaved shots, shot ``s`` at ``exp(i phase[s])`` times the image; the image, maps, k-space and shot masks."""
+    magnitude, _, x, _ = _gradient_echo(shape)
+    image = (magnitude * np.exp(0.3j * x / shape[-1])).astype(np.complex64)
+    maps = torch.from_numpy(_maps(shape, coils=coils))
+    masks = torch.zeros((shots, *shape[:2]), dtype=torch.bool)
+    for shot in range(shots):
+        masks[shot, :, shot::shots] = True
+    phase = np.zeros((shots, *shape)) if phase is None else phase
+    kspace = sum(
+        _kspace((image * np.exp(1j * phase[shot])).astype(np.complex64), maps.numpy())
+        * masks[shot][..., None]
+        for shot in range(shots)
+    )
+    return image, maps, kspace.to(torch.complex64), masks
+
+
+def _shot_phase(shape=(1, 48, 48), constant=0.9):
+    _, y, x = np.meshgrid(*(np.arange(n) - n // 2 for n in shape), indexing="ij")
+    second = constant + 0.8 * x / shape[-1] - 0.6 * y / shape[-2]
+    return np.stack([np.zeros(shape), second]).astype(np.float32)
+
+
+def test_the_phase_a_second_shot_adds_is_fitted_against_a_reference_image():
+    from pulserver.recon.handlers.epi import fit_shot_phases, phase_basis
+
+    phase = _shot_phase()
+    image, maps, kspace, masks = _segmented(phase)
+    reference = torch.from_numpy(image)
+    start = torch.zeros((2, *image.shape))
+
+    fitted = fit_shot_phases(
+        kspace, maps, masks, reference, start, phase_basis(image.shape, 3)
+    )
+
+    inside = np.abs(image) > 0
+    error = np.angle(np.exp(1j * (fitted.numpy() - phase)))[:, inside]
+    assert np.abs(error).max() < 1e-3
+
+
+def test_a_segmented_unit_is_unaliased_by_the_joint_solve_with_its_shot_phases(
+    device,
+):
+    from pulserver.recon.handlers.epi import cg_sense
+
+    phase = _shot_phase()
+    image, maps, kspace, masks = _segmented(phase)
+    sampled = masks.any(dim=0)[..., None].expand(kspace.shape[1:])
+    shots = (masks, torch.exp(1j * torch.from_numpy(phase)).to(torch.complex64))
+
+    joint = cg_sense(kspace, maps, sampled, 30, device, shots=shots)
+    merged = cg_sense(kspace, maps, sampled, 30, device)
+
+    assert _magnitude_error(joint, np.abs(image)) < 0.02
+    assert _magnitude_error(merged, np.abs(image)) > 0.2
+
+
+@pytest.mark.parametrize("reference", [True, False], ids=["reference", "search"])
+def test_the_shot_phases_of_a_segmented_unit_are_fitted_with_or_without_a_reference(
+    device, reference, caplog
+):
+    import logging
+
+    from pulserver.recon.handlers.epi import EpiRecon
+
+    phase = _shot_phase(constant=2.5)
+    image, maps, kspace, masks = _segmented(phase)
+    plugin = EpiRecon(0.0)
+    held = torch.from_numpy(image) if reference else None
+
+    with caplog.at_level(logging.INFO, logger="pulserver.recon"):
+        solved = plugin._solved(
+            kspace, maps, SimpleNamespace(device=device), held, shots=masks
+        )
+
+    assert _magnitude_error(solved, np.abs(image)) < 0.03
+    assert any(
+        "shot phases of a unit of 2 shots kept" in r.getMessage()
+        for r in caplog.records
+    )
+
+
+def test_every_template_is_tried_and_the_least_residual_kept(device, caplog):
+    import logging
+
+    from pulserver.recon.handlers.epi import EpiRecon
+
+    phase = _shot_phase(constant=2.5)
+    image, maps, kspace, masks = _segmented(phase)
+    noise = torch.randn(image.shape, generator=torch.Generator().manual_seed(0))
+    templates = [
+        ("noise", noise.to(torch.complex64)),
+        ("the object", torch.from_numpy(image)),
+    ]
+    plugin = EpiRecon(0.0)
+
+    with caplog.at_level(logging.INFO, logger="pulserver.recon"):
+        solved = plugin._solved(
+            kspace,
+            maps,
+            SimpleNamespace(device=device),
+            None,
+            shots=masks,
+            templates=templates,
+        )
+
+    messages = [r.getMessage() for r in caplog.records]
+    assert _magnitude_error(solved, np.abs(image)) < 0.03
+    assert any("fitted against noise:" in m for m in messages)
+    assert any("fitted against the object:" in m for m in messages)
+    assert not any("constant shot phases" in m for m in messages)
+
+
+def test_the_shot_phases_are_removed_from_each_coil_of_a_fully_sampled_unit():
+    from pulserver.recon.handlers.epi import shot_corrected
+
+    phase = _shot_phase()
+    image, maps, kspace, masks = _segmented(phase, shots=2)
+    flat = _kspace(image, maps.numpy())
+
+    corrected = shot_corrected(
+        kspace, masks, torch.exp(1j * torch.from_numpy(phase)).to(torch.complex64)
+    )
+
+    error = (corrected - flat).norm() / flat.norm()
+    assert float(error) < 1e-3
+    assert float((kspace - flat).norm() / flat.norm()) > 0.2
+
+
+def test_a_segmented_unit_whose_shots_agree_is_solved_as_one(device, caplog):
+    import logging
+
+    from pulserver.recon.handlers.epi import EpiRecon, sense_combined
+
+    _, maps, kspace, masks = _segmented()
+    plugin = EpiRecon(0.0)
+
+    with caplog.at_level(logging.INFO, logger="pulserver.recon"):
+        solved = plugin._solved(
+            kspace, maps, SimpleNamespace(device=device), None, shots=masks
+        )
+
+    np.testing.assert_allclose(
+        solved.cpu().numpy(), sense_combined(kspace, maps).cpu().numpy()
+    )
+    assert not any("shot phases" in r.getMessage() for r in caplog.records)
+
+
+def test_the_shot_masks_take_each_line_to_its_segment_and_a_single_segment_none():
+    from pulserver.recon.handlers.epi import shot_masks
+
+    def header(line, segment):
+        return SimpleNamespace(
+            idx=SimpleNamespace(kspace_encode_step_1=line, segment=segment)
+        )
+
+    def buffer(headers):
+        return SimpleNamespace(
+            axes=("coil", "phase_encode", "readout"),
+            headers=headers,
+            position=lambda h: (h.idx.kspace_encode_step_1,),
+        )
+
+    lines = [header(line, (line // 2) % 2) for line in range(0, 16, 2)]
+    masks = shot_masks(buffer(lines), (1, 16, 16))
+
+    assert masks.shape == (2, 1, 16)
+    assert masks[0, 0].nonzero().flatten().tolist() == [0, 4, 8, 12]
+    assert masks[1, 0].nonzero().flatten().tolist() == [2, 6, 10, 14]
+    assert shot_masks(buffer([header(4, 1), header(8, 1)]), (1, 16, 16)) is None

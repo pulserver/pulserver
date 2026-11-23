@@ -37,6 +37,7 @@ from .pics import (
     nlinv_estimate,
     partial_fourier_axes,
     pics_image,
+    shot_encoding,
     smooth_phase,
 )
 
@@ -439,6 +440,40 @@ class EpiRecon(PicsRecon):
     gradient echo at 7T does near air-tissue interfaces, the unit is left
     zero-filled and a warning says why.
 
+    A unit whose lines come from several segments (``SEG``), the interleaved
+    shots of a segmented scan, is solved with the phase each shot adds to the
+    image, as MUSE solves it (Chen et al., NeuroImage 2013,
+    doi:10.1016/j.neuroimage.2013.01.076): breathing and motion change the
+    field and the phase of the image from shot to shot, and lines encoded as
+    if they shared one phase alias each other. Each shot's phase relative to
+    the first shot's is a sum of Legendre polynomials in plane of degree
+    ``SHOT_PHASE_ORDER``, per partition, so per band of a multiband unit
+    (:func:`phase_basis`), fitted by Gauss-Newton against an image of the unit
+    (:func:`fit_shot_phases`). The images tried are the full-k phase reference
+    of its slice where the stream holds one of the unit's shape; for a unit
+    read with the phase encode forward, its field pair's forward planes, read
+    with the scan's train at its echo time, so the full-k reference, itself
+    read in several shots before the scan, is fitted against the pair; and for
+    at most ``SHOT_PHASE_SEARCH_SHOTS`` shots, the unit solved with the
+    constant phase per shot, out of ``SHOT_PHASE_CONSTANTS``, that leaves the
+    least data residual, which is how the field pair itself is fitted. A
+    shot's own lines are not unfolded on their own: a multiband shot of a
+    segmented scan reads one partition of the blipped-CAIPI lattice, its bands
+    superimposed. From each image the fit and the joint solve, which encodes
+    each shot's lines from the image times its phase
+    (:func:`~pulserver.recon.handlers.pics.shot_encoding`), alternate until
+    the data residual settles (``SHOT_PHASE_TOLERANCE``, at most
+    ``SHOT_PHASE_ITERATIONS`` times); every template is tried, the constant
+    search only where no template lowers the residual by more than
+    ``SHOT_PHASE_CLEAR_GAIN`` against the solve as one, and the phases that
+    leave the least residual are kept if they lower it at all, and the
+    partial-Fourier or wavelet solve takes the phases into its encoding. A
+    unit that no image improves is solved as one, and the log says so; one
+    whose solve as one leaves a residual of at most ``SHOT_PHASE_FLOOR`` is
+    solved as one at once. A segmented single-band full-k reference is
+    unfolded by its slice's calibration maps, and its own maps are drawn from
+    its coil images with the shot phases removed (:func:`shot_corrected`).
+
     A multiband unit is solved as one volume of its bands, a partition each,
     so its in-plane and band aliases, which the blipped-CAIPI shift spreads
     apart, are unfolded together by every virtual channel; its maps are its
@@ -498,6 +533,9 @@ class EpiRecon(PicsRecon):
         As :class:`~pulserver.recon.handlers.pics.PicsRecon`.
     kspace_filter, gradient_unwarp, intensity_correction : bool, default=True
         As :class:`~pulserver.recon.handlers.pics.PicsRecon`.
+    shot_phase : bool, default=True
+        Fit and encode the phase each shot of a segmented unit adds to the
+        image; ``False`` solves every unit as one.
     """
 
     def __init__(
@@ -510,6 +548,7 @@ class EpiRecon(PicsRecon):
         kspace_filter: bool = True,
         gradient_unwarp: bool = True,
         intensity_correction: bool = True,
+        shot_phase: bool = True,
     ) -> None:
         super().__init__(
             0.0 if wavelet is None else wavelet,
@@ -521,6 +560,8 @@ class EpiRecon(PicsRecon):
         )
         self.automatic_wavelet = wavelet is None
         self.l2 = float(l2)
+        self.shot_phase = bool(shot_phase)
+        self.shot_segments = None
         self.phase_references = {}
         self._skips_logged = set()
         compression = (
@@ -546,6 +587,7 @@ class EpiRecon(PicsRecon):
         self.full_resolution_maps = {}
         self.field = None
         self.field_pair = {}
+        self.pair_planes = []
         self.held_pairs = []
         self.releasing = False
         self.phase_references = {}
@@ -605,14 +647,43 @@ class EpiRecon(PicsRecon):
 
         volume = kspace if kspace.ndim == 4 else kspace[:, None]
         volume = torch.from_numpy(np.ascontiguousarray(volume, dtype=np.complex64))
-        maps = self._maps(context, data, volume)
+        shots = (
+            shot_masks(data.data, tuple(volume.shape[1:])) if self.shot_phase else None
+        )
+        maps = (
+            self._maps(context, data, volume)
+            if shots is None
+            else self._maps(context, data, volume, segmented=True)
+        )
         location = int(data.counters.get("slice", 0))
         in_plane = self._band_positions(data, volume.shape[1]) is not None
+        reference = self.phase_references.get(location)
+        templates = None
+        if shots is not None:
+            templates = [("its full-k phase reference", reference)]
+            if int(data.counters.get("set", 0)) not in REVERSED_SETS:
+                templates.append(
+                    (
+                        "its field pair's forward planes",
+                        self._pair_template(data, volume),
+                    )
+                )
         image = self._solved(
-            volume, maps, context, self.phase_references.get(location), in_plane
+            volume, maps, context, reference, in_plane, shots, templates
         )
-        if int(data.counters.get("set", 0)) == FULL_K_REFERENCE_SET:
+        unit_set = int(data.counters.get("set", 0))
+        if (
+            shots is not None
+            and unit_set == FULL_K_REFERENCE_SET
+            and volume.shape[1] == 1
+            and location not in self.full_resolution_maps
+            and fully_encoded(volume[:, 0])
+        ):
+            image = self._drawn_after_shots(volume, location, maps.dtype)
+        if unit_set == FULL_K_REFERENCE_SET:
             self.phase_references[location] = image
+        if unit_set == FIELD_PAIR_SETS[0] and volume.shape[1] == 1:
+            self.pair_planes.append((_along_slice(data.data.reference), image))
         image = image.numpy()
         if kspace.ndim == 3:
             image = image[0]
@@ -620,6 +691,54 @@ class EpiRecon(PicsRecon):
             np.array(center_crop(image, shape[-image.ndim :])),
             (-2, -1) if in_plane else None,
         )
+
+    def _drawn_after_shots(self, volume, location, dtype):
+        """Draw a segmented full-k reference's maps from its k-space with its shot phases removed, and return its image unfolded by them.
+
+        Each coil's image is solved with the phases fitted to the reference
+        (:func:`shot_corrected`), so the coil images the maps are drawn from
+        (:func:`fully_encoded_maps`) hold no alias of one shot's phase
+        against another's; drawn from the k-space as read, every map would.
+        """
+        corrected = volume
+        if self.shot_segments is not None:
+            corrected = shot_corrected(volume, *self.shot_segments)
+        drawn = fully_encoded_maps(corrected[:, 0])[:, None].to(dtype)
+        self.full_resolution_maps[location] = drawn
+        _log.info(
+            "coil maps of slice %d drawn from its fully encoded phase reference%s",
+            location,
+            "" if self.shot_segments is None else ", its shot phases removed",
+        )
+        return sense_combined(corrected, drawn)
+
+    def _pair_template(self, data, volume):
+        """Return the complex images of the forward field pair at each plane of a unit, ``(z, y, x)``; ``None`` where the stream holds none for some plane.
+
+        The forward pair is read with the scan's train at its echo time, so
+        its planes are distorted as the scan and its full-k reference are,
+        and its shot phases are fitted first, by the constant search: they are
+        the image a full-k reference of several shots, played before the scan,
+        has its shot phases fitted against (:meth:`_shot_phases`).
+        """
+        import torch
+
+        buffer = data.data
+        if buffer is None or not self.pair_planes:
+            return None
+        planes = []
+        for position in plane_positions(
+            buffer.reference, buffer.space, volume.shape[1]
+        ):
+            found = [
+                image
+                for along, image in self.pair_planes
+                if abs(along - position) <= BAND_TOLERANCE_MM
+            ]
+            if not found:
+                return None
+            planes.append(found[-1].reshape(1, *volume.shape[2:]))
+        return torch.cat(planes).to(torch.complex64)
 
     def _band_positions(self, data, count):
         """Return the position (mm) of each of a unit's ``count`` planes where they are the bands of a multiband unit; ``None`` for a slice or a slab.
@@ -663,21 +782,36 @@ class EpiRecon(PicsRecon):
             return EPI_WAVELET_SLICE
         return EPI_WAVELET_MULTIBAND if bands else EPI_WAVELET_SLAB
 
-    def _solved(self, volume, maps, context, reference=None, bands=False):
-        """Return the image of ``(coils, z, y, x)`` k-space by the solve its sampling calls for, a partial-Fourier unit solved for a real image times its phase; ``bands`` marks the partitions as a multiband unit's (:meth:`_wavelet`)."""
+    def _solved(
+        self,
+        volume,
+        maps,
+        context,
+        reference=None,
+        bands=False,
+        shots=None,
+        templates=None,
+    ):
+        """Return the image of ``(coils, z, y, x)`` k-space by the solve its sampling calls for, a partial-Fourier unit solved for a real image times its phase; ``bands`` marks the partitions as a multiband unit's (:meth:`_wavelet`), ``shots`` holds the ``(shots, z, y)`` lines of each segment of a segmented unit and ``templates`` the ``(name, image)`` its shot phases are fitted against, the full-k ``reference`` alone where it is not given (:meth:`_shot_phases`)."""
         sampled = volume.abs().sum(dim=0) > 0
         partial = partial_fourier_axes(sampled.numpy())
-        if _fills_acquired_range(sampled.numpy()) and not partial:
-            return sense_combined(volume, maps)
+        fills = _fills_acquired_range(sampled.numpy()) and not partial
         wavelet = self._wavelet(volume, bands)
-        start = cg_sense(
-            volume,
-            maps,
-            sampled,
-            self.iterations,
-            context.device,
-            l2=0.0 if wavelet > 0 else self.l2,
-        )
+        l2 = 0.0 if wavelet > 0 and not fills else self.l2
+        segments, start = None, None
+        if shots is not None:
+            if templates is None:
+                templates = [("its full-k phase reference", reference)]
+            segments, start = self._shot_phases(
+                volume, maps, sampled, shots, templates, context, l2
+            )
+        self.shot_segments = segments
+        if fills:
+            return sense_combined(volume, maps) if segments is None else start
+        if start is None:
+            start = cg_sense(
+                volume, maps, sampled, self.iterations, context.device, l2=l2
+            )
         if partial:
             phase = self._phase(start, reference, sampled)
             if phase is not None:
@@ -691,6 +825,7 @@ class EpiRecon(PicsRecon):
                     x0=(start * phase.conj()).real.to(start.dtype),
                     phase=phase,
                     l2=self.l2,
+                    shots=segments,
                 )
         if wavelet <= 0:
             return start
@@ -703,7 +838,120 @@ class EpiRecon(PicsRecon):
             self.iterations,
             context.device,
             x0=start * phase.conj(),
+            shots=segments,
         )
+
+    def _shot_phases(self, volume, maps, sampled, masks, templates, context, l2):
+        """Return the ``(masks, phases)`` of a segmented unit and its conjugate-gradient image, or ``None`` and its image solved as one.
+
+        The phase each shot adds to the image, relative to the first shot's,
+        is fitted as a smooth function (:func:`fit_shot_phases`) against an
+        image of the unit, from each start in turn: each of ``templates``,
+        ``(name, image)``, whose image has the unit's shape (its slice's full-k
+        phase reference, then its field pair's forward planes,
+        :meth:`_pair_template`), then, for at most ``SHOT_PHASE_SEARCH_SHOTS``
+        shots and unless a template lowered the residual by more than
+        ``SHOT_PHASE_CLEAR_GAIN`` against the solve that ignores the phases,
+        the unit solved with the constant phase per shot, out of
+        ``SHOT_PHASE_CONSTANTS``, that leaves the least data residual
+        (:func:`shot_constants`). From each start, the fit and the joint solve
+        with the phases (:func:`~pulserver.recon.handlers.pics.shot_encoding`)
+        alternate until an alternation lowers the data residual by less than
+        ``SHOT_PHASE_TOLERANCE``, at most ``SHOT_PHASE_ITERATIONS`` times. The
+        phases of the start that leaves the least residual are kept where it
+        is below that solve's. A unit whose solve as one leaves a residual
+        of at most ``SHOT_PHASE_FLOOR``, or that no start improves, is solved
+        as one.
+        """
+        import torch
+
+        begin = time.perf_counter()
+        device = context.device
+        merged = cg_sense(volume, maps, sampled, self.iterations, device, l2=l2)
+        count = int(masks.shape[0])
+        flat = torch.zeros((count, *volume.shape[1:]))
+        before = shot_residual(volume, maps, masks, merged, flat)
+        if before <= SHOT_PHASE_FLOOR:
+            return None, merged
+        basis = phase_basis(tuple(volume.shape[1:]), SHOT_PHASE_ORDER)
+
+        def joint(phases):
+            return cg_sense(
+                volume,
+                maps,
+                sampled,
+                self.iterations,
+                device,
+                l2=l2,
+                shots=(masks, torch.exp(1j * phases)),
+            )
+
+        starts = [
+            (name, image)
+            for name, image in templates
+            if image is not None and tuple(image.shape) == tuple(volume.shape[1:])
+        ]
+        if count <= SHOT_PHASE_SEARCH_SHOTS:
+            starts.append(("a search of constant shot phases", None))
+        best = None
+        for against, template in starts:
+            if (
+                template is None
+                and best is not None
+                and best[0] < (1.0 - SHOT_PHASE_CLEAR_GAIN) * before
+            ):
+                break
+            if template is not None:
+                image, phases = template, flat
+                residual = math.inf
+            else:
+                phases = shot_constants(volume, maps, sampled, masks, device)
+                image = joint(phases)
+                residual = shot_residual(volume, maps, masks, image, phases)
+            for _ in range(SHOT_PHASE_ITERATIONS):
+                fitted = fit_shot_phases(volume, maps, masks, image, phases, basis)
+                solved = joint(fitted)
+                lower = shot_residual(volume, maps, masks, solved, fitted)
+                if lower >= residual:
+                    break
+                image, phases, previous, residual = solved, fitted, residual, lower
+                if previous - residual < SHOT_PHASE_TOLERANCE * previous:
+                    break
+            _log.info(
+                "shot phases of a unit of %d shots fitted against %s: data "
+                "residual %.3f, %.3f solved as one",
+                count,
+                against,
+                residual,
+                before,
+            )
+            if best is None or residual < best[0]:
+                best = (residual, phases, image, against)
+        seconds = time.perf_counter() - begin
+        if best is None or not best[0] < before:
+            _log.info(
+                "a unit of %d shots is solved as one%s (%.2f s)",
+                count,
+                ""
+                if starts
+                else (
+                    f": it has no reference image, and the constant phases of "
+                    f"more than {SHOT_PHASE_SEARCH_SHOTS} shots are not searched"
+                ),
+                seconds,
+            )
+            return None, merged
+        residual, phases, image, against = best
+        _log.info(
+            "shot phases of a unit of %d shots kept, fitted against %s: data "
+            "residual %.3f, %.3f solved as one, in %.2f s",
+            count,
+            against,
+            residual,
+            before,
+            seconds,
+        )
+        return (masks, torch.exp(1j * phases).to(torch.complex64)), image
 
     def _phase(self, start, reference, sampled):
         """Return the phase of a partial-Fourier unit whose zero-filled image is ``start``; ``None`` where it has none to take.
@@ -734,13 +982,16 @@ class EpiRecon(PicsRecon):
             )
         return None
 
-    def _maps(self, context, data, volume):
+    def _maps(self, context, data, volume, segmented=False):
         """Return the unit's coil maps shaped as ``volume``: its slice's, its bands' slices', else fitted once to it and kept.
 
         From a single-band slice's full-k phase reference on, its maps are
         drawn from the reference: by :func:`fully_encoded_maps` where the
-        reference holds every line, else by :func:`full_resolution_maps`. The
-        bands of a multiband unit keep their slices' calibration maps.
+        reference holds every line, else by :func:`full_resolution_maps`. A
+        ``segmented`` reference that holds every line is unfolded by its
+        slice's calibration maps instead, and its maps are drawn once its shot
+        phases are removed (:meth:`_drawn_after_shots`). The bands of a
+        multiband unit keep their slices' calibration maps.
         """
         try:
             maps = coil_maps(context, data, estimate=epi_nlinv_estimate).reshape(
@@ -766,6 +1017,8 @@ class EpiRecon(PicsRecon):
         if int(data.counters.get("set", 0)) != FULL_K_REFERENCE_SET:
             return maps
         if fully_encoded(volume[:, 0]):
+            if segmented:
+                return maps
             drawn = fully_encoded_maps(volume[:, 0])[:, None].to(maps.dtype)
             self.full_resolution_maps[location] = drawn
             _log.info(
@@ -1431,12 +1684,15 @@ def sense_combined(kspace, maps):
     return torch.where(weight > 0, image / weight.clamp_min(1e-12), 0)
 
 
-def cg_sense(kspace, maps, sampled, iterations, device, *, l2=0.0):
+def cg_sense(kspace, maps, sampled, iterations, device, *, l2=0.0, shots=None):
     """Return the image ``(z, y, x)`` minimising ``|P F S x - y|^2 + l2 |x|^2``, ``l2`` at least ``CG_MIN_L2``, by conjugate gradients from zero.
 
     The encoding is :class:`bartorch.linop.CartesianSense` of ``maps`` over
-    the ``sampled`` lines, on ``device``; stopping after ``iterations`` steps
-    regularizes the solve. The data are scaled as ``pics`` scales them.
+    the ``sampled`` lines, on ``device``, with ``shots``, the ``(masks,
+    phases)`` of a segmented unit, each shot's phase in it
+    (:func:`~pulserver.recon.handlers.pics.shot_encoding`); stopping after
+    ``iterations`` steps regularizes the solve. The data are scaled as
+    ``pics`` scales them.
     """
     import bartorch
     import torch
@@ -1448,12 +1704,295 @@ def cg_sense(kspace, maps, sampled, iterations, device, *, l2=0.0):
     encoding = linop.CartesianSense(
         maps.reshape(maps.shape[0], *grid), grid, pattern=pattern, device=device
     )
+    if shots is not None:
+        encoding = shot_encoding(encoding, shots, grid)
     shifted = bartorch.fftmod(measured, axes=(-1, -2, -3), inverse=True)
     scaling = optim.data_scaling(shifted.reshape(kspace.shape[0], *grid), A=encoding)
     scaling = scaling or 1.0
     data = (measured * (1.0 / scaling)).reshape(kspace.shape[0], *grid)
     solve = optim.CG(lambda_=max(float(l2), CG_MIN_L2), maxiter=int(iterations))
     return (scaling * solve(data, encoding)).reshape(kspace.shape[1:])
+
+
+#: Degree of the Legendre polynomials in plane, per partition, that a shot's
+#: phase is fitted on (:func:`phase_basis`). In a noisy 7T simulation of
+#: MB2 x R2 and R2 in 2 and 3 shots with six virtual channels, degree 3 left
+#: the images 0.02 to 0.04 from those without shot phase; degree 5 and more
+#: fitted the noise of the multiband units.
+SHOT_PHASE_ORDER = 3
+
+#: Most alternations of the shot-phase fit and the joint solve of a segmented
+#: unit, and the fraction by which an alternation must lower its data
+#: residual for the next to run. In the 7T simulation an imaging unit fitted
+#: against its full-k reference settles after one; the 6-shot full-k reference
+#: of an MB2 x R2 x 3-shot scan, fitted against its field pair, came within
+#: 0.03 of the reference without shot phase after six, against 0.06 after one.
+SHOT_PHASE_ITERATIONS = 8
+SHOT_PHASE_TOLERANCE = 0.02
+
+#: Gauss-Newton steps of each shot-phase fit, and their Levenberg damping, a
+#: fraction of the mean curvature.
+SHOT_PHASE_STEPS = 2
+SHOT_PHASE_DAMPING = 1e-3
+
+#: Constant phases, evenly spaced over a turn, tried for each shot of a
+#: segmented unit with no reference image, and the conjugate-gradient steps of
+#: each trial solve.
+SHOT_PHASE_CONSTANTS = 8
+SHOT_PHASE_SEARCH_STEPS = 8
+
+#: Most shots of a unit with no reference image whose constant phases are
+#: searched; a unit of more is solved as one. The search costs a trial solve
+#: per constant and shot, and in a noisy 7T simulation it found the phases of
+#: a 2-shot unit but not those of the 4-shot full-k reference of an MB2 x R2
+#: scan, each of whose shots reads one partition of the CAIPI lattice.
+SHOT_PHASE_SEARCH_SHOTS = 3
+
+#: Conjugate-gradient steps of each coil's image with the shot phases removed
+#: (:func:`shot_corrected`), which a segmented full-k reference's maps are
+#: drawn from.
+SHOT_PHASE_COIL_STEPS = 20
+
+#: Fraction by which the shot phases fitted against a template must lower a
+#: segmented unit's data residual, against its solve as one, for the constant
+#: search not to be tried. The start that leaves the least residual is kept,
+#: if it lowers the residual at all: a shot phase of a few
+#: tenths of a radian lowers the residual of a noisy 7T unit by about 1 % and
+#: still aliases its image visibly, and phases fitted against an image that
+#: does not describe the unit lower it as little.
+SHOT_PHASE_CLEAR_GAIN = 0.05
+
+#: Data residual of a segmented unit solved as one, relative to its k-space,
+#: below which its shots agree and no shot phase is fitted.
+SHOT_PHASE_FLOOR = 1e-3
+
+
+def shot_masks(buffer, shape):
+    """Return the ``(shots, z, y)`` lines each segment of a unit placed; ``None`` where fewer than two segments placed any.
+
+    A line's segment is its acquisition's ``segment`` counter (``SEG``), and
+    the shots are in increasing segment order, so the first is the reference
+    every other shot's phase is fitted against. ``shape`` is the unit's
+    ``(z, y, x)``; a unit without a partition axis is one partition.
+    """
+    import torch
+
+    headers = getattr(buffer, "headers", None) or []
+    if not headers or not hasattr(buffer, "axes"):
+        return None
+    axes = tuple(buffer.axes[1:-1])
+    lines = {}
+    for header in headers:
+        where = dict(zip(axes, buffer.position(header), strict=True))
+        segment = int(acquisition_label(header, "segment", 0) or 0)
+        lines.setdefault(segment, []).append(
+            (where.get("partition", 0), where.get("phase_encode", 0))
+        )
+    if len(lines) < 2:
+        return None
+    masks = np.zeros((len(lines), *shape[:2]), dtype=bool)
+    for index, segment in enumerate(sorted(lines)):
+        for partition, line in lines[segment]:
+            masks[index, partition, line] = True
+    return torch.from_numpy(masks)
+
+
+def phase_basis(shape, order):
+    """Return ``(terms, z, y, x)`` products of Legendre polynomials in ``y`` and ``x`` of total degree at most ``order``, one set per partition.
+
+    The polynomials run over ``[-1, 1]`` across the field of view, so a
+    shot's phase is fitted to each partition (each band of a multiband unit)
+    on its own.
+    """
+    import torch
+
+    planes, rows, columns = shape
+    y = torch.linspace(-1.0, 1.0, rows)
+    x = torch.linspace(-1.0, 1.0, columns)
+
+    def legendre(degree, t):
+        low, high = torch.ones_like(t), t
+        if degree == 0:
+            return low
+        for n in range(1, degree):
+            low, high = high, ((2 * n + 1) * t * high - n * low) / (n + 1)
+        return high
+
+    terms = [(i, j) for i in range(order + 1) for j in range(order + 1 - i)]
+    basis = torch.zeros((planes * len(terms), *shape))
+    for plane in range(planes):
+        for index, (i, j) in enumerate(terms):
+            basis[plane * len(terms) + index, plane] = (
+                legendre(i, y)[:, None] * legendre(j, x)[None]
+            )
+    return basis
+
+
+def _centred(values, axes, inverse=False):
+    """Return the centred unitary transform over ``axes``, as :class:`bartorch.linop.CartesianSense` applies it."""
+    import torch
+
+    shifted = torch.fft.ifftshift(values, dim=axes)
+    if inverse:
+        shifted = torch.fft.ifftn(shifted, dim=axes, norm="ortho")
+    else:
+        shifted = torch.fft.fftn(shifted, dim=axes, norm="ortho")
+    return torch.fft.fftshift(shifted, dim=axes)
+
+
+def _shot_axes(maps):
+    return (-1, -2, -3) if maps.shape[1] > 1 else (-1, -2)
+
+
+def _shot_forward(maps, mask, images):
+    """``(..., coils, z, y, x)`` k-space of ``(..., z, y, x)`` images on the lines ``mask``, ``(z, y)``."""
+    coils = maps * images.unsqueeze(-4)
+    return _centred(coils, _shot_axes(maps)) * mask[..., None]
+
+
+def _shot_adjoint(maps, mask, kspace):
+    """Return the adjoint of :func:`_shot_forward`."""
+    images = _centred(kspace * mask[..., None], _shot_axes(maps), inverse=True)
+    return (maps.conj() * images).sum(dim=-4)
+
+
+def shot_residual(kspace, maps, masks, image, phases):
+    """Return the data residual of ``image`` under the shot ``phases`` (rad), relative to the k-space the shots placed."""
+    import torch
+
+    model = torch.zeros_like(kspace)
+    for mask, phase in zip(masks, phases, strict=True):
+        model = model + _shot_forward(
+            maps, mask.to(kspace.dtype), torch.exp(1j * phase) * image
+        )
+    placed = kspace * masks.any(dim=0)[..., None]
+    return float((model - placed).norm() / placed.norm().clamp_min(1e-30))
+
+
+def shot_corrected(kspace, masks, phases, iterations=SHOT_PHASE_COIL_STEPS):
+    """Return ``(coils, z, y, x)`` k-space with the phase of each shot removed, coil by coil.
+
+    Each coil's image ``u`` minimises ``sum_s |M_s F(c_s u) - y_s|^2`` over
+    the shots' lines ``masks`` and unit-magnitude ``phases`` ``c_s``, by
+    ``iterations`` conjugate-gradient steps from the coil image as read; the
+    k-space returned is that of ``u``.
+    """
+    import torch
+
+    unit = torch.ones((1, *kspace.shape[1:]), dtype=kspace.dtype)
+    rows = [mask.to(kspace.dtype) for mask in masks]
+
+    def normal(images):
+        out = torch.zeros_like(images)
+        for row, phase in zip(rows, phases, strict=True):
+            read = _shot_forward(unit, row, phase * images)
+            out = out + phase.conj() * _shot_adjoint(unit, row, read)
+        return out
+
+    axes = _shot_axes(unit)
+    data = kspace[:, None]
+    rhs = sum(
+        phase.conj() * _shot_adjoint(unit, row, data)
+        for row, phase in zip(rows, phases, strict=True)
+    )
+    images = _centred(kspace, axes, inverse=True)
+    residual = rhs - normal(images)
+    direction = residual.clone()
+    power = (residual.conj() * residual).real.sum()
+    for _ in range(iterations):
+        product = normal(direction)
+        step = power / (direction.conj() * product).real.sum().clamp_min(1e-30)
+        images = images + step * direction
+        residual = residual - step * product
+        updated = (residual.conj() * residual).real.sum()
+        direction = residual + (updated / power.clamp_min(1e-30)) * direction
+        power = updated
+    return _centred(images, axes)
+
+
+def shot_constants(kspace, maps, sampled, masks, device):
+    """Return ``(shots, z, y, x)`` constant phases (rad), the first shot's zero: each later shot's, in turn, the one of ``SHOT_PHASE_CONSTANTS`` whose solve (``SHOT_PHASE_SEARCH_STEPS`` steps) leaves the least data residual."""
+    import torch
+
+    phases = torch.zeros((masks.shape[0], *kspace.shape[1:]))
+    for shot in range(1, masks.shape[0]):
+        best = None
+        for constant in np.linspace(
+            -math.pi, math.pi, SHOT_PHASE_CONSTANTS, endpoint=False
+        ):
+            trial = phases.clone()
+            trial[shot] = float(constant)
+            image = cg_sense(
+                kspace,
+                maps,
+                sampled,
+                SHOT_PHASE_SEARCH_STEPS,
+                device,
+                shots=(masks, torch.exp(1j * trial)),
+            )
+            residual = shot_residual(kspace, maps, masks, image, trial)
+            if best is None or residual < best[0]:
+                best = (residual, float(constant))
+        phases[shot] = best[1]
+    return phases
+
+
+def fit_shot_phases(kspace, maps, masks, image, phases, basis):
+    """Return the ``(shots, z, y, x)`` phases (rad) each shot adds to ``image``, relative to the first shot's.
+
+    Shot ``s`` reads ``kspace`` on the lines ``masks[s]`` of ``image`` times
+    ``exp(i phi_s)``. Each ``phi_s`` is moved, from ``phases``, by its
+    closed-form constant and then by ``SHOT_PHASE_STEPS`` Gauss-Newton steps
+    over the smooth ``basis``, ``(terms, z, y, x)``: the residual's Jacobian
+    along term ``k`` is the forward model of ``i B_k exp(i phi_s) image``.
+    The phases are then taken relative to the first shot's.
+
+    Parameters
+    ----------
+    kspace, maps : torch.Tensor
+        ``(coils, z, y, x)``: the unit's k-space and coil maps.
+    masks : torch.Tensor
+        ``(shots, z, y)`` booleans, the lines each shot placed.
+    image : torch.Tensor
+        ``(z, y, x)`` complex image the shots are fitted against.
+    phases : torch.Tensor
+        ``(shots, z, y, x)`` starting phases, in rad.
+    basis : torch.Tensor
+        ``(terms, z, y, x)`` real functions the phases move along
+        (:func:`phase_basis`).
+
+    Returns
+    -------
+    torch.Tensor
+        ``(shots, z, y, x)`` float32 phases, the first zero.
+    """
+    import torch
+
+    phases = phases.clone()
+    terms = basis.shape[0]
+    flat = basis.reshape(terms, -1)
+    for shot in range(masks.shape[0]):
+        mask = masks[shot].to(kspace.dtype)
+        data = kspace * mask[..., None]
+        shifted = torch.exp(1j * phases[shot]) * image
+        model = _shot_forward(maps, mask, shifted)
+        phases[shot] += float(torch.angle((model.conj() * data).sum()))
+        for _ in range(SHOT_PHASE_STEPS):
+            shifted = torch.exp(1j * phases[shot]) * image
+            residual = _shot_forward(maps, mask, shifted) - data
+            slope = (shifted.conj() * _shot_adjoint(maps, mask, residual)).imag
+            gradient = flat @ slope.reshape(-1)
+            normal = _shot_adjoint(
+                maps, mask, _shot_forward(maps, mask, 1j * basis * shifted)
+            )
+            curvature = flat @ (shifted.conj() * normal).imag.reshape(terms, -1).T
+            curvature = 0.5 * (curvature + curvature.T)
+            curvature = curvature + SHOT_PHASE_DAMPING * torch.trace(
+                curvature
+            ) / terms * torch.eye(terms)
+            step = torch.linalg.solve(curvature.double(), -gradient.double())
+            phases[shot] += (step.float() @ flat).reshape(phases.shape[1:])
+    return (phases - phases[:1]).float()
 
 
 def susceptibility_field(image, reverse, voxel_size):
@@ -1553,6 +2092,11 @@ SUSCEPTIBILITY_FIELD = "susceptibility_field"
 
 #: ``SET`` of the full-k phase reference volume.
 FULL_K_REFERENCE_SET = 4
+
+#: ``SET`` of the volumes read with the phase encode reversed: the FLEET
+#: calibration's second polarity, the field pair's and the reference's. They
+#: are distorted the other way, and no forward image is their template.
+REVERSED_SETS = (1, FIELD_PAIR_SETS[1], FULL_K_REFERENCE_SET + 1)
 
 #: Fraction of a partial-Fourier image's energy in quadrature to its smooth
 #: phase above which that phase does not describe the image. A spin echo
