@@ -675,8 +675,10 @@ def _acquired_range(mask: np.ndarray, axis: int) -> tuple[int, int] | None:
     gap = int(np.diff(lines).max()) - 1
     low, high = int(lines[0]), profile.size - 1 - int(lines[-1])
     # Line 0 of an even axis has no conjugate on the grid: a scan that
-    # reverses its phase encode leaves it out without being partial Fourier.
-    unpaired = int(profile.size % 2 == 0 and low == 1 and high == 0)
+    # reverses its phase encode leaves it out without being partial Fourier,
+    # and on an undersampled lattice the reversed lines then start one line
+    # further from the edge than they end.
+    unpaired = int(profile.size % 2 == 0 and low == high + 1)
     if max(low, high) - unpaired <= gap:
         return None
     return int(lines[0]), int(lines[-1])
