@@ -437,6 +437,7 @@
     <span class="s2">"ENRICHED"</span><span class="p">,</span>
     <span class="s2">"SequenceTable"</span><span class="p">,</span>
     <span class="s2">"TableSpace"</span><span class="p">,</span>
+    <span class="s2">"acceleration_per_solve"</span><span class="p">,</span>
     <span class="s2">"enrich_acquisition"</span><span class="p">,</span>
     <span class="s2">"enrich_header"</span><span class="p">,</span>
     <span class="s2">"is_enriched"</span><span class="p">,</span>
@@ -456,7 +457,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">.._labels</span><span class="w"> </span><span class="kn">import</span> <span class="n">MRD_COUNTERS</span><span class="p">,</span> <span class="n">MRD_FLAGS</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..design._recon_parameters</span><span class="w"> </span><span class="kn">import</span> <span class="n">RECON_PARAMETERS</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..mrd._acquisitions</span><span class="w"> </span><span class="kn">import</span> <span class="n">AcquisitionFlag</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">..mrd._metadata</span><span class="w"> </span><span class="kn">import</span> <span class="n">DIFFUSION_TABLE</span><span class="p">,</span> <span class="n">user_parameter</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..mrd._metadata</span><span class="w"> </span><span class="kn">import</span> <span class="n">ACCELERATION_PER_SOLVE</span><span class="p">,</span> <span class="n">DIFFUSION_TABLE</span><span class="p">,</span> <span class="n">user_parameter</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..mrd._sequence</span><span class="w"> </span><span class="kn">import</span> <span class="n">ReadoutTable</span><span class="p">,</span> <span class="n">SequenceDefinitions</span><span class="p">,</span> <span class="n">read_chain</span>
 
 <span class="n">_F</span> <span class="o">=</span> <span class="n">AcquisitionFlag</span>
@@ -533,6 +534,9 @@
 <span class="sd">        Whether the space's readouts are sampled on the ramps of their</span>
 <span class="sd">        trapezoid, so that a Cartesian readout still carries its k as a 1D</span>
 <span class="sd">        trajectory.</span>
+<span class="sd">    bands</span>
+<span class="sd">        Slices one excitation of the space's readouts excites: the</span>
+<span class="sd">        ``MultibandFactor`` of a multiband stack, 1 elsewhere.</span>
 <span class="sd">    """</span>
 
     <span class="n">subsequence</span><span class="p">:</span> <span class="nb">int</span>
@@ -543,7 +547,8 @@
     <span class="n">centre_line</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">centre_partition</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">readout_samples</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="n">ramp_sampled</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span></div>
+    <span class="n">ramp_sampled</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="n">bands</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span></div>
 
 
 
@@ -852,6 +857,57 @@
 <span class="n">ENRICHED</span> <span class="o">=</span> <span class="s2">"pulserver_enriched"</span>
 
 
+<span class="k">def</span><span class="w"> </span><span class="nf">acceleration_per_solve</span><span class="p">(</span><span class="n">table</span><span class="p">:</span> <span class="n">SequenceTable</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the in-plane line step times the partition step times the bands, divided by the shots, of the main sequence's imaging unit.</span>
+
+<span class="sd">    The unit is the first slice group and repetition of the set that has the</span>
+<span class="sd">    most readouts in the last imaging space of the chain; its line and</span>
+<span class="sd">    partition steps are the most common spacings of its ``LIN`` and ``PAR``</span>
+<span class="sd">    counters, and its shots the ``SEG`` values it spans. A unit that varies</span>
+<span class="sd">    along no counter has an acceleration of 1.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    table : SequenceTable</span>
+<span class="sd">        The chain's readouts.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    float</span>
+<span class="sd">        The acceleration per joint solve; 1 where the chain has no imaging</span>
+<span class="sd">        space.</span>
+<span class="sd">    """</span>
+    <span class="n">imaging</span> <span class="o">=</span> <span class="p">[</span><span class="n">i</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">space</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">table</span><span class="o">.</span><span class="n">spaces</span><span class="p">)</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">space</span><span class="o">.</span><span class="n">navigator</span><span class="p">]</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">imaging</span><span class="p">:</span>
+        <span class="k">return</span> <span class="mf">1.0</span>
+    <span class="n">members</span> <span class="o">=</span> <span class="n">table</span><span class="o">.</span><span class="n">encoding_space</span> <span class="o">==</span> <span class="n">imaging</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+    <span class="n">counters</span> <span class="o">=</span> <span class="p">{</span><span class="n">name</span><span class="p">:</span> <span class="n">values</span><span class="p">[</span><span class="n">members</span><span class="p">]</span> <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">values</span> <span class="ow">in</span> <span class="n">table</span><span class="o">.</span><span class="n">counters</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
+    <span class="n">count</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">members</span><span class="o">.</span><span class="n">sum</span><span class="p">())</span>
+    <span class="k">if</span> <span class="n">count</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">return</span> <span class="mf">1.0</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">counter</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">counters</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">count</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int32</span><span class="p">))</span>
+
+    <span class="n">sets</span> <span class="o">=</span> <span class="n">counter</span><span class="p">(</span><span class="s2">"SET"</span><span class="p">)</span>
+    <span class="n">chosen</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">bincount</span><span class="p">(</span><span class="n">sets</span> <span class="o">-</span> <span class="n">sets</span><span class="o">.</span><span class="n">min</span><span class="p">()))</span> <span class="o">+</span> <span class="n">sets</span><span class="o">.</span><span class="n">min</span><span class="p">()</span>
+    <span class="n">unit</span> <span class="o">=</span> <span class="n">sets</span> <span class="o">==</span> <span class="n">chosen</span>
+    <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"SLC"</span><span class="p">,</span> <span class="s2">"REP"</span><span class="p">):</span>
+        <span class="n">values</span> <span class="o">=</span> <span class="n">counter</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
+        <span class="n">unit</span> <span class="o">&amp;=</span> <span class="n">values</span> <span class="o">==</span> <span class="n">values</span><span class="p">[</span><span class="n">unit</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">step</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+        <span class="n">distinct</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">counter</span><span class="p">(</span><span class="n">name</span><span class="p">)[</span><span class="n">unit</span><span class="p">])</span>
+        <span class="k">if</span> <span class="n">distinct</span><span class="o">.</span><span class="n">size</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="k">return</span> <span class="mi">1</span>
+        <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">bincount</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">diff</span><span class="p">(</span><span class="n">distinct</span><span class="p">))</span><span class="o">.</span><span class="n">argmax</span><span class="p">())</span>
+
+    <span class="n">bands</span> <span class="o">=</span> <span class="n">table</span><span class="o">.</span><span class="n">spaces</span><span class="p">[</span><span class="n">imaging</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]]</span><span class="o">.</span><span class="n">bands</span>
+    <span class="n">partition_step</span> <span class="o">=</span> <span class="mi">1</span> <span class="k">if</span> <span class="n">bands</span> <span class="o">&gt;</span> <span class="mi">1</span> <span class="k">else</span> <span class="n">step</span><span class="p">(</span><span class="s2">"PAR"</span><span class="p">)</span>
+    <span class="n">shots</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">counter</span><span class="p">(</span><span class="s2">"SEG"</span><span class="p">)[</span><span class="n">unit</span><span class="p">])</span><span class="o">.</span><span class="n">size</span>
+    <span class="k">return</span> <span class="n">step</span><span class="p">(</span><span class="s2">"LIN"</span><span class="p">)</span> <span class="o">*</span> <span class="n">partition_step</span> <span class="o">*</span> <span class="n">bands</span> <span class="o">/</span> <span class="nb">max</span><span class="p">(</span><span class="n">shots</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+
+
 <span class="k">def</span><span class="w"> </span><span class="nf">is_enriched</span><span class="p">(</span><span class="n">header</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Whether :func:`enrich_header` has written this header."""</span>
     <span class="k">return</span> <span class="n">user_parameter</span><span class="p">(</span><span class="n">header</span><span class="p">,</span> <span class="n">ENRICHED</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
@@ -901,9 +957,13 @@
 <span class="sd">    parameters the table holds replace the header's, and its diffusion table</span>
 <span class="sd">    becomes the ``diffusion_table`` user parameter string, one ``x y z b`` row</span>
 <span class="sd">    per volume (:func:`pulserver.mrd.diffusion_table`). Each recon parameter</span>
-<span class="sd">    of the table becomes a user parameter string of its name.</span>
+<span class="sd">    of the table becomes a user parameter string of its name, and</span>
+<span class="sd">    :func:`acceleration_per_solve` the ``ACCELERATION_PER_SOLVE`` one.</span>
 <span class="sd">    """</span>
     <span class="n">_set_user_string</span><span class="p">(</span><span class="n">header</span><span class="p">,</span> <span class="n">ENRICHED</span><span class="p">,</span> <span class="s2">"1"</span><span class="p">)</span>
+    <span class="n">_set_user_string</span><span class="p">(</span>
+        <span class="n">header</span><span class="p">,</span> <span class="n">ACCELERATION_PER_SOLVE</span><span class="p">,</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">acceleration_per_solve</span><span class="p">(</span><span class="n">table</span><span class="p">)</span><span class="si">:</span><span class="s2">g</span><span class="si">}</span><span class="s2">"</span>
+    <span class="p">)</span>
     <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">table</span><span class="o">.</span><span class="n">recon_parameters</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
         <span class="n">_set_user_string</span><span class="p">(</span><span class="n">header</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
     <span class="n">parameters</span> <span class="o">=</span> <span class="n">header</span><span class="o">.</span><span class="n">sequenceParameters</span>
@@ -1157,6 +1217,9 @@
                 <span class="ow">and</span> <span class="n">_ramp_sampled</span><span class="p">(</span>
                     <span class="n">readouts</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="n">members</span><span class="p">))</span> <span class="k">if</span> <span class="n">navigates</span> <span class="k">else</span> <span class="mi">0</span>
                 <span class="p">),</span>
+                <span class="n">bands</span><span class="o">=</span><span class="n">definitions</span><span class="o">.</span><span class="n">multiband</span>
+                <span class="k">if</span> <span class="n">bands</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">is_navigator</span>
+                <span class="k">else</span> <span class="mi">1</span><span class="p">,</span>
             <span class="p">)</span>
         <span class="p">)</span>
 

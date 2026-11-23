@@ -110,6 +110,7 @@ from.
    user_parameter
    max_stored_value
    diffusion_table
+   ACCELERATION_PER_SOLVE
    DIFFUSION_TABLE
    coil_combine
    center_crop

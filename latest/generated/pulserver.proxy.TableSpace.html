@@ -530,6 +530,8 @@ of one grid, and for a space with no readout.</p></li>
 <li><p><strong>ramp_sampled</strong> (<em>bool</em>) – Whether the space’s readouts are sampled on the ramps of their
 trapezoid, so that a Cartesian readout still carries its k as a 1D
 trajectory.</p></li>
+<li><p><strong>bands</strong> (<em>int</em>) – Slices one excitation of the space’s readouts excites: the
+<code class="docutils literal notranslate"><span class="pre">MultibandFactor</span></code> of a multiband stack, 1 elsewhere.</p></li>
 </ul>
 </dd>
 </dl>
@@ -538,31 +540,34 @@ trajectory.</p></li>
 <p class="rubric">Attributes</p>
 <div class="pst-scrollable-table-container"><table class="autosummary longtable table">
 <tbody>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.proxy.TableSpace.centre_line.html#pulserver.proxy.TableSpace.centre_line" title="pulserver.proxy.TableSpace.centre_line"><code class="xref py py-obj docutils literal notranslate"><span class="pre">centre_line</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.proxy.TableSpace.bands.html#pulserver.proxy.TableSpace.bands" title="pulserver.proxy.TableSpace.bands"><code class="xref py py-obj docutils literal notranslate"><span class="pre">bands</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.proxy.TableSpace.centre_partition.html#pulserver.proxy.TableSpace.centre_partition" title="pulserver.proxy.TableSpace.centre_partition"><code class="xref py py-obj docutils literal notranslate"><span class="pre">centre_partition</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.proxy.TableSpace.centre_line.html#pulserver.proxy.TableSpace.centre_line" title="pulserver.proxy.TableSpace.centre_line"><code class="xref py py-obj docutils literal notranslate"><span class="pre">centre_line</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.proxy.TableSpace.ramp_sampled.html#pulserver.proxy.TableSpace.ramp_sampled" title="pulserver.proxy.TableSpace.ramp_sampled"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ramp_sampled</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.proxy.TableSpace.centre_partition.html#pulserver.proxy.TableSpace.centre_partition" title="pulserver.proxy.TableSpace.centre_partition"><code class="xref py py-obj docutils literal notranslate"><span class="pre">centre_partition</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.proxy.TableSpace.readout_samples.html#pulserver.proxy.TableSpace.readout_samples" title="pulserver.proxy.TableSpace.readout_samples"><code class="xref py py-obj docutils literal notranslate"><span class="pre">readout_samples</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.proxy.TableSpace.ramp_sampled.html#pulserver.proxy.TableSpace.ramp_sampled" title="pulserver.proxy.TableSpace.ramp_sampled"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ramp_sampled</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.proxy.TableSpace.subsequence.html#pulserver.proxy.TableSpace.subsequence" title="pulserver.proxy.TableSpace.subsequence"><code class="xref py py-obj docutils literal notranslate"><span class="pre">subsequence</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.proxy.TableSpace.readout_samples.html#pulserver.proxy.TableSpace.readout_samples" title="pulserver.proxy.TableSpace.readout_samples"><code class="xref py py-obj docutils literal notranslate"><span class="pre">readout_samples</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.proxy.TableSpace.navigator.html#pulserver.proxy.TableSpace.navigator" title="pulserver.proxy.TableSpace.navigator"><code class="xref py py-obj docutils literal notranslate"><span class="pre">navigator</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.proxy.TableSpace.subsequence.html#pulserver.proxy.TableSpace.subsequence" title="pulserver.proxy.TableSpace.subsequence"><code class="xref py py-obj docutils literal notranslate"><span class="pre">subsequence</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.proxy.TableSpace.matrix.html#pulserver.proxy.TableSpace.matrix" title="pulserver.proxy.TableSpace.matrix"><code class="xref py py-obj docutils literal notranslate"><span class="pre">matrix</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.proxy.TableSpace.navigator.html#pulserver.proxy.TableSpace.navigator" title="pulserver.proxy.TableSpace.navigator"><code class="xref py py-obj docutils literal notranslate"><span class="pre">navigator</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.proxy.TableSpace.fov_mm.html#pulserver.proxy.TableSpace.fov_mm" title="pulserver.proxy.TableSpace.fov_mm"><code class="xref py py-obj docutils literal notranslate"><span class="pre">fov_mm</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.proxy.TableSpace.matrix.html#pulserver.proxy.TableSpace.matrix" title="pulserver.proxy.TableSpace.matrix"><code class="xref py py-obj docutils literal notranslate"><span class="pre">matrix</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.proxy.TableSpace.trajectory.html#pulserver.proxy.TableSpace.trajectory" title="pulserver.proxy.TableSpace.trajectory"><code class="xref py py-obj docutils literal notranslate"><span class="pre">trajectory</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.proxy.TableSpace.fov_mm.html#pulserver.proxy.TableSpace.fov_mm" title="pulserver.proxy.TableSpace.fov_mm"><code class="xref py py-obj docutils literal notranslate"><span class="pre">fov_mm</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.proxy.TableSpace.trajectory.html#pulserver.proxy.TableSpace.trajectory" title="pulserver.proxy.TableSpace.trajectory"><code class="xref py py-obj docutils literal notranslate"><span class="pre">trajectory</span></code></a></p></td>
 <td><p></p></td>
 </tr>
 </tbody>

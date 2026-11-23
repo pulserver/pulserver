@@ -16,6 +16,7 @@
    :toctree:
    :nosignatures:
 
+   ~TableSpace.bands
    ~TableSpace.centre_line
    ~TableSpace.centre_partition
    ~TableSpace.ramp_sampled

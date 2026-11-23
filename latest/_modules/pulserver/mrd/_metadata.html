@@ -439,6 +439,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">.._labels</span><span class="w"> </span><span class="kn">import</span> <span class="n">MRD_FLAGS</span><span class="p">,</span> <span class="n">canonical_label</span>
 
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s2">"ACCELERATION_PER_SOLVE"</span><span class="p">,</span>
     <span class="s2">"DIFFUSION_TABLE"</span><span class="p">,</span>
     <span class="s2">"MrdMetadata"</span><span class="p">,</span>
     <span class="s2">"acquisition_label"</span><span class="p">,</span>
@@ -489,6 +490,11 @@
     <span class="k">return</span> <span class="n">default</span></div>
 
 
+
+<span class="c1">#: User parameter string holding the acceleration per joint solve of the main</span>
+<span class="c1">#: sequence: the in-plane line step times the partition step times the bands,</span>
+<span class="c1">#: divided by the shots of one imaging unit.</span>
+<span class="n">ACCELERATION_PER_SOLVE</span> <span class="o">=</span> <span class="s2">"pulserver_acceleration_per_solve"</span>
 
 <span class="c1">#: User parameter string an MRD header states a diffusion table in: one</span>
 <span class="c1">#: ``x y z b`` row per line.</span>
