@@ -432,7 +432,7 @@ def test_without_a_field_pair_each_image_is_sent_at_once_with_one_warning(
         if "not corrected for susceptibility" in r.getMessage()
     ]
     assert [r.levelno for r in skipped] == [logging.WARNING, logging.DEBUG]
-    assert "no spin-echo field pair" in skipped[0].getMessage()
+    assert "no field pair" in skipped[0].getMessage()
 
 
 def test_without_pyhysco_each_image_is_sent_at_once_uncorrected_saying_so(

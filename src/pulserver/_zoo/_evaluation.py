@@ -352,7 +352,7 @@ def densest(layout: RfLayout, *prescans: RfLayout) -> RfLayout:
 
 
 #: Prescans of an EPI scan that image the whole stack or slab as volumes of
-#: their own, each at its own shortest TR: the spin-echo field pair and the
+#: their own, each at its own shortest TR: the field pair and the
 #: full-k phase reference.
 STACK_PRESCANS = ("field_forward", "field_reversed", "full_k_reference")
 

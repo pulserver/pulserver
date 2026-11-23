@@ -447,14 +447,15 @@ class EpiRecon(PicsRecon):
 
     When PyHySCO is installed (bartorch's ``pyhysco`` extra, GPL-3.0), one
     susceptibility displacement field is estimated for the whole stack
-    (:func:`bartorch.tools.correct_susceptibility`) from its spin-echo field
-    pair (``SET`` 2 forward, 3 reversed), reconstructed and kept but sent as
-    no image of the series: refocused, its two volumes are displaced in
-    opposite directions by the field and differ in nothing else. A pair of
-    gradient echoes, such as the FLEET calibration's two polarities or the
-    reversed reference volume (``SET`` 1), also differs in the intensity the
-    field gradient moves along the phase encode at 7T, and gives no field;
-    the reversed reference volume is sent as no image. The field is
+    (:func:`bartorch.tools.correct_susceptibility`) from its field pair
+    (``SET`` 2 forward, 3 reversed), reconstructed and kept but sent as no
+    image of the series. The pair is an echo of the scan's kind: a
+    gradient-echo pair at the scan's echo time loses and piles up signal
+    where the scan does, so the field is fitted to the intensity the scan
+    has, and a spin-echo scan's pair is refocused. The FLEET calibration's
+    two polarities and the reversed reference volume (``SET`` 1) are read at
+    a short echo or with other lines and give no field; the reversed
+    reference volume is sent as no image. The field is
     estimated once, on the planes of the pair at their positions along the
     slice direction (:class:`PlaneField`), and applied to every image of
     every slice, a plane between the pair's taking the linear interpolation
@@ -816,7 +817,7 @@ class EpiRecon(PicsRecon):
         )
 
     def _field_from_pair(self, context) -> None:
-        """Estimate the stack's field from its spin-echo field pair and keep it for the exam."""
+        """Estimate the stack's field from its field pair and keep it for the exam."""
         forward_set, reversed_set = FIELD_PAIR_SETS
         pairs = []
         train = None
@@ -829,7 +830,7 @@ class EpiRecon(PicsRecon):
         self.field_pair = {}
         if not pairs or self.hysco is not None:
             return
-        self._estimate_field(pairs, "its spin-echo field pair")
+        self._estimate_field(pairs, "its field pair")
         if self.field is not None:
             self.field = self.field._replace(train=train)
             context.exam.set(SUSCEPTIBILITY_FIELD, self.field)
@@ -954,7 +955,7 @@ class EpiRecon(PicsRecon):
         elif self.hysco is not None:
             reason = self.hysco
         else:
-            reason = "no spin-echo field pair (sets 2 and 3) came before it"
+            reason = "no field pair (sets 2 and 3) came before it"
         level = logging.DEBUG if reason in self._skips_logged else logging.WARNING
         self._skips_logged.add(reason)
         _log.log(
@@ -1550,12 +1551,14 @@ def susceptibility_field(image, reverse, voxel_size):
 FIELD_EDGE_PARTITIONS = 2
 
 #: PyHySCO smoothness weight of a volume's field, on the intensity scale of
-#: :func:`bartorch.tools.correct_susceptibility`. The field of a noisy 7T
-#: spin-echo pair of a 2 mm stack is closest to the true field in the brain
-#: near this weight. Three times looser it takes up the ventricles and the
-#: noise of the pair, and its steps draw dark lines in the corrected image;
-#: three times stiffer it recovers less of the displacement near the sinuses.
-SLAB_FIELD_SMOOTHNESS = 1000.0
+#: :func:`bartorch.tools.correct_susceptibility`. In a noisy 7T simulation of
+#: a 2 mm stack (R 2 to 4, partial Fourier 6/8), the unwarped scan is closest
+#: to a fully sampled gradient echo in the same field near this weight, with
+#: a gradient-echo or a spin-echo pair. Much looser the field takes up the
+#: ventricles and the noise of the pair, and its steps draw dark lines in the
+#: corrected image; much stiffer it recovers less of the displacement near
+#: the sinuses. R 2 alone, with twice R 4's displacement, prefers a third of it.
+SLAB_FIELD_SMOOTHNESS = 3000.0
 
 #: PyHySCO smoothness weight of a slice's field, on the same scale. A slice
 #: has no neighbours to constrain its field, and at PyHySCO's own weight the
@@ -1584,10 +1587,10 @@ def undistorted(image, field, voxel_size):
     return np.clip(corrected.cpu().numpy(), 0.0, None)
 
 
-#: ``SET`` of the forward and of the reversed volume of a spin-echo field pair.
+#: ``SET`` of the forward and of the reversed volume of a field pair.
 FIELD_PAIR_SETS = (2, 3)
 
-#: Exam key of the last spin-echo field pair's :class:`PlaneField`.
+#: Exam key of the last field pair's :class:`PlaneField`.
 SUSCEPTIBILITY_FIELD = "susceptibility_field"
 
 #: ``SET`` of the full-k phase reference volume.

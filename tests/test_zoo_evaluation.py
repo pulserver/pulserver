@@ -47,9 +47,7 @@ SYSTEM = design_system(LIMITS)
 SHIPPED = sorted(path.stem for path in _plugins.SEQUENCES.glob("*.py"))
 # The spin-echo sequences fix their flip angles; the others take one.
 SPIN_ECHO = [name for name in SHIPPED if name.startswith(("se", "fse"))]
-# The 2D EPI states its spin-echo field pair, whose refocusing pulses at the
-# pair's shortest TR outweigh the excitation train at any flip angle.
-FLIPPED = [name for name in SHIPPED if name not in SPIN_ECHO and name != "epi2d"]
+FLIPPED = [name for name in SHIPPED if name not in SPIN_ECHO]
 
 # The layout integrates the squared magnitude of each unit-peak waveform with
 # the trapezoidal rule over the sample times the listing carries;
