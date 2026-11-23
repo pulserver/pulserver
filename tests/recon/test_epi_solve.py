@@ -930,3 +930,25 @@ def test_the_shot_masks_take_each_line_to_its_segment_and_a_single_segment_none(
     assert masks[0, 0].nonzero().flatten().tolist() == [0, 4, 8, 12]
     assert masks[1, 0].nonzero().flatten().tolist() == [2, 6, 10, 14]
     assert shot_masks(buffer([header(4, 1), header(8, 1)]), (1, 16, 16)) is None
+
+
+def test_the_shot_phase_fit_is_the_same_whichever_number_of_basis_terms_it_carries_at_once(
+    monkeypatch,
+):
+    from pulserver.recon.handlers import epi
+    from pulserver.recon.handlers.epi import fit_shot_phases, phase_basis
+
+    shape = (2, 32, 32)
+    phase = _shot_phase(shape)
+    image, maps, kspace, masks = _segmented(phase, shape=shape)
+    reference = torch.from_numpy(image)
+    start = torch.zeros((2, *shape))
+    basis = phase_basis(shape, 3)
+
+    fitted = {}
+    for terms in (1, 7, basis.shape[0]):
+        monkeypatch.setattr(epi, "SHOT_PHASE_TERMS_AT_ONCE", terms)
+        fitted[terms] = fit_shot_phases(kspace, maps, masks, reference, start, basis)
+
+    for terms in (1, 7):
+        assert torch.allclose(fitted[terms], fitted[basis.shape[0]], atol=1e-5)

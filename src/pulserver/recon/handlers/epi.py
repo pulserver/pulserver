@@ -1849,6 +1849,11 @@ SHOT_PHASE_TOLERANCE = 0.02
 SHOT_PHASE_STEPS = 2
 SHOT_PHASE_DAMPING = 1e-3
 
+#: Phase basis functions carried through the forward and adjoint model at
+#: once while a shot's Gauss-Newton curvature is built. Each holds the coils
+#: times the volume, so the peak memory of the fit grows with it.
+SHOT_PHASE_TERMS_AT_ONCE = 28
+
 #: Constant phases, evenly spaced over a turn, tried for each shot of a
 #: segmented unit with no reference image, and the conjugate-gradient steps of
 #: each trial solve.
@@ -2098,10 +2103,21 @@ def fit_shot_phases(kspace, maps, masks, image, phases, basis):
             residual = _shot_forward(maps, mask, shifted) - data
             slope = (shifted.conj() * _shot_adjoint(maps, mask, residual)).imag
             gradient = flat @ slope.reshape(-1)
-            normal = _shot_adjoint(
-                maps, mask, _shot_forward(maps, mask, 1j * basis * shifted)
+            curvature = torch.cat(
+                [
+                    flat
+                    @ (
+                        shifted.conj()
+                        * _shot_adjoint(
+                            maps, mask, _shot_forward(maps, mask, 1j * chunk * shifted)
+                        )
+                    )
+                    .imag.reshape(chunk.shape[0], -1)
+                    .T
+                    for chunk in basis.split(SHOT_PHASE_TERMS_AT_ONCE)
+                ],
+                dim=1,
             )
-            curvature = flat @ (shifted.conj() * normal).imag.reshape(terms, -1).T
             curvature = 0.5 * (curvature + curvature.T)
             curvature = curvature + SHOT_PHASE_DAMPING * torch.trace(
                 curvature
