@@ -13,6 +13,7 @@ import numpy as np
 from .._labels import MRD_FLAGS, canonical_label
 
 __all__ = [
+    "ACCELERATION_PER_SOLVE",
     "DIFFUSION_TABLE",
     "MrdMetadata",
     "acquisition_label",
@@ -60,6 +61,11 @@ def user_parameter(metadata: Any, name: str, default: Any = None) -> Any:
                 return getattr(parameter, "value", default)
     return default
 
+
+#: User parameter string holding the acceleration per joint solve of the main
+#: sequence: the in-plane line step times the partition step times the bands,
+#: divided by the shots of one imaging unit.
+ACCELERATION_PER_SOLVE = "pulserver_acceleration_per_solve"
 
 #: User parameter string an MRD header states a diffusion table in: one
 #: ``x y z b`` row per line.

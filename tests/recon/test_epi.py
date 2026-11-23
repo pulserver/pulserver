@@ -855,3 +855,36 @@ def test_a_forward_or_single_plane_unit_keeps_its_own_set_for_its_maps():
 
     assert _polarity_of(forward, np.zeros((2, 4, 8, 8))) is forward
     assert _polarity_of(plane, np.zeros((2, 1, 8, 8))) is plane
+
+
+@pytest.mark.parametrize(
+    ("acceleration", "expected"),
+    [(1.0, 6), (4.0, 6), (5.9, 6), (6.0, 12), (8.0, 12)],
+)
+def test_twelve_virtual_channels_serve_a_solve_of_six_fold_acceleration_or_more(
+    acceleration, expected
+):
+    from pulserver.recon.handlers.epi import virtual_coils_for
+
+    assert virtual_coils_for(6, acceleration) == expected
+
+
+def test_a_stream_of_a_highly_accelerated_header_compresses_to_twelve_channels_first():
+    from pulserver.mrd import ACCELERATION_PER_SOLVE
+    from pulserver.recon.gadgets import CompressChannels
+    from pulserver.recon.handlers.epi import EpiRecon
+
+    header = SimpleNamespace(
+        userParameters=SimpleNamespace(
+            userParameterLong=[],
+            userParameterDouble=[],
+            userParameterString=[
+                SimpleNamespace(name=ACCELERATION_PER_SOLVE, value="6")
+            ],
+        )
+    )
+    recon = EpiRecon()
+    recon.startup(SimpleNamespace(header=header, exam={}))
+
+    assert recon.gadgets[1] is recon.gadget(CompressChannels)
+    assert recon.gadget(CompressChannels).n_virtual == recon.virtual_coils == 12
