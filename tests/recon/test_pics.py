@@ -808,6 +808,19 @@ def test_an_axis_is_partial_fourier_only_where_lines_are_missing_at_one_end():
     assert partial_fourier_axes(partial)
 
 
+@pytest.mark.parametrize("step", [1, 2, 3])
+def test_a_phase_encode_read_reversed_on_a_lattice_is_not_partial_fourier(step):
+    forward = np.zeros((1, 120, 8), dtype=bool)
+    forward[:, ::step] = True
+    reversed_lines = np.zeros_like(forward)
+    for line in np.flatnonzero(forward[0, :, 0]):
+        if line:
+            reversed_lines[:, 120 - line] = True
+
+    assert not partial_fourier_axes(forward)
+    assert not partial_fourier_axes(reversed_lines)
+
+
 def test_the_symmetric_phase_of_a_partial_fourier_image_is_its_phase_where_that_varies_slowly():
     import torch
 
