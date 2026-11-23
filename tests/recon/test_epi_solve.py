@@ -273,33 +273,6 @@ def _multiband(device, coils=8, grid=(24, 24), maps_out=None):
     return singles, volume
 
 
-def test_split_slice_grappa_returns_each_caipi_band_of_a_multiband_unit_as_its_own_kspace(
-    device,
-):
-    from pulserver.recon.handlers.epi import slice_grappa_bands
-
-    singles, volume = _multiband(device)
-
-    bands = slice_grappa_bands(volume, singles)
-
-    inner = (slice(None), slice(None), slice(2, -2), slice(3, -3))
-    expected = singles.transpose(0, 1)
-    error = torch.linalg.vector_norm(
-        bands[inner] - expected[inner]
-    ) / torch.linalg.vector_norm(expected[inner])
-    assert error < 0.1
-
-
-def test_split_slice_grappa_declines_a_unit_with_fewer_calibrated_lines_than_the_kernel():
-    from pulserver.recon.handlers.epi import slice_grappa_bands
-
-    singles, volume = _multiband("cpu")
-    training = torch.zeros_like(singles)
-    training[:, :, 10:12] = singles[:, :, 10:12]
-
-    assert slice_grappa_bands(volume, training) is None
-
-
 def _band_unit(position, partitions=2):
     reference = SimpleNamespace(
         position=(0.0, 0.0, position), slice_dir=(0.0, 0.0, 1.0)
@@ -309,8 +282,8 @@ def _band_unit(position, partitions=2):
     return SimpleNamespace(data=buffer, counters={"set": 1})
 
 
-def test_the_band_calibration_stacks_the_slices_at_each_band_position_preferring_the_unit_set():
-    from pulserver.recon.handlers.epi import band_calibration
+def test_the_band_planes_stack_the_slices_at_each_band_position_preferring_the_unit_set():
+    from pulserver.recon.handlers.epi import _band_planes
 
     plane = np.ones((3, 4, 4), np.complex64)
     stored = [
@@ -319,18 +292,18 @@ def test_the_band_calibration_stacks_the_slices_at_each_band_position_preferring
         (1, 2.5, plane * 3),
     ]
 
-    training = band_calibration(stored, _band_unit(2.5), (3, 2, 4, 4))
+    planes = _band_planes(stored, _band_unit(2.5), (3, 2, 4, 4))
 
-    assert training.shape == (2, 3, 4, 4)
-    np.testing.assert_array_equal(training[:, 0, 0, 0], [1, 3])
+    assert planes.shape == (3, 2, 4, 4)
+    np.testing.assert_array_equal(planes[0, :, 0, 0], [1, 3])
 
 
-def test_the_band_calibration_is_absent_when_a_band_slice_was_not_calibrated():
-    from pulserver.recon.handlers.epi import band_calibration
+def test_the_band_planes_are_absent_when_a_band_slice_was_not_calibrated():
+    from pulserver.recon.handlers.epi import _band_planes
 
     stored = [(0, -2.5, np.ones((3, 4, 4), np.complex64))]
 
-    assert band_calibration(stored, _band_unit(2.5), (3, 2, 4, 4)) is None
+    assert _band_planes(stored, _band_unit(2.5), (3, 2, 4, 4)) is None
 
 
 def _calibrated_plugin(singles=None, **arguments):
@@ -369,6 +342,67 @@ def test_each_band_of_a_multiband_unit_is_fermi_filtered_in_its_own_plane():
             fermi_filtered(images[False][band]),
             atol=1e-6 * float(np.abs(images[False]).max()),
         )
+
+
+def _caipi(ry, coils=6, grid=(48, 48)):
+    """Two bands of steep sensitivities and their blipped-CAIPI partition volume, ``ry``-fold undersampled with partial Fourier 3/4.
+
+    Returns the bands, their maps, their single-band calibration (the central
+    third of k-space) and the volume.
+    """
+    import bartorch
+
+    y, x = np.meshgrid(*(np.arange(n) - n // 2 for n in grid), indexing="ij")
+    first = ((y / 21.0) ** 2 + (x / 17.0) ** 2 < 1) + 0.5 * (
+        ((y - 6) / 5.0) ** 2 + ((x + 5) / 3.0) ** 2 < 1
+    )
+    second = ((y / 18.0) ** 2 + (x / 19.0) ** 2 < 1) - 0.4 * (
+        ((y + 6) / 3.0) ** 2 + ((x - 4) / 6.0) ** 2 < 1
+    )
+    phase = np.exp(1j * (0.6 * np.sin(x / 7.0) + 0.4 * y / grid[0]))
+    bands = (np.stack([first, second]) * phase).astype(np.complex64)
+    steep = _steep_maps(grid, coils)
+    maps = np.stack(
+        [steep, np.roll(steep, 1, axis=0) * np.exp(1j * x / grid[1])], axis=1
+    ).astype(np.complex64)
+    singles = _kspace(bands, maps).transpose(0, 1)
+    weights = bartorch.fft(
+        torch.eye(2, dtype=torch.complex64), (1,), unitary=True
+    ).reshape(2, 2)
+    volume = torch.zeros(coils, 2, *grid, dtype=torch.complex64)
+    centre = grid[0] // 2
+    for line in range(grid[0] // 4, grid[0]):
+        if (line - centre) % ry == 0:
+            # The band encode steps by one partition every ry lines, the
+            # CAIPI shift epi2D_sequence plays at MB2.
+            encode = (1 + (line - centre) // ry) % 2
+            volume[:, encode, line] = (
+                weights[:, encode, None, None] * singles[:, :, line]
+            ).sum(0)
+    calibration = torch.zeros_like(singles)
+    calibration[:, :, grid[0] // 3 : 2 * grid[0] // 3] = singles[
+        :, :, grid[0] // 3 : 2 * grid[0] // 3
+    ]
+    return bands, maps, calibration, volume
+
+
+@pytest.mark.parametrize(("ry", "bound"), [(3, 0.25), (4, 0.3)])
+def test_a_caipi_multiband_unit_beyond_twofold_in_plane_is_unfolded_by_one_solve_of_its_bands(
+    ry, bound
+):
+    """Separated first by split-slice GRAPPA and solved band by band, its bands erred by 0.34 of their norm at R3 and by 1.1 at R4."""
+    bands, maps, calibration, volume = _caipi(ry)
+    plugin, context = _calibrated_plugin(calibration, kspace_filter=False)
+    plugin._maps = lambda context, data, volume: torch.from_numpy(maps)
+    plugin.phase_references[0] = torch.from_numpy(bands)
+    unit = _band_unit(2.5)
+    unit.counters = {"set": 0, "slice": 0}
+
+    image = plugin.image(volume.numpy(), tuple(volume.shape[1:]), context, unit)
+
+    for band in range(2):
+        error = np.linalg.norm(np.abs(image[band]) - np.abs(bands[band]))
+        assert error / np.linalg.norm(bands[band]) < bound
 
 
 def test_the_bands_of_a_multiband_unit_are_unwarped_and_divided_by_a_field_each_in_its_plane():
@@ -453,11 +487,17 @@ def test_a_slab_or_slice_calibration_is_fitted_at_the_epi_sobolev_weight(
 
 
 @pytest.mark.parametrize(
-    ("wavelet", "partitions", "expected"),
-    [(None, 4, "EPI_WAVELET_SLAB"), (None, 1, "EPI_WAVELET_SLICE"), (0.0, 4, 0.0)],
+    ("wavelet", "partitions", "bands", "expected"),
+    [
+        (None, 4, False, "EPI_WAVELET_SLAB"),
+        (None, 2, True, "EPI_WAVELET_MULTIBAND"),
+        (None, 1, False, "EPI_WAVELET_SLICE"),
+        (0.0, 4, False, 0.0),
+        (0.0, 2, True, 0.0),
+    ],
 )
-def test_an_undersampled_unit_takes_the_wavelet_of_a_slab_or_a_slice_unless_one_is_given(
-    wavelet, partitions, expected
+def test_an_undersampled_unit_takes_the_wavelet_of_a_slab_multiband_unit_or_slice_unless_one_is_given(
+    wavelet, partitions, bands, expected
 ):
     from pulserver.recon.handlers import epi
 
@@ -465,7 +505,7 @@ def test_an_undersampled_unit_takes_the_wavelet_of_a_slab_or_a_slice_unless_one_
     volume = np.zeros((2, partitions, 4, 4), np.complex64)
 
     want = getattr(epi, expected) if isinstance(expected, str) else expected
-    assert plugin._wavelet(volume) == want
+    assert plugin._wavelet(volume, bands) == want
 
 
 def test_the_smooth_phase_has_unit_magnitude_and_keeps_a_slowly_varying_phase(device):

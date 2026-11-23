@@ -395,8 +395,8 @@ class EpiRecon(PicsRecon):
     Each readout is whitened (:class:`~pulserver.recon.Prewhiten`), projected
     onto ``virtual_coils`` channels (:class:`~pulserver.recon.CompressChannels`,
     one basis for the stream from the calibration of every slice, so the
-    bands of a multiband unit and the slices its kernels are trained on share
-    their virtual channels, and no later step holds every receive channel),
+    bands of a multiband unit share their virtual channels with the slices
+    whose maps unfold them, and no later step holds every receive channel),
     ramp-resampled along its k-space trajectory (:class:`RampSampling`) and
     has its odd/even phase removed (:class:`EpiPhaseCorrection`, from the
     blip-free reference train ``ACQ_IS_PHASECORR_DATA`` the sequence plays in
@@ -439,15 +439,20 @@ class EpiRecon(PicsRecon):
     gradient echo at 7T does near air-tissue interfaces, the unit is left
     zero-filled and a warning says why.
 
-    A multiband unit whose bands each lie on a calibrated slice has its bands
-    separated by split-slice GRAPPA (:func:`slice_grappa_bands`), with kernels
-    trained on those slices' calibration k-space, and each band is then
-    solved as a slice of its own, with its slice's maps. Each band is also
-    Fermi filtered, unwarped and divided by its receive field in its own
-    plane, as a slice is: the bands lie several slices apart, and filtered or
-    resampled across the stack a band takes in the others. A multiband unit
-    without that calibration is solved, filtered and corrected as one volume
-    of its bands.
+    A multiband unit is solved as one volume of its bands, a partition each,
+    so its in-plane and band aliases, which the blipped-CAIPI shift spreads
+    apart, are unfolded together by every virtual channel; its maps are its
+    bands' slices' maps stacked (:func:`band_maps`). Separating the bands
+    first by a split-slice GRAPPA kernel on the acquired lines leaves a few
+    local weights to cancel as many aliases as the joint solve unfolds pixel
+    by pixel, and beyond twofold in plane it fails with six virtual channels.
+    A multiband unit whose bands each lie on a calibrated slice is solved at
+    ``EPI_WAVELET_MULTIBAND`` and Fermi filtered, unwarped and divided by its
+    receive field band by band, each in its own plane, as a slice is: the
+    bands lie several slices apart, and filtered or resampled across the
+    stack a band takes in the others. One without that calibration is solved
+    at ``EPI_WAVELET_SLAB`` and filtered and corrected as one volume of its
+    bands.
 
     When PyHySCO is installed (bartorch's ``pyhysco`` extra, GPL-3.0), one
     susceptibility displacement field is estimated for the whole stack
@@ -480,9 +485,10 @@ class EpiRecon(PicsRecon):
     ----------
     wavelet : float | None, default=None
         ``lambda`` of a wavelet ``pics`` solve of undersampled units; zero
-        solves them by conjugate gradients. ``None`` takes ``EPI_WAVELET_SLAB``
-        for a unit of more than one partition and ``EPI_WAVELET_SLICE`` for a
-        slice.
+        solves them by conjugate gradients. ``None`` takes
+        ``EPI_WAVELET_MULTIBAND`` for a multiband unit whose bands lie on
+        calibrated slices, ``EPI_WAVELET_SLAB`` for any other unit of more than
+        one partition and ``EPI_WAVELET_SLICE`` for a slice.
     iterations : int, default=30
         Conjugate-gradient steps, or ``pics`` iterations with ``wavelet``.
     l2 : float, default=0.0
@@ -594,34 +600,17 @@ class EpiRecon(PicsRecon):
             self.releasing = False
 
     def image(self, kspace, shape, context, data):
-        """Return the complex image of ``(coils, [partitions,] phase encodes, readout)`` k-space, cropped to ``shape`` and Fermi filtered, each band of a multiband unit in its plane."""
+        """Return the complex image of ``(coils, [partitions,] phase encodes, readout)`` k-space, solved as one volume, cropped to ``shape`` and Fermi filtered, each band of a multiband unit in its plane."""
         import torch
 
         volume = kspace if kspace.ndim == 4 else kspace[:, None]
         volume = torch.from_numpy(np.ascontiguousarray(volume, dtype=np.complex64))
         maps = self._maps(context, data, volume)
         location = int(data.counters.get("slice", 0))
-        reference = self.phase_references.get(location)
-        bands = None
         in_plane = self._band_positions(data, volume.shape[1]) is not None
-        if volume.shape[1] > 1:
-            training = band_calibration(self.slice_calibrations, data, volume.shape)
-            if training is not None:
-                bands = slice_grappa_bands(volume, torch.from_numpy(training))
-        if bands is None:
-            image = self._solved(volume, maps, context, reference)
-        else:
-            image = torch.cat(
-                [
-                    self._solved(
-                        bands[:, b : b + 1],
-                        maps[:, b : b + 1],
-                        context,
-                        None if reference is None else reference[b : b + 1],
-                    )
-                    for b in range(bands.shape[1])
-                ]
-            )
+        image = self._solved(
+            volume, maps, context, self.phase_references.get(location), in_plane
+        )
         if int(data.counters.get("set", 0)) == FULL_K_REFERENCE_SET:
             self.phase_references[location] = image
         image = image.numpy()
@@ -651,7 +640,7 @@ class EpiRecon(PicsRecon):
         return None
 
     def _calibrate(self, context):
-        """Estimate the maps of each held calibration slice on its own, and keep its k-space for split-slice GRAPPA."""
+        """Estimate the maps of each held calibration slice on its own, and keep its position and k-space: the position places the bands of a multiband unit (:meth:`_band_positions`), the k-space trains :func:`full_resolution_maps`."""
         for polarity, units in self.calibrations.items():
             for unit in units:
                 coil_maps(context, unit, estimate=epi_nlinv_estimate)
@@ -666,19 +655,21 @@ class EpiRecon(PicsRecon):
                     )
         self.calibrations = {}
 
-    def _wavelet(self, volume):
-        """Return the wavelet ``lambda`` of ``(coils, z, y, x)`` k-space."""
+    def _wavelet(self, volume, bands=False):
+        """Return the wavelet ``lambda`` of ``(coils, z, y, x)`` k-space, whose partitions are the ``bands`` of a multiband unit or a slab's."""
         if not self.automatic_wavelet:
             return self.wavelet
-        return EPI_WAVELET_SLAB if volume.shape[1] > 1 else EPI_WAVELET_SLICE
+        if volume.shape[1] == 1:
+            return EPI_WAVELET_SLICE
+        return EPI_WAVELET_MULTIBAND if bands else EPI_WAVELET_SLAB
 
-    def _solved(self, volume, maps, context, reference=None):
-        """Return the image of ``(coils, z, y, x)`` k-space by the solve its sampling calls for, a partial-Fourier unit solved for a real image times its phase."""
+    def _solved(self, volume, maps, context, reference=None, bands=False):
+        """Return the image of ``(coils, z, y, x)`` k-space by the solve its sampling calls for, a partial-Fourier unit solved for a real image times its phase; ``bands`` marks the partitions as a multiband unit's (:meth:`_wavelet`)."""
         sampled = volume.abs().sum(dim=0) > 0
         partial = partial_fourier_axes(sampled.numpy())
         if _fills_acquired_range(sampled.numpy()) and not partial:
             return sense_combined(volume, maps)
-        wavelet = self._wavelet(volume)
+        wavelet = self._wavelet(volume, bands)
         start = cg_sense(
             volume,
             maps,
@@ -746,9 +737,10 @@ class EpiRecon(PicsRecon):
     def _maps(self, context, data, volume):
         """Return the unit's coil maps shaped as ``volume``: its slice's, its bands' slices', else fitted once to it and kept.
 
-        From a slice's full-k phase reference on, its maps are drawn from the
-        reference: by :func:`fully_encoded_maps` where the reference holds
-        every line, else by :func:`full_resolution_maps`.
+        From a single-band slice's full-k phase reference on, its maps are
+        drawn from the reference: by :func:`fully_encoded_maps` where the
+        reference holds every line, else by :func:`full_resolution_maps`. The
+        bands of a multiband unit keep their slices' calibration maps.
         """
         try:
             maps = coil_maps(context, data, estimate=epi_nlinv_estimate).reshape(
@@ -1084,11 +1076,17 @@ def plane_positions(acquisition, space, count) -> list[float]:
     return [centre + (index - count // 2) * depth for index in range(count)]
 
 
-#: Wavelet ``lambda`` of an undersampled 3D EPI slab and 2D EPI slice, on
-#: data scaled as ``pics`` scales them. A slab's partition and CAIPI
-#: unfolding amplifies noise and converges slowly without the prior; a
-#: slice's prior is weak enough to keep the cortex and the deep grey nuclei.
+#: Wavelet ``lambda`` of an undersampled 3D EPI slab, 2D EPI multiband unit
+#: and 2D EPI slice, on data scaled as ``pics`` scales them. A slab's
+#: partition and CAIPI unfolding amplifies noise and converges slowly without
+#: the prior; a slice's prior is weak enough to keep the cortex and the deep
+#: grey nuclei. A multiband unit unfolds its bands and its in-plane aliases
+#: together: in a noisy 7T simulation of a 2 mm stack at MB2 and R 2 to 4 with
+#: six virtual channels, its bands are closest to a fully sampled gradient
+#: echo near this weight, the slab's smoothing R 2 and a slice's leaving R 4
+#: aliased.
 EPI_WAVELET_SLAB = 0.1
+EPI_WAVELET_MULTIBAND = 0.03
 EPI_WAVELET_SLICE = 0.003
 
 #: Sobolev weight of the EPI coil maps on their calibration grid. Below
@@ -1327,17 +1325,6 @@ def slab_plane_maps(context, data):
 PARTITION_TOLERANCE = 0.1
 
 
-def band_calibration(stored, data, shape):
-    """Return the calibration k-space of a multiband group's bands, ``(bands, coils, y, x)``; ``None`` where some band's slice has none.
-
-    ``stored`` holds ``(set, position along the slice direction in mm,
-    (coils, y, x) k-space)`` for each calibrated slice; band ``p`` takes the
-    slice at the position of partition ``p``, as :func:`band_maps` does.
-    """
-    planes = _band_planes(stored, data, shape)
-    return None if planes is None else np.ascontiguousarray(planes.swapaxes(0, 1))
-
-
 def _band_planes(stored, data, shape):
     """Return the entries of ``stored`` at the planes of a multiband unit, stacked as ``(coils, bands, y, x)``; ``None`` where a band has none.
 
@@ -1368,62 +1355,6 @@ def _band_planes(stored, data, shape):
             return None
         planes.append(found.reshape(found.shape[0], *shape[-2:]))
     return np.ascontiguousarray(np.stack(planes, axis=1))
-
-
-def slice_grappa_bands(volume, training, size=(3, 5)):
-    """Return the bands of multiband k-space separated by split-slice GRAPPA, ``(coils, bands, y, x)``; ``None`` where the calibration cannot train the kernels.
-
-    Each acquired line of ``volume`` holds one partition encode, its
-    collapsed bands each weighted by the centred, unitary Fourier transform
-    along the partitions of a unit image at that band, the encoding the
-    joint solve models. The kernels
-    (:func:`bartorch.tools.slice_grappa_kernel`) are trained on the
-    calibration lines on the acquired lattice, each band's single-band
-    k-space carrying the weight of the line's encode, and applied
-    (:func:`bartorch.tools.slice_grappa`) to the collapsed lines, whose
-    weights they then remove. Lines not acquired stay zero.
-
-    Parameters
-    ----------
-    volume : torch.Tensor
-        ``(coils, bands, y, x)`` multiband k-space, each acquired line in one
-        partition.
-    training : torch.Tensor
-        ``(bands, coils, y, x)`` single-band calibration k-space of each band's
-        slice, zero outside its calibration lines.
-    size : tuple of int, default=(3, 5)
-        Kernel extent along lines and readout.
-
-    Returns
-    -------
-    torch.Tensor or None
-        Separated k-space, each band's lines unweighted.
-    """
-    import bartorch
-    import torch
-    from bartorch import tools
-
-    count = volume.shape[1]
-    lines = volume.abs().sum(dim=(0, 3)) > 0
-    acquired = torch.nonzero(lines.any(dim=0)).flatten()
-    encode = lines[:, acquired].to(torch.int64).argmax(dim=0)
-    unit = torch.eye(count, dtype=torch.complex64)
-    weights = bartorch.fft(unit, (1,), unitary=True).reshape(count, count)[:, encode]
-    calibrated = (training.abs().sum(dim=(0, 1, 3)) > 0)[acquired]
-    taught = torch.nonzero(calibrated).flatten()
-    if taught.numel() < size[0] or not bool(
-        (taught[-1] - taught[0] + 1) == taught.numel()
-    ):
-        return None
-    window = slice(int(taught[0]), int(taught[-1]) + 1)
-    kernels = tools.slice_grappa_kernel(
-        training[:, :, acquired[window]].to(torch.complex64), weights[:, window], size
-    )
-    collapsed = volume.sum(dim=1)[:, acquired]
-    separated = tools.slice_grappa(collapsed, kernels, size) / weights[:, None, :, None]
-    bands = torch.zeros_like(volume)
-    bands[:, :, acquired] = separated.transpose(0, 1).to(volume.dtype)
-    return bands
 
 
 #: Distance (mm) within which a stored slice's position is a band's.
