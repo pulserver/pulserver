@@ -842,3 +842,40 @@ def test_a_stack_excited_one_slice_at_a_time_keeps_one_slice_per_space(tmp_path)
     np.testing.assert_allclose(
         table.slice_offset_m[imaging], positions[table.counters["SLC"][imaging]]
     )
+
+
+@pytest.mark.parametrize(
+    ("lines", "segments", "expected"),
+    [
+        ([0, 3, 6, 9], [0, 0, 0, 0], 3.0),
+        ([0, 2, 4, 6], [0, 1, 0, 1], 1.0),
+        ([0, 1, 2, 3], [0, 0, 0, 0], 1.0),
+    ],
+)
+def test_the_acceleration_per_solve_is_the_line_step_divided_by_the_shots(
+    tmp_path, lines, segments, expected
+):
+    from pulserver.proxy._enrich import acceleration_per_solve
+
+    seq = pp.Sequence(pp.Opts())
+    for lin, seg in zip(lines, segments, strict=True):
+        add_readout(
+            seq,
+            pp.make_label("LIN", "SET", lin),
+            pp.make_label("SEG", "SET", seg),
+        )
+
+    assert acceleration_per_solve(written(seq, tmp_path)) == expected
+
+
+def test_the_header_states_the_acceleration_per_solve_of_the_main_sequence(tmp_path):
+    from pulserver.mrd import ACCELERATION_PER_SOLVE, user_parameter
+
+    seq = pp.Sequence(pp.Opts())
+    for lin in (0, 3, 6, 9):
+        add_readout(seq, pp.make_label("LIN", "SET", lin))
+    enriched = header()
+
+    enrich_header(enriched, written(seq, tmp_path))
+
+    assert float(user_parameter(enriched, ACCELERATION_PER_SOLVE)) == 3.0

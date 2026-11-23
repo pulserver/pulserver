@@ -15,7 +15,12 @@ import time
 import numpy as np
 
 from ...mrd._header import EncodingSpace
-from ...mrd._metadata import acquisition_label, has_acquisition_flag
+from ...mrd._metadata import (
+    ACCELERATION_PER_SOLVE,
+    acquisition_label,
+    has_acquisition_flag,
+    user_parameter,
+)
 from .._buffers import ReconData, discards, echo_centre
 from .._calibration import (
     MissingCalibration,
@@ -538,7 +543,10 @@ class EpiRecon(PicsRecon):
         Tikhonov weight ``lambda`` of the conjugate-gradient solve, on data
         scaled as ``pics`` scales them.
     virtual_coils : int | None, default=VIRTUAL_COILS
-        As :class:`~pulserver.recon.handlers.pics.PicsRecon`.
+        As :class:`~pulserver.recon.handlers.pics.PicsRecon`, raised to
+        ``EPI_VIRTUAL_COILS_ACCELERATED`` where the header's acceleration per
+        joint solve (``ACCELERATION_PER_SOLVE``) is at least
+        ``EPI_ACCELERATED_SOLVE``. Compression stays first in the chain.
     kspace_filter, gradient_unwarp, intensity_correction : bool, default=True
         As :class:`~pulserver.recon.handlers.pics.PicsRecon`.
     shot_phase : bool, default=True
@@ -589,6 +597,12 @@ class EpiRecon(PicsRecon):
     def startup(self, context):
         super().startup(context)
         self.gadget(EpiPhaseCorrection).ramp = self.gadget(RampSampling)
+        if self.virtual_coils is not None:
+            self.virtual_coils = virtual_coils_for(
+                self.virtual_coils,
+                float(user_parameter(context.header, ACCELERATION_PER_SOLVE, 1.0)),
+            )
+            self.gadget(CompressChannels).n_virtual = self.virtual_coils
         self.calibrations = {}
         self.slice_calibrations = []
         self.own_maps = {}
@@ -1384,6 +1398,14 @@ EPI_WAVELET_SLICE = 0.003
 #: the multiband weight against its aliases.
 EPI_WAVELET_SEGMENTED_ACCELERATION = 2.0
 
+#: Acceleration per joint solve (in-plane line step times partition step times
+#: bands, divided by shots) from which a stream is compressed to
+#: ``EPI_VIRTUAL_COILS_ACCELERATED`` virtual channels instead of
+#: ``virtual_coils``: a solve that unfolds this much needs more of the array's
+#: sensitivity variation than the first six compressed channels carry.
+EPI_ACCELERATED_SOLVE = 6.0
+EPI_VIRTUAL_COILS_ACCELERATED = 12
+
 #: Sobolev weight of the EPI coil maps on their calibration grid. Below
 #: BART's, the maps follow the steep sensitivity next to the coil elements:
 #: along the scalp of a close-fitting array, where the scalp is far brighter
@@ -1675,6 +1697,29 @@ def _along_slice(acquisition) -> float:
     position = np.asarray(getattr(acquisition, "position", (0, 0, 0)), float)
     normal = np.asarray(getattr(acquisition, "slice_dir", (0, 0, 1)), float)
     return float(position @ normal)
+
+
+def virtual_coils_for(virtual_coils: int, acceleration: float) -> int:
+    """Return the virtual channels a stream is compressed to at an acceleration per joint solve.
+
+    Parameters
+    ----------
+    virtual_coils : int
+        Channels kept below ``EPI_ACCELERATED_SOLVE``.
+    acceleration : float
+        In-plane line step times partition step times bands, divided by the
+        shots of one imaging unit.
+
+    Returns
+    -------
+    int
+        ``EPI_VIRTUAL_COILS_ACCELERATED`` where ``acceleration`` is at least
+        ``EPI_ACCELERATED_SOLVE`` and more than ``virtual_coils``,
+        ``virtual_coils`` otherwise.
+    """
+    if acceleration >= EPI_ACCELERATED_SOLVE:
+        return max(virtual_coils, EPI_VIRTUAL_COILS_ACCELERATED)
+    return virtual_coils
 
 
 def _line_step(volume) -> int:

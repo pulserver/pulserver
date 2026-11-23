@@ -11,6 +11,7 @@ __all__ = [
     "ENRICHED",
     "SequenceTable",
     "TableSpace",
+    "acceleration_per_solve",
     "enrich_acquisition",
     "enrich_header",
     "is_enriched",
@@ -30,7 +31,7 @@ from .._accelerators import require
 from .._labels import MRD_COUNTERS, MRD_FLAGS
 from ..design._recon_parameters import RECON_PARAMETERS
 from ..mrd._acquisitions import AcquisitionFlag
-from ..mrd._metadata import DIFFUSION_TABLE, user_parameter
+from ..mrd._metadata import ACCELERATION_PER_SOLVE, DIFFUSION_TABLE, user_parameter
 from ..mrd._sequence import ReadoutTable, SequenceDefinitions, read_chain
 
 _F = AcquisitionFlag
@@ -105,6 +106,9 @@ class TableSpace:
         Whether the space's readouts are sampled on the ramps of their
         trapezoid, so that a Cartesian readout still carries its k as a 1D
         trajectory.
+    bands
+        Slices one excitation of the space's readouts excites: the
+        ``MultibandFactor`` of a multiband stack, 1 elsewhere.
     """
 
     subsequence: int
@@ -116,6 +120,7 @@ class TableSpace:
     centre_partition: int | None = None
     readout_samples: int | None = None
     ramp_sampled: bool = False
+    bands: int = 1
 
 
 @dataclass(frozen=True, eq=False)
@@ -408,6 +413,57 @@ def _diffusion(seq: Any) -> tuple[np.ndarray, np.ndarray] | None:
 ENRICHED = "pulserver_enriched"
 
 
+def acceleration_per_solve(table: SequenceTable) -> float:
+    """Return the in-plane line step times the partition step times the bands, divided by the shots, of the main sequence's imaging unit.
+
+    The unit is the first slice group and repetition of the set that has the
+    most readouts in the last imaging space of the chain; its line and
+    partition steps are the most common spacings of its ``LIN`` and ``PAR``
+    counters, and its shots the ``SEG`` values it spans. A unit that varies
+    along no counter has an acceleration of 1.
+
+    Parameters
+    ----------
+    table : SequenceTable
+        The chain's readouts.
+
+    Returns
+    -------
+    float
+        The acceleration per joint solve; 1 where the chain has no imaging
+        space.
+    """
+    imaging = [i for i, space in enumerate(table.spaces) if not space.navigator]
+    if not imaging:
+        return 1.0
+    members = table.encoding_space == imaging[-1]
+    counters = {name: values[members] for name, values in table.counters.items()}
+    count = int(members.sum())
+    if count == 0:
+        return 1.0
+
+    def counter(name: str) -> np.ndarray:
+        return counters.get(name, np.zeros(count, dtype=np.int32))
+
+    sets = counter("SET")
+    chosen = np.argmax(np.bincount(sets - sets.min())) + sets.min()
+    unit = sets == chosen
+    for name in ("SLC", "REP"):
+        values = counter(name)
+        unit &= values == values[unit][0]
+
+    def step(name: str) -> int:
+        distinct = np.unique(counter(name)[unit])
+        if distinct.size < 2:
+            return 1
+        return int(np.bincount(np.diff(distinct)).argmax())
+
+    bands = table.spaces[imaging[-1]].bands
+    partition_step = 1 if bands > 1 else step("PAR")
+    shots = np.unique(counter("SEG")[unit]).size
+    return step("LIN") * partition_step * bands / max(shots, 1)
+
+
 def is_enriched(header: Any) -> bool:
     """Whether :func:`enrich_header` has written this header."""
     return user_parameter(header, ENRICHED) is not None
@@ -455,9 +511,13 @@ def enrich_header(header: Any, table: SequenceTable) -> None:
     parameters the table holds replace the header's, and its diffusion table
     becomes the ``diffusion_table`` user parameter string, one ``x y z b`` row
     per volume (:func:`pulserver.mrd.diffusion_table`). Each recon parameter
-    of the table becomes a user parameter string of its name.
+    of the table becomes a user parameter string of its name, and
+    :func:`acceleration_per_solve` the ``ACCELERATION_PER_SOLVE`` one.
     """
     _set_user_string(header, ENRICHED, "1")
+    _set_user_string(
+        header, ACCELERATION_PER_SOLVE, f"{acceleration_per_solve(table):g}"
+    )
     for name, value in table.recon_parameters.items():
         _set_user_string(header, name, value)
     parameters = header.sequenceParameters
@@ -707,6 +767,9 @@ def _map_readouts(
                 and _ramp_sampled(
                     readouts, int(np.argmax(members)) if navigates else 0
                 ),
+                bands=definitions.multiband
+                if bands is not None and not is_navigator
+                else 1,
             )
         )
 

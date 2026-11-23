@@ -4,6 +4,7 @@ from ._acquisitions import AcquisitionBucket, AcquisitionBucketStats, Acquisitio
 from ._header import LOOP_COUNTERS, EncodingSpace
 from ._images import as_numpy, center_crop, coil_combine
 from ._metadata import (
+    ACCELERATION_PER_SOLVE,
     DIFFUSION_TABLE,
     MrdMetadata,
     acquisition_label,
@@ -16,6 +17,7 @@ from ._metadata import (
 from ._sequence import ReadoutTable, SequenceDefinitions, read_chain
 
 __all__ = [
+    "ACCELERATION_PER_SOLVE",
     "DIFFUSION_TABLE",
     "LOOP_COUNTERS",
     "AcquisitionBucket",
