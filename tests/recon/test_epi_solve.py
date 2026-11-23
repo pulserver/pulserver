@@ -489,7 +489,6 @@ def test_a_slab_or_slice_calibration_is_fitted_at_the_epi_sobolev_weight(
 @pytest.mark.parametrize(
     ("wavelet", "partitions", "bands", "expected"),
     [
-        (None, 4, False, "EPI_WAVELET_SLAB"),
         (None, 2, True, "EPI_WAVELET_MULTIBAND"),
         (None, 1, False, "EPI_WAVELET_SLICE"),
         (0.0, 4, False, 0.0),
@@ -506,6 +505,29 @@ def test_an_undersampled_unit_takes_the_wavelet_of_a_slab_multiband_unit_or_slic
 
     want = getattr(epi, expected) if isinstance(expected, str) else expected
     assert plugin._wavelet(volume, bands) == want
+
+
+@pytest.mark.parametrize(
+    ("ry", "rz", "expected"),
+    [
+        (2, 2, "EPI_WAVELET_SLICE"),
+        (4, 1, "EPI_WAVELET_SLICE"),
+        (3, 2, "EPI_WAVELET_SLAB"),
+        (2, 4, "EPI_WAVELET_SLAB"),
+    ],
+)
+def test_a_slab_takes_the_slice_wavelet_up_to_fourfold_acceleration_and_the_slab_wavelet_beyond(
+    ry, rz, expected
+):
+    from pulserver.recon.handlers import epi
+
+    volume = np.zeros((2, 8, 24, 8), np.complex64)
+    # A CAIPI lattice over a partial-Fourier extent: the lines before the
+    # first read are not counted as skipped.
+    for line in range(6, 24, ry):
+        volume[:, ((line - 6) // ry) % rz :: rz, line] = 1.0
+
+    assert epi.EpiRecon()._wavelet(volume) == getattr(epi, expected)
 
 
 @pytest.mark.parametrize(
