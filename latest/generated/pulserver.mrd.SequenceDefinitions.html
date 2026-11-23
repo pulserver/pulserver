@@ -527,6 +527,8 @@ when undefined.</p></li>
 axis from the field-of-view centre, in metres, indexed by <code class="docutils literal notranslate"><span class="pre">SLC</span></code>;
 empty when undefined.</p></li>
 <li><p><strong>slice_thickness</strong> (<em>float or None</em>) – <code class="docutils literal notranslate"><span class="pre">SliceThickness</span></code>, in metres; <code class="docutils literal notranslate"><span class="pre">None</span></code> when undefined.</p></li>
+<li><p><strong>multiband</strong> (<em>int</em>) – <code class="docutils literal notranslate"><span class="pre">MultibandFactor</span></code>: the slices one excitation excites; 1 when
+undefined.</p></li>
 </ul>
 </dd>
 </dl>
@@ -550,34 +552,37 @@ empty when undefined.</p></li>
 <tr class="row-even"><td><p><a class="reference internal" href="pulserver.mrd.SequenceDefinitions.centre_partition.html#pulserver.mrd.SequenceDefinitions.centre_partition" title="pulserver.mrd.SequenceDefinitions.centre_partition"><code class="xref py py-obj docutils literal notranslate"><span class="pre">centre_partition</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.mrd.SequenceDefinitions.slice_positions.html#pulserver.mrd.SequenceDefinitions.slice_positions" title="pulserver.mrd.SequenceDefinitions.slice_positions"><code class="xref py py-obj docutils literal notranslate"><span class="pre">slice_positions</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.mrd.SequenceDefinitions.multiband.html#pulserver.mrd.SequenceDefinitions.multiband" title="pulserver.mrd.SequenceDefinitions.multiband"><code class="xref py py-obj docutils literal notranslate"><span class="pre">multiband</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.mrd.SequenceDefinitions.slice_thickness.html#pulserver.mrd.SequenceDefinitions.slice_thickness" title="pulserver.mrd.SequenceDefinitions.slice_thickness"><code class="xref py py-obj docutils literal notranslate"><span class="pre">slice_thickness</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.mrd.SequenceDefinitions.slice_positions.html#pulserver.mrd.SequenceDefinitions.slice_positions" title="pulserver.mrd.SequenceDefinitions.slice_positions"><code class="xref py py-obj docutils literal notranslate"><span class="pre">slice_positions</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.mrd.SequenceDefinitions.matrix.html#pulserver.mrd.SequenceDefinitions.matrix" title="pulserver.mrd.SequenceDefinitions.matrix"><code class="xref py py-obj docutils literal notranslate"><span class="pre">matrix</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.mrd.SequenceDefinitions.slice_thickness.html#pulserver.mrd.SequenceDefinitions.slice_thickness" title="pulserver.mrd.SequenceDefinitions.slice_thickness"><code class="xref py py-obj docutils literal notranslate"><span class="pre">slice_thickness</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.mrd.SequenceDefinitions.fov.html#pulserver.mrd.SequenceDefinitions.fov" title="pulserver.mrd.SequenceDefinitions.fov"><code class="xref py py-obj docutils literal notranslate"><span class="pre">fov</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.mrd.SequenceDefinitions.matrix.html#pulserver.mrd.SequenceDefinitions.matrix" title="pulserver.mrd.SequenceDefinitions.matrix"><code class="xref py py-obj docutils literal notranslate"><span class="pre">matrix</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.mrd.SequenceDefinitions.navigator_matrix.html#pulserver.mrd.SequenceDefinitions.navigator_matrix" title="pulserver.mrd.SequenceDefinitions.navigator_matrix"><code class="xref py py-obj docutils literal notranslate"><span class="pre">navigator_matrix</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.mrd.SequenceDefinitions.fov.html#pulserver.mrd.SequenceDefinitions.fov" title="pulserver.mrd.SequenceDefinitions.fov"><code class="xref py py-obj docutils literal notranslate"><span class="pre">fov</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.mrd.SequenceDefinitions.navigator_fov.html#pulserver.mrd.SequenceDefinitions.navigator_fov" title="pulserver.mrd.SequenceDefinitions.navigator_fov"><code class="xref py py-obj docutils literal notranslate"><span class="pre">navigator_fov</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.mrd.SequenceDefinitions.navigator_matrix.html#pulserver.mrd.SequenceDefinitions.navigator_matrix" title="pulserver.mrd.SequenceDefinitions.navigator_matrix"><code class="xref py py-obj docutils literal notranslate"><span class="pre">navigator_matrix</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.mrd.SequenceDefinitions.tr.html#pulserver.mrd.SequenceDefinitions.tr" title="pulserver.mrd.SequenceDefinitions.tr"><code class="xref py py-obj docutils literal notranslate"><span class="pre">tr</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.mrd.SequenceDefinitions.navigator_fov.html#pulserver.mrd.SequenceDefinitions.navigator_fov" title="pulserver.mrd.SequenceDefinitions.navigator_fov"><code class="xref py py-obj docutils literal notranslate"><span class="pre">navigator_fov</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.mrd.SequenceDefinitions.te.html#pulserver.mrd.SequenceDefinitions.te" title="pulserver.mrd.SequenceDefinitions.te"><code class="xref py py-obj docutils literal notranslate"><span class="pre">te</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.mrd.SequenceDefinitions.tr.html#pulserver.mrd.SequenceDefinitions.tr" title="pulserver.mrd.SequenceDefinitions.tr"><code class="xref py py-obj docutils literal notranslate"><span class="pre">tr</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.mrd.SequenceDefinitions.ti.html#pulserver.mrd.SequenceDefinitions.ti" title="pulserver.mrd.SequenceDefinitions.ti"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ti</span></code></a></p></td>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.mrd.SequenceDefinitions.te.html#pulserver.mrd.SequenceDefinitions.te" title="pulserver.mrd.SequenceDefinitions.te"><code class="xref py py-obj docutils literal notranslate"><span class="pre">te</span></code></a></p></td>
 <td><p></p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="pulserver.mrd.SequenceDefinitions.flip_angle.html#pulserver.mrd.SequenceDefinitions.flip_angle" title="pulserver.mrd.SequenceDefinitions.flip_angle"><code class="xref py py-obj docutils literal notranslate"><span class="pre">flip_angle</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="pulserver.mrd.SequenceDefinitions.ti.html#pulserver.mrd.SequenceDefinitions.ti" title="pulserver.mrd.SequenceDefinitions.ti"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ti</span></code></a></p></td>
+<td><p></p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.mrd.SequenceDefinitions.flip_angle.html#pulserver.mrd.SequenceDefinitions.flip_angle" title="pulserver.mrd.SequenceDefinitions.flip_angle"><code class="xref py py-obj docutils literal notranslate"><span class="pre">flip_angle</span></code></a></p></td>
 <td><p></p></td>
 </tr>
 </tbody>

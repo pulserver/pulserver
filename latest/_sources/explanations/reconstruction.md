@@ -40,9 +40,9 @@ write such a plugin.
 - **Prewhitens on arrival, from the series' noise readouts or the exam's noise covariance.**
 
   Code: {class}`~pulserver.recon.Prewhiten`. Test: *noise readouts whiten the imaging readouts* (`test_prewhiten.py`).
-- **Compresses coils with one basis per stream, as the readouts arrive or as a unit closes.**
+- **Compresses coils as the readouts arrive, with one basis per stream, or as a unit closes, with one basis per slice location.**
 
-  Code: {class}`~pulserver.recon.CompressChannels`, {class}`~pulserver.recon.CoilCompression`. Tests: *virtual channels are uncorrelated and carry the leading eigenvalues*; *compressed data and maps reconstruct the uncompressed image*; *calibration readouts are held then given on projected ahead of the first imaging readout*; *the basis comes from the calibration readouts of the first contrast* (`test_coil_compression.py`); *contrasts open together are buffered with the virtual channels and lose nothing* (`test_pics.py`).
+  Code: {class}`~pulserver.recon.CompressChannels`, {class}`~pulserver.recon.CoilCompression`. Tests: *virtual channels are uncorrelated and carry the leading eigenvalues*; *compressed data and maps reconstruct the uncompressed image*; *calibration readouts are held then given on projected ahead of the first imaging readout*; *the basis comes from the calibration readouts of the first contrast*; *a slice seen by channels the first slice does not see keeps its signal* (`test_coil_compression.py`); *contrasts open together are buffered with the virtual channels and lose nothing* (`test_pics.py`).
 - **Finds coil maps in the unit, the stream or the exam, and refuses maps that differ in any recorded field.**
 
   Code: {func}`~pulserver.recon.coil_maps`, {class}`~pulserver.recon.CoilSensitivities`. Tests: *a later unit without calibration readouts is given the maps of its slice*; *maps that differ in a field are refused naming it with both values*; *exam maps at another matrix are refused not resampled* (`test_calibration.py`).
@@ -51,7 +51,7 @@ write such a plugin.
   Code: {class}`~pulserver.recon.ExamCache`. Test: *a value one cache stores is read by the next on its directory* (`test_app.py`).
 - **Ships a `pics` plugin with prewhitening, coil compression, partial Fourier and asymmetric echo.**
 
-  Code: `src/pulserver/_zoo/recon/pics.py`. Tests: *every other phase encode and the centre reconstruct to the image of all lines*; *a partial fourier image is closer to the full one than the solve of its lines alone*; *homodyne over two partial fourier axes together beats one axis after the other*; *a multi echo scan sends the real and imaginary parts of each echo as series of their own*; *channels beyond the virtual coils are compressed before the maps and the solve* (`test_pics.py`).
+  Code: `src/pulserver/_zoo/recon/pics.py`. Tests: *every other phase encode and the centre reconstruct to the image of all lines*; *a partial fourier image is closer to the full one than the solve of its lines alone*; *a real image times its phase restores the lines partial fourier leaves out*; *a multi echo scan sends the real and imaginary parts of each echo as series of their own*; *channels beyond the virtual coils are compressed before the maps and the solve* (`test_pics.py`).
 - **Corrects the images of every shipped reconstruction in one order, each step on unless the scan or the site turns it off: a Fermi filter of the solved image's k-space, gradient nonlinearity, and the N4 receive field of the magnitude, one per slice and set.**
 
   The receive field, fitted at four levels of N4's B-spline mesh, removes a head coil's centre-bright shading at 7 T and compresses the intensity ratios between separate compartments, such as a phantom's vials, towards one; a scan states `IntensityCorrectionLevels` 2 to keep them, or `IntensityCorrection` 0. The receive field is fitted to each slice of a 2D multi-slice series on its own and normalised to mean 1 inside that slice's object, so the shipped reconstructions do not keep intensity ratios between slices.

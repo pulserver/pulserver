@@ -726,10 +726,14 @@ the scanner’s <a class="reference internal" href="../../generated/pulserver.vi
 named <code class="docutils literal notranslate"><span class="pre">transmit/receive</span></code>: the body coil both ways, taken to be one channel of
 unit sensitivity each way; the body coil transmitting to a 48-channel receive
 head array, <code class="docutils literal notranslate"><span class="pre">body/head48</span></code>; and an 8-channel head coil for parallel transmission
-with a 32-channel receive head array, <code class="docutils literal notranslate"><span class="pre">head8/head32</span></code>. The head coils’
-sensitivities are BART’s coil models rather than electromagnetic simulations:
-the 8-channel coil is <code class="docutils literal notranslate"><span class="pre">HEAD_2D_8CH</span></code>, constant along <span class="math notranslate nohighlight">\(z\)</span>, and the arrays are the
-first 48 and 32 channels of <code class="docutils literal notranslate"><span class="pre">HEAD_3D_64CH</span></code>, each sampled by bartorch over a cube
+with a 32-channel receive head array, <code class="docutils literal notranslate"><span class="pre">head8/head32</span></code>. The 8-channel coil is
+BART’s <code class="docutils literal notranslate"><span class="pre">HEAD_2D_8CH</span></code> model, constant along <span class="math notranslate nohighlight">\(z\)</span>. The receive arrays are
+arrays of 48 and 32 circular loops of
+7 cm diameter, their centres spread evenly over an ellipsoidal helmet about the
+head, and each sensitivity is <span class="math notranslate nohighlight">\(B_x + jB_y\)</span> of its loop by the Biot-Savart law.
+The loops sit as close to the head as a product array’s do, so their
+sensitivities fall off from the scalp inwards and unfold parallel-imaging
+aliasing with the g-factors of such an array. Each model is sampled over a cube
 25.6 cm wide about the isocentre and interpolated linearly between the samples.
 The receive sensitivities <span class="math notranslate nohighlight">\(s_c\)</span> have a root sum of squares of 1 at the
 isocentre. The transmit sensitivities <span class="math notranslate nohighlight">\(s^+_c\)</span> are the complex conjugates of the

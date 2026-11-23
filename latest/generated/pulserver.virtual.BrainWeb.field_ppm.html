@@ -503,12 +503,17 @@
 <dt class="sig sig-object py" id="pulserver.virtual.BrainWeb.field_ppm">
 <span class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">BrainWeb.</span></span><span class="sig-name descname"><span class="pre">field_ppm</span></span><a class="headerlink" href="#pulserver.virtual.BrainWeb.field_ppm" title="Link to this definition">#</a></dt>
 <dd><p>The field the head adds to B0 at each voxel, <code class="docutils literal notranslate"><span class="pre">(z,</span> <span class="pre">y,</span> <span class="pre">x)</span></code>, in ppm of B0, as a first-order shim leaves it.</p>
-<p>The head is water, and the background air, each voxel in proportion to
-the fraction of it the background fills. The field along B0, the
-physical z axis, is the susceptibility convolved with the dipole
-kernel, the Lorentz sphere’s third included (Marques and Bowtell,
-Concepts Magn Reson B 25:65, 2005), whose constant and linear terms
-over the voxels at least half head are then removed.</p>
+<p>The head is water, and the background air where the head ends: at a
+voxel mostly background and at its neighbours, each in proportion to
+the fraction of it the background fills. The fuzzy model’s small
+background fractions inside the scalp and the skull are no air. The
+field along B0, the physical z axis, is the susceptibility convolved
+with the dipole kernel, the Lorentz sphere’s third included (Marques
+and Bowtell, Concepts Magn Reson B 25:65, 2005). The field steps
+across the surface of the head, so a voxel the surface crosses, and
+the voxel beneath it, take the field of the tissue deeper in, which
+is the field their tissue is in. The constant and linear terms over
+the voxels at least half head are then removed.</p>
 </dd></dl>
 
 </section>

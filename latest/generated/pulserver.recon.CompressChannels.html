@@ -515,9 +515,15 @@ readouts are then given on, projected, ahead of that readout, and every
 later readout is projected as it arrives, so a buffer holds
 <code class="docutils literal notranslate"><span class="pre">n_virtual</span></code> channels. Readouts held when the stream ends are given on
 by <a class="reference internal" href="pulserver.recon.CompressChannels.release.html#pulserver.recon.CompressChannels.release" title="pulserver.recon.CompressChannels.release"><code class="xref py py-meth docutils literal notranslate"><span class="pre">release()</span></code></a>.</p>
-<p>A stream whose first readout is not a calibration readout, or whose
-readouts have no more than <code class="docutils literal notranslate"><span class="pre">n_virtual</span></code> channels, passes unchanged, as
-do navigator and noise readouts. Place the gadget after
+<p>Navigator and odd/even phase-reference readouts are held, projected and
+given on with the readouts around them, so every readout of a buffer or a
+phase fit has the same channels; they give no basis. A Cartesian stream
+whose first readout of neither kind is not a calibration readout holds
+its readouts up to the k-space centre line of their encoding space, the
+header’s <code class="docutils literal notranslate"><span class="pre">center</span></code>, and they give the basis. A stream of an encoding
+space the header does not state as Cartesian that opens without
+calibration, or whose readouts have no more than <code class="docutils literal notranslate"><span class="pre">n_virtual</span></code> channels,
+passes unchanged, as do noise readouts. Place the gadget after
 <a class="reference internal" href="pulserver.recon.Prewhiten.html#pulserver.recon.Prewhiten" title="pulserver.recon.Prewhiten"><code class="xref py py-class docutils literal notranslate"><span class="pre">Prewhiten</span></code></a>, so the basis is that of whitened channels, and before
 any gadget that changes the header of a readout: a held readout is given
 on with its acquisition as this gadget received it.</p>

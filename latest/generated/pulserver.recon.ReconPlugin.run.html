@@ -525,6 +525,9 @@ with the design’s manifest beside it.</p></li>
 <li><p><strong>dicom_dictionary</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em>, </em><em>default=None</em>) – Private DICOM dictionary the header’s <code class="docutils literal notranslate"><span class="pre">dicom:</span></code> attributes are
 resolved against, in place of the one the header names
 (<a class="reference internal" href="../user-guide/reconstruction-client.html#dicom-attributes"><span class="std std-ref">DICOM attributes</span></a>).</p></li>
+<li><p><strong>device</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em>, </em><em>default=None</em>) – Device the reconstruction may run its operators on, such as
+<code class="docutils literal notranslate"><span class="pre">&quot;cuda&quot;</span></code> or <code class="docutils literal notranslate"><span class="pre">&quot;cuda:1&quot;</span></code>, as a proxy worker passes the GPU of its
+slot (<a class="reference internal" href="pulserver.recon.ReconContext.device.html#pulserver.recon.ReconContext.device" title="pulserver.recon.ReconContext.device"><code class="xref py py-attr docutils literal notranslate"><span class="pre">ReconContext.device</span></code></a>); <code class="docutils literal notranslate"><span class="pre">None</span></code> keeps it on the CPU.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>

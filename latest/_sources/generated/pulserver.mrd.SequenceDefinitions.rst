@@ -26,6 +26,7 @@
 
    ~SequenceDefinitions.centre_line
    ~SequenceDefinitions.centre_partition
+   ~SequenceDefinitions.multiband
    ~SequenceDefinitions.slice_positions
    ~SequenceDefinitions.slice_thickness
    ~SequenceDefinitions.matrix

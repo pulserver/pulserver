@@ -577,9 +577,9 @@ readouts of every unit are whitened alike.</p>
 <section id="coil-compression">
 <h2>Coil compression<a class="headerlink" href="#coil-compression" title="Link to this heading">#</a></h2>
 <p>The basis <span class="math notranslate nohighlight">\(A\)</span> is that of the channel covariance
-<span class="math notranslate nohighlight">\(\sum_k \mathbf{y}_k\mathbf{y}_k^H\)</span> over calibration samples. One basis is
-estimated per stream, and every readout or unit is projected onto it, so the
-virtual channels of successive units are the same. The basis and the
+<span class="math notranslate nohighlight">\(\sum_k \mathbf{y}_k\mathbf{y}_k^H\)</span> over calibration samples. Every
+readout or unit of a slice is projected onto the same basis, so the virtual
+channels of successive units of that slice are the same. The basis and the
 projection are computed on the host. It is estimated in one of two places:</p>
 <ul class="simple">
 <li><p>as the readouts arrive, by the gadget
@@ -589,11 +589,15 @@ until the first readout that is not calibration, then placed, projected,
 ahead of it; every later readout is projected as it arrives. The buffers then
 hold <span class="math notranslate nohighlight">\(n\)</span> channels, which is what lets the units of every echo of a
 multi-echo volume be open together;</p></li>
-<li><p>as a unit closes, by <a class="reference internal" href="../../generated/pulserver.recon.CoilCompression.html#pulserver.recon.CoilCompression" title="pulserver.recon.CoilCompression"><code class="xref py py-class docutils literal notranslate"><span class="pre">CoilCompression</span></code></a>, from the
-placed samples of the calibration k-space of the first unit the stream
-compresses, or of its imaging k-space where that unit holds none. This is
-the place for a scan whose calibration lines are spread among its imaging
-lines, such as an echo train.</p></li>
+<li><p>as a unit closes, by <a class="reference internal" href="../../generated/pulserver.recon.CoilCompression.html#pulserver.recon.CoilCompression" title="pulserver.recon.CoilCompression"><code class="xref py py-class docutils literal notranslate"><span class="pre">CoilCompression</span></code></a>, one basis
+per slice location, from the placed samples of the calibration k-space of
+the first unit of that location, or of its imaging k-space where that unit
+holds none. A slice far from the first one played is seen by other
+channels, and a basis fitted to the first would drop them. This is the place
+for a scan whose calibration lines are spread among its imaging lines, such
+as an echo train. With <code class="docutils literal notranslate"><span class="pre">by_slice=False</span></code> the stream has one basis, the
+first unit’s: the bands of a multiband unit and the slices whose
+maps unfold them have to share their virtual channels.</p></li>
 </ul>
 <p>If the signal of the channels lies in a subspace of dimension at most <span class="math notranslate nohighlight">\(n\)</span>,
 compression discards none of it, and SENSE with compressed data and compressed

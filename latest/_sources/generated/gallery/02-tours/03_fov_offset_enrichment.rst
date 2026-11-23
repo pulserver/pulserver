@@ -163,7 +163,7 @@ gives ``None`` where the scanner's offsets carry the whole phase.
  .. code-block:: none
 
     gradient echo: a phase on 0 of 64 readouts
-    echo planar: a phase on 133 of 133 readouts
+    echo planar: a phase on 254 of 254 readouts
 
 
 
@@ -239,7 +239,7 @@ engine's bases. As received, the echo planar samples do not.
  .. code-block:: none
 
     gradient echo: relative difference from the isocentre, as received 4.5e-03, with the proxy phase 4.5e-03
-    echo planar: relative difference from the isocentre, as received 2.0e-01, with the proxy phase 1.2e-01
+    echo planar: relative difference from the isocentre, as received 2.0e-01, with the proxy phase 1.3e-01
 
 
 
@@ -313,7 +313,7 @@ needs no new cache.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.605 seconds)
+   **Total running time of the script:** (0 minutes 0.850 seconds)
 
 
 .. _sphx_glr_download_generated_gallery_02-tours_03_fov_offset_enrichment.py:

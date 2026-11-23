@@ -538,6 +538,9 @@
 <span class="sd">        empty when undefined.</span>
 <span class="sd">    slice_thickness : float or None</span>
 <span class="sd">        ``SliceThickness``, in metres; ``None`` when undefined.</span>
+<span class="sd">    multiband : int</span>
+<span class="sd">        ``MultibandFactor``: the slices one excitation excites; 1 when</span>
+<span class="sd">        undefined.</span>
 <span class="sd">    """</span>
 
     <span class="n">matrix</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span>
@@ -552,6 +555,7 @@
     <span class="n">centre_partition</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">slice_positions</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="p">()</span>
     <span class="n">slice_thickness</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">multiband</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span>
 
 <div class="viewcode-block" id="SequenceDefinitions.from_sequence">
 <a class="viewcode-back" href="../../../generated/pulserver.mrd.SequenceDefinitions.from_sequence.html#pulserver.mrd.SequenceDefinitions.from_sequence">[docs]</a>
@@ -588,6 +592,9 @@
             <span class="n">slice_positions</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="n">_numbers</span><span class="p">(</span><span class="n">seq</span><span class="o">.</span><span class="n">get_definition</span><span class="p">(</span><span class="s2">"SlicePositions"</span><span class="p">))),</span>
             <span class="n">slice_thickness</span><span class="o">=</span><span class="nb">next</span><span class="p">(</span>
                 <span class="nb">iter</span><span class="p">(</span><span class="n">_numbers</span><span class="p">(</span><span class="n">seq</span><span class="o">.</span><span class="n">get_definition</span><span class="p">(</span><span class="s2">"SliceThickness"</span><span class="p">))),</span> <span class="kc">None</span>
+            <span class="p">),</span>
+            <span class="n">multiband</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span>
+                <span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">_numbers</span><span class="p">(</span><span class="n">seq</span><span class="o">.</span><span class="n">get_definition</span><span class="p">(</span><span class="s2">"MultibandFactor"</span><span class="p">))),</span> <span class="mi">1</span><span class="p">)</span>
             <span class="p">),</span>
         <span class="p">)</span></div>
 </div>

@@ -504,26 +504,35 @@
 <span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">pulserver.recon.</span></span><span class="sig-name descname"><span class="pre">CoilCompression</span></span><a class="reference internal" href="../_modules/pulserver/recon/_calibration.html#CoilCompression"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.recon.CoilCompression" title="Link to this definition">#</a></dt>
 <dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/builtins/functions.html#object" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
 <p>Reduce the receive channels of a unit’s k-space to virtual channels.</p>
-<p>The basis is estimated once per stream, from the first unit it is given,
-and applied to every unit. It consists of the eigenvectors of the channel
-covariance over every placed sample of the unit’s calibration k-space, or
-of its imaging k-space where it holds no calibration data
-(<code class="xref py py-func docutils literal notranslate"><span class="pre">bartorch.tools.cc()</span></code>), of which the <code class="docutils literal notranslate"><span class="pre">n_virtual</span></code> with the largest
-eigenvalues are kept: the virtual channels are uncorrelated and ordered by
-decreasing power. <code class="xref py py-func docutils literal notranslate"><span class="pre">bartorch.tools.ccapply()</span></code> projects the k-space of
-<code class="docutils literal notranslate"><span class="pre">data.data</span></code> and <code class="docutils literal notranslate"><span class="pre">data.ref</span></code> onto it. The basis is stored in
-<code class="docutils literal notranslate"><span class="pre">context.coil_compression</span></code>, and <a class="reference internal" href="pulserver.recon.coil_maps.html#pulserver.recon.coil_maps" title="pulserver.recon.coil_maps"><code class="xref py py-func docutils literal notranslate"><span class="pre">coil_maps()</span></code></a> records it with the
-maps it estimates, which only units compressed by the same basis reuse:
-compress a unit before asking for its maps.</p>
+<p>Each slice location has a basis of its own, estimated from the first unit
+of that location and applied to every later unit of it, so a slice keeps
+the channels that see it whatever slice the stream opens with. With
+<code class="docutils literal notranslate"><span class="pre">by_slice</span></code> false the stream has one basis for every location: the one
+<code class="xref py py-meth docutils literal notranslate"><span class="pre">pool()</span></code> estimated, else that of the first unit. A basis consists of
+the eigenvectors of the channel covariance over every placed sample of
+the calibration k-space, or of the imaging k-space where there is no
+calibration data (<code class="xref py py-func docutils literal notranslate"><span class="pre">bartorch.tools.cc()</span></code>), of which the <code class="docutils literal notranslate"><span class="pre">n_virtual</span></code>
+with the largest eigenvalues are kept: the virtual channels are
+uncorrelated and ordered by decreasing power.
+<code class="xref py py-func docutils literal notranslate"><span class="pre">bartorch.tools.ccapply()</span></code> projects the k-space of <code class="docutils literal notranslate"><span class="pre">data.data</span></code> and
+<code class="docutils literal notranslate"><span class="pre">data.ref</span></code> onto it. The bases are stored in
+<code class="docutils literal notranslate"><span class="pre">context.coil_compressions</span></code> by location (<code class="docutils literal notranslate"><span class="pre">None</span></code> for the stream’s
+one), and the basis applied last in <code class="docutils literal notranslate"><span class="pre">context.coil_compression</span></code>, which
+<a class="reference internal" href="pulserver.recon.coil_maps.html#pulserver.recon.coil_maps" title="pulserver.recon.coil_maps"><code class="xref py py-func docutils literal notranslate"><span class="pre">coil_maps()</span></code></a> records with the maps it estimates and which only units
+compressed by the same basis reuse: compress a unit before asking for its
+maps.</p>
 <p>The returned unit holds new buffers with <code class="docutils literal notranslate"><span class="pre">n_virtual</span></code> channels, and shares
 its <code class="docutils literal notranslate"><span class="pre">counters</span></code> and <code class="docutils literal notranslate"><span class="pre">acquisitions</span></code> with the unit it was made from. The
 basis and the projection are computed on the host. bartorch is imported
 when a unit is compressed.</p>
-<p>Corresponds to Gadgetron’s <code class="docutils literal notranslate"><span class="pre">GenericReconEigenChannelGadget</span></code>.</p>
+<p>Corresponds to Gadgetron’s <code class="docutils literal notranslate"><span class="pre">GenericReconEigenChannelGadget</span></code>, its basis
+computed per slice.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>n_virtual</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a>) – Virtual channels kept, at most the number of channels of the first
-unit.</p>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>n_virtual</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a>) – Virtual channels kept, at most the number of channels of the units.</p></li>
+<li><p><strong>by_slice</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>default=True</em>) – Estimate a basis per slice location rather than one for the stream.</p></li>
+</ul>
 </dd>
 </dl>
 </dd></dl>

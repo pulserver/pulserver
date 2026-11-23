@@ -490,7 +490,11 @@
 <div class="viewcode-block" id="gradient_unwarped">
 <a class="viewcode-back" href="../../../generated/pulserver.recon.gradient_unwarped.html#pulserver.recon.gradient_unwarped">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">gradient_unwarped</span><span class="p">(</span>
-    <span class="n">image</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">cache</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">image</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="n">context</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="n">data</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+    <span class="n">cache</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">planes</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Correct an image for gradient nonlinearity.</span>
 
@@ -501,7 +505,10 @@
 <span class="sd">    and the unit's reference acquisition, so the correction is in the frame the</span>
 <span class="sd">    series was acquired in, oblique prescriptions included. An encoding of one</span>
 <span class="sd">    partition, a 2D slice, is corrected in its plane: the displacement across</span>
-<span class="sd">    the slice moves the slice, which resampling cannot undo.</span>
+<span class="sd">    the slice moves the slice, which resampling cannot undo. So is each of</span>
+<span class="sd">    ``planes``, the slices a multiband unit stacks along its partition axis,</span>
+<span class="sd">    at its own position: resampled across the stack, a band would take in its</span>
+<span class="sd">    neighbour, a gap of several slices away.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
@@ -517,6 +524,10 @@
 <span class="sd">        unit needs is taken from it or added to it. A stream of several units</span>
 <span class="sd">        of one geometry, the echoes of a multi-echo scan or the volumes of a</span>
 <span class="sd">        time series, so builds its correction once.</span>
+<span class="sd">    planes : sequence of float, default=None</span>
+<span class="sd">        Position (mm) along the reference acquisition's slice direction of</span>
+<span class="sd">        each partition of ``image`` where the partitions are slices of their</span>
+<span class="sd">        own; ``None`` corrects the partitions as one volume.</span>
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
@@ -542,8 +553,19 @@
     <span class="k">try</span><span class="p">:</span>
         <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 
-        <span class="n">correction</span> <span class="o">=</span> <span class="n">_correction</span><span class="p">(</span><span class="n">header</span><span class="p">,</span> <span class="n">reference</span><span class="p">,</span> <span class="n">cache</span><span class="p">)</span>
-        <span class="n">corrected</span> <span class="o">=</span> <span class="n">correction</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">image</span><span class="p">))</span>
+        <span class="n">values</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">image</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">planes</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">corrected</span> <span class="o">=</span> <span class="n">_correction</span><span class="p">(</span><span class="n">header</span><span class="p">,</span> <span class="n">reference</span><span class="p">,</span> <span class="n">cache</span><span class="p">)(</span><span class="n">values</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">corrected</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span>
+                <span class="p">[</span>
+                    <span class="n">_correction</span><span class="p">(</span><span class="n">header</span><span class="p">,</span> <span class="n">_moved</span><span class="p">(</span><span class="n">reference</span><span class="p">,</span> <span class="n">position</span><span class="p">),</span> <span class="n">cache</span><span class="p">,</span> <span class="kc">True</span><span class="p">)(</span>
+                        <span class="n">values</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">index</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:]</span>
+                    <span class="p">)</span>
+                    <span class="k">for</span> <span class="n">index</span><span class="p">,</span> <span class="n">position</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">planes</span><span class="p">)</span>
+                <span class="p">],</span>
+                <span class="n">dim</span><span class="o">=-</span><span class="mi">3</span><span class="p">,</span>
+            <span class="p">)</span>
     <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
         <span class="n">_log</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">"the image was not corrected for gradient nonlinearity: </span><span class="si">%s</span><span class="s2">"</span><span class="p">,</span> <span class="n">error</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">image</span>
@@ -562,8 +584,10 @@
 <span class="n">UNWARP_CACHE_VOXELS</span> <span class="o">=</span> <span class="mi">2</span> <span class="o">*</span> <span class="mi">256</span><span class="o">**</span><span class="mi">3</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_correction</span><span class="p">(</span><span class="n">header</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">reference</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">cache</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Return the gradient nonlinearity correction of ``reference``'s geometry, from ``cache`` where it holds it."""</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_correction</span><span class="p">(</span>
+    <span class="n">header</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">reference</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">cache</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">plane</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the gradient nonlinearity correction of ``reference``'s geometry, in its plane where ``plane`` is true or its encoding has one partition, from ``cache`` where it holds it."""</span>
     <span class="kn">from</span><span class="w"> </span><span class="nn">bartorch.tools</span><span class="w"> </span><span class="kn">import</span> <span class="n">Gradunwarp</span>
 
     <span class="n">key</span> <span class="o">=</span> <span class="p">(</span>
@@ -572,12 +596,13 @@
             <span class="nb">tuple</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">reference</span><span class="p">,</span> <span class="n">name</span><span class="p">))</span>
             <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"position"</span><span class="p">,</span> <span class="s2">"read_dir"</span><span class="p">,</span> <span class="s2">"phase_dir"</span><span class="p">,</span> <span class="s2">"slice_dir"</span><span class="p">)</span>
         <span class="p">),</span>
+        <span class="n">plane</span><span class="p">,</span>
     <span class="p">)</span>
     <span class="k">if</span> <span class="n">cache</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">cache</span><span class="p">:</span>
         <span class="n">cache</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">cache</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">cache</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
     <span class="n">correction</span> <span class="o">=</span> <span class="n">Gradunwarp</span><span class="o">.</span><span class="n">from_mrd</span><span class="p">(</span><span class="n">header</span><span class="p">,</span> <span class="n">reference</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">correction</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">plane</span> <span class="ow">or</span> <span class="n">correction</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
         <span class="n">correction</span> <span class="o">=</span> <span class="n">_in_plane</span><span class="p">(</span><span class="n">correction</span><span class="p">,</span> <span class="n">header</span><span class="p">,</span> <span class="n">reference</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">cache</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">cache</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">correction</span>
@@ -587,6 +612,21 @@
         <span class="p">):</span>
             <span class="n">cache</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="nb">next</span><span class="p">(</span><span class="nb">iter</span><span class="p">(</span><span class="n">cache</span><span class="p">)))</span>
     <span class="k">return</span> <span class="n">correction</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_moved</span><span class="p">(</span><span class="n">reference</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">position</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the geometry of ``reference`` moved along its slice direction to ``position`` (mm), as :meth:`bartorch.tools.Gradunwarp.from_mrd` reads it."""</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">types</span><span class="w"> </span><span class="kn">import</span> <span class="n">SimpleNamespace</span>
+
+    <span class="n">normal</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">reference</span><span class="o">.</span><span class="n">slice_dir</span><span class="p">,</span> <span class="nb">float</span><span class="p">)</span>
+    <span class="n">centre</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">reference</span><span class="o">.</span><span class="n">position</span><span class="p">,</span> <span class="nb">float</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">SimpleNamespace</span><span class="p">(</span>
+        <span class="n">encoding_space_ref</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">reference</span><span class="p">,</span> <span class="s2">"encoding_space_ref"</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="ow">or</span> <span class="mi">0</span><span class="p">),</span>
+        <span class="n">position</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="n">centre</span> <span class="o">+</span> <span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">position</span><span class="p">)</span> <span class="o">-</span> <span class="nb">float</span><span class="p">(</span><span class="n">centre</span> <span class="o">@</span> <span class="n">normal</span><span class="p">))</span> <span class="o">*</span> <span class="n">normal</span><span class="p">),</span>
+        <span class="n">read_dir</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">reference</span><span class="o">.</span><span class="n">read_dir</span><span class="p">),</span>
+        <span class="n">phase_dir</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">reference</span><span class="o">.</span><span class="n">phase_dir</span><span class="p">),</span>
+        <span class="n">slice_dir</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">reference</span><span class="o">.</span><span class="n">slice_dir</span><span class="p">),</span>
+    <span class="p">)</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_in_plane</span><span class="p">(</span><span class="n">correction</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">header</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">reference</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
@@ -834,12 +874,12 @@
 
 <div class="viewcode-block" id="Corrections.unwarped">
 <a class="viewcode-back" href="../../../generated/pulserver.recon.Corrections.unwarped.html#pulserver.recon.Corrections.unwarped">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">unwarped</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">image</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Return ``image`` corrected for gradient nonlinearity (:func:`gradient_unwarped`) where the correction is on, each geometry's correction built once for the stream."""</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">unwarped</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">image</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">planes</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Return ``image`` corrected for gradient nonlinearity (:func:`gradient_unwarped`, each of ``planes`` in its own plane) where the correction is on, each geometry's correction built once for the stream."""</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">gradient_unwarp</span><span class="p">:</span>
             <span class="k">return</span> <span class="n">image</span>
         <span class="n">start</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span>
-        <span class="n">corrected</span> <span class="o">=</span> <span class="n">gradient_unwarped</span><span class="p">(</span><span class="n">image</span><span class="p">,</span> <span class="n">context</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_unwarps</span><span class="p">)</span>
+        <span class="n">corrected</span> <span class="o">=</span> <span class="n">gradient_unwarped</span><span class="p">(</span><span class="n">image</span><span class="p">,</span> <span class="n">context</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_unwarps</span><span class="p">,</span> <span class="n">planes</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">corrected</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">image</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_ran</span><span class="p">(</span>
                 <span class="s2">"GRADUNWARP"</span><span class="p">,</span>
@@ -852,11 +892,13 @@
 
 <div class="viewcode-block" id="Corrections.intensity_corrected">
 <a class="viewcode-back" href="../../../generated/pulserver.recon.Corrections.intensity_corrected.html#pulserver.recon.Corrections.intensity_corrected">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">intensity_corrected</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">results</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Return ``results`` with their magnitude images divided by the receive field (:class:`IntensityCorrection`) where the correction is on."""</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">intensity_corrected</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">results</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">by_plane</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Return ``results`` with their magnitude images divided by the receive field (:class:`IntensityCorrection`, of each plane where ``by_plane``) where the correction is on."""</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">intensity</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">return</span> <span class="n">results</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">intensity</span><span class="p">(</span><span class="n">results</span><span class="p">,</span> <span class="n">data</span><span class="p">)</span></div>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">intensity</span><span class="p">(</span><span class="n">results</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">by_plane</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="Corrections.applied">
@@ -905,8 +947,10 @@
 <span class="sd">    repetition and cardiac phase of it: echoes and time points keep their</span>
 <span class="sd">    intensity ratios, so a T2* fit or a time series is not changed by the</span>
 <span class="sd">    correction. Each slice of a 2D multi-slice series has a field of its own,</span>
-<span class="sd">    of mean 1 inside its own mask, so ratios between slices are not kept.</span>
-<span class="sd">    Make one instance per stream.</span>
+<span class="sd">    of mean 1 inside its own mask, so ratios between slices are not kept; so</span>
+<span class="sd">    has each band of a multiband unit, the slices it stacks along its</span>
+<span class="sd">    partition axis, where the call says ``by_plane``. Make one instance per</span>
+<span class="sd">    stream.</span>
 
 <span class="sd">    A magnitude image that is not 2D or 3D once its axes of one point are</span>
 <span class="sd">    dropped, or whose mask holds fewer than 64 pixels or 128 voxels or less</span>
@@ -925,13 +969,15 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">levels</span> <span class="o">=</span> <span class="n">N4_FITTING_LEVELS</span> <span class="k">if</span> <span class="n">levels</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="nb">int</span><span class="p">(</span><span class="n">levels</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">fields</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">results</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">results</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">by_plane</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""Return ``results``, a :class:`~pulserver.recon.ReconResult` or a list of them, with their magnitude images divided by the field.</span>
 
 <span class="sd">        Each corrected result is a copy whose ``ImageProcessingHistory``</span>
 <span class="sd">        attribute ends in ``"N4"``. ``data`` is the unit's</span>
 <span class="sd">        :class:`~pulserver.recon.ReconData`, whose ``slice`` and ``set``</span>
-<span class="sd">        counters select the field.</span>
+<span class="sd">        counters select the field. With ``by_plane`` each plane along the axis</span>
+<span class="sd">        before the last two takes a 2D field of its own, and a plane whose</span>
+<span class="sd">        mask is too small is left undivided.</span>
 <span class="sd">        """</span>
         <span class="kn">from</span><span class="w"> </span><span class="nn">.plugin</span><span class="w"> </span><span class="kn">import</span> <span class="n">ReconResult</span>
 
@@ -947,7 +993,7 @@
         <span class="k">if</span> <span class="n">magnitude</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">return</span> <span class="n">results</span>
         <span class="k">try</span><span class="p">:</span>
-            <span class="n">field</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_field</span><span class="p">(</span><span class="n">_host</span><span class="p">(</span><span class="n">magnitude</span><span class="o">.</span><span class="n">data</span><span class="p">),</span> <span class="n">data</span><span class="p">)</span>
+            <span class="n">field</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_field</span><span class="p">(</span><span class="n">_host</span><span class="p">(</span><span class="n">magnitude</span><span class="o">.</span><span class="n">data</span><span class="p">),</span> <span class="n">data</span><span class="p">,</span> <span class="n">by_plane</span><span class="p">)</span>
             <span class="k">if</span> <span class="n">field</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="k">return</span> <span class="n">results</span>
             <span class="n">corrected</span> <span class="o">=</span> <span class="p">[</span>
@@ -966,15 +1012,21 @@
             <span class="k">return</span> <span class="n">results</span>
         <span class="k">return</span> <span class="n">corrected</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">results</span><span class="p">,</span> <span class="nb">list</span><span class="p">)</span> <span class="k">else</span> <span class="n">corrected</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">_field</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">magnitude</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_field</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">magnitude</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">by_plane</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""Return the field of the slice and set of ``data``, estimating it from ``magnitude`` the first time."""</span>
         <span class="n">counters</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="s2">"counters"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">or</span> <span class="p">{}</span>
         <span class="n">key</span> <span class="o">=</span> <span class="p">(</span>
             <span class="nb">int</span><span class="p">(</span><span class="n">counters</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"slice"</span><span class="p">,</span> <span class="mi">0</span><span class="p">)),</span>
             <span class="nb">int</span><span class="p">(</span><span class="n">counters</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"set"</span><span class="p">,</span> <span class="mi">0</span><span class="p">)),</span>
             <span class="n">magnitude</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span>
+            <span class="n">by_plane</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">fields</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">fields</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">by_plane</span> <span class="ow">and</span> <span class="n">magnitude</span><span class="o">.</span><span class="n">ndim</span> <span class="o">&gt;=</span> <span class="mi">3</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">fields</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_plane_fields</span><span class="p">(</span><span class="n">magnitude</span><span class="p">,</span> <span class="n">key</span><span class="p">)</span>
             <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">fields</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
         <span class="n">squeezed</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">n</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">magnitude</span><span class="o">.</span><span class="n">shape</span> <span class="k">if</span> <span class="n">n</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">)</span>
         <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">squeezed</span><span class="p">)</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">):</span>
@@ -997,7 +1049,35 @@
             <span class="k">if</span> <span class="n">field</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
             <span class="k">else</span> <span class="s2">"; its mask is too small to tell shading from contrast, so it is not corrected"</span><span class="p">,</span>
         <span class="p">)</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">fields</span><span class="p">[</span><span class="n">key</span><span class="p">]</span></div>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">fields</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_plane_fields</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">magnitude</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">key</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Return the 2D field of each plane of ``magnitude``, 1 over a plane that has none; ``None`` where no plane has one."""</span>
+        <span class="n">start</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span>
+        <span class="n">planes</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">magnitude</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">*</span><span class="n">magnitude</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">2</span><span class="p">:])</span>
+        <span class="n">fields</span> <span class="o">=</span> <span class="p">[</span><span class="n">receive_field</span><span class="p">(</span><span class="n">plane</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">levels</span><span class="p">)</span> <span class="k">for</span> <span class="n">plane</span> <span class="ow">in</span> <span class="n">planes</span><span class="p">]</span>
+        <span class="n">missing</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">field</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">for</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">fields</span><span class="p">)</span>
+        <span class="n">_log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="s2">"N4 receive field of each of the </span><span class="si">%d</span><span class="s2"> planes of slice </span><span class="si">%d</span><span class="s2">, set </span><span class="si">%d</span><span class="s2">, </span><span class="si">%s</span><span class="s2">, "</span>
+            <span class="s2">"estimated in </span><span class="si">%.1f</span><span class="s2"> s</span><span class="si">%s</span><span class="s2">"</span><span class="p">,</span>
+            <span class="nb">len</span><span class="p">(</span><span class="n">planes</span><span class="p">),</span>
+            <span class="n">key</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+            <span class="n">key</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span>
+            <span class="n">planes</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">2</span><span class="p">:],</span>
+            <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span> <span class="o">-</span> <span class="n">start</span><span class="p">,</span>
+            <span class="s2">""</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">missing</span>
+            <span class="k">else</span> <span class="sa">f</span><span class="s2">"; the mask of </span><span class="si">{</span><span class="n">missing</span><span class="si">}</span><span class="s2"> is too small to tell shading from "</span>
+            <span class="s2">"contrast, so they are not corrected"</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">missing</span> <span class="o">==</span> <span class="nb">len</span><span class="p">(</span><span class="n">fields</span><span class="p">):</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span>
+            <span class="p">[</span>
+                <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">plane</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span> <span class="k">if</span> <span class="n">field</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">field</span>
+                <span class="k">for</span> <span class="n">plane</span><span class="p">,</span> <span class="n">field</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">planes</span><span class="p">,</span> <span class="n">fields</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+            <span class="p">]</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">magnitude</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span></div>
 
 
 

@@ -649,10 +649,17 @@
 <span class="sd">        ``n``-voxel axis. The grid is centred instead, its voxel centres</span>
 <span class="sd">        symmetric about the field-of-view centre, which puts voxel ``n // 2``</span>
 <span class="sd">        half a voxel past it along each axis of even ``n``: ``FOV / (2 n)``,</span>
-<span class="sd">        and 0 along an axis of odd ``n`` or one voxel. Zero for a space that</span>
-<span class="sd">        states no matrix size or field of view.</span>
+<span class="sd">        and 0 along an axis of odd ``n`` or one voxel. A navigator space that</span>
+<span class="sd">        states no matrix size or field of view is on the grid of its file's</span>
+<span class="sd">        imaging space, so its readouts carry the phase of the readouts they</span>
+<span class="sd">        navigate; any other such space is at zero.</span>
 <span class="sd">        """</span>
-        <span class="n">space</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">spaces</span><span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">encoding_space</span><span class="p">[</span><span class="n">index</span><span class="p">])]</span>
+        <span class="n">number</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">encoding_space</span><span class="p">[</span><span class="n">index</span><span class="p">])</span>
+        <span class="n">space</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">spaces</span><span class="p">[</span><span class="n">number</span><span class="p">]</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">space</span><span class="o">.</span><span class="n">matrix</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">space</span><span class="o">.</span><span class="n">fov_mm</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">and</span> <span class="n">space</span><span class="o">.</span><span class="n">navigator</span><span class="p">:</span>
+            <span class="n">imaging</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">spaces</span><span class="p">[</span><span class="n">number</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span> <span class="k">if</span> <span class="n">number</span> <span class="k">else</span> <span class="kc">None</span>
+            <span class="k">if</span> <span class="n">imaging</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">imaging</span><span class="o">.</span><span class="n">subsequence</span> <span class="o">==</span> <span class="n">space</span><span class="o">.</span><span class="n">subsequence</span><span class="p">:</span>
+                <span class="n">space</span> <span class="o">=</span> <span class="n">imaging</span>
         <span class="k">if</span> <span class="n">space</span><span class="o">.</span><span class="n">matrix</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">space</span><span class="o">.</span><span class="n">fov_mm</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span>
         <span class="n">matrix</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">space</span><span class="o">.</span><span class="n">matrix</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
@@ -1115,6 +1122,7 @@
     <span class="n">_mark_boundaries</span><span class="p">(</span><span class="n">flags</span><span class="p">,</span> <span class="n">counters</span><span class="p">,</span> <span class="n">local_space</span><span class="p">,</span> <span class="nb">set</span><span class="p">(</span><span class="n">labels</span><span class="p">))</span>
 
     <span class="n">stack</span> <span class="o">=</span> <span class="n">_is_slice_stack</span><span class="p">(</span><span class="n">labels</span><span class="p">,</span> <span class="n">definitions</span><span class="p">)</span>
+    <span class="n">bands</span> <span class="o">=</span> <span class="n">_multiband_stack</span><span class="p">(</span><span class="n">labels</span><span class="p">,</span> <span class="n">definitions</span><span class="p">)</span>
     <span class="n">spaces</span> <span class="o">=</span> <span class="p">[]</span>
     <span class="n">navigates</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="n">navigator</span><span class="o">.</span><span class="n">any</span><span class="p">())</span>
     <span class="k">for</span> <span class="n">local</span><span class="p">,</span> <span class="n">is_navigator</span> <span class="ow">in</span> <span class="p">((</span><span class="mi">0</span><span class="p">,</span> <span class="kc">False</span><span class="p">),</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="kc">True</span><span class="p">)):</span>
@@ -1124,6 +1132,8 @@
         <span class="n">fov</span> <span class="o">=</span> <span class="n">definitions</span><span class="o">.</span><span class="n">navigator_fov</span> <span class="k">if</span> <span class="n">is_navigator</span> <span class="k">else</span> <span class="n">definitions</span><span class="o">.</span><span class="n">fov</span>
         <span class="k">if</span> <span class="n">stack</span><span class="p">:</span>
             <span class="n">matrix</span><span class="p">,</span> <span class="n">fov</span> <span class="o">=</span> <span class="n">_one_slice</span><span class="p">(</span><span class="n">matrix</span><span class="p">,</span> <span class="n">fov</span><span class="p">,</span> <span class="n">definitions</span><span class="o">.</span><span class="n">slice_thickness</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="n">bands</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">is_navigator</span><span class="p">:</span>
+            <span class="n">matrix</span><span class="p">,</span> <span class="n">fov</span> <span class="o">=</span> <span class="n">_one_band_group</span><span class="p">(</span><span class="n">matrix</span><span class="p">,</span> <span class="n">fov</span><span class="p">,</span> <span class="n">definitions</span><span class="p">,</span> <span class="n">bands</span><span class="p">)</span>
         <span class="n">members</span> <span class="o">=</span> <span class="n">local_space</span> <span class="o">==</span> <span class="n">local</span> <span class="k">if</span> <span class="n">navigates</span> <span class="k">else</span> <span class="nb">slice</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
         <span class="n">trajectory</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">((</span><span class="n">readouts</span><span class="o">.</span><span class="n">trajectory_dimensions</span><span class="p">[</span><span class="n">members</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">any</span><span class="p">())</span>
         <span class="n">spaces</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
@@ -1160,6 +1170,8 @@
         <span class="s2">"num_samples"</span><span class="p">:</span> <span class="n">readouts</span><span class="o">.</span><span class="n">num_samples</span><span class="p">,</span>
         <span class="s2">"slice_offset_m"</span><span class="p">:</span> <span class="n">_slice_offsets</span><span class="p">(</span><span class="n">labels</span><span class="p">,</span> <span class="n">definitions</span><span class="p">,</span> <span class="n">count</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">stack</span>
+        <span class="k">else</span> <span class="n">_band_group_offsets</span><span class="p">(</span><span class="n">labels</span><span class="p">,</span> <span class="n">definitions</span><span class="p">,</span> <span class="n">bands</span><span class="p">,</span> <span class="n">count</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">bands</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
         <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">count</span><span class="p">),</span>
     <span class="p">}</span>
     <span class="k">return</span> <span class="n">part</span><span class="p">,</span> <span class="n">spaces</span>
@@ -1179,6 +1191,59 @@
     <span class="n">slices</span> <span class="o">=</span> <span class="n">labels</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"SLC"</span><span class="p">)</span>
     <span class="n">varies</span> <span class="o">=</span> <span class="n">slices</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">slices</span><span class="p">)</span><span class="o">.</span><span class="n">size</span> <span class="o">&gt;</span> <span class="mi">1</span>
     <span class="k">return</span> <span class="nb">bool</span><span class="p">(</span><span class="n">definitions</span><span class="o">.</span><span class="n">slice_positions</span><span class="p">)</span> <span class="ow">or</span> <span class="n">varies</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_multiband_stack</span><span class="p">(</span>
+    <span class="n">labels</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">],</span> <span class="n">definitions</span><span class="p">:</span> <span class="n">SequenceDefinitions</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the slice groups of a subsequence that excites its slices several at a time; ``None`` otherwise.</span>
+
+<span class="sd">    A multiband stack defines ``MultibandFactor`` ``m`` above 1 and</span>
+<span class="sd">    ``SlicePositions``, whose count ``m`` divides, and writes ``PAR`` for the</span>
+<span class="sd">    band: ``SLC`` ``g`` excites the slices ``g + b G`` of the ``G`` groups,</span>
+<span class="sd">    ``b`` from 0 to ``m - 1``, ``G`` slice positions apart.</span>
+<span class="sd">    """</span>
+    <span class="n">m</span><span class="p">,</span> <span class="n">positions</span> <span class="o">=</span> <span class="n">definitions</span><span class="o">.</span><span class="n">multiband</span><span class="p">,</span> <span class="n">definitions</span><span class="o">.</span><span class="n">slice_positions</span>
+    <span class="k">if</span> <span class="n">m</span> <span class="o">&lt;</span> <span class="mi">2</span> <span class="ow">or</span> <span class="s2">"PAR"</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">labels</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">positions</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">positions</span><span class="p">)</span> <span class="o">%</span> <span class="n">m</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="k">return</span> <span class="nb">len</span><span class="p">(</span><span class="n">positions</span><span class="p">)</span> <span class="o">//</span> <span class="n">m</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_one_band_group</span><span class="p">(</span>
+    <span class="n">matrix</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">fov</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">definitions</span><span class="p">:</span> <span class="n">SequenceDefinitions</span><span class="p">,</span>
+    <span class="n">groups</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Return the matrix and field of view of one slice group of a multiband stack, in m.</span>
+
+<span class="sd">    The bands of a group are its partitions: ``MultibandFactor`` of them</span>
+<span class="sd">    along z, each the gap between the bands of a group deep, so the partition</span>
+<span class="sd">    grid, centred on the group, places each band on a voxel.</span>
+<span class="sd">    """</span>
+    <span class="n">m</span> <span class="o">=</span> <span class="n">definitions</span><span class="o">.</span><span class="n">multiband</span>
+    <span class="n">positions</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">definitions</span><span class="o">.</span><span class="n">slice_positions</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+    <span class="n">gap</span> <span class="o">=</span> <span class="nb">abs</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">positions</span><span class="p">[</span><span class="n">groups</span><span class="p">]</span> <span class="o">-</span> <span class="n">positions</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span>
+    <span class="k">if</span> <span class="n">matrix</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">matrix</span> <span class="o">=</span> <span class="p">(</span><span class="n">matrix</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">matrix</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">m</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">fov</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">fov</span> <span class="o">=</span> <span class="p">(</span><span class="n">fov</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">fov</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">m</span> <span class="o">*</span> <span class="n">gap</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">matrix</span><span class="p">,</span> <span class="n">fov</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_band_group_offsets</span><span class="p">(</span>
+    <span class="n">labels</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">],</span>
+    <span class="n">definitions</span><span class="p">:</span> <span class="n">SequenceDefinitions</span><span class="p">,</span>
+    <span class="n">groups</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">count</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the centre of the slice group each readout's ``SLC`` indexes, in m: the mean of its bands' positions."""</span>
+    <span class="n">positions</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">definitions</span><span class="o">.</span><span class="n">slice_positions</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+    <span class="n">centres</span> <span class="o">=</span> <span class="n">positions</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">definitions</span><span class="o">.</span><span class="n">multiband</span><span class="p">,</span> <span class="n">groups</span><span class="p">)</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+    <span class="n">slices</span> <span class="o">=</span> <span class="n">labels</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"SLC"</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">slices</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="n">count</span><span class="p">,</span> <span class="n">centres</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+    <span class="k">return</span> <span class="n">centres</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">slices</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)]</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_one_slice</span><span class="p">(</span>
@@ -1225,27 +1290,29 @@
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_ramp_sampled</span><span class="p">(</span><span class="n">readouts</span><span class="p">:</span> <span class="n">ReadoutTable</span><span class="p">,</span> <span class="n">index</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Whether a readout samples the ramps of its readout gradient.</span>
+<span class="w">    </span><span class="sd">"""Whether a readout's k-space samples are unevenly spaced, as sampling on the gradient ramps leaves them.</span>
 
-<span class="sd">    The readout gradient is the trapezoid with the longest flat top in the</span>
-<span class="sd">    block; a block with none is not ramp sampled.</span>
+<span class="sd">    Decided from the readout's k-space trajectory, the integral of the played</span>
+<span class="sd">    gradients at the sample times: along the axis it travels furthest, the</span>
+<span class="sd">    spacing of consecutive samples differs from their mean by more than</span>
+<span class="sd">    ``_UNEVEN_SPACING`` of it. A readout whose k does not move is not ramp</span>
+<span class="sd">    sampled.</span>
 <span class="sd">    """</span>
-    <span class="n">block</span> <span class="o">=</span> <span class="n">readouts</span><span class="o">.</span><span class="n">readout_block</span><span class="p">(</span><span class="n">index</span><span class="p">)</span>
-    <span class="n">adc</span> <span class="o">=</span> <span class="n">block</span><span class="o">.</span><span class="n">adc</span>
-    <span class="n">trapezoids</span> <span class="o">=</span> <span class="p">[</span>
-        <span class="n">g</span>
-        <span class="k">for</span> <span class="n">g</span> <span class="ow">in</span> <span class="p">(</span><span class="n">block</span><span class="o">.</span><span class="n">gx</span><span class="p">,</span> <span class="n">block</span><span class="o">.</span><span class="n">gy</span><span class="p">,</span> <span class="n">block</span><span class="o">.</span><span class="n">gz</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">g</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">g</span><span class="p">,</span> <span class="s2">"type"</span><span class="p">,</span> <span class="s2">""</span><span class="p">)</span> <span class="o">==</span> <span class="s2">"trap"</span>
-    <span class="p">]</span>
-    <span class="k">if</span> <span class="n">adc</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">trapezoids</span><span class="p">:</span>
+    <span class="n">k</span> <span class="o">=</span> <span class="n">readouts</span><span class="o">.</span><span class="n">readout_k</span><span class="p">(</span><span class="n">index</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">k</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">&lt;</span> <span class="mi">3</span><span class="p">:</span>
         <span class="k">return</span> <span class="kc">False</span>
-    <span class="n">g</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">trapezoids</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">g</span><span class="p">:</span> <span class="n">g</span><span class="o">.</span><span class="n">flat_time</span><span class="p">)</span>
-    <span class="n">start</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">adc</span><span class="o">.</span><span class="n">delay</span><span class="p">)</span> <span class="o">-</span> <span class="nb">float</span><span class="p">(</span><span class="n">g</span><span class="o">.</span><span class="n">delay</span><span class="p">)</span>
-    <span class="n">stop</span> <span class="o">=</span> <span class="n">start</span> <span class="o">+</span> <span class="nb">int</span><span class="p">(</span><span class="n">adc</span><span class="o">.</span><span class="n">num_samples</span><span class="p">)</span> <span class="o">*</span> <span class="nb">float</span><span class="p">(</span><span class="n">adc</span><span class="o">.</span><span class="n">dwell</span><span class="p">)</span>
-    <span class="n">tolerance</span> <span class="o">=</span> <span class="mf">1e-9</span>
-    <span class="k">return</span> <span class="p">(</span>
-        <span class="n">start</span> <span class="o">&lt;</span> <span class="n">g</span><span class="o">.</span><span class="n">rise_time</span> <span class="o">-</span> <span class="n">tolerance</span> <span class="ow">or</span> <span class="n">stop</span> <span class="o">&gt;</span> <span class="n">g</span><span class="o">.</span><span class="n">rise_time</span> <span class="o">+</span> <span class="n">g</span><span class="o">.</span><span class="n">flat_time</span> <span class="o">+</span> <span class="n">tolerance</span>
-    <span class="p">)</span>
+    <span class="n">axis</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ptp</span><span class="p">(</span><span class="n">k</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)))</span>
+    <span class="n">steps</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">diff</span><span class="p">(</span><span class="n">k</span><span class="p">[</span><span class="n">axis</span><span class="p">])</span>
+    <span class="n">mean</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">steps</span><span class="p">))</span>
+    <span class="k">if</span> <span class="n">mean</span> <span class="o">==</span> <span class="mf">0.0</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">False</span>
+    <span class="k">return</span> <span class="nb">bool</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">steps</span> <span class="o">-</span> <span class="n">mean</span><span class="p">))</span> <span class="o">&gt;</span> <span class="n">_UNEVEN_SPACING</span> <span class="o">*</span> <span class="nb">abs</span><span class="p">(</span><span class="n">mean</span><span class="p">))</span>
+
+
+<span class="c1">#: Relative departure of a sample spacing from the mean spacing above which a</span>
+<span class="c1">#: readout counts as ramp sampled; a plateau's spacing departs from it only by</span>
+<span class="c1">#: rounding.</span>
+<span class="n">_UNEVEN_SPACING</span> <span class="o">=</span> <span class="mf">1e-3</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_full_echo</span><span class="p">(</span>

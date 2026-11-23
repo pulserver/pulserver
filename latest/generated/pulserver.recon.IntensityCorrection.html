@@ -515,8 +515,10 @@ closes with a magnitude image, and divides every later contrast,
 repetition and cardiac phase of it: echoes and time points keep their
 intensity ratios, so a T2* fit or a time series is not changed by the
 correction. Each slice of a 2D multi-slice series has a field of its own,
-of mean 1 inside its own mask, so ratios between slices are not kept.
-Make one instance per stream.</p>
+of mean 1 inside its own mask, so ratios between slices are not kept; so
+has each band of a multiband unit, the slices it stacks along its
+partition axis, where the call says <code class="docutils literal notranslate"><span class="pre">by_plane</span></code>. Make one instance per
+stream.</p>
 <p>A magnitude image that is not 2D or 3D once its axes of one point are
 dropped, or whose mask holds fewer than 64 pixels or 128 voxels or less
 than <code class="xref py py-data docutils literal notranslate"><span class="pre">N4_MIN_MASK_FRACTION</span></code> of the image, or that falls apart into

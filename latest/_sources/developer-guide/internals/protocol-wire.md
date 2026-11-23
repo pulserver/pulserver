@@ -52,9 +52,9 @@ plugin offers and its fat saturation, and the shipped plugins number the
 saturation pulses after the others, so one placed or removed changes no other
 number. A prescan of the chain that repeats at its own TR, such as the
 calibration of the EPI plugins, is costed by a scanner over its own
-repetition; where it plays more RF power than a TR, the layout is its pulses
-over the TR, each numbered as the pulse of the listing it plays, or else the
-first of its use.
+repetition; where it plays more RF power than a TR, beyond rounding, the layout
+is its pulses over the TR, the strongest first, each numbered as the pulse of
+the listing it plays, or else the first of its use.
 
 The layout is an estimate for the prescription. An evaluation that states none
 states no estimate and is valid, and what the scanner checks before the scan is

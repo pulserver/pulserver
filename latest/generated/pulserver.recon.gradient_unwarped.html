@@ -510,7 +510,10 @@ resampled separately. Geometry comes from the header’s reconstruction space
 and the unit’s reference acquisition, so the correction is in the frame the
 series was acquired in, oblique prescriptions included. An encoding of one
 partition, a 2D slice, is corrected in its plane: the displacement across
-the slice moves the slice, which resampling cannot undo.</p>
+the slice moves the slice, which resampling cannot undo. So is each of
+<code class="docutils literal notranslate"><span class="pre">planes</span></code>, the slices a multiband unit stacks along its partition axis,
+at its own position: resampled across the stack, a band would take in its
+neighbour, a gap of several slices away.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
@@ -522,6 +525,9 @@ acquisition’s encoding space, position and orientation; the one this
 unit needs is taken from it or added to it. A stream of several units
 of one geometry, the echoes of a multi-echo scan or the volumes of a
 time series, so builds its correction once.</p></li>
+<li><p><strong>planes</strong> (<a class="reference internal" href="pulserver.design.Evaluation.sequence.html#pulserver.design.Evaluation.sequence" title="pulserver.design.Evaluation.sequence"><em>sequence</em></a><em> of </em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><em>float</em></a><em>, </em><em>default=None</em>) – Position (mm) along the reference acquisition’s slice direction of
+each partition of <code class="docutils literal notranslate"><span class="pre">image</span></code> where the partitions are slices of their
+own; <code class="docutils literal notranslate"><span class="pre">None</span></code> corrects the partitions as one volume.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>

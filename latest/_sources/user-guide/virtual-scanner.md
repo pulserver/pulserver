@@ -231,8 +231,8 @@ line, is written to standard output, and the scan clock to standard error.
 - `--spacing`, in mm, 1 mm by default, is the spacing at which the phantom is
   sampled as tissue. `--coils` sets the phantom's own receive coils; `--coil`
   scans it with one of the virtual scanner's coils instead, `body`,
-  `body/head48` or `head8/head32`, named `transmit/receive`, whose
-  sensitivities bartorch samples from BART's coil models.
+  `body/head48` or `head8/head32`, named `transmit/receive`: the receive
+  arrays are 48 and 32 loops on a helmet close about the head.
 - `--nod DEGREES PERIOD` turns the subject about the physical x axis
   sinusoidally, `--drift X Y Z` translates it in mm/min, and
   `--jumps RATE MM DEGREES` moves it suddenly at random, `RATE` times a second

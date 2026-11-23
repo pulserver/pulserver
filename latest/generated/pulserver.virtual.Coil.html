@@ -505,14 +505,14 @@
 <dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/builtins/functions.html#object" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
 <p>The transmit and receive RF coils of an exam, fixed in the physical frame.</p>
 <p><code class="docutils literal notranslate"><span class="pre">name</span></code> is <code class="docutils literal notranslate"><span class="pre">transmit/receive</span></code>, or one coil’s name where it does both.
-Each side is BART’s coil model (<code class="docutils literal notranslate"><span class="pre">HEAD_2D_8CH</span></code> or <code class="docutils literal notranslate"><span class="pre">HEAD_3D_64CH</span></code>) and
-the number of its channels the coil takes, the first ones, as <code class="docutils literal notranslate"><span class="pre">phantom</span>
-<span class="pre">-S</span></code> selects them, or the file of the coil’s field maps <code class="xref py py-func docutils literal notranslate"><span class="pre">coils()</span></code>
-reads; a side without either is one channel of unit sensitivity
-everywhere, as a body coil is taken to be. A model is sampled by bartorch
-on first use, over <code class="xref py py-data docutils literal notranslate"><span class="pre">MODEL_FOV</span></code>
-along the physical axes; <code class="docutils literal notranslate"><span class="pre">HEAD_2D_8CH</span></code> is constant along z. Either is
-interpolated linearly.</p>
+Each side is a coil model and the number of its channels the coil takes,
+or the file of the coil’s field maps <code class="xref py py-func docutils literal notranslate"><span class="pre">coils()</span></code> reads; a side without
+either is one channel of unit sensitivity everywhere, as a body coil is
+taken to be. A model is BART’s <code class="docutils literal notranslate"><span class="pre">HEAD_2D_8CH</span></code> or <code class="docutils literal notranslate"><span class="pre">HEAD_3D_64CH</span></code>, of
+which the coil takes the first channels, as <code class="docutils literal notranslate"><span class="pre">phantom</span> <span class="pre">-S</span></code> selects them,
+or <code class="xref py py-data docutils literal notranslate"><span class="pre">HELMET</span></code>, an array of that many loops close about the head. A
+model is sampled on first use over <code class="xref py py-data docutils literal notranslate"><span class="pre">MODEL_FOV</span></code> along the physical
+axes and interpolated linearly; <code class="docutils literal notranslate"><span class="pre">HEAD_2D_8CH</span></code> is constant along z.</p>
 <p>Receive sensitivities are scaled to a root sum of squares of 1 at the
 isocentre, and transmit sensitivities so that the <a class="reference internal" href="pulserver.virtual.Coil.default_shim.html#pulserver.virtual.Coil.default_shim" title="pulserver.virtual.Coil.default_shim"><code class="xref py py-attr docutils literal notranslate"><span class="pre">default_shim</span></code></a>
 plays a pulse at its nominal amplitude at the isocentre. Its weights have a

@@ -607,7 +607,7 @@
 
 <span class="c1">#: The attributes of a :class:`ReconContext` that hold the state of one stream</span>
 <span class="c1">#: and that a hook may assign.</span>
-<span class="n">_STREAM</span> <span class="o">=</span> <span class="p">(</span><span class="s2">"coil_maps"</span><span class="p">,</span> <span class="s2">"noise"</span><span class="p">,</span> <span class="s2">"coil_compression"</span><span class="p">)</span>
+<span class="n">_STREAM</span> <span class="o">=</span> <span class="p">(</span><span class="s2">"coil_maps"</span><span class="p">,</span> <span class="s2">"noise"</span><span class="p">,</span> <span class="s2">"coil_compression"</span><span class="p">,</span> <span class="s2">"coil_compressions"</span><span class="p">)</span>
 
 
 <div class="viewcode-block" id="ExamCache">
@@ -904,9 +904,11 @@
 <span class="sd">    maps a slice counter to the :class:`CoilSensitivities` the stream holds for</span>
 <span class="sd">    it, and ``(slice, set)`` to those estimated from calibration readouts of a</span>
 <span class="sd">    later set, such as a FLEET calibration's reversed phase encode;</span>
-<span class="sd">    :attr:`noise` is the prewhitening a :class:`Prewhiten` applies and</span>
-<span class="sd">    :attr:`coil_compression` the basis a :class:`CoilCompression` applies; the</span>
-<span class="sd">    last two are ``None`` until the stream has them. A hook may assign them.</span>
+<span class="sd">    :attr:`noise` is the prewhitening a :class:`Prewhiten` applies,</span>
+<span class="sd">    :attr:`coil_compressions` the bases a :class:`CoilCompression` holds by</span>
+<span class="sd">    slice location and :attr:`coil_compression` the one it applied last; the</span>
+<span class="sd">    noise and the applied basis are ``None`` until the stream has them. A</span>
+<span class="sd">    hook may assign them.</span>
 
 <span class="sd">    The scan context itself does not change once built: assigning to</span>
 <span class="sd">    :attr:`header`, :attr:`exam`, :attr:`config` or :attr:`device` raises.</span>
@@ -949,6 +951,9 @@
     <span class="p">)</span>
     <span class="n">noise</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">init</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="nb">repr</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
     <span class="n">coil_compression</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">init</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="nb">repr</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">coil_compressions</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span>
+        <span class="n">default_factory</span><span class="o">=</span><span class="nb">dict</span><span class="p">,</span> <span class="n">init</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="nb">repr</span><span class="o">=</span><span class="kc">False</span>
+    <span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__getattr__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
         <span class="c1"># Reached only where normal lookup failed, so never for a field.</span>
@@ -1422,6 +1427,7 @@
         <span class="n">design</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">dicom</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
         <span class="n">dicom_dictionary</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">device</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">Any</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">"""Reconstruct one ISMRMRD HDF5 file in this process, through the same hooks.</span>
 
@@ -1455,6 +1461,10 @@
 <span class="sd">            Private DICOM dictionary the header's ``dicom:`` attributes are</span>
 <span class="sd">            resolved against, in place of the one the header names</span>
 <span class="sd">            (:ref:`dicom-attributes`).</span>
+<span class="sd">        device : str, default=None</span>
+<span class="sd">            Device the reconstruction may run its operators on, such as</span>
+<span class="sd">            ``"cuda"`` or ``"cuda:1"``, as a proxy worker passes the GPU of its</span>
+<span class="sd">            slot (:attr:`ReconContext.device`); ``None`` keeps it on the CPU.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
@@ -1486,6 +1496,7 @@
             <span class="n">design</span><span class="o">=</span><span class="n">design</span><span class="p">,</span>
             <span class="n">dicom</span><span class="o">=</span><span class="n">dicom</span><span class="p">,</span>
             <span class="n">dicom_dictionary</span><span class="o">=</span><span class="n">dicom_dictionary</span><span class="p">,</span>
+            <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
         <span class="p">)</span></div>
 
 

@@ -224,10 +224,12 @@ reads the chain as the subsequences of one scan.
 
  .. code-block:: none
 
-    ['epi.seq', 'epi_epi_2d.seq']
-    subsequence 0: 73 blocks per repetition, 6 repetitions
+    ['epi.seq', 'epi_epi_2d_field_forward.seq', 'epi_epi_2d_field_reversed.seq', 'epi_epi_2d.seq']
+    subsequence 0: 33 blocks per repetition, 3 repetitions
     subsequence 1: 73 blocks per repetition, 6 repetitions
-    virtual segments over the chain: 3
+    subsequence 2: 73 blocks per repetition, 6 repetitions
+    subsequence 3: 73 blocks per repetition, 6 repetitions
+    virtual segments over the chain: 4
 
 
 
@@ -242,7 +244,7 @@ base block, so both subsequences play the virtual segments printed above.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.566 seconds)
+   **Total running time of the script:** (0 minutes 0.646 seconds)
 
 
 .. _sphx_glr_download_generated_gallery_02-tours_02_segmentation.py:

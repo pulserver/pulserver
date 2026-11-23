@@ -223,6 +223,7 @@ from.
    NOISE_COVARIANCE
    EXAM_ARTIFACTS
    coil_maps
+   volume_coil_maps
    CoilSensitivities
    MissingCalibration
    CoilCompression

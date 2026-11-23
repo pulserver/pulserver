@@ -32,3 +32,4 @@
    ~ReconContext.header
    ~ReconContext.exam
    ~ReconContext.coil_maps
+   ~ReconContext.coil_compressions

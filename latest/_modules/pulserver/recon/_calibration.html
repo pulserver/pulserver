@@ -428,7 +428,13 @@
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
-<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"CoilCompression"</span><span class="p">,</span> <span class="s2">"CoilSensitivities"</span><span class="p">,</span> <span class="s2">"MissingCalibration"</span><span class="p">,</span> <span class="s2">"coil_maps"</span><span class="p">]</span>
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s2">"CoilCompression"</span><span class="p">,</span>
+    <span class="s2">"CoilSensitivities"</span><span class="p">,</span>
+    <span class="s2">"MissingCalibration"</span><span class="p">,</span>
+    <span class="s2">"coil_maps"</span><span class="p">,</span>
+    <span class="s2">"volume_coil_maps"</span><span class="p">,</span>
+<span class="p">]</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">copy</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">dataclasses</span>
@@ -734,63 +740,175 @@
 
 
 
+<div class="viewcode-block" id="volume_coil_maps">
+<a class="viewcode-back" href="../../../generated/pulserver.recon.volume_coil_maps.html#pulserver.recon.volume_coil_maps">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">volume_coil_maps</span><span class="p">(</span>
+    <span class="n">context</span><span class="p">:</span> <span class="n">ReconContext</span><span class="p">,</span> <span class="n">units</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">ReconData</span><span class="p">],</span> <span class="o">*</span><span class="p">,</span> <span class="n">estimate</span><span class="p">:</span> <span class="n">Any</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Estimate one set of coil sensitivities for the slices of a stack, and store each slice's in the stream.</span>
+
+<span class="sd">    ``units`` are the calibration units of the slices of one stack, each</span>
+<span class="sd">    holding its slice's calibration k-space ``data.ref`` and no imaging</span>
+<span class="sd">    readouts, all with one set counter and one grid. Their k-spaces, zero-filled</span>
+<span class="sd">    onto the grid of their space as :func:`coil_maps` takes them, are stacked</span>
+<span class="sd">    in the order of the slice positions along the slice direction, Fourier</span>
+<span class="sd">    transformed along that order, and given to ``estimate`` as one volume</span>
+<span class="sd">    ``(coils, slices, y, x)``. The maps it returns are smooth across the</span>
+<span class="sd">    stack, and the sensitivities of each slice, its plane of them, are stored</span>
+<span class="sd">    in ``context.coil_maps`` as :func:`coil_maps` stores those of one slice:</span>
+<span class="sd">    under the slice counter, or under ``(slice, set)`` where the set is not 0.</span>
+<span class="sd">    A stack of one slice is estimated as :func:`coil_maps` estimates it.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If a unit holds imaging readouts or no calibration readouts, the units</span>
+<span class="sd">        do not share one set and one grid, or the estimate returns maps on</span>
+<span class="sd">        another grid than it was given.</span>
+<span class="sd">    """</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">units</span><span class="p">:</span>
+        <span class="k">return</span>
+    <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">unit</span><span class="o">.</span><span class="n">data</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">unit</span><span class="o">.</span><span class="n">ref</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">for</span> <span class="n">unit</span> <span class="ow">in</span> <span class="n">units</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">"volume_coil_maps takes calibration units: calibration readouts and "</span>
+            <span class="s2">"no imaging readouts"</span>
+        <span class="p">)</span>
+    <span class="n">sets</span> <span class="o">=</span> <span class="p">{</span><span class="nb">int</span><span class="p">(</span><span class="n">unit</span><span class="o">.</span><span class="n">counters</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"set"</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span> <span class="k">for</span> <span class="n">unit</span> <span class="ow">in</span> <span class="n">units</span><span class="p">}</span>
+    <span class="n">grids</span> <span class="o">=</span> <span class="p">{</span><span class="n">_grid</span><span class="p">(</span><span class="n">unit</span><span class="o">.</span><span class="n">ref</span><span class="p">)</span> <span class="k">for</span> <span class="n">unit</span> <span class="ow">in</span> <span class="n">units</span><span class="p">}</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">sets</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">grids</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"the calibration units span sets </span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">sets</span><span class="p">)</span><span class="si">}</span><span class="s2"> and grids "</span>
+            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">grids</span><span class="p">)</span><span class="si">}</span><span class="s2">; one stack shares one set and one grid"</span>
+        <span class="p">)</span>
+    <span class="p">(</span><span class="n">polarity</span><span class="p">,)</span> <span class="o">=</span> <span class="n">sets</span>
+    <span class="n">start</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span>
+    <span class="n">method</span> <span class="o">=</span> <span class="n">_method</span><span class="p">(</span><span class="n">estimate</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">units</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="p">(</span><span class="n">unit</span><span class="p">,)</span> <span class="o">=</span> <span class="n">units</span>
+        <span class="n">location</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">unit</span><span class="o">.</span><span class="n">counters</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"slice"</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span>
+        <span class="n">context</span><span class="o">.</span><span class="n">coil_maps</span><span class="p">[(</span><span class="n">location</span><span class="p">,</span> <span class="n">polarity</span><span class="p">)</span> <span class="k">if</span> <span class="n">polarity</span> <span class="k">else</span> <span class="n">location</span><span class="p">]</span> <span class="o">=</span> <span class="n">_estimated</span><span class="p">(</span>
+            <span class="n">context</span><span class="p">,</span> <span class="n">unit</span><span class="o">.</span><span class="n">ref</span><span class="p">,</span> <span class="n">estimate</span>
+        <span class="p">)</span>
+        <span class="k">return</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">along_slice</span><span class="p">(</span><span class="n">unit</span><span class="p">:</span> <span class="n">ReconData</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+        <span class="n">reference</span> <span class="o">=</span> <span class="n">unit</span><span class="o">.</span><span class="n">ref</span><span class="o">.</span><span class="n">reference</span>
+        <span class="n">position</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">reference</span><span class="p">,</span> <span class="s2">"position"</span><span class="p">,</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">)),</span> <span class="nb">float</span><span class="p">)</span>
+        <span class="n">normal</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">reference</span><span class="p">,</span> <span class="s2">"slice_dir"</span><span class="p">,</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)),</span> <span class="nb">float</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">position</span> <span class="o">@</span> <span class="n">normal</span><span class="p">)</span>
+
+    <span class="n">units</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">units</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="n">along_slice</span><span class="p">)</span>
+    <span class="n">planes</span> <span class="o">=</span> <span class="p">[</span><span class="n">_zero_filled</span><span class="p">(</span><span class="n">unit</span><span class="o">.</span><span class="n">ref</span><span class="p">)</span> <span class="k">for</span> <span class="n">unit</span> <span class="ow">in</span> <span class="n">units</span><span class="p">]</span>
+    <span class="n">stack</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">planes</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">bartorch</span><span class="w"> </span><span class="kn">import</span> <span class="n">fft</span>
+
+    <span class="n">kspace</span> <span class="o">=</span> <span class="n">fft</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">stack</span><span class="p">),</span> <span class="p">(</span><span class="mi">1</span><span class="p">,),</span> <span class="n">unitary</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">stack</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+    <span class="n">maps</span> <span class="o">=</span> <span class="n">estimate</span><span class="p">(</span><span class="n">kspace</span><span class="o">.</span><span class="n">contiguous</span><span class="p">())</span>
+    <span class="n">maps</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">maps</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">(),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">complex64</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">maps</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="n">stack</span><span class="o">.</span><span class="n">shape</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"the estimate returned maps of shape </span><span class="si">{</span><span class="n">maps</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2"> for k-space of "</span>
+            <span class="sa">f</span><span class="s2">"shape </span><span class="si">{</span><span class="n">stack</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">"</span>
+        <span class="p">)</span>
+    <span class="n">measurement</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">context</span><span class="o">.</span><span class="n">header</span><span class="p">,</span> <span class="s2">"measurementInformation"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="n">source</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">measurement</span><span class="p">,</span> <span class="s2">"measurementID"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">index</span><span class="p">,</span> <span class="n">unit</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">units</span><span class="p">):</span>
+        <span class="n">location</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">unit</span><span class="o">.</span><span class="n">counters</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"slice"</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span>
+        <span class="n">context</span><span class="o">.</span><span class="n">coil_maps</span><span class="p">[(</span><span class="n">location</span><span class="p">,</span> <span class="n">polarity</span><span class="p">)</span> <span class="k">if</span> <span class="n">polarity</span> <span class="k">else</span> <span class="n">location</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">CoilSensitivities</span><span class="p">(</span>
+                <span class="n">maps</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">maps</span><span class="p">[:,</span> <span class="n">index</span><span class="p">]),</span>
+                <span class="n">coils</span><span class="o">=</span><span class="n">coil_labels</span><span class="p">(</span><span class="n">context</span><span class="o">.</span><span class="n">header</span><span class="p">),</span>
+                <span class="n">noise</span><span class="o">=</span><span class="n">_id</span><span class="p">(</span><span class="n">context</span><span class="o">.</span><span class="n">noise</span><span class="p">),</span>
+                <span class="n">basis</span><span class="o">=</span><span class="n">_id</span><span class="p">(</span><span class="n">context</span><span class="o">.</span><span class="n">coil_compression</span><span class="p">),</span>
+                <span class="n">geometry</span><span class="o">=</span><span class="n">_geometry</span><span class="p">(</span><span class="n">context</span><span class="o">.</span><span class="n">header</span><span class="p">,</span> <span class="n">unit</span><span class="o">.</span><span class="n">ref</span><span class="p">),</span>
+                <span class="n">method</span><span class="o">=</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">method</span><span class="si">}</span><span class="s2"> over a stack of </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">units</span><span class="p">)</span><span class="si">}</span><span class="s2"> slices"</span><span class="p">,</span>
+                <span class="n">source</span><span class="o">=</span><span class="kc">None</span> <span class="k">if</span> <span class="n">source</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="nb">str</span><span class="p">(</span><span class="n">source</span><span class="p">),</span>
+            <span class="p">)</span>
+        <span class="p">)</span>
+    <span class="n">_log</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+        <span class="s2">"coil sensitivities of </span><span class="si">%d</span><span class="s2"> slices, set </span><span class="si">%d</span><span class="s2">, estimated together by </span><span class="si">%s</span><span class="s2"> as "</span>
+        <span class="s2">"one volume </span><span class="si">%s</span><span class="s2">, in </span><span class="si">%.1f</span><span class="s2"> s"</span><span class="p">,</span>
+        <span class="nb">len</span><span class="p">(</span><span class="n">units</span><span class="p">),</span>
+        <span class="n">polarity</span><span class="p">,</span>
+        <span class="n">method</span><span class="p">,</span>
+        <span class="nb">tuple</span><span class="p">(</span><span class="n">stack</span><span class="o">.</span><span class="n">shape</span><span class="p">),</span>
+        <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span> <span class="o">-</span> <span class="n">start</span><span class="p">,</span>
+    <span class="p">)</span></div>
+
+
+
 <div class="viewcode-block" id="CoilCompression">
 <a class="viewcode-back" href="../../../generated/pulserver.recon.CoilCompression.html#pulserver.recon.CoilCompression">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">CoilCompression</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Reduce the receive channels of a unit's k-space to virtual channels.</span>
 
-<span class="sd">    The basis is estimated once per stream, from the first unit it is given,</span>
-<span class="sd">    and applied to every unit. It consists of the eigenvectors of the channel</span>
-<span class="sd">    covariance over every placed sample of the unit's calibration k-space, or</span>
-<span class="sd">    of its imaging k-space where it holds no calibration data</span>
-<span class="sd">    (:func:`bartorch.tools.cc`), of which the ``n_virtual`` with the largest</span>
-<span class="sd">    eigenvalues are kept: the virtual channels are uncorrelated and ordered by</span>
-<span class="sd">    decreasing power. :func:`bartorch.tools.ccapply` projects the k-space of</span>
-<span class="sd">    ``data.data`` and ``data.ref`` onto it. The basis is stored in</span>
-<span class="sd">    ``context.coil_compression``, and :func:`coil_maps` records it with the</span>
-<span class="sd">    maps it estimates, which only units compressed by the same basis reuse:</span>
-<span class="sd">    compress a unit before asking for its maps.</span>
+<span class="sd">    Each slice location has a basis of its own, estimated from the first unit</span>
+<span class="sd">    of that location and applied to every later unit of it, so a slice keeps</span>
+<span class="sd">    the channels that see it whatever slice the stream opens with. With</span>
+<span class="sd">    ``by_slice`` false the stream has one basis for every location: the one</span>
+<span class="sd">    :meth:`pool` estimated, else that of the first unit. A basis consists of</span>
+<span class="sd">    the eigenvectors of the channel covariance over every placed sample of</span>
+<span class="sd">    the calibration k-space, or of the imaging k-space where there is no</span>
+<span class="sd">    calibration data (:func:`bartorch.tools.cc`), of which the ``n_virtual``</span>
+<span class="sd">    with the largest eigenvalues are kept: the virtual channels are</span>
+<span class="sd">    uncorrelated and ordered by decreasing power.</span>
+<span class="sd">    :func:`bartorch.tools.ccapply` projects the k-space of ``data.data`` and</span>
+<span class="sd">    ``data.ref`` onto it. The bases are stored in</span>
+<span class="sd">    ``context.coil_compressions`` by location (``None`` for the stream's</span>
+<span class="sd">    one), and the basis applied last in ``context.coil_compression``, which</span>
+<span class="sd">    :func:`coil_maps` records with the maps it estimates and which only units</span>
+<span class="sd">    compressed by the same basis reuse: compress a unit before asking for its</span>
+<span class="sd">    maps.</span>
 
 <span class="sd">    The returned unit holds new buffers with ``n_virtual`` channels, and shares</span>
 <span class="sd">    its ``counters`` and ``acquisitions`` with the unit it was made from. The</span>
 <span class="sd">    basis and the projection are computed on the host. bartorch is imported</span>
 <span class="sd">    when a unit is compressed.</span>
 
-<span class="sd">    Corresponds to Gadgetron's ``GenericReconEigenChannelGadget``.</span>
+<span class="sd">    Corresponds to Gadgetron's ``GenericReconEigenChannelGadget``, its basis</span>
+<span class="sd">    computed per slice.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
 <span class="sd">    n_virtual : int</span>
-<span class="sd">        Virtual channels kept, at most the number of channels of the first</span>
-<span class="sd">        unit.</span>
+<span class="sd">        Virtual channels kept, at most the number of channels of the units.</span>
+<span class="sd">    by_slice : bool, default=True</span>
+<span class="sd">        Estimate a basis per slice location rather than one for the stream.</span>
 <span class="sd">    """</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n_virtual</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n_virtual</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">by_slice</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">if</span> <span class="n">n_virtual</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"n_virtual is </span><span class="si">{</span><span class="n">n_virtual</span><span class="si">}</span><span class="s2">; it has to be at least 1"</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">n_virtual</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">n_virtual</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">by_slice</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="n">by_slice</span><span class="p">)</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">context</span><span class="p">:</span> <span class="n">ReconContext</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">ReconData</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ReconData</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Return ``data`` with its k-space projected onto the stream's basis.</span>
+<span class="w">        </span><span class="sd">"""Return ``data`` with its k-space projected onto the basis of its location.</span>
 
 <span class="sd">        Raises</span>
 <span class="sd">        ------</span>
 <span class="sd">        ValueError</span>
-<span class="sd">            If the stream's basis was made for another ``n_virtual`` or</span>
-<span class="sd">            another number of channels, or the first unit holds no k-space.</span>
+<span class="sd">            If the stream's bases were made for another ``n_virtual`` or</span>
+<span class="sd">            another number of channels, or the unit that has to give the basis</span>
+<span class="sd">            holds no k-space.</span>
 <span class="sd">        """</span>
-        <span class="n">basis</span> <span class="o">=</span> <span class="n">context</span><span class="o">.</span><span class="n">coil_compression</span>
+        <span class="k">for</span> <span class="n">stored</span> <span class="ow">in</span> <span class="n">context</span><span class="o">.</span><span class="n">coil_compressions</span><span class="o">.</span><span class="n">values</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">stored</span><span class="o">.</span><span class="n">n_virtual</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_virtual</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">"the stream's basis keeps </span><span class="si">{</span><span class="n">stored</span><span class="o">.</span><span class="n">n_virtual</span><span class="si">}</span><span class="s2"> virtual channels, "</span>
+                    <span class="sa">f</span><span class="s2">"not the </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">n_virtual</span><span class="si">}</span><span class="s2"> this step keeps"</span>
+                <span class="p">)</span>
+        <span class="n">key</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">counters</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"slice"</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">by_slice</span> <span class="k">else</span> <span class="kc">None</span>
+        <span class="n">basis</span> <span class="o">=</span> <span class="n">context</span><span class="o">.</span><span class="n">coil_compressions</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">basis</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">source</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">ref</span> <span class="k">if</span> <span class="n">data</span><span class="o">.</span><span class="n">ref</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">data</span><span class="o">.</span><span class="n">data</span>
             <span class="k">if</span> <span class="n">source</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"a unit with no k-space cannot give the basis"</span><span class="p">)</span>
             <span class="n">basis</span> <span class="o">=</span> <span class="n">_basis</span><span class="p">(</span><span class="n">source</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_virtual</span><span class="p">)</span>
-            <span class="n">context</span><span class="o">.</span><span class="n">coil_compression</span> <span class="o">=</span> <span class="n">basis</span>
-        <span class="k">elif</span> <span class="n">basis</span><span class="o">.</span><span class="n">n_virtual</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_virtual</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">"the stream's basis keeps </span><span class="si">{</span><span class="n">basis</span><span class="o">.</span><span class="n">n_virtual</span><span class="si">}</span><span class="s2"> virtual channels, "</span>
-                <span class="sa">f</span><span class="s2">"not the </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">n_virtual</span><span class="si">}</span><span class="s2"> this step keeps"</span>
-            <span class="p">)</span>
+            <span class="n">context</span><span class="o">.</span><span class="n">coil_compressions</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">basis</span>
+        <span class="n">context</span><span class="o">.</span><span class="n">coil_compression</span> <span class="o">=</span> <span class="n">basis</span>
         <span class="k">return</span> <span class="n">dataclasses</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span>
             <span class="n">data</span><span class="p">,</span>
             <span class="n">data</span><span class="o">=</span><span class="n">_compressed</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="n">basis</span><span class="p">),</span>
@@ -896,12 +1014,8 @@
     <span class="k">return</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">(</span><span class="si">{</span><span class="n">options</span><span class="si">}</span><span class="s2">)"</span> <span class="k">if</span> <span class="n">options</span> <span class="k">else</span> <span class="n">name</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_estimated</span><span class="p">(</span>
-    <span class="n">context</span><span class="p">:</span> <span class="n">ReconContext</span><span class="p">,</span> <span class="n">ref</span><span class="p">:</span> <span class="n">ReconBuffer</span><span class="p">,</span> <span class="n">estimate</span><span class="p">:</span> <span class="n">Any</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">CoilSensitivities</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Estimate maps from a unit's calibration k-space, zero-filled onto the grid of its space."""</span>
-    <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
-
+<span class="k">def</span><span class="w"> </span><span class="nf">_zero_filled</span><span class="p">(</span><span class="n">ref</span><span class="p">:</span> <span class="n">ReconBuffer</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return a unit's calibration k-space zero-filled onto the grid of its space, ``(coils, *grid)``."""</span>
     <span class="n">space</span> <span class="o">=</span> <span class="n">ref</span><span class="o">.</span><span class="n">space</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="n">space</span><span class="o">.</span><span class="n">cartesian</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
@@ -927,7 +1041,16 @@
         <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">size</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">placement</span><span class="p">,</span> <span class="n">calibration</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">:</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
     <span class="p">)</span>
     <span class="n">kspace</span><span class="p">[(</span><span class="nb">slice</span><span class="p">(</span><span class="kc">None</span><span class="p">),</span> <span class="o">*</span><span class="n">lines</span><span class="p">,</span> <span class="nb">slice</span><span class="p">(</span><span class="kc">None</span><span class="p">))]</span> <span class="o">=</span> <span class="n">calibration</span>
+    <span class="k">return</span> <span class="n">kspace</span>
 
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_estimated</span><span class="p">(</span>
+    <span class="n">context</span><span class="p">:</span> <span class="n">ReconContext</span><span class="p">,</span> <span class="n">ref</span><span class="p">:</span> <span class="n">ReconBuffer</span><span class="p">,</span> <span class="n">estimate</span><span class="p">:</span> <span class="n">Any</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">CoilSensitivities</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Estimate maps from a unit's calibration k-space, zero-filled onto the grid of its space."""</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+
+    <span class="n">kspace</span> <span class="o">=</span> <span class="n">_zero_filled</span><span class="p">(</span><span class="n">ref</span><span class="p">)</span>
     <span class="n">maps</span> <span class="o">=</span> <span class="n">estimate</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">kspace</span><span class="p">))</span>
     <span class="n">maps</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">maps</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">(),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">complex64</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">maps</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="n">kspace</span><span class="o">.</span><span class="n">shape</span><span class="p">:</span>

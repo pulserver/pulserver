@@ -507,8 +507,10 @@
 <code class="docutils literal notranslate"><span class="pre">n</span></code>-voxel axis. The grid is centred instead, its voxel centres
 symmetric about the field-of-view centre, which puts voxel <code class="docutils literal notranslate"><span class="pre">n</span> <span class="pre">//</span> <span class="pre">2</span></code>
 half a voxel past it along each axis of even <code class="docutils literal notranslate"><span class="pre">n</span></code>: <code class="docutils literal notranslate"><span class="pre">FOV</span> <span class="pre">/</span> <span class="pre">(2</span> <span class="pre">n)</span></code>,
-and 0 along an axis of odd <code class="docutils literal notranslate"><span class="pre">n</span></code> or one voxel. Zero for a space that
-states no matrix size or field of view.</p>
+and 0 along an axis of odd <code class="docutils literal notranslate"><span class="pre">n</span></code> or one voxel. A navigator space that
+states no matrix size or field of view is on the grid of its file’s
+imaging space, so its readouts carry the phase of the readouts they
+navigate; any other such space is at zero.</p>
 </dd></dl>
 
 </section>

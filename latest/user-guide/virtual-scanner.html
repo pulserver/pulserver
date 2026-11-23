@@ -750,8 +750,8 @@ one of fat, with T1 from 0.3 s to 2.0 s and T2 from 0.04 s to 0.3 s.</p>
 <li><p><code class="docutils literal notranslate"><span class="pre">--spacing</span></code>, in mm, 1 mm by default, is the spacing at which the phantom is
 sampled as tissue. <code class="docutils literal notranslate"><span class="pre">--coils</span></code> sets the phantom’s own receive coils; <code class="docutils literal notranslate"><span class="pre">--coil</span></code>
 scans it with one of the virtual scanner’s coils instead, <code class="docutils literal notranslate"><span class="pre">body</span></code>,
-<code class="docutils literal notranslate"><span class="pre">body/head48</span></code> or <code class="docutils literal notranslate"><span class="pre">head8/head32</span></code>, named <code class="docutils literal notranslate"><span class="pre">transmit/receive</span></code>, whose
-sensitivities bartorch samples from BART’s coil models.</p></li>
+<code class="docutils literal notranslate"><span class="pre">body/head48</span></code> or <code class="docutils literal notranslate"><span class="pre">head8/head32</span></code>, named <code class="docutils literal notranslate"><span class="pre">transmit/receive</span></code>: the receive
+arrays are 48 and 32 loops on a helmet close about the head.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">--nod</span> <span class="pre">DEGREES</span> <span class="pre">PERIOD</span></code> turns the subject about the physical x axis
 sinusoidally, <code class="docutils literal notranslate"><span class="pre">--drift</span> <span class="pre">X</span> <span class="pre">Y</span> <span class="pre">Z</span></code> translates it in mm/min, and
 <code class="docutils literal notranslate"><span class="pre">--jumps</span> <span class="pre">RATE</span> <span class="pre">MM</span> <span class="pre">DEGREES</span></code> moves it suddenly at random, <code class="docutils literal notranslate"><span class="pre">RATE</span></code> times a second
