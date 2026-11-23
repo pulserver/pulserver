@@ -535,8 +535,9 @@ class EpiRecon(PicsRecon):
         calibrated slices (``EPI_WAVELET_SLICE`` for one read in shots enough
         to bring its acceleration per shot to
         ``EPI_WAVELET_SEGMENTED_ACCELERATION``), ``EPI_WAVELET_SLAB`` for any
-        other unit of more than one partition and ``EPI_WAVELET_SLICE`` for a
-        slice.
+        other unit of more than one partition accelerated beyond
+        ``EPI_WAVELET_SLAB_ACCELERATION`` and ``EPI_WAVELET_SLICE`` for a
+        slice or a slab accelerated no more.
     iterations : int, default=30
         Conjugate-gradient steps, or ``pics`` iterations with ``wavelet``.
     l2 : float, default=0.0
@@ -807,13 +808,18 @@ class EpiRecon(PicsRecon):
         A multiband unit read in several shots whose in-plane line step times
         its bands, divided by its shots, is at most
         ``EPI_WAVELET_SEGMENTED_ACCELERATION`` takes ``EPI_WAVELET_SLICE``;
-        any other multiband unit ``EPI_WAVELET_MULTIBAND``.
+        any other multiband unit ``EPI_WAVELET_MULTIBAND``. A slab
+        accelerated at most ``EPI_WAVELET_SLAB_ACCELERATION`` takes
+        ``EPI_WAVELET_SLICE``, and a slab accelerated further
+        ``EPI_WAVELET_SLAB``.
         """
         if not self.automatic_wavelet:
             return self.wavelet
         if volume.shape[1] == 1:
             return EPI_WAVELET_SLICE
         if not bands:
+            if _acceleration(volume) <= EPI_WAVELET_SLAB_ACCELERATION:
+                return EPI_WAVELET_SLICE
             return EPI_WAVELET_SLAB
         if shots > 1:
             per_shot = _line_step(volume) * volume.shape[1] / shots
@@ -1374,18 +1380,28 @@ def plane_positions(acquisition, space, count) -> list[float]:
     return [centre + (index - count // 2) * depth for index in range(count)]
 
 
-#: Wavelet ``lambda`` of an undersampled 3D EPI slab, 2D EPI multiband unit
-#: and 2D EPI slice, on data scaled as ``pics`` scales them. A slab's
-#: partition and CAIPI unfolding amplifies noise and converges slowly without
-#: the prior; a slice's prior is weak enough to keep the cortex and the deep
-#: grey nuclei. A multiband unit unfolds its bands and its in-plane aliases
-#: together: in a noisy 7T simulation of a 2 mm stack at MB2 and R 2 to 4 with
-#: six virtual channels, its bands are closest to a fully sampled gradient
-#: echo near this weight, the slab's smoothing R 2 and a slice's leaving R 4
-#: aliased.
-EPI_WAVELET_SLAB = 0.1
+#: Wavelet ``lambda`` of an undersampled 3D EPI slab accelerated beyond
+#: ``EPI_WAVELET_SLAB_ACCELERATION``, 2D EPI multiband unit and 2D EPI slice,
+#: on data scaled as ``pics`` scales them. A slice's prior is weak enough to
+#: keep the cortex and the deep grey nuclei. A multiband unit unfolds its
+#: bands and its in-plane aliases together: in a noisy 7T simulation of a
+#: 2 mm stack at MB2 and R 2 to 4 with six virtual channels, its bands are
+#: closest to a fully sampled gradient echo near this weight, a slice's
+#: leaving R 4 aliased. A 2 mm slab of 16 partitions at R3 x 2 with six
+#: virtual channels in the same simulation came out at 0.257 brain NRMSE
+#: against the fully sampled gradient echo at the slab weight, 0.279 at the
+#: slice weight.
+EPI_WAVELET_SLAB = 0.03
 EPI_WAVELET_MULTIBAND = 0.03
 EPI_WAVELET_SLICE = 0.003
+
+#: Largest acceleration of a 3D EPI slab, the encoded lines of its partition
+#: and phase-encode extent over those read, solved at ``EPI_WAVELET_SLICE``
+#: instead of ``EPI_WAVELET_SLAB``. In the 7T simulation, field-free and
+#: noisy, an R2 x 2 slab came out at 0.029 brain NRMSE against the fully
+#: sampled gradient echo at the slice weight, 0.077 at the slab weight and
+#: 0.028 by conjugate gradients; R4 x 1 in the field at 0.120 against 0.135.
+EPI_WAVELET_SLAB_ACCELERATION = 4.0
 
 #: Largest in-plane line step times bands, divided by its shots, of a
 #: segmented multiband unit solved at ``EPI_WAVELET_SLICE`` instead of
@@ -1720,6 +1736,17 @@ def virtual_coils_for(virtual_coils: int, acceleration: float) -> int:
     if acceleration >= EPI_ACCELERATED_SOLVE:
         return max(virtual_coils, EPI_VIRTUAL_COILS_ACCELERATED)
     return virtual_coils
+
+
+def _acceleration(volume) -> float:
+    """Return the lines of the partition and phase-encode extent ``(coils, z, y, x)`` k-space acquired, over those it holds; 1 where it holds none."""
+    magnitude = volume.abs().cpu().numpy() if hasattr(volume, "cpu") else np.abs(volume)
+    read = magnitude.sum(axis=(0, 3)) > 0
+    if not read.any():
+        return 1.0
+    extent = [np.flatnonzero(read.any(axis=1 - axis)) for axis in (0, 1)]
+    box = np.prod([found[-1] - found[0] + 1 for found in extent])
+    return float(box / read.sum())
 
 
 def _line_step(volume) -> int:
