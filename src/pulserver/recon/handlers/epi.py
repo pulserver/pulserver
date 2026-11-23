@@ -470,9 +470,11 @@ class EpiRecon(PicsRecon):
     partial-Fourier or wavelet solve takes the phases into its encoding. A
     unit that no image improves is solved as one, and the log says so; one
     whose solve as one leaves a residual of at most ``SHOT_PHASE_FLOOR`` is
-    solved as one at once. A segmented single-band full-k reference is
-    unfolded by its slice's calibration maps, and its own maps are drawn from
-    its coil images with the shot phases removed (:func:`shot_corrected`).
+    solved as one at once. The fits, the joint solves and their residuals run
+    on the reconstruction's device. A segmented single-band full-k reference
+    is unfolded by its slice's calibration maps, and its own maps are drawn
+    from its coil images with the shot phases removed
+    (:func:`shot_corrected`).
 
     A multiband unit is solved as one volume of its bands, a partition each,
     so its in-plane and band aliases, which the blipped-CAIPI shift spreads
@@ -684,7 +686,7 @@ class EpiRecon(PicsRecon):
             and location not in self.full_resolution_maps
             and fully_encoded(volume[:, 0])
         ):
-            image = self._drawn_after_shots(volume, location, maps.dtype)
+            image = self._drawn_after_shots(volume, location, maps.dtype, context)
         if unit_set == FULL_K_REFERENCE_SET:
             self.phase_references[location] = image
         if unit_set == FIELD_PAIR_SETS[0] and volume.shape[1] == 1:
@@ -697,7 +699,7 @@ class EpiRecon(PicsRecon):
             (-2, -1) if in_plane else None,
         )
 
-    def _drawn_after_shots(self, volume, location, dtype):
+    def _drawn_after_shots(self, volume, location, dtype, context=None):
         """Draw a segmented full-k reference's maps from its k-space with its shot phases removed, and return its image unfolded by them.
 
         Each coil's image is solved with the phases fitted to the reference
@@ -707,7 +709,12 @@ class EpiRecon(PicsRecon):
         """
         corrected = volume
         if self.shot_segments is not None:
-            corrected = shot_corrected(volume, *self.shot_segments)
+            import torch
+
+            device = getattr(context, "device", None)
+            on = torch.device(device) if device is not None else volume.device
+            masks, phases = self.shot_segments
+            corrected = shot_corrected(volume.to(on), masks.to(on), phases.to(on)).cpu()
         drawn = fully_encoded_maps(corrected[:, 0])[:, None].to(dtype)
         self.full_resolution_maps[location] = drawn
         _log.info(
@@ -880,19 +887,22 @@ class EpiRecon(PicsRecon):
         phases of the start that leaves the least residual are kept where it
         is below that solve's. A unit whose solve as one leaves a residual
         of at most ``SHOT_PHASE_FLOOR``, or that no start improves, is solved
-        as one.
+        as one. The fits and residuals run on ``context.device``, as the
+        solves do; the phases and the image are returned on the host.
         """
         import torch
 
         begin = time.perf_counter()
         device = context.device
+        on = torch.device(device) if device is not None else volume.device
+        placed = (volume.to(on), maps.to(on), masks.to(on))
         merged = cg_sense(volume, maps, sampled, self.iterations, device, l2=l2)
         count = int(masks.shape[0])
-        flat = torch.zeros((count, *volume.shape[1:]))
-        before = shot_residual(volume, maps, masks, merged, flat)
+        flat = torch.zeros((count, *volume.shape[1:]), device=on)
+        before = shot_residual(*placed, merged.to(on), flat)
         if before <= SHOT_PHASE_FLOOR:
             return None, merged
-        basis = phase_basis(tuple(volume.shape[1:]), SHOT_PHASE_ORDER)
+        basis = phase_basis(tuple(volume.shape[1:]), SHOT_PHASE_ORDER).to(on)
 
         def joint(phases):
             return cg_sense(
@@ -902,8 +912,8 @@ class EpiRecon(PicsRecon):
                 self.iterations,
                 device,
                 l2=l2,
-                shots=(masks, torch.exp(1j * phases)),
-            )
+                shots=(masks, torch.exp(1j * phases).cpu()),
+            ).to(on)
 
         starts = [
             (name, image)
@@ -921,16 +931,16 @@ class EpiRecon(PicsRecon):
             ):
                 break
             if template is not None:
-                image, phases = template, flat
+                image, phases = template.to(on), flat
                 residual = math.inf
             else:
-                phases = shot_constants(volume, maps, sampled, masks, device)
+                phases = shot_constants(volume, maps, sampled, masks, device).to(on)
                 image = joint(phases)
-                residual = shot_residual(volume, maps, masks, image, phases)
+                residual = shot_residual(*placed, image, phases)
             for _ in range(SHOT_PHASE_ITERATIONS):
-                fitted = fit_shot_phases(volume, maps, masks, image, phases, basis)
+                fitted = fit_shot_phases(*placed, image, phases, basis)
                 solved = joint(fitted)
-                lower = shot_residual(volume, maps, masks, solved, fitted)
+                lower = shot_residual(*placed, solved, fitted)
                 if lower >= residual:
                     break
                 image, phases, previous, residual = solved, fitted, residual, lower
@@ -961,6 +971,7 @@ class EpiRecon(PicsRecon):
             )
             return None, merged
         residual, phases, image, against = best
+        phases, image = phases.cpu(), image.cpu()
         _log.info(
             "shot phases of a unit of %d shots kept, fitted against %s: data "
             "residual %.3f, %.3f solved as one, in %.2f s",
@@ -1918,7 +1929,7 @@ def shot_corrected(kspace, masks, phases, iterations=SHOT_PHASE_COIL_STEPS):
     """
     import torch
 
-    unit = torch.ones((1, *kspace.shape[1:]), dtype=kspace.dtype)
+    unit = torch.ones((1, *kspace.shape[1:]), dtype=kspace.dtype, device=kspace.device)
     rows = [mask.to(kspace.dtype) for mask in masks]
 
     def normal(images):
@@ -1950,9 +1961,11 @@ def shot_corrected(kspace, masks, phases, iterations=SHOT_PHASE_COIL_STEPS):
 
 
 def shot_constants(kspace, maps, sampled, masks, device):
-    """Return ``(shots, z, y, x)`` constant phases (rad), the first shot's zero: each later shot's, in turn, the one of ``SHOT_PHASE_CONSTANTS`` whose solve (``SHOT_PHASE_SEARCH_STEPS`` steps) leaves the least data residual."""
+    """Return ``(shots, z, y, x)`` constant phases (rad), the first shot's zero: each later shot's, in turn, the one of ``SHOT_PHASE_CONSTANTS`` whose solve (``SHOT_PHASE_SEARCH_STEPS`` steps) leaves the least data residual, the solves and residuals on ``device``."""
     import torch
 
+    on = torch.device(device) if device is not None else kspace.device
+    placed = (kspace.to(on), maps.to(on), masks.to(on))
     phases = torch.zeros((masks.shape[0], *kspace.shape[1:]))
     for shot in range(1, masks.shape[0]):
         best = None
@@ -1969,7 +1982,7 @@ def shot_constants(kspace, maps, sampled, masks, device):
                 device,
                 shots=(masks, torch.exp(1j * trial)),
             )
-            residual = shot_residual(kspace, maps, masks, image, trial)
+            residual = shot_residual(*placed, image.to(on), trial.to(on))
             if best is None or residual < best[0]:
                 best = (residual, float(constant))
         phases[shot] = best[1]
@@ -2028,7 +2041,7 @@ def fit_shot_phases(kspace, maps, masks, image, phases, basis):
             curvature = 0.5 * (curvature + curvature.T)
             curvature = curvature + SHOT_PHASE_DAMPING * torch.trace(
                 curvature
-            ) / terms * torch.eye(terms)
+            ) / terms * torch.eye(terms, device=curvature.device)
             step = torch.linalg.solve(curvature.double(), -gradient.double())
             phases[shot] += (step.float() @ flat).reshape(phases.shape[1:])
     return (phases - phases[:1]).float()
