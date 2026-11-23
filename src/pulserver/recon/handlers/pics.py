@@ -1,4 +1,4 @@
-"""Cartesian parallel-imaging compressed-sensing reconstruction with bartorch, as ``bart nlinv``, ``bart pics`` and ``bart homodyne``."""
+"""Cartesian parallel-imaging compressed-sensing reconstruction with bartorch, as ``bart nlinv`` and ``bart pics``, partial Fourier solved for a real image times its phase."""
 
 from __future__ import annotations
 
@@ -39,6 +39,24 @@ CALIBRATION_LINES = 48
 #: Virtual channels the receive channels are compressed to before the maps
 #: and the solve (:class:`~pulserver.recon.CompressChannels`).
 VIRTUAL_COILS = 6
+
+#: Least Tikhonov weight of a conjugate-gradient SENSE solve, on data scaled
+#: as ``pics`` scales them. Lines a unit leaves out, such as the ends of a
+#: partial-Fourier phase encode, make the normal operator singular, and in
+#: single precision the iterate grows without bound along them.
+CG_MIN_L2 = 1e-6
+
+#: Least Tikhonov weight of the real-image conjugate-gradient solve, on data
+#: scaled as ``pics`` scales them. Two partial-Fourier axes leave out k-space
+#: whose conjugate is not sampled either, and without a weight the solve
+#: grows it without bound.
+REAL_SOLVE_MIN_L2 = 1e-4
+
+#: Standard deviation, in lines, of the in-plane Gaussian k-space window that
+#: smooths that phase. At 7T the off-resonance phase near the sinuses wraps
+#: within a few voxels by a BOLD echo time; a wavelet prior on that complex
+#: image turns each wrap into a ring.
+PHASE_SMOOTHING_LINES = 8.0
 
 #: ``series_index`` of the magnitude, real and imaginary images.
 MAGNITUDE_SERIES, REAL_SERIES, IMAGINARY_SERIES = 0, 1, 2
@@ -84,15 +102,18 @@ class PicsRecon(ReconPlugin):
     ``W`` the wavelet transform over the encoded axes of at least
     ``WAVELET_MIN_POINTS`` points. An encoded axis is partial Fourier where
     the lines missing at one end outnumber the widest gap between sampled
-    lines, and :func:`partial_fourier` completes the image by homodyne over
-    every such axis together, which makes it real. bartorch is imported when
-    the first unit is reconstructed.
+    lines. A unit with such an axis is solved again for a real image times
+    the phase of its first solve over the k-space sampled on both sides of
+    the centre (:func:`symmetric_phase`), the maps
+    carrying the phase (:func:`pics_image` with ``phase``), so the k-space it
+    leaves unsampled is the conjugate of what it samples. bartorch is
+    imported when the first unit is reconstructed.
 
     The magnitude image is series ``MAGNITUDE_SERIES``. A scan of more than
     one contrast, such as a multi-echo gradient echo, also sends the real and
     imaginary parts of each image as series ``REAL_SERIES`` and
-    ``IMAGINARY_SERIES``; they keep the phase of the image where no axis is
-    partial Fourier.
+    ``IMAGINARY_SERIES``; where an axis is partial Fourier their phase is
+    that symmetric phase.
 
     The k-space, the maps and the vectors of the solve stay on the host. The
     encoding is built on ``context.device`` and brings them over a coil at a
@@ -263,7 +284,19 @@ class PicsRecon(ReconPlugin):
         image = pics_image(
             volume, maps, sampled, self.wavelet, self.iterations, context.device
         )
-        image = partial_fourier(image, sampled).numpy()
+        if partial_fourier_axes(sampled.numpy()):
+            phase = symmetric_phase(image, sampled)
+            image = pics_image(
+                volume,
+                maps,
+                sampled,
+                self.wavelet,
+                self.iterations,
+                context.device,
+                x0=(image * phase.conj()).real.to(image.dtype),
+                phase=phase,
+            )
+        image = image.numpy()
         if kspace.ndim == 3:
             image = image[0]
         return self._filtered(np.array(center_crop(image, shape[-image.ndim :])))
@@ -296,10 +329,12 @@ class PicsRecon(ReconPlugin):
             reason,
         )
 
-    def _filtered(self, image: np.ndarray) -> np.ndarray:
+    def _filtered(
+        self, image: np.ndarray, axes: tuple[int, ...] | None = None
+    ) -> np.ndarray:
         if self.corrections is None:
             return image
-        return self.corrections.filtered(image)
+        return self.corrections.filtered(image, axes)
 
     def wave_image(self, context: ReconContext, data: ReconData) -> np.ndarray:
         """Return the complex image ``(partitions, phase encodes, readout)`` of a wave-CAIPI volume.
@@ -379,7 +414,11 @@ PLUGIN = PicsRecon()
 
 
 def nlinv_estimate(
-    kspace: Any, traj: Any = None, shape: tuple[int, ...] | None = None
+    kspace: Any,
+    traj: Any = None,
+    shape: tuple[int, ...] | None = None,
+    *,
+    sobolev: float | None = None,
 ) -> Any:
     """Return the coil maps :func:`bartorch.apps.nlinv_maps` fits to ``kspace``, with phase-pole correction.
 
@@ -392,7 +431,9 @@ def nlinv_estimate(
     zero and leave a dark spot in the image. BART refuses the detection on a
     grid with an axis no longer than a twentieth of its longest, rounded up;
     k-space whose calibration grid has such an axis, a slab of 3 partitions
-    or fewer on a matrix of 48 or more, is fitted without it.
+    or fewer on a matrix of 48 or more, is fitted without it. ``sobolev`` is
+    the Sobolev weight of the maps on the calibration grid
+    (:func:`bartorch.apps.nlinv_maps`); ``None`` for BART's.
     """
     from bartorch import apps
 
@@ -406,13 +447,18 @@ def nlinv_estimate(
         radius=CALIBRATION_LINES / 2,
         shape=shape,
         phase_pole=0 if detectable else None,
+        **({} if sobolev is None else {"sobolev": sobolev}),
     )
 
 
 def compressed(
-    context: ReconContext, data: ReconData, virtual_coils: int | None
+    context: ReconContext,
+    data: ReconData,
+    virtual_coils: int | None,
+    *,
+    by_slice: bool = True,
 ) -> ReconData:
-    """Return ``data`` with its receive channels compressed to ``virtual_coils`` (:class:`~pulserver.recon.CoilCompression`).
+    """Return ``data`` with its receive channels compressed to ``virtual_coils`` (:class:`~pulserver.recon.CoilCompression`, ``by_slice`` as there).
 
     ``data`` is returned as it is when it holds no more channels than that, or
     ``virtual_coils`` is ``None``.
@@ -420,7 +466,7 @@ def compressed(
     buffer = data.data if data.data is not None else data.ref
     if virtual_coils is None or buffer is None or buffer.coils <= virtual_coils:
         return data
-    return CoilCompression(virtual_coils)(context, data)
+    return CoilCompression(virtual_coils, by_slice=by_slice)(context, data)
 
 
 def pics_image(
@@ -430,6 +476,10 @@ def pics_image(
     wavelet: float,
     iterations: int,
     device: str | None,
+    x0: Any = None,
+    phase: Any = None,
+    l2: float = 0.0,
+    shots: Any = None,
 ) -> Any:
     """Return the complex image ``(z, y, x)`` of ``bart pics -S -R W`` over host k-space ``(coils, z, y, x)``.
 
@@ -442,7 +492,23 @@ def pics_image(
     ``wavelet`` along the axes of at least ``WAVELET_MIN_POINTS`` points. A
     volume of one partition is solved as a plane. The k-space, the maps and
     the iteration's vectors stay on the host, and the encoding computes on
-    ``device``; ``None`` is the host. The image is on the host.
+    ``device``; ``None`` is the host. FISTA starts from the image ``x0``,
+    ``(z, y, x)``, when one is given, and from zero otherwise. The image is
+    on the host.
+
+    With ``phase``, a unit-magnitude ``(z, y, x)`` image, the image is that
+    phase times a real image ``m``, and the encoding is that of ``m``: the
+    maps carry the phase and the unknown is real (``linop.Real``), so the
+    k-space a partial-Fourier axis leaves unsampled is the conjugate of what
+    it samples. ``x0`` is then the start of ``m``. With ``wavelet`` 0 the
+    solve is conjugate gradients with Tikhonov weight ``l2``, at least
+    ``REAL_SOLVE_MIN_L2`` with ``phase``.
+
+    With ``shots``, the ``(masks, phases)`` of a segmented unit, each shot's
+    lines are encoded from the image times that shot's phase
+    (:func:`shot_encoding`), so the phase that changes from shot to shot does
+    not alias the image; with ``phase`` as well, shot ``s`` sees ``phase``
+    times its own.
     """
     import bartorch
     import torch
@@ -452,82 +518,152 @@ def pics_image(
     pattern = sampled.reshape(grid).to(torch.complex64)
     measured = kspace * sampled
     shifted = bartorch.fftmod(measured, axes=(-1, -2, -3), inverse=True)
+    if phase is not None:
+        maps = maps * phase.reshape(1, *maps.shape[1:])
     encoding = linop.CartesianSense(
         maps.reshape(maps.shape[0], *grid), grid, pattern=pattern, device=device
     )
+    if shots is not None:
+        encoding = shot_encoding(encoding, shots, grid)
+    if phase is not None:
+        encoding = encoding @ linop.Real(grid)
     scaling = optim.data_scaling(shifted) or optim.data_scaling(
         shifted.reshape(kspace.shape[0], *grid), A=encoding
     )
     scaling = scaling or 1.0
-    axes = wavelet_axes(grid, tuple(range(-1, -len(grid) - 1, -1)))
-    solve = optim.FISTA(priors.Wavelet(axes, wavelet), maxiter=iterations)
+    if wavelet > 0:
+        axes = wavelet_axes(grid, tuple(range(-1, -len(grid) - 1, -1)))
+        solve = optim.FISTA(priors.Wavelet(axes, wavelet), maxiter=iterations)
+    elif phase is not None:
+        solve = optim.CG(
+            lambda_=max(float(l2), REAL_SOLVE_MIN_L2), maxiter=int(iterations)
+        )
+    else:
+        solve = optim.CG(lambda_=max(float(l2), CG_MIN_L2), maxiter=int(iterations))
     data = (measured * (1.0 / scaling)).reshape(kspace.shape[0], *grid)
-    return (scaling * solve(data, encoding)).reshape(kspace.shape[1:])
+    start = {} if x0 is None else {"x0": (x0 * (1.0 / scaling)).reshape(grid)}
+    image = (scaling * solve(data, encoding, **start)).reshape(kspace.shape[1:])
+    if phase is None:
+        return image
+    return image.real.to(torch.complex64) * phase.reshape(image.shape)
 
 
-def partial_fourier(image: Any, sampled: Any) -> Any:
-    """Return ``image`` completed by homodyne over every partial-Fourier axis of ``sampled`` together.
+def shot_encoding(encoding: Any, shots: Any, grid: tuple[int, ...]) -> Any:
+    """Return the encoding of a segmented unit whose shots each multiply the image by their own phase.
 
-    An axis is partial Fourier where the lines missing at one end of
-    ``sampled`` outnumber the widest gap between sampled lines, which
-    undersampling alone leaves. The k-space of ``image`` is kept inside the
-    range of lines acquired along each such axis, ``R``. A sample of ``R``
-    whose conjugate position is also in ``R`` is weighted 1, any other
-    sample of ``R`` 2, and the phase is that of the image of the samples
-    weighted 1. The image returned is the real part of the weighted image
-    with that phase removed. One axis at a time would leave the phase of the
-    others' missing lines in the image whose real part the next takes.
+    ``sum_s diag(M_s) E diag(c_s)`` (:func:`bartorch.linop.FieldCorrected`
+    with its coefficients given): shot ``s`` reads the lines ``M_s`` of the
+    image times its phase ``c_s``, as MUSE (Chen et al., NeuroImage 2013,
+    doi:10.1016/j.neuroimage.2013.01.076) encodes them.
+
+    Parameters
+    ----------
+    encoding : bartorch.linop.LinearOperator
+        :class:`bartorch.linop.CartesianSense` over ``grid``.
+    shots : tuple of torch.Tensor
+        ``(masks, phases)``: ``(shots, z, y)`` booleans, the lines each shot
+        placed, and ``(shots, z, y, x)`` unit-magnitude phases.
+    grid : tuple of int
+        The encoding's image grid, ``(y, x)`` for one partition.
+
+    Returns
+    -------
+    bartorch.linop.LinearOperator
+    """
+    import torch
+    from bartorch import linop
+
+    masks, phases = shots
+    count = int(masks.shape[0])
+    rows = masks.reshape(count, 1, *grid[:-1], 1).expand(count, 1, *grid)
+    weights = rows.to(torch.complex64).contiguous()
+    phases = phases.reshape(count, *grid).to(torch.complex64)
+    return linop.FieldCorrected(encoding, coefficients=(weights, phases))
+
+
+def smooth_phase(image):
+    """Return the unit-magnitude phase of ``image`` low-passed in plane.
 
     Parameters
     ----------
     image : torch.Tensor
-        Complex ``([z,] y, x)`` image of the sampled k-space; the Fourier
-        transform relating them is centred, zero frequency at ``n // 2``.
+        Complex ``(z, y, x)`` image, the transform centred.
+
+    Returns
+    -------
+    torch.Tensor
+        ``exp(i angle(g * image))``, complex64, ``g`` a Gaussian k-space
+        window of ``PHASE_SMOOTHING_LINES`` lines over ``y`` and ``x``.
+    """
+    import bartorch
+    import torch
+
+    image = image.to(torch.complex64)
+    ny, nx = image.shape[-2:]
+    y = torch.arange(ny, dtype=torch.float32, device=image.device) - ny // 2
+    x = torch.arange(nx, dtype=torch.float32, device=image.device) - nx // 2
+    window = torch.exp(
+        -(y[:, None] ** 2 + x[None, :] ** 2) / (2 * PHASE_SMOOTHING_LINES**2)
+    )
+    axes = (-1, -2)
+    kspace = bartorch.fft(image, axes, unitary=True).reshape(image.shape)
+    smooth = bartorch.fft(kspace * window, axes, inverse=True, unitary=True)
+    return torch.exp(1j * torch.angle(smooth.reshape(image.shape))).to(torch.complex64)
+
+
+def symmetric_phase(image: Any, sampled: Any) -> Any:
+    """Return the unit-magnitude phase of ``image`` from the k-space a partial-Fourier ``sampled`` holds on both sides of the centre.
+
+    Along each partial-Fourier axis (:func:`_acquired_range`) the k-space of
+    ``image`` is kept where both a sample and its conjugate lie in the
+    acquired range, the phase of a homodyne reconstruction.
+
+    Parameters
+    ----------
+    image : torch.Tensor
+        Complex ``(z, y, x)`` image, the transform centred.
     sampled : torch.Tensor
         Boolean mask of the acquired samples, with the shape of ``image``.
 
     Returns
     -------
     torch.Tensor
-        ``image`` where no axis is partial Fourier; otherwise the completed
-        real image, as complex64.
+        ``exp(i angle(image_low))``, complex64.
     """
     import bartorch
     import torch
 
     mask = sampled.cpu().numpy()
     kept = np.ones(mask.shape, dtype=bool)
-    axes = []
     for axis in range(mask.ndim):
         lines = _acquired_range(mask, axis)
         if lines is None:
             continue
-        axes.append(axis)
-        shape = [1] * mask.ndim
-        shape[axis] = mask.shape[axis]
         inside = np.zeros(mask.shape[axis], dtype=bool)
         inside[lines[0] : lines[1] + 1] = True
+        shape = [1] * mask.ndim
+        shape[axis] = mask.shape[axis]
         kept = kept & inside.reshape(shape)
-    if not axes:
-        return image
-    every = tuple(range(mask.ndim))
+    axes = tuple(range(-1, -mask.ndim - 1, -1))
     # Index i of a centred axis of n points holds the conjugate of index
     # 2 (n // 2) - i, the mirror image shifted by one point where n is even.
-    mirrored = np.roll(np.flip(kept), [1 - n % 2 for n in mask.shape], axis=every)
-    weight = np.where(kept, np.where(mirrored, 1.0, 2.0), 0.0).astype(np.float32)
-    symmetric = (kept & mirrored).astype(np.float32)
-    kspace = bartorch.fft(image.to(torch.complex64), every, unitary=True)
-    kspace = kspace.reshape(image.shape)
+    mirrored = np.roll(np.flip(kept), [1 - n % 2 for n in mask.shape], axis=axes)
+    symmetric = torch.from_numpy((kept & mirrored).astype(np.float32))
+    kspace = bartorch.fft(image.to(torch.complex64), axes, unitary=True)
+    low = bartorch.fft(
+        kspace.reshape(image.shape) * symmetric.to(image.device),
+        axes,
+        inverse=True,
+        unitary=True,
+    ).reshape(image.shape)
+    return torch.exp(1j * torch.angle(low)).to(torch.complex64)
 
-    def weighted_image(weights: np.ndarray) -> Any:
-        weighted = kspace * torch.from_numpy(weights)
-        return bartorch.fft(weighted, every, inverse=True, unitary=True).reshape(
-            image.shape
-        )
 
-    low, weighted = weighted_image(symmetric), weighted_image(weight)
-    phase = torch.exp(-1j * torch.angle(low))
-    return (weighted * phase).real.to(torch.complex64)
+def partial_fourier_axes(sampled: np.ndarray) -> bool:
+    """Return whether any axis of the boolean mask ``sampled`` is partial Fourier (:func:`_acquired_range`)."""
+    return any(
+        _acquired_range(sampled, axis) is not None for axis in range(sampled.ndim)
+    )
 
 
 def _acquired_range(mask: np.ndarray, axis: int) -> tuple[int, int] | None:
@@ -538,7 +674,10 @@ def _acquired_range(mask: np.ndarray, axis: int) -> tuple[int, int] | None:
         return None
     gap = int(np.diff(lines).max()) - 1
     low, high = int(lines[0]), profile.size - 1 - int(lines[-1])
-    if max(low, high) <= gap:
+    # Line 0 of an even axis has no conjugate on the grid: a scan that
+    # reverses its phase encode leaves it out without being partial Fourier.
+    unpaired = int(profile.size % 2 == 0 and low == 1 and high == 0)
+    if max(low, high) - unpaired <= gap:
         return None
     return int(lines[0]), int(lines[-1])
 

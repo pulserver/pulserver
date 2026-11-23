@@ -21,6 +21,7 @@ from pulserver._zoo._evaluation import (
     packets,
     pixel_bandwidth,
     rf_layout,
+    stack_prescans,
 )
 from pulserver._zoo._user import OPTIONS, OWN, user_entries
 from pulserver.design import (
@@ -41,7 +42,7 @@ from pulserver.protocol import (
     UIParam,
 )
 
-#: The calibration of an undersampled or multiband scan: ``"fleet"``, the
+#: The calibration every scan opens with: ``"fleet"``, the
 #: default, segmented EPI with the imaging train's echo spacing, its shots of
 #: a slice in rapid succession, in each phase-encode polarity, so the coil
 #: sensitivities are distorted as the images are; or ``"gre"``, a gradient
@@ -122,9 +123,9 @@ class Epi2D(SequencePlugin):
     def evaluate(self, system, protocol):
         # A cycle plays one shot of every slice group of a packet, and a TR
         # the shots of a volume. The design of one group at the shortest TR
-        # plays one cycle of that group per shot, after its calibration. The
-        # calibration repeats at its own TR, which the console's does not set:
-        # where it plays more RF power than a TR, the layout states its power.
+        # plays one cycle of that group per shot. The prescans repeat at their
+        # own TR, which the console's does not set: where one plays more RF
+        # power than a TR, the layout states its power.
         a = arguments(self, protocol)
         multiband = a["multiband"]
         if a["n_slices"] % multiband:
@@ -145,13 +146,29 @@ class Epi2D(SequencePlugin):
             # The reference only fills a dummy shot, which `played` counts.
             "phase_reference": False,
         }
-        *calibration, _, volume = self.app(system, **(protocol.arguments | one))
         n_shots, n_frames = a["n_shots"], a["n_frames"]
+        *prescans, volume = self.app(system, **(protocol.arguments | one))
+        stem = volume.definitions["Name"]
+        references = [
+            seq for seq in prescans if seq.definitions["Name"] == f"{stem}_reference"
+        ]
+        volumes = len(references) + n_frames
+        # The calibration, the field pair and the full-k reference play every
+        # slice at their own shortest TR, so they are designed at the
+        # prescription, and the layout states the prescan the scan plays.
+        chain = list(self.app(system, **protocol.arguments))
+        calibration = [
+            seq
+            for seq in chain[:-1]
+            if seq.definitions["Name"] == f"{stem}_calibration"
+        ]
+        stack_volumes = stack_prescans(chain)
         shot = volume.definitions["TR"][0] / n_shots
         sizes, cycles = _cycles(
             a | {"n_slices": groups}, shot, system.block_duration_raster
         )
-        # The reference volume and the time series each play their dummy
+        # The time series, and the reference volume that follows a
+        # calibration without FLEET's two polarities, each play their dummy
         # cycles first, packet by packet.
         n_dummy = a["n_dummy"]
         if n_dummy is None:
@@ -162,7 +179,7 @@ class Epi2D(SequencePlugin):
         if not NAVIGATOR:
             # The reference plays in the last dummy cycle, so there is one.
             dummy_cycles = max(dummy_cycles, 1)
-        played = 2 * dummy_cycles + (1 + n_frames) * n_shots
+        played = (volumes - n_frames + 1) * dummy_cycles + volumes * n_shots
         tr = n_shots * max(cycles)
         # The fat saturation is numbered after the excitation, so the
         # excitation keeps the number the listing, made with it on, gives it.
@@ -172,12 +189,18 @@ class Epi2D(SequencePlugin):
         values = achieved(self, volume) | {UIParam.TR: tr}
         return Evaluation(
             protocol.replace(values),
-            played * sum(cycles) + groups * sequences.duration(calibration),
+            played * sum(cycles)
+            + sequences.duration(calibration)
+            + sequences.duration(stack_volumes),
             info=bandwidth_note(
                 system, a["readout_bandwidth_hz"], *first_readout(volume)
             ),
             rf_layout=densest(
-                layout, *(RfLayout.of(prescan, None) for prescan in calibration)
+                layout,
+                *(
+                    RfLayout.of(prescan, None)
+                    for prescan in (*calibration, *stack_volumes)
+                ),
             ),
             sequence=volume,
             echo_spacing=volume.definitions["EchoSpacing"][0],

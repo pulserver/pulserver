@@ -112,6 +112,39 @@ def test_a_sphere_of_tissue_in_air_has_no_field_inside_once_shimmed_and_a_dipole
     assert equator == pytest.approx(-0.5 * pole, rel=0.05)
 
 
+def _sphere_background(size, radius):
+    """Background fraction of a sphere of tissue centred in a cube, each voxel sampled at 3 x 3 x 3 points."""
+    centre = 0.5 * (size - 1)
+    offsets = np.array([-1.0, 0.0, 1.0]) / 3.0
+    z, y, x = np.indices((size, size, size)) - centre
+    inside = np.zeros((size, size, size))
+    for dz in offsets:
+        for dy in offsets:
+            for dx in offsets:
+                inside += (x + dx) ** 2 + (y + dy) ** 2 + (z + dz) ** 2 <= radius**2
+    return (1.0 - inside / 27.0).astype(np.float32)
+
+
+def test_tissue_in_a_voxel_the_surface_of_a_sphere_crosses_is_in_the_field_inside_the_sphere():
+    background = _sphere_background(64, 20.0)
+
+    field = _brainweb._susceptibility_field(background)
+
+    contrast = _brainweb.WATER_PPM - _brainweb.AIR_PPM
+    assert np.abs(field[background < 1.0]).max() < 0.02 * abs(contrast)
+
+
+def test_background_scattered_inside_the_tissue_of_a_sphere_adds_no_field():
+    background = _sphere_background(64, 20.0)
+    speckled = background.copy()
+    speckled[26:38:3, 26:38:3, 26:38:3] = 0.05
+
+    np.testing.assert_array_equal(
+        _brainweb._susceptibility_field(speckled),
+        _brainweb._susceptibility_field(background),
+    )
+
+
 def test_a_region_keeps_the_entries_it_answers_for_from_their_positions_and_frequencies(
     model,
 ):

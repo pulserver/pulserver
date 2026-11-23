@@ -145,6 +145,19 @@ def test_a_plane_is_corrected_in_two_dimensions():
     assert spread(corrected, inside[16:17]) < 0.5 * spread(plane, inside[16:17])
 
 
+def test_each_band_of_a_multiband_unit_takes_a_field_of_its_own():
+    """Two planes far apart stacked as one unit: fitted as a volume of two voxels' depth, N4 failed and no band was corrected."""
+    image, _ = shaded_cylinder()
+    bands = np.stack([image[10], 0.5 * image[22] ** 2]).astype(np.float32)
+
+    out = IntensityCorrection()(ReconResult(bands), unit(slice=0), by_plane=True)
+
+    assert out.attributes["ImageProcessingHistory"][-1] == "N4"
+    for band in range(2):
+        field = _correct.receive_field(bands[band])
+        np.testing.assert_allclose(out.data[band], bands[band] / field, rtol=1e-5)
+
+
 @pytest.mark.parametrize(
     "result",
     [

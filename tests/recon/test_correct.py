@@ -19,13 +19,14 @@ COIL = "\n".join(
     + ["DELTA 0.0"]
 )
 
-#: A 16x16 axial slice; the coil table is inserted as a user parameter.
+#: A 16x16 axial slice, or a stack of partitions; the coil table is inserted
+#: as a user parameter.
 HEADER_XML = """<?xml version="1.0"?>
 <ismrmrdHeader xmlns="http://www.ismrm.org/ISMRMRD">
   <experimentalConditions><H1resonanceFrequency_Hz>63500000</H1resonanceFrequency_Hz></experimentalConditions>
   <encoding>
-    <encodedSpace><matrixSize><x>16</x><y>16</y><z>1</z></matrixSize><fieldOfView_mm><x>240</x><y>240</y><z>5</z></fieldOfView_mm></encodedSpace>
-    <reconSpace><matrixSize><x>16</x><y>16</y><z>1</z></matrixSize><fieldOfView_mm><x>240</x><y>240</y><z>5</z></fieldOfView_mm></reconSpace>
+    <encodedSpace><matrixSize><x>16</x><y>16</y><z>{partitions}</z></matrixSize><fieldOfView_mm><x>240</x><y>240</y><z>{depth}</z></fieldOfView_mm></encodedSpace>
+    <reconSpace><matrixSize><x>16</x><y>16</y><z>{partitions}</z></matrixSize><fieldOfView_mm><x>240</x><y>240</y><z>{depth}</z></fieldOfView_mm></reconSpace>
     <encodingLimits/>
     <trajectory>cartesian</trajectory>
   </encoding>{parameters}
@@ -33,8 +34,8 @@ HEADER_XML = """<?xml version="1.0"?>
 """
 
 
-def header(table=None, name="gradient_coefficients"):
-    """The header above, stating ``table`` under ``name`` when one is given."""
+def header(table=None, name="gradient_coefficients", partitions=1, depth=5):
+    """The header above, ``partitions`` deep over ``depth`` mm, stating ``table`` under ``name`` when one is given."""
     parameters = (
         ""
         if table is None
@@ -44,7 +45,9 @@ def header(table=None, name="gradient_coefficients"):
             "</userParameterString></userParameters>"
         )
     )
-    return ismrmrd.xsd.CreateFromDocument(HEADER_XML.format(parameters=parameters))
+    return ismrmrd.xsd.CreateFromDocument(
+        HEADER_XML.format(parameters=parameters, partitions=partitions, depth=depth)
+    )
 
 
 def acquisition():
@@ -160,6 +163,29 @@ def test_a_slice_far_off_isocentre_keeps_every_voxel(partition_axis):
     inner = out[..., 4:12, 4:12]
     assert np.all(inner > 0.5), "no voxel of the slice may be lost"
     assert not np.allclose(inner, 1.0), "the slice must still be corrected"
+
+
+def test_each_band_of_a_multiband_unit_is_corrected_in_its_own_plane():
+    """Two bands 16 mm apart, stacked as the partitions of one unit.
+
+    Resampled as one volume, a band took in the other and an empty band came
+    back with invalid values; each band is the slice at its own position.
+    """
+    pytest.importorskip("bartorch.tools")
+    reference = acquisition()
+    reference.position = (0.0, 0.0, 60.0)
+    image = np.zeros((2, 16, 16), dtype=np.float32)
+    image[0] = 1.0
+    stack = _Context(header(CUBIC, partitions=2, depth=32))
+
+    out = gradient_unwarped(image, stack, _Data(reference), planes=[44.0, 60.0])
+
+    plane = acquisition()
+    plane.position = (0.0, 0.0, 44.0)
+    alone = gradient_unwarped(image[0], _Context(header(CUBIC)), _Data(plane))
+    np.testing.assert_allclose(out[0], alone, rtol=1e-6)
+    assert not np.allclose(alone, 1.0), "the band must still be corrected"
+    np.testing.assert_array_equal(out[1], 0.0)
 
 
 def test_a_correction_that_fails_returns_the_image_and_says_so(monkeypatch, caplog):

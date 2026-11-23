@@ -128,14 +128,11 @@ def test_compression_leaves_the_unit_it_is_given_as_it_was(device):
     assert virtual.acquisitions is original.acquisitions
 
 
-def test_the_basis_of_the_first_unit_is_applied_to_the_later_ones(device):
-    """A later unit whose channels lie in the span of the basis keeps its norm."""
-    image, maps, kspace = coil_phantom(COILS, MATRIX)
-    later = centred_kspace(maps * np.roll(image, 5, axis=0))
-    ids = []
+def _two_slices(by_slice, ids, first, second, *, device="cpu"):
+    """Compress a unit of slice 0, one of slice 1 and slice 0 again; return the compressed units."""
 
     def step(context, data):
-        compressed = recon.CoilCompression(3)(context, data)
+        compressed = recon.CoilCompression(3, by_slice=by_slice)(context, data)
         ids.append(context.coil_compression.id)
         return compressed
 
@@ -143,12 +140,54 @@ def test_the_basis_of_the_first_unit_is_applied_to_the_later_ones(device):
     play(
         plugin,
         calibration_header(COILS, MATRIX, slices=2),
-        acs_readouts(kspace, slice_index=0) + acs_readouts(later, slice_index=1),
+        acs_readouts(first, slice_index=0)
+        + acs_readouts(second, slice_index=1)
+        + acs_readouts(first, slice_index=0),
         device=device,
     )
+    return plugin.results
 
-    _, second = plugin.results
-    assert ids[0] == ids[1]
+
+def _on_channels(channels):
+    """Calibration k-space of the phantom received by ``channels`` only."""
+    _, _, kspace = coil_phantom(COILS, MATRIX)
+    kept = np.zeros_like(kspace)
+    kept[list(channels)] = kspace[list(channels)]
+    return kept
+
+
+def test_each_slice_location_keeps_a_basis_of_its_own(device):
+    ids = []
+
+    _two_slices(
+        True, ids, _on_channels(range(3)), _on_channels([0, 4, 5]), device=device
+    )
+
+    assert ids[0] != ids[1]
+    assert ids[2] == ids[0]
+
+
+def test_a_slice_seen_by_channels_the_first_slice_does_not_see_keeps_its_signal(
+    device,
+):
+    first, second = _on_channels(range(3)), _on_channels(range(3, COILS))
+
+    _, kept, _ = _two_slices(True, [], first, second, device=device)
+
+    np.testing.assert_allclose(
+        np.linalg.norm(kept.data.kspace), np.linalg.norm(second), rtol=ROUND_OFF
+    )
+
+
+def test_one_basis_for_the_stream_is_that_of_the_first_unit(device):
+    """A later unit whose channels lie in the span of the basis keeps its norm."""
+    image, maps, kspace = coil_phantom(COILS, MATRIX)
+    later = centred_kspace(maps * np.roll(image, 5, axis=0))
+    ids = []
+
+    _, second, _ = _two_slices(False, ids, kspace, later, device=device)
+
+    assert ids[0] == ids[1] == ids[2]
     assert second.data.kspace.shape[0] == 3
     np.testing.assert_allclose(
         np.linalg.norm(second.data.kspace), np.linalg.norm(later), rtol=ROUND_OFF
@@ -390,24 +429,63 @@ def test_the_basis_comes_from_the_calibration_readouts_of_the_first_contrast():
     )
 
 
-def test_a_stream_led_by_an_imaging_readout_passes_its_channels_unchanged():
+def test_a_stream_led_by_imaging_readouts_is_held_to_its_kspace_centre_and_gives_the_basis():
     _, _, kspace = coil_phantom(8, MATRIX)
     context = streaming_context()
     gadget = started(recon.CompressChannels(4), context)
+    lines = readouts(kspace, lines=range(MATRIX))
 
-    passed = [gadget(a, np.asarray(a.data)) for a in acs_readouts(kspace, acs=ACS)]
+    given = [gadget(a, np.asarray(a.data)) for a in lines]
 
-    assert all(readout.shape == (8, MATRIX) for readout in passed)
-    assert context.coil_compression is None
+    centre = MATRIX // 2
+    assert all(out is None for out in given[:centre])
+    assert [acquisition for acquisition, _ in given[centre]] == lines[: centre + 1]
+    assert all(data.shape == (4, MATRIX) for _, data in given[centre])
+    assert all(out.shape == (4, MATRIX) for out in given[centre + 1 :])
+    assert context.coil_compression.n_virtual == 4
 
 
-@pytest.mark.parametrize("flag", ["ACQ_IS_NAVIGATION_DATA", "ACQ_IS_RTFEEDBACK_DATA"])
-def test_navigator_readouts_pass_unchanged_and_are_never_held(flag):
+@pytest.mark.parametrize(
+    "flag",
+    ["ACQ_IS_NAVIGATION_DATA", "ACQ_IS_RTFEEDBACK_DATA", "ACQ_IS_PHASECORR_DATA"],
+)
+def test_navigator_and_phase_reference_readouts_take_the_virtual_channels_in_their_place(
+    flag,
+):
     _, _, kspace = coil_phantom(8, MATRIX)
     gadget = started(recon.CompressChannels(4), streaming_context())
-    (navigator,) = readouts(kspace, flag, "ACQ_IS_PARALLEL_CALIBRATION", lines=[0])
+    (navigator,) = readouts(kspace, flag, lines=[0])
+    calibration = readouts(kspace, "ACQ_IS_PARALLEL_CALIBRATION", lines=range(8, 24))
+    (imaging,) = readouts(kspace, lines=[2])
 
-    assert gadget(navigator, np.asarray(navigator.data)) is not None
+    assert gadget(navigator, np.asarray(navigator.data)) is None
+    for readout in calibration:
+        assert gadget(readout, np.asarray(readout.data)) is None
+    given = gadget(imaging, np.asarray(imaging.data))
+    (later,) = readouts(kspace, flag, lines=[0])
+    projected = gadget(later, np.asarray(later.data))
+
+    assert [acquisition for acquisition, _ in given] == [
+        navigator,
+        *calibration,
+        imaging,
+    ]
+    assert all(data.shape == (4, MATRIX) for _, data in given)
+    assert projected.shape == (4, MATRIX)
+
+
+def test_navigators_ahead_of_an_uncalibrated_stream_are_given_on_projected_at_its_centre():
+    _, _, kspace = coil_phantom(8, MATRIX)
+    gadget = started(recon.CompressChannels(4), streaming_context())
+    (navigator,) = readouts(kspace, "ACQ_IS_NAVIGATION_DATA", lines=[0])
+    lines = readouts(kspace, lines=range(MATRIX // 2 + 1))
+
+    assert gadget(navigator, np.asarray(navigator.data)) is None
+    *held, given = [gadget(a, np.asarray(a.data)) for a in lines]
+
+    assert all(out is None for out in held)
+    assert [acquisition for acquisition, _ in given] == [navigator, *lines]
+    assert all(data.shape == (4, MATRIX) for _, data in given)
 
 
 def test_readouts_held_when_the_stream_ends_reach_their_unit_projected(device):

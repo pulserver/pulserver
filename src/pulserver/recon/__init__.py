@@ -5,6 +5,7 @@ from ._calibration import (
     CoilSensitivities,
     MissingCalibration,
     coil_maps,
+    volume_coil_maps,
 )
 from ._correct import (
     Corrections,
@@ -64,4 +65,5 @@ __all__ = [
     "figure_rgb",
     "gradient_unwarped",
     "load_plugin",
+    "volume_coil_maps",
 ]

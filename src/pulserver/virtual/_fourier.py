@@ -17,9 +17,15 @@ from ._motion import RigidMotion
 from ._timeline import Timeline
 from ._tissue import Tissue
 
-#: Dephasing across a voxel, in cycles, from which the net moment between two
-#: events shifts the configuration states by one order.
+#: Dephasing across a voxel, in cycles, beyond which the net moment between two
+#: events shifts the configuration states by one order. Half a cycle is the edge
+#: of the k-space a voxel grid encodes, which a phase-encode prewinder reaches.
 SHIFT_CYCLES = 0.5
+
+#: Relative margin by which a dephasing exceeds :data:`SHIFT_CYCLES` to shift
+#: the states: a moment to the edge of k-space, summed in floating point from
+#: the moments before it, lands on either side of the threshold by rounding.
+_SHIFT_MARGIN = 1e-6
 
 #: Relative residual to which the signals of the tissue's classes are spanned
 #: by a temporal basis across the readouts, and their decay and precession by
@@ -96,6 +102,10 @@ _MIXED_SAMPLE = 1 << 16
 #: projected onto it.
 _SKETCH = 4096
 
+#: Singular value, relative to the largest, below which a row of the union
+#: of two orthonormal bases adds no direction.
+_INDEPENDENT = 1e-3
+
 #: Deviation from the periodic state, relative to the equilibrium
 #: magnetization, below which one period of a stream stands for every later
 #: one: relaxation contracts the deviation by at least ``exp(-t / T1)``.
@@ -126,7 +136,7 @@ class FourierPlayer:
     spectral-spatial pulse, has its profile across the field and the position
     along that axis, simulated over those the entries span. Between events, the
     net gradient moment across a voxel shifts the configuration states by one
-    order where it dephases by at least :data:`SHIFT_CYCLES` cycles along the
+    order where it dephases by more than :data:`SHIFT_CYCLES` cycles along the
     axes the tissue spans; its part that changes from one repetition to the
     next counts where the intervals between two pulses do not cancel it, and
     anything less is taken as balanced.
@@ -206,7 +216,7 @@ class FourierPlayer:
         voxel = _voxel(timeline, everything, tissue.spacing)
         spanned = _spanned(everything, tissue.axes, timeline.rotation, voxel)
         winds = np.linalg.norm((timeline.readouts.winding @ spanned) * voxel, axis=1)
-        timeline.read_free_induction(np.flatnonzero(winds < SHIFT_CYCLES))
+        timeline.read_free_induction(np.flatnonzero(~_dephases(winds)))
         shifted = _shifted(timeline, events, voxel, spanned)
         self._poses = None if motion is None else _poses(timeline, motion, self.device)
         selector_of, selectors = _selectors(pulses)
@@ -333,17 +343,25 @@ class FourierPlayer:
                 parts.append(signal if weigh is None else weigh(signal, some))
             return torch.cat(parts, dim=1)
 
+        carried = self._carried(local, atoms)
         sketched = max(1, _SKETCH // count)
         if atoms.numel() <= max(sketched, step):
-            left, right = _leading(simulated(atoms).reshape(-1, width), self._tolerance)
-            coefficients = left.reshape(count, atoms.numel(), -1)
+            signals = simulated(atoms)
+            right = self._spanning(signals, carried, width)
+            coefficients = signals @ right.mH
         else:
             generator = torch.Generator(device=self.device).manual_seed(0)
-            order = torch.randperm(
-                atoms.numel(), device=self.device, generator=generator
+            order = (
+                torch.multinomial(
+                    carried**2, sketched, replacement=False, generator=generator
+                )
+                if int(torch.count_nonzero(carried)) >= sketched
+                else torch.randperm(
+                    atoms.numel(), device=self.device, generator=generator
+                )[:sketched]
             )
-            sample = atoms[order[:sketched]]
-            _, right = _leading(simulated(sample).reshape(-1, width), self._tolerance)
+            sample = atoms[order]
+            right = self._spanning(simulated(sample), carried[order], width)
             coefficients = torch.empty(
                 (count, atoms.numel(), right.shape[0]),
                 dtype=torch.complex64,
@@ -388,6 +406,34 @@ class FourierPlayer:
             return signal[..., source] * decay.to(signal.dtype)
 
         return weigh, column.reshape(-1)
+
+    def _carried(self, local: torch.Tensor, atoms: torch.Tensor) -> torch.Tensor:
+        """Return the root of the summed squared magnetization each of ``atoms`` carries over the entries at ``local``.
+
+        A basis spanning the atoms' signals weighted by it spans the images
+        to the tolerance, however few entries a tissue class holds and
+        however many classes share the rest.
+        """
+        density = self._entries.density[local].abs()[:, None]
+        share = (self._atoms.weight[local] * density).reshape(-1) ** 2
+        position = torch.searchsorted(atoms, self._atoms.index[local].reshape(-1))
+        carried = torch.zeros(atoms.numel(), dtype=share.dtype, device=self.device)
+        carried.index_add_(0, position, share)
+        return carried.sqrt().to(torch.float32)
+
+    def _spanning(
+        self, signals: torch.Tensor, carried: torch.Tensor, width: int
+    ) -> torch.Tensor:
+        """Return orthonormal rows spanning the atoms' signals to the tolerance, both as each atom alone and as weighted by the magnetization it carries, ``(terms, width)``."""
+        _, alone = _leading(signals.reshape(-1, width), self._tolerance)
+        _, weighted = _leading(
+            (signals * carried[None, :, None]).reshape(-1, width), self._tolerance
+        )
+        _, sigma, rows = torch.linalg.svd(
+            torch.cat([alone, weighted]), full_matrices=False
+        )
+        kept = int(torch.count_nonzero(sigma > _INDEPENDENT * sigma[0]))
+        return rows[: max(1, min(kept, MAX_TERMS))]
 
     def _image(self, basis: _Basis, tissue: Tissue, rotation: np.ndarray) -> _Grid:
         """Return the images a station's readouts encode.
@@ -486,8 +532,6 @@ class FourierPlayer:
 
     def _acquired(self, first: int, last: int) -> np.ndarray:
         """Return the samples of the readouts from ``first`` to before ``last``, ``(coils, samples)``."""
-        from bartorch import linop
-
         timeline, device = self._timeline, self.device
         times, k, receiver = timeline._kspace(first, last)
         firsts = timeline.readouts.first
@@ -498,52 +542,79 @@ class FourierPlayer:
         )
         stations = self._station_of[readout]
         for index, station in enumerate(self._stations):
-            chosen = np.flatnonzero(stations == station)
-            if not chosen.size:
+            every = np.flatnonzero(stations == station)
+            if not every.size:
                 continue
             grid, basis = self._grids[index], self._bases[index]
             if grid is None:
                 continue
-            where = torch.as_tensor(chosen, device=device)
-            position = np.searchsorted(basis.readouts, readout[chosen])
-            temporal = basis.temporal[
-                :, basis.column[torch.as_tensor(position, device=device)]
-            ]
-            within = firsts[first] + chosen - firsts[readout[chosen]]
-            across = self._readout.basis(readout[chosen], within)
-            weights = grid.mix @ (temporal[:, None, :] * across[None, :, :]).reshape(
-                -1, chosen.size
+            # The signal weights hold a row per pair of temporal and readout
+            # terms and the transforms a row per coil and image term, for
+            # every sample: the samples are taken in batches that fit the budget.
+            rows = max(
+                basis.temporal.shape[0] * self._readout.terms,
+                grid.images.shape[0] * grid.sensitivities.shape[0],
             )
-            at = k[where]
-            phase = receiver[where] - echo_phase[where]
-            if self._poses is not None:
-                turns, shifts = self._poses
-                moved = torch.as_tensor(readout[chosen], device=device)
-                phase = phase - 2.0 * math.pi * (at * shifts[moved]).sum(dim=1)
-                at = torch.einsum("nij,nj->ni", turns[moved], at)
-            centre = torch.as_tensor(grid.centre, dtype=at.dtype, device=device)
-            phase = phase - 2.0 * math.pi * (at * centre).sum(dim=1)
-            factor = (
-                math.sqrt(grid.points) * grid.spectrum(at) * torch.exp(1j * phase)
-            ).to(torch.complex64)
-            traj = grid.trajectory(at).to(torch.float32)[None]
-            terms = grid.images.shape[0]
-            coils = grid.sensitivities.shape[0]
-            per_coil = max(1, min(coils, _BUDGET // (8 * grid.points * terms)))
-            nufft = linop.NUFFT(traj, (per_coil * terms, *grid.shape), toeplitz=False)
-            for c0 in range(0, coils, per_coil):
-                c1 = min(c0 + per_coil, coils)
-                held = torch.zeros(
-                    (per_coil, terms, *grid.shape), dtype=torch.complex64, device=device
-                )
-                held[: c1 - c0] = grid.sensitivity(c0, c1)[:, None] * grid.images[None]
-                transformed = nufft(held.reshape(-1, *grid.shape)).reshape(
-                    per_coil, terms, -1
-                )[: c1 - c0]
-                out[c0:c1, where] = (
-                    torch.einsum("ctn,tn->cn", transformed, weights) * factor
+            step = max(1, _BUDGET // (8 * rows))
+            for begin in range(0, every.size, step):
+                self._acquire_station(
+                    out,
+                    every[begin : begin + step],
+                    readout,
+                    grid,
+                    basis,
+                    firsts,
+                    first,
+                    k,
+                    receiver,
+                    echo_phase,
                 )
         return out.cpu().numpy()
+
+    def _acquire_station(
+        self, out, chosen, readout, grid, basis, firsts, first, k, receiver, echo_phase
+    ) -> None:
+        """Add to ``out`` the samples ``chosen`` of one station, ``(coils, samples)``."""
+        device = self.device
+        where = torch.as_tensor(chosen, device=device)
+        position = np.searchsorted(basis.readouts, readout[chosen])
+        temporal = basis.temporal[
+            :, basis.column[torch.as_tensor(position, device=device)]
+        ]
+        within = firsts[first] + chosen - firsts[readout[chosen]]
+        across = self._readout.basis(readout[chosen], within)
+        weights = grid.mix @ (temporal[:, None, :] * across[None, :, :]).reshape(
+            -1, chosen.size
+        )
+        at = k[where]
+        phase = receiver[where] - echo_phase[where]
+        if self._poses is not None:
+            turns, shifts = self._poses
+            moved = torch.as_tensor(readout[chosen], device=device)
+            phase = phase - 2.0 * math.pi * (at * shifts[moved]).sum(dim=1)
+            at = torch.einsum("nij,nj->ni", turns[moved], at)
+        centre = torch.as_tensor(grid.centre, dtype=at.dtype, device=device)
+        phase = phase - 2.0 * math.pi * (at * centre).sum(dim=1)
+        factor = (
+            math.sqrt(grid.points) * grid.spectrum(at) * torch.exp(1j * phase)
+        ).to(torch.complex64)
+        traj = grid.trajectory(at).to(torch.float32)[None]
+        terms = grid.images.shape[0]
+        coils = grid.sensitivities.shape[0]
+        per_coil = max(1, min(coils, _BUDGET // (8 * grid.points * terms)))
+        transform = _transform(traj, (per_coil * terms, *grid.shape))
+        for c0 in range(0, coils, per_coil):
+            c1 = min(c0 + per_coil, coils)
+            held = torch.zeros(
+                (per_coil, terms, *grid.shape), dtype=torch.complex64, device=device
+            )
+            held[: c1 - c0] = grid.sensitivity(c0, c1)[:, None] * grid.images[None]
+            transformed = transform(held.reshape(-1, *grid.shape)).reshape(
+                per_coil, terms, -1
+            )[: c1 - c0]
+            out[c0:c1, where] = (
+                torch.einsum("ctn,tn->cn", transformed, weights) * factor
+            )
 
     def _span_ends(self) -> np.ndarray:
         """Return the blocks at which spans may end: after at least :data:`_SPAN_SAMPLES` samples, and the scan's end."""
@@ -553,6 +624,25 @@ class FourierPlayer:
         marks = np.arange(_SPAN_SAMPLES, int(total[-1]) + 1, _SPAN_SAMPLES)
         ends = np.searchsorted(total, marks) + 1
         return np.unique(np.concatenate([ends[ends < self.blocks], [self.blocks]]))
+
+
+def _transform(traj: torch.Tensor, image_shape: tuple[int, ...]):
+    """Return the NUFFT of images ``image_shape`` at ``traj`` ``(1, samples, axes)``, as a callable.
+
+    bartorch transforms a trajectory whose kz is zero everywhere in 2D. A 3D
+    image's transform on its kz = 0 plane is the 2D transform of its sum along
+    z, scaled by one over the square root of the z points, which this returns
+    for such a trajectory.
+    """
+    from bartorch import linop
+
+    if len(image_shape) < 4 or traj.shape[-1] < 3 or bool(torch.any(traj[..., 2] != 0)):
+        return linop.NUFFT(traj, image_shape, toeplitz=False)
+    depth = image_shape[-3]
+    flat = linop.NUFFT(
+        traj[..., :2], (image_shape[0], *image_shape[-2:]), toeplitz=False
+    )
+    return lambda images: flat(images.sum(dim=-3) / math.sqrt(depth))
 
 
 def simulate(
@@ -776,6 +866,11 @@ def _spanned(
     return np.diag((cube | (spread > 0.5 * voxel)).astype(float))
 
 
+def _dephases(cycles: np.ndarray) -> np.ndarray:
+    """Return where a dephasing across a voxel, in cycles, shifts the configuration states."""
+    return np.asarray(cycles) > SHIFT_CYCLES * (1.0 + _SHIFT_MARGIN)
+
+
 def _shifted(
     timeline: Timeline, events: _Events, voxel: np.ndarray, spanned: np.ndarray
 ) -> np.ndarray:
@@ -785,7 +880,7 @@ def _shifted(
     projecting onto them, and is read in cycles across the voxel. While the
     magnetization precesses freely from an excitation, the states shift by one
     order over the interval to the next pulse where k winds by
-    :data:`SHIFT_CYCLES` or more by then, and each readout reads the pathway
+    more than :data:`SHIFT_CYCLES` by then, and each readout reads the pathway
     the timeline found it reads: the shifts fall before the readouts of the
     echoes of earlier intervals, as an SSFP-echo readout reads one, and after
     those of the free induction. Around a refocusing
@@ -796,7 +891,7 @@ def _shifted(
     encoding where the intervals between consecutive pulses sum it to
     nothing, and counted where they do not, as the turned readout of a
     radial scan is. An interval shifts the states where the median over its
-    place dephases by :data:`SHIFT_CYCLES`.
+    place dephases by more than :data:`SHIFT_CYCLES`.
     """
     readouts = timeline.readouts
     played = timeline.played
@@ -818,7 +913,7 @@ def _shifted(
     interval = np.cumsum(events.kind == 1)[:-1]
     summed = np.zeros((int(interval.max()) + 1, 3))
     np.add.at(summed, interval, changing)
-    cancelled = np.linalg.norm(summed, axis=1) < SHIFT_CYCLES
+    cancelled = ~_dephases(np.linalg.norm(summed, axis=1))
     dephasing = mean[pair] + np.where(cancelled[interval][:, None], 0.0, changing)
     use = np.where(
         events.kind == 1,
@@ -843,7 +938,7 @@ def _shifted(
     firsts = np.concatenate([[0], np.cumsum(counts)[:-1]])
     ranked = size[order]
     typical = 0.5 * (ranked[firsts + (counts - 1) // 2] + ranked[firsts + counts // 2])
-    shifts = (typical[pair] >= SHIFT_CYCLES).astype(np.int64)
+    shifts = _dephases(typical[pair]).astype(np.int64)
     pathway = np.where(
         events.kind == 2,
         readouts.pathway[np.where(events.kind == 2, events.index, 0)],
@@ -852,6 +947,11 @@ def _shifted(
     before = np.where(events.kind[:-1] == 2, pathway[:-1], 0)
     shifts = np.where(reading, np.clip(pathway[1:] - before, 0, None), shifts)
     return np.where(winding, np.clip(shifts - before, 0, None), shifts)
+
+
+def _energy(values: torch.Tensor) -> torch.Tensor:
+    """Return the summed squared magnitude of a tensor, accumulated in double precision."""
+    return values.abs().square().sum(dtype=torch.float64)
 
 
 def _leading(
@@ -878,7 +978,7 @@ def _leading(
             found = torch.linalg.qr(values @ (values.mH @ found)).Q
         small, s, vh = torch.linalg.svd(found.mH @ values, full_matrices=False)
         u = found @ small
-    total = torch.linalg.vector_norm(values).double() ** 2
+    total = _energy(values)
     residual = 1.0 - torch.cumsum(s.double() ** 2, 0) / total.clamp_min(1e-300)
     rank = int(torch.count_nonzero(residual > tolerance**2)) + 1
     rank = max(1, min(rank, MAX_TERMS, s.numel()))
@@ -914,7 +1014,7 @@ def _span(
         guess = torch.zeros((rows, sketch), dtype=torch.complex64, device=device)
         total = 0.0
         for block in blocks():
-            total += float(torch.linalg.vector_norm(block)) ** 2
+            total += float(_energy(block))
             if sketch < rows:
                 guess += block @ torch.randn(
                     (block.shape[1], sketch),

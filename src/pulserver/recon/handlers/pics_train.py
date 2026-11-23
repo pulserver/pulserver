@@ -1,4 +1,4 @@
-"""Cartesian parallel-imaging compressed-sensing reconstruction of the image the readouts of a train fill, as ``bart nlinv``, ``bart pics`` and ``bart homodyne``."""
+"""Cartesian parallel-imaging compressed-sensing reconstruction of the image the readouts of a train fill, as ``bart nlinv`` and ``bart pics``, partial Fourier solved for a real image times its phase."""
 
 from __future__ import annotations
 

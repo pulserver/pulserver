@@ -65,11 +65,11 @@ def precession(sequence):
 
 
 def synthetic_sensitivities(model, channels):
-    """Smooth sensitivities in place of BART's ``model``, as ``_coils._sampled`` returns them: each channel stronger to one side and turning in phase along x."""
+    """Smooth sensitivities in place of the coil ``model``, as ``_coils._sampled`` returns them: each channel stronger to one side and turning in phase along x."""
     from pulserver.virtual import _coils
 
     index = (np.arange(_coils._SAMPLES) - _coils._SAMPLES // 2) / _coils._SAMPLES
-    z = index[:, None, None] if model == "HEAD_3D_64CH" else np.zeros((1, 1, 1))
+    z = index[:, None, None] if model != "HEAD_2D_8CH" else np.zeros((1, 1, 1))
     y, x = index[None, :, None], index[None, None, :]
     maps = []
     for channel in range(channels):

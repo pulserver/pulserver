@@ -286,6 +286,13 @@ def _same_pulse(a: pp.RfDefinition, b: pp.RfDefinition) -> bool:
     )
 
 
+#: The relative excess over a layout's RF power within which a prescan plays
+#: the same power: a prescan that plays a TR's pulses at the TR's rate, such
+#: as a gradient-echo field pair at the shortest TR, exceeds it by rounding
+#: alone, and the wire writes amplitudes to nine significant digits.
+SAME_POWER_RTOL = 1e-9
+
+
 def densest(layout: RfLayout, *prescans: RfLayout) -> RfLayout:
     """Return ``layout``, or the RF of a prescan of the chain where it plays more RF power, over the layout's period.
 
@@ -295,22 +302,27 @@ def densest(layout: RfLayout, *prescans: RfLayout) -> RfLayout:
     power than the TR does, and a protocol whose TR meets the limits is then
     refused before the scan. Each of ``prescans`` states the prescan's
     instances over its duration (:meth:`RfLayout.of`). The one of the most RF
-    power (:func:`rf_power`), where it is more than the layout's, is returned
-    as its instances in play order, repeated, as many as it plays in
-    ``layout.period``, rounded up, over that period: the period stays the TR
-    the console sets, and the power is at least the prescan's at every TR, so
-    a scanner that lengthens the TR to meet its limits cannot meet them for a
-    prescan that exceeds them.
+    power (:func:`rf_power`), where it is more than the layout's beyond
+    ``SAME_POWER_RTOL``, is returned as its instances of the most energy
+    first, then in play order, repeated, as many as it plays in
+    ``layout.period``, rounded up, over that period: a prescan of unequal
+    pulses, such as a spin echo's excitation and refocusing, states its
+    refocusing pulses first. The period stays the TR the console sets, and
+    the power is at least the prescan's at every TR, so a scanner that
+    lengthens the TR to meet its limits cannot meet them for a prescan that
+    exceeds them.
 
     The prescan's definitions take the numbers of the layout's, which the
     listing names: the definition that plays the same pulse, else the first
     of its use, and the amplitudes are over that definition's peak, so the
     peak each instance plays is its own. A definition of a use the layout
     plays no pulse of is numbered after the layout's. The instances follow no
-    control: a prescan's flip angle is its own.
+    control: they play the amplitudes of the evaluated protocol.
     """
     strongest = max(prescans, key=rf_power, default=None)
-    if strongest is None or rf_power(strongest) <= rf_power(layout):
+    if strongest is None or rf_power(strongest) <= rf_power(layout) * (
+        1 + SAME_POWER_RTOL
+    ):
         return layout
     own = layout.instances.definitions
     definitions = list(own)
@@ -328,7 +340,18 @@ def densest(layout: RfLayout, *prescans: RfLayout) -> RfLayout:
     scale = np.divide(peak, over, out=np.ones_like(peak), where=over > 0)
     played = len(strongest.instances.definition)
     count = math.ceil(layout.period * played / strongest.period - 1e-9)
-    picks = np.arange(count) % played
+    energy = np.array(
+        [
+            d.peak_hz**2
+            * sum(np.trapezoid(np.abs(channel) ** 2, d.time) for channel in d.waveform)
+            for d in strongest.instances.definitions
+        ]
+    )
+    played_energy = (
+        strongest.instances.amplitude**2 * energy[strongest.instances.definition]
+    )
+    order = np.argsort(-played_energy, kind="stable")
+    picks = order[np.arange(count) % played]
     which = strongest.instances.definition[picks]
     instances = pp.RfInstances(
         tuple(definitions),
@@ -336,6 +359,19 @@ def densest(layout: RfLayout, *prescans: RfLayout) -> RfLayout:
         strongest.instances.amplitude[picks] * scale[which],
     )
     return RfLayout(instances, (None,) * count, layout.period)
+
+
+#: Prescans of an EPI scan that image the whole stack or slab as volumes of
+#: their own, each at its own shortest TR: the field pair and the
+#: full-k phase reference.
+STACK_PRESCANS = ("field_forward", "field_reversed", "full_k_reference")
+
+
+def stack_prescans(chain: list[pp.Sequence]) -> list[pp.Sequence]:
+    """Return the sequences of an EPI chain, main sequence last, named ``<scan>_<name>`` for a name of ``STACK_PRESCANS``."""
+    stem = chain[-1].definitions["Name"]
+    names = {f"{stem}_{name}" for name in STACK_PRESCANS}
+    return [seq for seq in chain[:-1] if seq.definitions.get("Name") in names]
 
 
 def packets(

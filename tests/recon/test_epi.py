@@ -6,7 +6,8 @@ import numpy as np
 import pytest
 
 from pulserver.mrd import AcquisitionFlag
-from pulserver.recon.handlers.epi import EpiPhaseCorrection, RampSampling
+from pulserver.recon._buffers import ReconData
+from pulserver.recon.handlers.epi import EpiPhaseCorrection, RampSampling, _polarity_of
 
 pytest.importorskip("bartorch")
 
@@ -193,17 +194,28 @@ def test_forward_and_reversed_lines_leave_the_gadgets_in_one_direction_with_one_
 
 
 class _Correction:
-    """Stands in for bartorch's susceptibility estimate: records what it is given and returns a field displacing the k-th slice of its last axis by k voxels."""
+    """Stands in for bartorch's susceptibility estimate: records what it is given and returns a field displacing a slice by one voxel, and the k-th slice of a volume's last axis by k voxels."""
 
     def __init__(self):
         self.calls = []
+        self.smoothness = []
+        self.blip_up = []
 
-    def __call__(self, blip_up, blip_down, *, voxel_size, phase_encoding_axis):
+    def __call__(
+        self, blip_up, blip_down, *, voxel_size, phase_encoding_axis, alpha=None
+    ):
         import torch
 
         self.calls.append((tuple(blip_up.shape), voxel_size, phase_encoding_axis))
+        self.smoothness.append(alpha)
+        self.blip_up.append(blip_up.numpy().copy())
         shape = list(blip_up.shape)
         shape[phase_encoding_axis] += 1
+        if len(shape) == 2:
+            field = torch.full(
+                shape, voxel_size[phase_encoding_axis], dtype=torch.float64
+            )
+            return SimpleNamespace(field_map=field)
         steps = torch.arange(shape[-1], dtype=torch.float64)
         field = (voxel_size[phase_encoding_axis] * steps).expand(shape).clone()
         return SimpleNamespace(field_map=field)
@@ -218,7 +230,7 @@ def correction(monkeypatch):
     return stand_in
 
 
-def test_a_slice_is_estimated_as_three_identical_slices_its_phase_encode_first(
+def test_a_slice_is_estimated_in_its_plane_its_phase_encode_first(
     correction,
 ):
     from pulserver.recon.handlers.epi import susceptibility_field, undistorted
@@ -228,26 +240,50 @@ def test_a_slice_is_estimated_as_three_identical_slices_its_phase_encode_first(
     field = susceptibility_field(image, image, (2.0, 3.0))
     corrected = undistorted(image, field, (2.0, 3.0))
 
-    assert correction.calls == [((6, 8, 3), (2.0, 3.0, 1.0), 0)]
-    # The middle slice's field: one voxel, so the image is sampled at x + 1.
+    assert correction.calls == [((6, 8), (2.0, 3.0), 0)]
+    # A field of one voxel: the image is sampled at x + 1.
     assert field.shape == (7, 8)
     np.testing.assert_allclose(corrected, np.roll(image, -1, axis=0))
 
 
-def test_a_volume_is_estimated_as_one_its_phase_encode_first(correction):
-    from pulserver.recon.handlers.epi import susceptibility_field, undistorted
+def test_a_volume_is_estimated_as_one_its_phase_encode_first_its_end_partitions_repeated(
+    correction,
+):
+    from pulserver.recon.handlers.epi import (
+        FIELD_EDGE_PARTITIONS,
+        susceptibility_field,
+        undistorted,
+    )
 
     volume = np.random.default_rng(1).random((4, 6, 8))
 
     field = susceptibility_field(volume, volume, (5.0, 2.0, 3.0))
     corrected = undistorted(volume, field, (5.0, 2.0, 3.0))
 
-    # (partition, phase, readout) goes in as (phase, readout, partition), and
-    # the field comes back in the volume's axes: partition k displaced by k.
-    assert correction.calls == [((6, 8, 4), (2.0, 3.0, 5.0), 0)]
+    # (partition, phase, readout) goes in as (phase, readout, partition), with
+    # the end partitions repeated, and the field comes back in the volume's
+    # axes: partition k displaced by k plus the repeated partitions before it.
+    padded = 4 + 2 * FIELD_EDGE_PARTITIONS
+    assert correction.calls == [((6, 8, padded), (2.0, 3.0, 5.0), 0)]
     assert field.shape == (4, 7, 8)
     for k in range(4):
-        np.testing.assert_allclose(corrected[k], np.roll(volume[k], -k, axis=0))
+        shift = k + FIELD_EDGE_PARTITIONS
+        np.testing.assert_allclose(corrected[k], np.roll(volume[k], -shift, axis=0))
+
+
+def test_a_volume_field_is_fitted_at_the_slab_smoothness_and_a_slice_at_the_slice_smoothness(
+    correction,
+):
+    from pulserver.recon.handlers.epi import (
+        SLAB_FIELD_SMOOTHNESS,
+        SLICE_FIELD_SMOOTHNESS,
+        susceptibility_field,
+    )
+
+    susceptibility_field(np.ones((4, 6, 8)), np.ones((4, 6, 8)), (5.0, 2.0, 3.0))
+    susceptibility_field(np.ones((6, 8)), np.ones((6, 8)), (2.0, 3.0))
+
+    assert correction.smoothness == [SLAB_FIELD_SMOOTHNESS, SLICE_FIELD_SMOOTHNESS]
 
 
 def _oversampled_header(columns, oversampling):
@@ -317,140 +353,133 @@ def test_without_pyhysco_the_field_raises_rather_than_passing_the_image_on(
         susceptibility_field(np.ones((6, 8)), np.ones((6, 8)), (2.0, 3.0))
 
 
-def _epi_recon(monkeypatch, image):
-    """An EpiRecon whose solve returns ``image``, started on an offline stream."""
+def _stack_recon(monkeypatch, images, *, hysco=None, context=None):
+    """An EpiRecon whose units are ``images[(slice, set)]``, started on an offline stream, or on ``context``.
+
+    ``hysco`` is the reason the susceptibility correction is unavailable;
+    ``None`` makes it available.
+    """
     from pulserver.recon import ReconContext
     from pulserver.recon.handlers import epi
-    from pulserver.recon.handlers.pics import PicsRecon
 
-    monkeypatch.setattr(PicsRecon, "image", lambda self, *args: image)
-    plugin = epi.EpiRecon(gradient_unwarp=False, intensity_correction=False)
-    plugin.startup(ReconContext.offline())
-    return plugin
+    context = ReconContext.offline() if context is None else context
+    plugin = epi.EpiRecon(
+        gradient_unwarp=False, intensity_correction=False, kspace_filter=False
+    )
+    plugin.startup(context)
+    plugin.hysco = hysco
+
+    def unit_image(context, data):
+        key = (data.counters["slice"], data.counters["set"])
+        return data.data, data, images[key]
+
+    monkeypatch.setattr(plugin, "unit_image", unit_image)
+    return plugin, context
 
 
-def _unit(set_index):
-    space = SimpleNamespace(recon_fov=(0.2, 0.2), recon_matrix=(6, 8))
+def _unit(location, set_index):
+    space = SimpleNamespace(recon_fov=(0.005, 0.2, 0.2), recon_matrix=(1, 6, 8))
+    reference = SimpleNamespace(
+        position=(0.0, 0.0, 5.0 * location), slice_dir=(0.0, 0.0, 1.0)
+    )
     return SimpleNamespace(
-        counters={"slice": 0, "set": set_index}, data=SimpleNamespace(space=space)
+        counters={"slice": location, "set": set_index},
+        data=SimpleNamespace(
+            space=space,
+            reference=reference,
+            mask=np.ones((1, 6, 8), dtype=bool),
+            sample_time=2e-6,
+        ),
     )
 
 
-def _image(plugin, set_index):
-    return plugin.image(None, (6, 8), None, _unit(set_index))
+def _images(count, polarities=(0, 1)):
+    rng = np.random.default_rng(2)
+    return {
+        (location, polarity): rng.random((6, 8))
+        for location in range(count)
+        for polarity in polarities
+    }
 
 
-def test_an_image_without_its_reversed_reference_is_sent_on_with_a_warning(
+def test_the_reversed_reference_volume_is_sent_as_no_image_and_gives_no_field(
+    monkeypatch, correction
+):
+    plugin, context = _stack_recon(monkeypatch, _images(1))
+
+    assert plugin.recon(context, "", _unit(0, 1)) is None
+    (result,) = plugin.recon(context, "", _unit(0, 0))
+
+    assert correction.calls == []
+    assert plugin.field is None
+    assert "HYSCO" not in result.attributes.get("ImageProcessingHistory", [])
+
+
+def test_without_a_field_pair_each_image_is_sent_at_once_with_one_warning(
     monkeypatch, caplog
 ):
     import logging
 
-    plugin = _epi_recon(monkeypatch, np.ones((6, 8)))
+    plugin, context = _stack_recon(monkeypatch, _images(1))
 
     with caplog.at_level(logging.DEBUG, logger="pulserver.recon"):
-        _image(plugin, 0)
-        _image(plugin, 0)
+        first = plugin.recon(context, "", _unit(0, 0))
+        second = plugin.recon(context, "", _unit(0, 0))
 
+    assert len(first) == len(second) == 1
     skipped = [
         r
         for r in caplog.records
         if "not corrected for susceptibility" in r.getMessage()
     ]
     assert [r.levelno for r in skipped] == [logging.WARNING, logging.DEBUG]
-    assert (
-        "no phase-encode-reversed reference (set 1) of slice 0"
-        in skipped[0].getMessage()
-    )
+    assert "no field pair" in skipped[0].getMessage()
 
 
-def test_an_image_left_uncorrected_for_want_of_pyhysco_says_so(monkeypatch, caplog):
+def test_without_pyhysco_each_image_is_sent_at_once_uncorrected_saying_so(
+    monkeypatch, caplog
+):
     import logging
 
-    from bartorch import tools
-
-    def missing(*args, **kwargs):
-        raise ImportError("no PyHySCO")
-
-    monkeypatch.setattr(tools, "correct_susceptibility", missing)
-    plugin = _epi_recon(monkeypatch, np.ones((6, 8)))
+    images = _images(1)
+    plugin, context = _stack_recon(
+        monkeypatch, images, hysco="PyHySCO is not installed (stand-in)"
+    )
 
     with caplog.at_level(logging.INFO, logger="pulserver.recon"):
-        _image(plugin, 1)
-        out = _image(plugin, 0)
+        plugin.recon(context, "", _unit(0, 1))
+        (result,) = plugin.recon(context, "", _unit(0, 0))
 
-    np.testing.assert_array_equal(out, np.ones((6, 8)))
+    np.testing.assert_array_equal(result.data, images[(0, 0)])
     (warning,) = [r for r in caplog.records if r.levelno == logging.WARNING]
     assert "PyHySCO is not installed" in warning.getMessage()
 
 
-def test_a_corrected_image_is_logged_and_carries_hysco_in_its_history(
-    monkeypatch, caplog, correction
+def test_the_field_pair_of_a_stack_gives_one_field_that_corrects_every_slice(
+    monkeypatch, correction
 ):
-    import logging
+    from pulserver.recon.handlers.epi import FIELD_EDGE_PARTITIONS
 
-    plugin = _epi_recon(monkeypatch, np.ones((6, 8)))
+    images = _images(2, polarities=(0, 2, 3))
+    plugin, context = _stack_recon(monkeypatch, images)
+    for location in (1, 0):
+        for set_index in (2, 3):
+            assert plugin.recon(context, "", _unit(location, set_index)) is None
 
-    with caplog.at_level(logging.INFO, logger="pulserver.recon"):
-        _image(plugin, 1)
-        _image(plugin, 0)
+    (first,) = plugin.recon(context, "", _unit(1, 0))
+    (second,) = plugin.recon(context, "", _unit(0, 0))
 
-    assert len(correction.calls) == 1
-    assert any(
-        r.levelno == logging.INFO
-        and r.getMessage().startswith("susceptibility distortion of a (6, 8) image")
-        for r in caplog.records
-    )
-    assert plugin.corrections.applied() == ["HYSCO"]
-
-
-def test_the_field_of_a_slice_is_estimated_once_and_applied_to_each_of_its_images(
-    monkeypatch, caplog, correction
-):
-    import logging
-
-    image = np.random.default_rng(2).random((6, 8))
-    plugin = _epi_recon(monkeypatch, image)
-
-    with caplog.at_level(logging.DEBUG, logger="pulserver.recon"):
-        _image(plugin, 1)
-        first = _image(plugin, 0)
-        second = _image(plugin, 0)
-
-    assert len(correction.calls) == 1
-    # The stand-in field displaces the slice by one voxel, the first image
-    # included.
-    np.testing.assert_allclose(first, np.roll(image, -1, axis=0))
-    np.testing.assert_allclose(second, np.roll(image, -1, axis=0))
-    logged = [
-        r.getMessage()
-        for r in caplog.records
-        if r.getMessage().startswith("susceptibility distortion")
-    ]
-    assert "field of slice 0 estimated" in logged[0]
-    assert "applying the field of slice 0" in logged[1]
-
-    # A new reference of the slice is estimated against again.
-    _image(plugin, 1)
-    _image(plugin, 0)
-    assert len(correction.calls) == 2
-
-
-def test_the_reversed_reference_is_reconstructed_and_kept_but_sent_as_no_image(
-    monkeypatch,
-):
-    from pulserver.recon.handlers.pics import PicsRecon
-
-    plugin = _epi_recon(monkeypatch, np.ones((6, 8)))
-    reconstructed = []
-    monkeypatch.setattr(
-        plugin, "unit_image", lambda context, data: reconstructed.append(data)
-    )
-    monkeypatch.setattr(PicsRecon, "recon", lambda self, context, branch, data: "sent")
-
-    assert plugin.recon(None, "", _unit(1)) is None
-    assert len(reconstructed) == 1
-    assert plugin.recon(None, "", _unit(0)) == "sent"
-    assert len(reconstructed) == 1
+    # One field for the stack, the slices in the order of their positions,
+    # the end slices repeated; the stand-in displaces slice k by k voxels.
+    padded = 2 + 2 * FIELD_EDGE_PARTITIONS
+    assert correction.calls == [((6, 8, padded), (0.2 * 1e3 / 6, 25.0, 5.0), 0)]
+    for result, location in ((first, 1), (second, 0)):
+        assert result.reference.position[2] == 5.0 * location
+        shift = location + FIELD_EDGE_PARTITIONS
+        np.testing.assert_allclose(
+            result.data, np.roll(images[(location, 0)], -shift, axis=0)
+        )
+        assert "HYSCO" in result.attributes["ImageProcessingHistory"]
 
 
 def _hybrid(data, inverse):
@@ -554,3 +583,275 @@ def test_the_epi_reconstruction_takes_in_the_phase_reference():
     acquisition = _labelled(AcquisitionFlag.IS_PHASECORR_DATA, 0)
 
     assert recon._accepts(acquisition)
+
+
+@pytest.mark.parametrize("delay_us", [-3.0, 4.0])
+def test_the_navigator_gives_the_read_gradient_delay_and_the_ramp_resampling_applies_it(
+    delay_us,
+):
+    dwell_us, samples = 2.0, 2 * COLUMNS + 16
+    t = np.arange(samples) * dwell_us
+    rise, total = 40.0, t[-1]
+
+    def designed(time):
+        # Area under a trapezoid of unit amplitude, rising over `rise` us.
+        up = np.clip(time, 0, rise) ** 2 / (2 * rise)
+        flat = np.clip(time - rise, 0, total - 2 * rise)
+        down = np.clip(time - (total - rise), 0, rise)
+        down = down - down**2 / (2 * rise)
+        return up + flat + down
+
+    span = designed(total)
+    to_pixels = 1.0 / span  # cycles per pixel, -1/2 to 1/2 across the line
+
+    def line(sign):
+        nominal = sign * (designed(t) * to_pixels - 0.5)
+        played = sign * (designed(t - delay_us) * to_pixels - 0.5)
+        flags = AcquisitionFlag.IS_NAVIGATION_DATA
+        if sign < 0:
+            flags |= AcquisitionFlag.IS_REVERSE
+        acquisition = SimpleNamespace(
+            flags=int(flags.value),
+            traj=(nominal * COLUMNS / FOV)[:, None],
+            encoding_space_ref=0,
+            sample_time_us=dwell_us,
+        )
+        return acquisition, _sampled(played)[None]
+
+    ramp = _ramp_gadget()
+    ramp.delay_s = 0.0
+    gadget = EpiPhaseCorrection()
+    gadget.startup(SimpleNamespace(header=None))
+    gadget.ramp = ramp
+    for sign in (1, -1, 1):
+        acquisition, data = line(sign)
+        assert ramp(acquisition, data) is data
+        assert gadget(acquisition, data) is None
+
+    np.testing.assert_allclose(ramp.delay_s, 1e-6 * delay_us, rtol=0.03)
+
+
+def _calibration_unit(location, polarity, kspace):
+    space = SimpleNamespace(recon_fov=(0.005, 0.2, 0.2), recon_matrix=(1, 6, 8))
+    reference = SimpleNamespace(
+        position=(0.0, 0.0, 5.0 * location), slice_dir=(0.0, 0.0, 1.0)
+    )
+    ref = SimpleNamespace(
+        space=space,
+        reference=reference,
+        image_shape=(6, 8),
+        kspace=kspace,
+        coils=kspace.shape[0],
+    )
+    return SimpleNamespace(
+        counters={"slice": location, "set": polarity}, ref=ref, data=None
+    )
+
+
+def test_a_fleet_calibration_of_both_polarities_gives_no_field(monkeypatch, correction):
+    from pulserver.recon.handlers import epi
+
+    monkeypatch.setattr(epi, "coil_maps", lambda *args, **kwargs: None)
+    monkeypatch.setattr(epi, "_zero_filled", lambda ref: ref.kspace)
+    plugin, context = _stack_recon(monkeypatch, _images(1))
+    rng = np.random.default_rng(3)
+    plugin.calibrations = {
+        polarity: [
+            _calibration_unit(
+                0, polarity, rng.random((2, 1, 6, 8)).astype(np.complex64)
+            )
+        ]
+        for polarity in (0, 1)
+    }
+
+    plugin._calibrate(context)
+    plugin.recon(context, "", _unit(0, 0))
+
+    assert correction.calls == []
+    assert plugin.field is None
+
+
+def test_a_spin_echo_field_pair_is_sent_as_no_image_and_its_field_corrects_every_image(
+    monkeypatch, correction
+):
+    images = _images(1, polarities=(0, 1, 2, 3))
+    plugin, context = _stack_recon(monkeypatch, images)
+
+    assert plugin.recon(context, "", _unit(0, 2)) is None
+    assert plugin.recon(context, "", _unit(0, 3)) is None
+    (first,) = plugin.recon(context, "", _unit(0, 0))
+    plugin.recon(context, "", _unit(0, 1))
+    (later,) = plugin.recon(context, "", _unit(0, 0))
+
+    assert len(correction.calls) == 1
+    np.testing.assert_allclose(correction.blip_up[0], images[(0, 2)])
+    for result in (first, later):
+        np.testing.assert_allclose(result.data, np.roll(images[(0, 0)], -1, axis=0))
+        assert "HYSCO" in result.attributes["ImageProcessingHistory"]
+
+
+def test_a_series_without_a_field_pair_takes_the_exam_field_of_a_pair_sampled_as_it_is(
+    monkeypatch, correction
+):
+    from pulserver.recon.handlers.epi import FIELD_EDGE_PARTITIONS
+
+    images = _images(2, polarities=(0, 2, 3))
+    first, context = _stack_recon(monkeypatch, images)
+    for location in (0, 1):
+        for set_index in (2, 3):
+            first.recon(context, "", _unit(location, set_index))
+    first.recon(context, "", _unit(0, 0))
+    later, _ = _stack_recon(monkeypatch, images, context=context)
+
+    (result,) = later.recon(context, "", _unit(1, 0))
+
+    assert len(correction.calls) == 1
+    shift = 1 + FIELD_EDGE_PARTITIONS
+    np.testing.assert_allclose(result.data, np.roll(images[(1, 0)], -shift, axis=0))
+
+
+def test_a_series_sampled_otherwise_than_the_field_pair_is_left_uncorrected_saying_so(
+    monkeypatch, correction, caplog
+):
+    import logging
+
+    images = _images(1, polarities=(0, 2, 3))
+    first, context = _stack_recon(monkeypatch, images)
+    for set_index in (2, 3):
+        first.recon(context, "", _unit(0, set_index))
+    first.recon(context, "", _unit(0, 0))
+    later, _ = _stack_recon(monkeypatch, images, context=context)
+    unit = _unit(0, 0)
+    unit.data.sample_time = 4e-6
+
+    with caplog.at_level(logging.WARNING, logger="pulserver.recon"):
+        (result,) = later.recon(context, "", unit)
+
+    np.testing.assert_array_equal(result.data, images[(0, 0)])
+    assert any("phase-encode sampling" in r.getMessage() for r in caplog.records)
+
+
+def test_a_plane_between_those_of_a_stack_field_takes_their_linear_interpolation():
+    from pulserver.recon.handlers.epi import PlaneField
+
+    fields = np.stack([np.zeros((7, 8)), np.ones((7, 8)), 3 * np.ones((7, 8))])
+    field = PlaneField(
+        positions=np.array([0.0, 2.0, 4.0]),
+        fields=fields,
+        voxel=(2.0, 2.0),
+        slice_dir=(0.0, 0.0, 1.0),
+        train=None,
+    )
+
+    displacement, reason = field.at([0.5, 3.0, 4.8], None, (0, 0, 1), (6, 8))
+    outside, why = field.at([5.5], None, (0, 0, 1), (6, 8))
+
+    assert reason is None
+    np.testing.assert_allclose(displacement[:, 0, 0], [0.25, 2.0, 3.0])
+    assert outside is None and "outside" in why
+
+
+def _slab_maps(context, polarity, centre_mm, partitions):
+    from pulserver.recon._calibration import CoilSensitivities
+
+    maps = np.zeros((2, partitions, 6, 8), dtype=np.complex64)
+    maps[:] = (np.arange(partitions) + 10 * polarity)[None, :, None, None]
+    key = (0, polarity) if polarity else 0
+    context.coil_maps[key] = CoilSensitivities(
+        maps=maps,
+        coils=("0", "1"),
+        noise=None,
+        basis=None,
+        geometry={
+            "position": (0.0, 0.0, centre_mm),
+            "slice_dir": (0.0, 0.0, 1.0),
+            "extent": (2.0 * partitions, 200.0, 200.0),
+        },
+        method="stand-in",
+        source=None,
+    )
+
+
+def _plane(position_mm, set_index):
+    unit = _unit(0, set_index)
+    unit.data.reference.position = (0.0, 0.0, position_mm)
+    unit.data.image_shape = (6, 8)
+    return unit
+
+
+def test_a_plane_on_a_slab_partition_takes_that_partitions_maps_of_its_polarity():
+    from pulserver.recon import ReconContext
+    from pulserver.recon.handlers.epi import FIELD_PAIR_SETS, slab_plane_maps
+
+    context = ReconContext.offline()
+    for polarity in (0, 1):
+        _slab_maps(context, polarity, centre_mm=10.0, partitions=4)
+    forward, reversed_ = FIELD_PAIR_SETS
+
+    # Partition p of 4 lies at 10 + (p - 2) * 2 mm.
+    assert slab_plane_maps(context, _plane(8.0, forward))[0, 0, 0, 0] == 1
+    assert slab_plane_maps(context, _plane(12.0, reversed_))[0, 0, 0, 0] == 13
+    assert slab_plane_maps(context, _plane(9.0, forward)) is None
+    assert slab_plane_maps(context, _plane(20.0, forward)) is None
+
+
+def test_field_pair_planes_read_before_the_slab_calibration_wait_for_its_maps(
+    monkeypatch, correction
+):
+    from pulserver.recon import ReconContext
+    from pulserver.recon.handlers import epi
+
+    context = ReconContext.offline()
+    plugin = epi.EpiRecon(
+        gradient_unwarp=False, intensity_correction=False, kspace_filter=False
+    )
+    plugin.startup(context)
+    plugin.hysco = None
+    images = _images(1, polarities=(0, 2, 3))
+    unfolded = []
+
+    def image(kspace, shape, context_, data):
+        key = (data.counters["slice"], data.counters["set"])
+        if key[1] == 0:
+            _slab_maps(context, 0, centre_mm=0.0, partitions=4)
+        else:
+            unfolded.append(int(epi.slab_plane_maps(context, data)[0, 0, 0, 0]))
+        return images[key]
+
+    monkeypatch.setattr(plugin, "image", image)
+    monkeypatch.setattr(epi, "averaged", lambda buffer: buffer.kspace)
+    monkeypatch.setattr(epi, "coil_maps", lambda *args, **kwargs: None)
+
+    def unit(set_index):
+        data = _plane(0.0, set_index)
+        data.ref = None
+        data.data.kspace = np.zeros((2, 6, 8), dtype=np.complex64)
+        return data
+
+    assert plugin.recon(context, "", unit(2)) is None
+    assert plugin.recon(context, "", unit(3)) is None
+    assert unfolded == []
+    (result,) = plugin.recon(context, "", unit(0))
+
+    assert unfolded == [2, 2]
+    assert len(correction.calls) == 1
+    assert "HYSCO" in result.attributes["ImageProcessingHistory"]
+
+
+@pytest.mark.parametrize("unit_set", [3, 5])
+def test_a_reversed_volume_of_a_slab_is_unfolded_by_the_slab_calibrations_reversed_maps(
+    unit_set,
+):
+    data = ReconData("", counters={"slice": 0, "set": unit_set})
+    volume = np.zeros((2, 4, 8, 8), np.complex64)
+
+    assert _polarity_of(data, volume).counters["set"] == 1
+    assert data.counters["set"] == unit_set
+
+
+def test_a_forward_or_single_plane_unit_keeps_its_own_set_for_its_maps():
+    forward = ReconData("", counters={"slice": 0, "set": 2})
+    plane = ReconData("", counters={"slice": 0, "set": 3})
+
+    assert _polarity_of(forward, np.zeros((2, 4, 8, 8))) is forward
+    assert _polarity_of(plane, np.zeros((2, 1, 8, 8))) is plane
