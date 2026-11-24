@@ -267,7 +267,9 @@ class EpiPhaseCorrection(Gadget):
         }
         self.navigator = []
         self.navigator_profiles = {}
-        self.echo_scale = _navigator_echo_scale(getattr(context, "header", None))
+        stated = _navigator_echo_scale(getattr(context, "header", None))
+        self.echo_scale = 1.0 if stated is None else stated
+        self.echo_scale_stated = stated is not None
         self.excitation = None
         self.phase = None
         self.pending = {}
@@ -462,7 +464,7 @@ class EpiPhaseCorrection(Gadget):
                 *location,
                 self.echo_scale,
                 ""
-                if self.echo_scale != 1.0
+                if self.echo_scale_stated
                 else " (the header states no NavigatorEchoTime and TrainEchoTime)",
             )
             return None
@@ -471,17 +473,17 @@ class EpiPhaseCorrection(Gadget):
         return phase * self.echo_scale
 
 
-def _navigator_echo_scale(header) -> float:
-    """Return the header's ``TrainEchoTime`` over its ``NavigatorEchoTime``; 1 where either is missing or not positive."""
+def _navigator_echo_scale(header) -> float | None:
+    """Return the header's ``TrainEchoTime`` over its ``NavigatorEchoTime``; ``None`` where either is missing or not positive."""
     if header is None:
-        return 1.0
+        return None
     try:
         train = float(user_parameter(header, "TrainEchoTime", 0.0))
         navigator = float(user_parameter(header, "NavigatorEchoTime", 0.0))
     except (TypeError, ValueError):
-        return 1.0
+        return None
     if train <= 0.0 or navigator <= 0.0:
-        return 1.0
+        return None
     return train / navigator
 
 
