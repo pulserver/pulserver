@@ -477,8 +477,11 @@ class EpiPhaseCorrection(Gadget):
                 # reversed one, flipped back into its own order first.
                 line = (torch.flip(line[0], [-1]), True)
                 phase = self.excitation
-        data = line[0].numpy()
-        if not line[1]:
+        return self._corrected(line[0].numpy(), line[1], phase)
+
+    def _corrected(self, data, reverse, phase):
+        """Return ``data`` as :func:`bartorch.tools.correct_lines` corrects it."""
+        if not reverse:
             return data.astype(np.complex64, copy=False)
         if phase is None:
             return np.ascontiguousarray(data[..., ::-1], dtype=np.complex64)
