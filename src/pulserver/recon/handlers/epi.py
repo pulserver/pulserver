@@ -1611,14 +1611,8 @@ def full_resolution_maps(kspace, calibration, maps, device):
 
 #: Root-sum-of-squares, as a fraction of its 99th percentile, at which the
 #: maps of :func:`fully_encoded_maps` weigh a pixel's own coil images and
-#: those of its neighbourhood equally.
+#: the NLINV maps equally.
 ENCODED_MAPS_FLOOR = 0.02
-
-#: Side, in pixels, of the neighbourhood whose coil covariance gives
-#: :func:`fully_encoded_maps` its maps where a pixel has no signal, and side
-#: of the central k-space it is estimated from (``bart walsh -b``, ``-r``).
-ENCODED_MAPS_BLOCK = 15
-ENCODED_MAPS_CALIBRATION = 24
 
 
 def fully_encoded(kspace):
@@ -1635,11 +1629,9 @@ def fully_encoded_maps(kspace):
     signal of that pixel is received with, also where the field has piled
     the signal of several places, each at its own phase, onto one pixel:
     there no map smooth in space, and none fitted at another echo time,
-    unfolds the imaging. Where a pixel has little signal its maps are Walsh's,
-    the principal direction of the coil images' covariance over a
-    neighbourhood of ``ENCODED_MAPS_BLOCK`` pixels (:func:`bartorch.tools.walsh`
-    and :func:`bartorch.tools.ecaltwo`, uncropped), the sensitivity of the
-    signal nearby, smooth into the air around the head.
+    unfolds the imaging. Where a pixel has little signal its maps are those
+    NLINV fits to the central lines of the same k-space
+    (:func:`epi_nlinv_estimate`), smooth into the air around the head.
 
     Parameters
     ----------
@@ -1654,7 +1646,6 @@ def fully_encoded_maps(kspace):
     """
     import bartorch
     import torch
-    from bartorch import tools
 
     shape = tuple(kspace.shape)
     axes = (-1, -2)
@@ -1665,17 +1656,7 @@ def fully_encoded_maps(kspace):
     floor = ENCODED_MAPS_FLOOR * torch.quantile(rss.flatten(), 0.99)
     weight = rss.square() / (rss.square() + floor.square()).clamp_min(1e-30)
     drawn = images / rss.clamp_min(1e-12)
-    ny, nx = shape[-2:]
-    calibration = tools.walsh(
-        kspace.to(torch.complex64).reshape(shape[0], 1, ny, nx).contiguous(),
-        r=(
-            min(ENCODED_MAPS_CALIBRATION, nx - 1),
-            min(ENCODED_MAPS_CALIBRATION, ny - 1),
-            1,
-        ),
-        b=(ENCODED_MAPS_BLOCK, ENCODED_MAPS_BLOCK, 1),
-    )
-    nearby = tools.ecaltwo(nx, ny, 1, calibration, m=1, c=0.0)
+    nearby = torch.as_tensor(epi_nlinv_estimate(kspace.to(torch.complex64)[:, None]))
     nearby = nearby.reshape(shape).to(images.device, torch.complex64)
     phase = torch.exp(1j * torch.angle((nearby.conj() * drawn).sum(dim=0)))
     blended = weight * drawn + (1 - weight) * nearby * phase
