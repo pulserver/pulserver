@@ -10,7 +10,6 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
-import pypulseqpp as pp
 import torch
 
 from .. import ir
@@ -175,9 +174,9 @@ class Trace:
             [
                 np.arccos(
                     np.clip(
-                        pp.sim_bloch(
+                        _longitudinal(
                             self.b1, chunk[:, :1] + chunk[:, 1:] * self.along, self.dt
-                        )[:, 2],
+                        ),
                         -1.0,
                         1.0,
                     )
@@ -824,7 +823,7 @@ def _turn(
     """
     b1, step_us, _ = _raster(prepared, at, amplitude, channels, delay_us)
     dt = 1e-6 * step_us
-    turned = pp.sim_bloch(b1, np.zeros((3, 1)), dt, initial=np.eye(3)).T
+    turned = _rotation(b1, dt)
     flip = float(np.arccos(np.clip(0.5 * (np.trace(turned) - 1.0), -1.0, 1.0)))
     if flip > math.pi - 1e-3:
         # A half turn is 2 n n^T - 1: its axis is any nonzero column of R + 1.
@@ -843,13 +842,55 @@ def _turn(
     step = 1.0 / (_PROFILE_POINTS * duration)
     reach = math.ceil(_PROFILE_REACH * _PROFILE_POINTS)
     detunings = step * np.arange(-reach, reach + 1)
-    tipped = np.arccos(
-        np.clip(pp.sim_bloch(b1, detunings[:, None], dt)[:, 2], -1.0, 1.0)
-    )
+    tipped = np.arccos(np.clip(_longitudinal(b1, detunings[:, None], dt), -1.0, 1.0))
     ratio = tipped / max(float(tipped[reach]), 1e-12)
     inside = np.flatnonzero(ratio >= _IN_BAND)
     low, high = (int(inside[0]), int(inside[-1])) if inside.size else (reach, reach)
     return flip, axis, (detunings[low : high + 1], ratio[low : high + 1])
+
+
+def _spinor(
+    b1_hz: np.ndarray, bz_hz: np.ndarray, dt: float
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Return the Cayley-Klein pair of the field ``b1_hz``, ``(T,)``, at each row of ``bz_hz``.
+
+    ``bz_hz`` is ``(P, T)``, or ``(P, 1)`` held throughout, in Hz; each step
+    of ``dt`` s turns right-handedly about ``(Re b1, Im b1, bz)``
+    (:func:`blochsim.compose_spinor`).
+    """
+    from blochsim import compose_spinor
+
+    drive = torch.from_numpy(2.0 * math.pi * dt * np.asarray(b1_hz, dtype=complex))
+    turn = torch.from_numpy(2.0 * math.pi * dt * np.asarray(bz_hz, dtype=float))
+    if turn.shape[1] == 1:
+        return compose_spinor(drive, turn[:, 0].contiguous())
+    return compose_spinor(drive, list(turn.T.contiguous()))
+
+
+def _longitudinal(b1_hz: np.ndarray, bz_hz: np.ndarray, dt: float) -> np.ndarray:
+    """Return the longitudinal magnetization the field leaves of magnetization at rest, per row of ``bz_hz`` (:func:`_spinor`)."""
+    a, b = _spinor(b1_hz, bz_hz, dt)
+    return (a.abs() ** 2 - b.abs() ** 2).numpy()
+
+
+def _rotation(b1_hz: np.ndarray, dt: float) -> np.ndarray:
+    """Return the ``(3, 3)`` rotation the field ``b1_hz`` performs on resonance (:func:`_spinor`)."""
+    a, b = (complex(value[0]) for value in _spinor(b1_hz, np.zeros((1, 1)), dt))
+    unitary = np.array([[a, b], [-b.conjugate(), a.conjugate()]])
+    pauli = (
+        np.array([[0, 1], [1, 0]], dtype=complex),
+        np.array([[0, -1j], [1j, 0]]),
+        np.array([[1, 0], [0, -1]], dtype=complex),
+    )
+    return np.array(
+        [
+            [
+                0.5 * np.trace(row @ unitary @ column @ unitary.conj().T).real
+                for column in pauli
+            ]
+            for row in pauli
+        ]
+    )
 
 
 def _raster(
