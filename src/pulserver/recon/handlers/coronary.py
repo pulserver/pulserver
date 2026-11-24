@@ -106,10 +106,11 @@ class SegmentMotion(Gadget):
         kspace = np.zeros((coils, matrix, samples), np.complex64)
         for line, data in lines:
             kspace[:, min(max(line, 0), matrix - 1)] = data
-        images = np.fft.fftshift(
-            np.fft.ifft2(np.fft.ifftshift(kspace, axes=(1, 2))), axes=(1, 2)
-        )
-        image = np.sqrt((np.abs(images) ** 2).sum(axis=0))
+        import bartorch
+        import torch
+
+        images = bartorch.fft(torch.from_numpy(kspace), (1, 2), inverse=True)
+        image = bartorch.rss(images.reshape(kspace.shape), 0).numpy()
         if self._reference is None:
             ratio = (
                 self._oversampling[space] if space < len(self._oversampling) else 1.0

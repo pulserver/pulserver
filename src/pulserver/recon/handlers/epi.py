@@ -1611,12 +1611,8 @@ def full_resolution_maps(kspace, calibration, maps, device):
 
 #: Root-sum-of-squares, as a fraction of its 99th percentile, at which the
 #: maps of :func:`fully_encoded_maps` weigh a pixel's own coil images and
-#: those of its neighbourhood equally.
+#: the NLINV maps equally.
 ENCODED_MAPS_FLOOR = 0.02
-
-#: Standard deviation, in pixels, of the Gaussian neighbourhood whose coil
-#: images give :func:`fully_encoded_maps` its maps where a pixel has no signal.
-ENCODED_MAPS_REACH = 8.0
 
 
 def fully_encoded(kspace):
@@ -1633,10 +1629,9 @@ def fully_encoded_maps(kspace):
     signal of that pixel is received with, also where the field has piled
     the signal of several places, each at its own phase, onto one pixel:
     there no map smooth in space, and none fitted at another echo time,
-    unfolds the imaging. Where a pixel has little signal its maps are the
-    principal direction of the coil images' covariance over a Gaussian
-    neighbourhood (``ENCODED_MAPS_REACH``), the sensitivity of the signal
-    nearby, smooth into the air around the head.
+    unfolds the imaging. Where a pixel has little signal its maps are those
+    NLINV fits to the central lines of the same k-space
+    (:func:`epi_nlinv_estimate`), smooth into the air around the head.
 
     Parameters
     ----------
@@ -1661,17 +1656,8 @@ def fully_encoded_maps(kspace):
     floor = ENCODED_MAPS_FLOOR * torch.quantile(rss.flatten(), 0.99)
     weight = rss.square() / (rss.square() + floor.square()).clamp_min(1e-30)
     drawn = images / rss.clamp_min(1e-12)
-    ny, nx = shape[-2:]
-    y = (torch.arange(ny, dtype=torch.float32) - ny // 2) / ny
-    x = (torch.arange(nx, dtype=torch.float32) - nx // 2) / nx
-    window = torch.exp(
-        -2 * (math.pi * ENCODED_MAPS_REACH) ** 2 * (y[:, None] ** 2 + x[None] ** 2)
-    )
-    covariance = images[:, None] * images[None].conj()
-    spectrum = bartorch.fft(covariance, axes, unitary=True).reshape(covariance.shape)
-    covariance = bartorch.fft(spectrum * window, axes, inverse=True, unitary=True)
-    covariance = covariance.reshape(shape[0], *shape).permute(2, 3, 0, 1)
-    nearby = torch.linalg.eigh(covariance).eigenvectors[..., -1].permute(2, 0, 1)
+    nearby = torch.as_tensor(epi_nlinv_estimate(kspace.to(torch.complex64)[:, None]))
+    nearby = nearby.reshape(shape).to(images.device, torch.complex64)
     phase = torch.exp(1j * torch.angle((nearby.conj() * drawn).sum(dim=0)))
     blended = weight * drawn + (1 - weight) * nearby * phase
     return (blended / blended.abs().square().sum(dim=0).sqrt().clamp_min(1e-12)).to(
@@ -2080,32 +2066,26 @@ def phase_basis(shape, order):
     return basis
 
 
-def _centred(values, axes, inverse=False):
-    """Return the centred unitary transform over ``axes``, as :class:`bartorch.linop.CartesianSense` applies it."""
-    import torch
-
-    shifted = torch.fft.ifftshift(values, dim=axes)
-    if inverse:
-        shifted = torch.fft.ifftn(shifted, dim=axes, norm="ortho")
-    else:
-        shifted = torch.fft.fftn(shifted, dim=axes, norm="ortho")
-    return torch.fft.fftshift(shifted, dim=axes)
-
-
 def _shot_axes(maps):
     return (-1, -2, -3) if maps.shape[1] > 1 else (-1, -2)
 
 
 def _shot_forward(maps, mask, images):
-    """``(..., coils, z, y, x)`` k-space of ``(..., z, y, x)`` images on the lines ``mask``, ``(z, y)``."""
+    """``(..., coils, z, y, x)`` k-space of ``(..., z, y, x)`` images on the lines ``mask``, ``(z, y)``, as :class:`bartorch.linop.CartesianSense` encodes them."""
+    import bartorch
+
     coils = maps * images.unsqueeze(-4)
-    return _centred(coils, _shot_axes(maps)) * mask[..., None]
+    kspace = bartorch.fft(coils, _shot_axes(maps), unitary=True).reshape(coils.shape)
+    return kspace * mask[..., None]
 
 
 def _shot_adjoint(maps, mask, kspace):
     """Return the adjoint of :func:`_shot_forward`."""
-    images = _centred(kspace * mask[..., None], _shot_axes(maps), inverse=True)
-    return (maps.conj() * images).sum(dim=-4)
+    import bartorch
+
+    lines = kspace * mask[..., None]
+    images = bartorch.fft(lines, _shot_axes(maps), inverse=True, unitary=True)
+    return (maps.conj() * images.reshape(lines.shape)).sum(dim=-4)
 
 
 def shot_residual(kspace, maps, masks, image, phases):
@@ -2130,36 +2110,23 @@ def shot_corrected(kspace, masks, phases, iterations=SHOT_PHASE_COIL_STEPS):
     k-space returned is that of ``u``.
     """
     import torch
+    from bartorch import linop, optim
 
-    unit = torch.ones((1, *kspace.shape[1:]), dtype=kspace.dtype, device=kspace.device)
-    rows = [mask.to(kspace.dtype) for mask in masks]
-
-    def normal(images):
-        out = torch.zeros_like(images)
-        for row, phase in zip(rows, phases, strict=True):
-            read = _shot_forward(unit, row, phase * images)
-            out = out + phase.conj() * _shot_adjoint(unit, row, read)
-        return out
-
-    axes = _shot_axes(unit)
-    data = kspace[:, None]
-    rhs = sum(
-        phase.conj() * _shot_adjoint(unit, row, data)
-        for row, phase in zip(rows, phases, strict=True)
+    shape = tuple(kspace.shape)
+    axes = (-1, -2, -3) if shape[1] > 1 else (-1, -2)
+    transform = linop.FFT(shape, axes)
+    shots = [
+        linop.Diagonal(mask.to(kspace.dtype)[None, ..., None].contiguous(), shape)
+        @ transform
+        @ linop.Diagonal(phase[None].to(kspace.dtype).contiguous(), shape)
+        for mask, phase in zip(masks, phases, strict=True)
+    ]
+    data = torch.stack([kspace * mask.to(kspace.dtype)[..., None] for mask in masks])
+    images = transform.H(kspace.contiguous())
+    solved = optim.CG(maxiter=int(iterations))(
+        data.contiguous(), linop.stack(shots), x0=images
     )
-    images = _centred(kspace, axes, inverse=True)
-    residual = rhs - normal(images)
-    direction = residual.clone()
-    power = (residual.conj() * residual).real.sum()
-    for _ in range(iterations):
-        product = normal(direction)
-        step = power / (direction.conj() * product).real.sum().clamp_min(1e-30)
-        images = images + step * direction
-        residual = residual - step * product
-        updated = (residual.conj() * residual).real.sum()
-        direction = residual + (updated / power.clamp_min(1e-30)) * direction
-        power = updated
-    return _centred(images, axes)
+    return transform(solved.reshape(shape).contiguous()).reshape(shape)
 
 
 def shot_constants(kspace, maps, sampled, masks, device):
