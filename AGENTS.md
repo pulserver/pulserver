@@ -10,15 +10,18 @@ them.
 Orchestrator for MR acquisitions: sequence design, scanner preparation and
 reconstruction.
 
-Pulserver sits on top of two engines it does not reimplement: sequence design
-is [`pypulseqpp`](https://github.com/pulserver/pypulseqpp) and the
-reconstruction engine is [`bartorch`](https://github.com/mcencini/bartorch).
+Pulserver sits on top of three engines it does not reimplement: sequence
+design is [`pypulseqpp`](https://github.com/pulserver/pypulseqpp), the
+reconstruction engine is [`bartorch`](https://github.com/mcencini/bartorch) and
+the spin simulation engine is [`blochsim`](https://github.com/pulserver/blochsim).
 Vendor-specific playout and data conversion live in the scanner-side
 interpreters; they call pulserver's public API and carry no sequence or
 reconstruction logic of their own. Code that belongs to an engine goes
 upstream into that engine, not into a copy here. The virtual scanner, which
-stands in for a scanner and its interpreter, is pulserver's own, and so is the
-Fourier engine it plays the IR cache with: neither engine reads the cache.
+stands in for a scanner and its interpreter, is pulserver's own. Its Fourier
+engine plays the IR cache on a phantom with blochsim for the spin physics and
+bartorch for every transform (`bartorch.fft`, `bartorch.linop.NUFFT`); neither
+engine reads the cache.
 
 ## Rule 1: use bartorch and blochsim, never reimplement them
 
