@@ -52,6 +52,14 @@ CG_MIN_L2 = 1e-6
 #: grows it without bound.
 REAL_SOLVE_MIN_L2 = 1e-4
 
+#: Bytes of device memory the coil slabs of a SENSE encoding may take at
+#: once, and the bytes a coil of one grid point takes in them
+#: (:func:`sense_coil_batch`). A slab of every coil runs the FFTs of all
+#: coils in one launch; a 3D volume at laminar resolution takes fewer coils
+#: per slab to stay within a 16 GB card.
+SENSE_SLAB_BYTES = 2 << 30
+SENSE_BYTES_PER_POINT = 32
+
 #: Standard deviation, in lines, of the in-plane Gaussian k-space window that
 #: smooths that phase. At 7T the off-resonance phase near the sinuses wraps
 #: within a few voxels by a BOLD echo time; a wavelet prior on that complex
@@ -420,8 +428,9 @@ def nlinv_estimate(
     shape: tuple[int, ...] | None = None,
     *,
     sobolev: float | None = None,
+    phase_pole: bool = True,
 ) -> Any:
-    """Return the coil maps :func:`bartorch.apps.nlinv_maps` fits to ``kspace``, with phase-pole correction.
+    """Return the coil maps :func:`bartorch.apps.nlinv_maps` fits to ``kspace``, with phase-pole correction unless ``phase_pole`` is false.
 
     ``bart nlinv -m 1 --phase-pole 0`` on a calibration grid of
     ``CALIBRATION_LINES`` points an axis, capped at the axis: the central
@@ -440,7 +449,7 @@ def nlinv_estimate(
 
     image = kspace.shape[1:] if traj is None else (shape or ())
     grid = [min(CALIBRATION_LINES, n) for n in image if n > 1]
-    detectable = not grid or min(grid) > math.ceil(max(grid) / 20)
+    detectable = phase_pole and (not grid or min(grid) > math.ceil(max(grid) / 20))
     return apps.nlinv_maps(
         kspace,
         traj,
@@ -491,11 +500,10 @@ def pics_image(
     (:func:`bartorch.optim.data_scaling`), and FISTA over the wavelet term of
     weight
     ``wavelet`` along the axes of at least ``WAVELET_MIN_POINTS`` points. A
-    volume of one partition is solved as a plane. The k-space, the maps and
-    the iteration's vectors stay on the host, and the encoding computes on
-    ``device``; ``None`` is the host. FISTA starts from the image ``x0``,
-    ``(z, y, x)``, when one is given, and from zero otherwise. The image is
-    on the host.
+    volume of one partition is solved as a plane. The iteration, its
+    proximal steps included, runs on ``device``; ``None`` is the host. FISTA
+    starts from the image ``x0``, ``(z, y, x)``, when one is given, and from
+    zero otherwise. The image is returned on the device of ``kspace``.
 
     With ``phase``, a unit-magnitude ``(z, y, x)`` image, the image is that
     phase times a real image ``m``, and the encoding is that of ``m``: the
@@ -522,7 +530,11 @@ def pics_image(
     if phase is not None:
         maps = maps * phase.reshape(1, *maps.shape[1:])
     encoding = linop.CartesianSense(
-        maps.reshape(maps.shape[0], *grid), grid, pattern=pattern, device=device
+        maps.reshape(maps.shape[0], *grid),
+        grid,
+        pattern=pattern,
+        device=device,
+        coil_batch=sense_coil_batch(maps.shape[0], grid),
     )
     if shots is not None:
         encoding = tools.shot_encoding(encoding, *shots)
@@ -542,11 +554,19 @@ def pics_image(
     else:
         solve = optim.CG(lambda_=max(float(l2), CG_MIN_L2), maxiter=int(iterations))
     data = (measured * (1.0 / scaling)).reshape(kspace.shape[0], *grid)
-    start = {} if x0 is None else {"x0": (x0 * (1.0 / scaling)).reshape(grid)}
-    image = (scaling * solve(data, encoding, **start)).reshape(kspace.shape[1:])
+    on = torch.device(device) if device is not None else data.device
+    start = {} if x0 is None else {"x0": (x0 * (1.0 / scaling)).reshape(grid).to(on)}
+    image = scaling * solve(data.to(on), encoding, **start)
+    image = image.to(kspace.device).reshape(kspace.shape[1:])
     if phase is None:
         return image
     return image.real.to(torch.complex64) * phase.reshape(image.shape)
+
+
+def sense_coil_batch(coils: int, grid: tuple[int, ...]) -> int:
+    """Return the coils per slab of a SENSE encoding over ``grid``: ``0``, every coil at once, where they fit in ``SENSE_SLAB_BYTES``, else as many as fit, at least one."""
+    fitting = SENSE_SLAB_BYTES // (SENSE_BYTES_PER_POINT * math.prod(grid))
+    return 0 if fitting >= coils else max(1, int(fitting))
 
 
 def smooth_phase(image):

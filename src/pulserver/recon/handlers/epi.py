@@ -43,6 +43,7 @@ from .pics import (
     nlinv_estimate,
     partial_fourier_axes,
     pics_image,
+    sense_coil_batch,
     smooth_phase,
 )
 
@@ -81,6 +82,7 @@ class RampSampling(Gadget):
     """
 
     delay_s = 0.0
+    last_operator = None
 
     def startup(self, context):
         super().startup(context)
@@ -119,6 +121,46 @@ class RampSampling(Gadget):
         ) or has_acquisition_flag(acquisition, "ACQ_IS_NAVIGATION_DATA"):
             return data
         return self.resample(acquisition, data)
+
+    def operator(self, acquisition, samples):
+        """Return the matrix that takes a readout of ``samples`` samples onto its space's readout grid, as this gadget does, and whether the grid runs reversed.
+
+        ``(samples, columns)``, so that ``data @ matrix`` is the readout on
+        the grid, at the current :attr:`delay_s`; a navigator or
+        phase-reference readout is taken onto the grid as
+        :class:`EpiPhaseCorrection` resamples it. The acquisition is left as
+        it was. ``None`` for a readout already on its grid, or of a space without
+        geometry.
+        """
+        fields = ("center_sample", "discard_pre", "discard_post")
+        saved = {
+            name: getattr(acquisition, name)
+            for name in fields
+            if hasattr(acquisition, name)
+        }
+        identity = np.eye(int(samples), dtype=np.complex64)
+        traj = getattr(acquisition, "traj", None)
+        try:
+            if traj is None or np.size(traj) == 0:
+                matrix = identity
+                for gadget in self.uniform:
+                    matrix = gadget(acquisition, matrix)
+                reverse = False
+            else:
+                self.last_operator = None
+                self.resample(acquisition, identity[:1])
+                matrix = identity if self.last_operator is None else self.last_operator
+                k = np.asarray(traj, dtype=np.float64)[:, 0]
+                reverse = bool(k[-1] < k[0])
+        finally:
+            for name in fields:
+                if name in saved:
+                    setattr(acquisition, name, saved[name])
+                elif hasattr(acquisition, name):
+                    delattr(acquisition, name)
+        if matrix is identity:
+            return None
+        return np.asarray(matrix), reverse
 
     def resample(self, acquisition, data, delay_s=None):
         """Return one readout resampled onto its space's readout grid, the trajectory delayed by ``delay_s``.
@@ -159,6 +201,7 @@ class RampSampling(Gadget):
             columns - 1 - columns // 2 if positions[-1] < positions[0] else columns // 2
         )
         acquisition.discard_pre = acquisition.discard_post = 0
+        self.last_operator = self.operators[key]
         return data @ self.operators[key]
 
 
@@ -255,6 +298,7 @@ class EpiPhaseCorrection(Gadget):
     def __init__(self, excitation_phase: bool = True) -> None:
         super().__init__()
         self.excitation_phase = bool(excitation_phase)
+        self._corrections = {}
 
     def startup(self, context):
         super().startup(context)
@@ -276,6 +320,7 @@ class EpiPhaseCorrection(Gadget):
         self.latest = None
         self._warned = False
         self._delay_fitted = False
+        self._corrections = {}
 
     def _lines(self, collected, delay=None):
         """Return the readouts of ``collected``, ``(acquisition, data, reverse)``, resampled and in forward order."""
@@ -382,7 +427,6 @@ class EpiPhaseCorrection(Gadget):
 
     def __call__(self, acquisition, data):
         import torch
-        from bartorch import tools
 
         reverse = has_acquisition_flag(acquisition, "ACQ_IS_REVERSE")
         if has_acquisition_flag(acquisition, "ACQ_IS_PHASECORR_DATA"):
@@ -434,7 +478,39 @@ class EpiPhaseCorrection(Gadget):
                 # reversed one, flipped back into its own order first.
                 line = (torch.flip(line[0], [-1]), True)
                 phase = self.excitation
-        return tools.correct_lines([line], phase)[0].numpy()
+        return self._corrected(line[0].numpy(), line[1], phase)
+
+    def _corrected(self, data, reverse, phase):
+        """Return ``data`` as :func:`bartorch.tools.correct_lines` corrects it."""
+        if not reverse:
+            return data.astype(np.complex64, copy=False)
+        if phase is None:
+            return np.ascontiguousarray(data[..., ::-1], dtype=np.complex64)
+        return data.astype(np.complex64, copy=False) @ self._correction(
+            phase, data.shape[-1]
+        )
+
+    def _correction(self, phase, samples):
+        """Return the ``(samples, samples)`` matrix ``M`` with ``data @ M`` the reversed readout ``data`` flipped and corrected by ``phase`` (:func:`bartorch.tools.correct_lines`).
+
+        Matrices are kept per phase and sample count while the phases repeat,
+        so the transforms run once per excitation rather than once per readout.
+        """
+        import torch
+        from bartorch import tools
+
+        coefficients = np.asarray(phase, dtype=np.float64)
+        key = (samples, coefficients.tobytes())
+        matrix = self._corrections.get(key)
+        if matrix is None:
+            if len(self._corrections) >= CORRECTIONS_KEPT:
+                self._corrections.clear()
+            identity = torch.eye(samples, dtype=torch.complex64)
+            matrix = tools.correct_lines(
+                [(identity, True)], torch.from_numpy(coefficients)
+            )[0].numpy()
+            self._corrections[key] = matrix
+        return matrix
 
     def _excitation_phase(self, acquisition):
         """Return the coefficients removing the phase of the excitation whose navigator was just read, against the first of its navigator's encoding space and slice; ``None`` for the first, or where no encoding space is 3D."""
@@ -486,6 +562,16 @@ def _navigator_echo_scale(header) -> float | None:
     return train / navigator
 
 
+#: Solve steps of an EPI unit, and of a 3D slab with its start image's. In a
+#: 7T simulation of a 128 mm slab with every physical effect, brain NRMSE at
+#: 60 steps from a 30-step start was 0.112 at R3 x 2 and 0.104 at R4 x 2,
+#: against 0.114 and 0.113 at 30 from 30, for 0.13 s more per volume on an A40.
+EPI_ITERATIONS = 30
+EPI_SLAB_ITERATIONS, EPI_SLAB_START_ITERATIONS = 60, 30
+
+#: Correction matrices :class:`EpiPhaseCorrection` keeps before starting over.
+CORRECTIONS_KEPT = 64
+
 #: First trial delay of the read gradient (s), and the secant steps after it.
 DELAY_STEP_S, DELAY_ITERATIONS = 1e-6, 3
 
@@ -499,9 +585,12 @@ class EpiRecon(PicsRecon):
 
     Each readout is whitened (:class:`~pulserver.recon.Prewhiten`), projected
     onto ``virtual_coils`` channels (:class:`~pulserver.recon.CompressChannels`,
-    one basis for the stream from the calibration of every slice, so the
-    bands of a multiband unit share their virtual channels with the slices
-    whose maps unfold them, and no later step holds every receive channel),
+    one geometric basis for the stream from the calibration of every slice: a
+    basis per position along the readout, which keeps at each position the
+    channels that see it, so few virtual channels still unfold a whole-head
+    slab; the bands of a multiband unit share their virtual channels with the
+    slices whose maps unfold them, and no later step holds every receive
+    channel),
     ramp-resampled along its k-space trajectory (:class:`RampSampling`) and
     has its odd/even phase removed (:class:`EpiPhaseCorrection`, from the
     blip-free reference train ``ACQ_IS_PHASECORR_DATA`` the sequence plays in
@@ -634,12 +723,18 @@ class EpiRecon(PicsRecon):
         ``EPI_WAVELET_MULTIBAND`` for a multiband unit whose bands lie on
         calibrated slices (``EPI_WAVELET_SLICE`` for one read in shots enough
         to bring its acceleration per shot to
-        ``EPI_WAVELET_SEGMENTED_ACCELERATION``), ``EPI_WAVELET_SLAB`` for any
-        other unit of more than one partition accelerated beyond
-        ``EPI_WAVELET_SLAB_ACCELERATION`` and ``EPI_WAVELET_SLICE`` for a
-        slice or a slab accelerated no more.
-    iterations : int, default=30
+        ``EPI_WAVELET_SEGMENTED_ACCELERATION``), ``EPI_WAVELET_SLAB`` for a
+        multiband stack without calibrated slices, and ``EPI_WAVELET_SLICE``
+        for a slice or a slab.
+    iterations : int | None, default=None
         Conjugate-gradient steps, or ``pics`` iterations with ``wavelet``.
+        ``None`` takes ``EPI_SLAB_ITERATIONS`` for a 3D slab and
+        ``EPI_ITERATIONS`` for any other unit.
+    start_iterations : int | None, default=None
+        Conjugate-gradient steps of the image a wavelet or partial-Fourier
+        solve starts from and takes its phase from. ``None`` takes
+        ``EPI_SLAB_START_ITERATIONS`` for a 3D slab where ``iterations`` is
+        ``None``, else the unit's ``iterations``.
     l2 : float, default=0.0
         Tikhonov weight ``lambda`` of the conjugate-gradient solve, on data
         scaled as ``pics`` scales them.
@@ -660,8 +755,9 @@ class EpiRecon(PicsRecon):
     def __init__(
         self,
         wavelet: float | None = None,
-        iterations: int = 30,
+        iterations: int | None = None,
         *,
+        start_iterations: int | None = None,
         l2: float = 0.0,
         virtual_coils: int | None = VIRTUAL_COILS,
         kspace_filter: bool = True,
@@ -671,7 +767,7 @@ class EpiRecon(PicsRecon):
     ) -> None:
         super().__init__(
             0.0 if wavelet is None else wavelet,
-            iterations,
+            EPI_ITERATIONS if iterations is None else int(iterations),
             virtual_coils,
             kspace_filter=kspace_filter,
             gradient_unwarp=gradient_unwarp,
@@ -679,6 +775,10 @@ class EpiRecon(PicsRecon):
         )
         self.automatic_wavelet = wavelet is None
         self.l2 = float(l2)
+        self.stated_iterations = iterations is not None
+        self.start_iterations = (
+            None if start_iterations is None else int(start_iterations)
+        )
         self.shot_phase = bool(shot_phase)
         self.shot_segments = None
         self.phase_references = {}
@@ -686,7 +786,7 @@ class EpiRecon(PicsRecon):
         compression = (
             ()
             if self.virtual_coils is None
-            else (CompressChannels(self.virtual_coils),)
+            else (CompressChannels(self.virtual_coils, geometric=True),)
         )
         self.gadgets = (
             Prewhiten(),
@@ -701,6 +801,7 @@ class EpiRecon(PicsRecon):
         super().startup(context)
         self.gadget(EpiPhaseCorrection).ramp = self.gadget(RampSampling)
         if self.virtual_coils is not None:
+            self.gadget(CompressChannels).grid = self.gadget(RampSampling).operator
             self.virtual_coils = virtual_coils_for(
                 self.virtual_coils,
                 float(user_parameter(context.header, ACCELERATION_PER_SOLVE, 1.0)),
@@ -913,19 +1014,15 @@ class EpiRecon(PicsRecon):
         A multiband unit read in several shots whose in-plane line step times
         its bands, divided by its shots, is at most
         ``EPI_WAVELET_SEGMENTED_ACCELERATION`` takes ``EPI_WAVELET_SLICE``;
-        any other multiband unit ``EPI_WAVELET_MULTIBAND``. A slab
-        accelerated at most ``EPI_WAVELET_SLAB_ACCELERATION`` (R3 x 2) takes
-        ``EPI_WAVELET_SLICE``, and a slab accelerated further
-        ``EPI_WAVELET_SLAB``.
+        any other multiband unit ``EPI_WAVELET_MULTIBAND``. A slab takes
+        ``EPI_WAVELET_SLICE``.
         """
         if not self.automatic_wavelet:
             return self.wavelet
         if volume.shape[1] == 1:
             return EPI_WAVELET_SLICE
         if not bands:
-            if _acceleration(volume) <= EPI_WAVELET_SLAB_ACCELERATION:
-                return EPI_WAVELET_SLICE
-            return EPI_WAVELET_SLAB
+            return EPI_WAVELET_SLICE
         if shots > 1:
             per_shot = _line_step(volume) * volume.shape[1] / shots
             if per_shot <= EPI_WAVELET_SEGMENTED_ACCELERATION:
@@ -960,10 +1057,10 @@ class EpiRecon(PicsRecon):
         self.shot_segments = segments
         if fills:
             return sense_combined(volume, maps) if segments is None else start
+        steps, start_steps = self._steps(volume.shape[1] > 1 and not bands)
         if start is None:
-            start = cg_sense(
-                volume, maps, sampled, self.iterations, context.device, l2=l2
-            )
+            begin = start_steps if wavelet > 0 or partial else steps
+            start = cg_sense(volume, maps, sampled, begin, context.device, l2=l2)
         if partial:
             phase = self._phase(start, reference, sampled)
             if phase is not None:
@@ -972,7 +1069,7 @@ class EpiRecon(PicsRecon):
                     maps,
                     sampled,
                     wavelet,
-                    self.iterations,
+                    steps,
                     context.device,
                     x0=(start * phase.conj()).real.to(start.dtype),
                     phase=phase,
@@ -987,11 +1084,19 @@ class EpiRecon(PicsRecon):
             maps * phase,
             sampled,
             wavelet,
-            self.iterations,
+            steps,
             context.device,
             x0=start * phase.conj(),
             shots=segments,
         )
+
+    def _steps(self, slab: bool) -> tuple[int, int]:
+        """Return the solve's steps and its start image's for a unit, a 3D slab or not."""
+        if slab and not self.stated_iterations:
+            steps, start = EPI_SLAB_ITERATIONS, EPI_SLAB_START_ITERATIONS
+        else:
+            steps, start = self.iterations, self.iterations
+        return steps, start if self.start_iterations is None else self.start_iterations
 
     def _shot_phases(self, volume, maps, sampled, masks, templates, context, l2):
         """Return the ``(masks, phases)`` of a segmented unit and its conjugate-gradient image, or ``None`` and its image solved as one.
@@ -1486,28 +1591,23 @@ def plane_positions(acquisition, space, count) -> list[float]:
     return [centre + (index - count // 2) * depth for index in range(count)]
 
 
-#: Wavelet ``lambda`` of an undersampled 3D EPI slab accelerated beyond
-#: ``EPI_WAVELET_SLAB_ACCELERATION``, 2D EPI multiband unit and 2D EPI slice,
-#: on data scaled as ``pics`` scales them. A slice's prior is weak enough to
-#: keep the cortex and the deep grey nuclei. A multiband unit unfolds its
-#: bands and its in-plane aliases together: in a noisy 7T simulation of a
-#: 2 mm stack at MB2 and R 2 to 4 with six virtual channels, its bands are
-#: closest to a fully sampled gradient echo near this weight, a slice's
-#: leaving R 4 aliased.
+#: Wavelet ``lambda`` of an undersampled 2D EPI multiband unit, 2D EPI slice
+#: and 3D EPI slab, on data scaled as ``pics`` scales them. A slice's prior is
+#: weak enough to keep the cortex and the deep grey nuclei. A multiband unit
+#: unfolds its bands and its in-plane aliases together: in a noisy 7T
+#: simulation of a 2 mm stack at MB2 and R 2 to 4 with six virtual channels,
+#: its bands are closest to a fully sampled gradient echo near this weight, a
+#: slice's leaving R 4 aliased. A slab takes the slice's weight at every
+#: CAIPI lattice: in a 7T simulation of a 128 mm slab of 2 mm partitions with
+#: the field, gradient delays, fat, B1+, motion, respiration and correlated
+#: noise, twelve geometrically compressed channels, against the fully
+#: sampled gradient echo, R3 x 3 came out at 0.118 brain NRMSE at the slice
+#: weight against 0.143 at the multiband weight, and R4 x 2 at 0.102 against
+#: 0.133. ``EPI_WAVELET_SLAB`` is that of a multiband stack whose bands have
+#: no calibrated slices of their own.
 EPI_WAVELET_SLAB = 0.03
 EPI_WAVELET_MULTIBAND = 0.03
 EPI_WAVELET_SLICE = 0.003
-
-#: Largest acceleration of a 3D EPI slab, the encoded lines of its partition
-#: and phase-encode extent over those read, solved at ``EPI_WAVELET_SLICE``
-#: instead of ``EPI_WAVELET_SLAB``. In the noisy 7T simulation of a 2 mm slab
-#: of 16 partitions in the susceptibility field, unwarped, against the fully
-#: sampled gradient echo: R2 x 2 in 3 shots with six virtual channels came
-#: out at 0.106 brain NRMSE at the slice weight and by conjugate gradients
-#: alike, and R3 x 2 with twelve virtual channels at 0.176 at the slice
-#: weight, 0.188 at the slab weight and 0.185 by conjugate gradients (0.129,
-#: and 0.137 by conjugate gradients, in 2 shots).
-EPI_WAVELET_SLAB_ACCELERATION = 6.0
 
 #: Largest in-plane line step times bands, divided by its shots, of a
 #: segmented multiband unit solved at ``EPI_WAVELET_SLICE`` instead of
@@ -1666,10 +1766,18 @@ def fully_encoded_maps(kspace):
 
 
 def epi_nlinv_estimate(kspace):
-    """Return the coil maps of EPI calibration k-space by :func:`~pulserver.recon.handlers.pics.nlinv_estimate` at ``EPI_SOBOLEV``."""
-    if EPI_SOBOLEV is None:
-        return nlinv_estimate(kspace)
-    return nlinv_estimate(kspace, sobolev=EPI_SOBOLEV)
+    """Return the coil maps of EPI calibration k-space by :func:`~pulserver.recon.handlers.pics.nlinv_estimate` at ``EPI_SOBOLEV``.
+
+    A slab's maps are fitted without phase-pole correction: at ``EPI_SOBOLEV``
+    the correction makes BART's fit of a 7T head calibration over ten times
+    slower, and in a simulation of a 128 mm slab the images came out as close
+    to the fully sampled gradient echo without it, with no dark spot.
+    """
+    slab = kspace.ndim == 4 and kspace.shape[1] > 1
+    options = {} if EPI_SOBOLEV is None else {"sobolev": EPI_SOBOLEV}
+    if slab:
+        options["phase_pole"] = False
+    return nlinv_estimate(kspace, **options)
 
 
 def band_maps(context, data, shape):
@@ -1830,17 +1938,6 @@ def virtual_coils_for(virtual_coils: int, acceleration: float) -> int:
     return virtual_coils
 
 
-def _acceleration(volume) -> float:
-    """Return the lines of the partition and phase-encode extent ``(coils, z, y, x)`` k-space acquired, over those it holds; 1 where it holds none."""
-    magnitude = volume.abs().cpu().numpy() if hasattr(volume, "cpu") else np.abs(volume)
-    read = magnitude.sum(axis=(0, 3)) > 0
-    if not read.any():
-        return 1.0
-    extent = [np.flatnonzero(read.any(axis=1 - axis)) for axis in (0, 1)]
-    box = np.prod([found[-1] - found[0] + 1 for found in extent])
-    return float(box / read.sum())
-
-
 def _line_step(volume) -> int:
     """Return the most common step between the phase-encode lines ``(coils, z, y, x)`` k-space holds, on any partition; 1 where it holds fewer than two."""
     magnitude = volume.abs().cpu().numpy() if hasattr(volume, "cpu") else np.abs(volume)
@@ -1916,11 +2013,12 @@ def cg_sense(kspace, maps, sampled, iterations, device, *, l2=0.0, shots=None):
     """Return the image ``(z, y, x)`` minimising ``|P F S x - y|^2 + l2 |x|^2``, ``l2`` at least ``CG_MIN_L2``, by conjugate gradients from zero.
 
     The encoding is :class:`bartorch.linop.CartesianSense` of ``maps`` over
-    the ``sampled`` lines, on ``device``, with ``shots``, the ``(masks,
-    phases)`` of a segmented unit, each shot's phase in it
-    (:func:`bartorch.tools.shot_encoding`); stopping after
-    ``iterations`` steps regularizes the solve. The data are scaled as
-    ``pics`` scales them.
+    the ``sampled`` lines, with ``shots``, the ``(masks, phases)`` of a
+    segmented unit, each shot's phase in it
+    (:func:`bartorch.tools.shot_encoding`); stopping after ``iterations``
+    steps regularizes the solve. The data are scaled as ``pics`` scales them.
+    The iteration runs on ``device`` (the host where ``None``), and the image
+    is returned on the device of ``kspace``.
     """
     import bartorch
     import torch
@@ -1930,7 +2028,11 @@ def cg_sense(kspace, maps, sampled, iterations, device, *, l2=0.0, shots=None):
     pattern = sampled.reshape(grid).to(torch.complex64)
     measured = kspace * sampled
     encoding = linop.CartesianSense(
-        maps.reshape(maps.shape[0], *grid), grid, pattern=pattern, device=device
+        maps.reshape(maps.shape[0], *grid),
+        grid,
+        pattern=pattern,
+        device=device,
+        coil_batch=sense_coil_batch(maps.shape[0], grid),
     )
     if shots is not None:
         encoding = tools.shot_encoding(encoding, *shots)
@@ -1938,8 +2040,10 @@ def cg_sense(kspace, maps, sampled, iterations, device, *, l2=0.0, shots=None):
     scaling = optim.data_scaling(shifted.reshape(kspace.shape[0], *grid), A=encoding)
     scaling = scaling or 1.0
     data = (measured * (1.0 / scaling)).reshape(kspace.shape[0], *grid)
+    on = torch.device(device) if device is not None else data.device
     solve = optim.CG(lambda_=max(float(l2), CG_MIN_L2), maxiter=int(iterations))
-    return (scaling * solve(data, encoding)).reshape(kspace.shape[1:])
+    image = scaling * solve(data.to(on), encoding)
+    return image.to(kspace.device).reshape(kspace.shape[1:])
 
 
 #: Degree of the Legendre polynomials in plane, per partition, that a shot's

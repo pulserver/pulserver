@@ -76,7 +76,9 @@ class Basis:
 
     ``matrix`` is the unitary ``(coils, coils)`` matrix ``bartorch.tools.cc``
     returns, of which ``n_virtual`` virtual channels are kept; ``id``
-    identifies the basis.
+    identifies the basis. A geometric basis (``geometric_basis_of``) is
+    ``(readout, n_virtual, coils)``: the projection onto the virtual channels
+    at each position along the readout, in image order.
     """
 
     matrix: np.ndarray
@@ -765,11 +767,13 @@ def _projected(maps: np.ndarray, basis: Basis) -> np.ndarray:
     from bartorch import tools
 
     coils = maps.shape[0]
-    if coils != basis.matrix.shape[0]:
+    if coils != basis.matrix.shape[-1]:
         raise ValueError(
             f"{coils} channels cannot be projected onto a basis of "
-            f"{basis.matrix.shape[0]}"
+            f"{basis.matrix.shape[-1]}"
         )
+    if basis.matrix.ndim == 3:
+        return np.einsum("xvc,c...x->v...x", basis.matrix, maps).astype(np.complex64)
     virtual = tools.ccapply(
         torch.from_numpy(np.ascontiguousarray(maps)).reshape(coils, -1, 1, 1),
         torch.from_numpy(basis.matrix).reshape(coils, coils, 1, 1, 1),
@@ -803,17 +807,135 @@ def basis_of(samples: np.ndarray, n_virtual: int) -> Basis:
     return Basis(matrix, n_virtual, digest(matrix[:, :n_virtual], n_virtual))
 
 
-def projected_readout(data: np.ndarray, basis: Basis) -> np.ndarray:
-    """Return a ``(coils, samples)`` readout on the virtual channels of ``basis`` (:func:`bartorch.tools.ccapply_readout`)."""
+def projected_readout(
+    data: np.ndarray, basis: Basis, grid: tuple[np.ndarray, bool] | None = None
+) -> np.ndarray:
+    """Return a ``(coils, samples)`` readout on the virtual channels of ``basis``, by :func:`bartorch.tools.ccapply_readout` for an SVD basis.
+
+    A geometric basis acts at each position along the readout: the readout is
+    taken onto its grid by ``grid``, ``(matrix, reverse)`` with
+    ``data @ matrix`` the readout on a grid of the basis's length, run
+    backwards where ``reverse`` (the readout as sampled where ``grid`` is
+    ``None``), projected position by position, and returned to its own
+    samples through the pseudo-inverse of ``matrix``, so that taking the
+    result onto the grid gives the projected grid readout.
+
+    Raises
+    ------
+    ValueError
+        If a geometric basis has another length than the readout's grid.
+    """
+    if basis.matrix.ndim == 2:
+        import torch
+        from bartorch import tools
+
+        virtual = tools.ccapply_readout(
+            torch.from_numpy(np.ascontiguousarray(data)),
+            torch.from_numpy(basis.matrix),
+            p=basis.n_virtual,
+        )
+        return virtual.numpy().astype(data.dtype, copy=False)
+    matrix, reverse = grid if grid is not None else (None, False)
+    columns = basis.matrix.shape[0]
+    if (data.shape[-1] if matrix is None else matrix.shape[-1]) != columns:
+        raise ValueError(
+            f"a readout of "
+            f"{data.shape[-1] if matrix is None else matrix.shape[-1]} grid "
+            f"points cannot be projected onto a geometric basis of {columns}"
+        )
+    into, out_of = _grid_transforms(matrix, reverse, columns)
+    hybrid = data.astype(np.complex64, copy=False) @ into
+    virtual = np.einsum("xvc,cx->vx", basis.matrix, hybrid) @ out_of
+    return virtual.astype(data.dtype, copy=False)
+
+
+_GRID_TRANSFORMS: dict[tuple, tuple] = {}
+
+
+def _grid_transforms(
+    matrix: np.ndarray | None, reverse: bool, columns: int
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return the linear maps of a readout onto image space along its grid and back to its samples, kept for as long as ``matrix`` is.
+
+    ``into`` takes the samples onto the grid, runs it backwards where
+    ``reverse``, and transforms it to image space (:func:`_to_hybrid`);
+    ``out_of`` transforms back (:func:`_to_kspace`), undoes the reversal and
+    returns to the samples through the pseudo-inverse of ``matrix``.
+    """
+    key = (id(matrix), bool(reverse), columns)
+    held = _GRID_TRANSFORMS.get(key)
+    if held is None or held[0] is not matrix:
+        if len(_GRID_TRANSFORMS) > 256:
+            _GRID_TRANSFORMS.clear()
+        identity = np.eye(columns, dtype=np.complex64)
+        order = slice(None, None, -1) if reverse else slice(None)
+        to_image = _to_hybrid(identity[order])
+        to_kspace = _to_kspace(identity)[:, order]
+        if matrix is not None:
+            to_image = matrix.astype(np.complex64) @ to_image
+            to_kspace = to_kspace @ np.linalg.pinv(matrix).astype(np.complex64)
+        held = (matrix, to_image.astype(np.complex64), to_kspace.astype(np.complex64))
+        _GRID_TRANSFORMS[key] = held
+    return held[1], held[2]
+
+
+def geometric_basis_of(lines: np.ndarray, n_virtual: int) -> Basis:
+    """Return the geometric basis of ``(coils, lines, readout)`` grid readouts: BART's per-position coil compression (``bart cc -G``).
+
+    At each position of the readout in image space, the channels' covariance
+    over the lines gives the ``n_virtual`` strongest virtual channels, so a
+    channel that sees one side of the head is kept where that side lies, and
+    neighbouring positions are aligned so each virtual channel's sensitivity
+    stays smooth along the readout (Zhang et al., Magn Reson Med 2013,
+    doi:10.1002/mrm.24267; :func:`bartorch.tools.cc` and
+    :func:`bartorch.tools.ccapply`). The basis holds the projection
+    ``bart ccapply -G`` applies at each position, ``(readout, n_virtual,
+    coils)``, read off by applying it to one channel at a time.
+
+    Raises
+    ------
+    ValueError
+        If ``n_virtual`` exceeds the channels.
+    """
     import torch
     from bartorch import tools
 
-    virtual = tools.ccapply_readout(
-        torch.from_numpy(np.ascontiguousarray(data)),
-        torch.from_numpy(basis.matrix),
-        p=basis.n_virtual,
+    coils, _, columns = lines.shape
+    if n_virtual > coils:
+        raise ValueError(f"cannot keep {n_virtual} virtual channels of {coils}")
+    calibration = torch.from_numpy(
+        np.ascontiguousarray(lines, dtype=np.complex64)
+    ).reshape(coils, 1, lines.shape[1], columns)
+    compression = tools.cc(calibration, p=n_virtual, M=True, A=True, G=True)
+    channels = np.zeros((coils, 1, coils, columns), dtype=np.complex64)
+    channels[np.arange(coils), 0, np.arange(coils)] = 1.0
+    applied = tools.ccapply(
+        torch.from_numpy(_to_kspace(channels)), compression, p=n_virtual, G=True
     )
-    return virtual.numpy().astype(data.dtype, copy=False)
+    matrix = np.ascontiguousarray(
+        _to_hybrid(applied.cpu().numpy())[:, 0].transpose(2, 0, 1)
+    ).astype(np.complex64)
+    return Basis(matrix, n_virtual, digest(matrix, n_virtual, "geometric"))
+
+
+def _to_hybrid(line: np.ndarray) -> np.ndarray:
+    """Return k-space along its last axis in image space (:func:`bartorch.fft`, centred, unitary)."""
+    import bartorch
+    import torch
+
+    return bartorch.fft(
+        torch.from_numpy(np.ascontiguousarray(line)), -1, inverse=True, unitary=True
+    ).numpy()
+
+
+def _to_kspace(line: np.ndarray) -> np.ndarray:
+    """Return image space along its last axis in k-space (:func:`bartorch.fft`, centred, unitary)."""
+    import bartorch
+    import torch
+
+    return bartorch.fft(
+        torch.from_numpy(np.ascontiguousarray(line)), -1, unitary=True
+    ).numpy()
 
 
 def _compressed(buffer: ReconBuffer | None, basis: Basis) -> ReconBuffer | None:

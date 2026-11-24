@@ -469,9 +469,12 @@ def test_each_calibration_slice_of_a_stack_is_fitted_its_own_maps(monkeypatch):
     assert len(plugin.slice_calibrations) == 3
 
 
-@pytest.mark.parametrize("shape", [(2, 4, 4, 4), (2, 1, 4, 4), (2, 4, 4)])
-def test_a_slab_or_slice_calibration_is_fitted_at_the_epi_sobolev_weight(
-    monkeypatch, shape
+@pytest.mark.parametrize(
+    ("shape", "pole"),
+    [((2, 4, 4, 4), {"phase_pole": False}), ((2, 1, 4, 4), {}), ((2, 4, 4), {})],
+)
+def test_a_calibration_is_fitted_at_the_epi_sobolev_weight_and_a_slab_without_phase_poles(
+    monkeypatch, shape, pole
 ):
     from pulserver.recon.handlers import epi
 
@@ -483,7 +486,7 @@ def test_a_slab_or_slice_calibration_is_fitted_at_the_epi_sobolev_weight(
 
     epi.epi_nlinv_estimate(np.ones(shape, np.complex64))
 
-    assert given == {"sobolev": 1.0}
+    assert given == {"sobolev": 1.0, **pole}
 
 
 @pytest.mark.parametrize(
@@ -513,12 +516,11 @@ def test_an_undersampled_unit_takes_the_wavelet_of_a_slab_multiband_unit_or_slic
         (2, 2, "EPI_WAVELET_SLICE"),
         (4, 1, "EPI_WAVELET_SLICE"),
         (3, 2, "EPI_WAVELET_SLICE"),
-        (2, 4, "EPI_WAVELET_SLAB"),
+        (2, 4, "EPI_WAVELET_SLICE"),
+        (3, 3, "EPI_WAVELET_SLICE"),
     ],
 )
-def test_a_slab_takes_the_slice_wavelet_up_to_sixfold_acceleration_and_the_slab_wavelet_beyond(
-    ry, rz, expected
-):
+def test_a_slab_takes_the_slice_wavelet_at_every_caipi_lattice(ry, rz, expected):
     from pulserver.recon.handlers import epi
 
     volume = np.zeros((2, 8, 24, 8), np.complex64)
@@ -976,3 +978,68 @@ def test_the_shot_phase_fit_is_the_same_whichever_number_of_basis_terms_it_carri
 
     for terms in (1, 7):
         assert torch.allclose(fitted[terms], fitted[basis.shape[0]], atol=1e-5)
+
+
+def test_a_wavelet_solve_starts_from_start_iterations_conjugate_gradient_steps(
+    monkeypatch,
+):
+    from pulserver.recon.handlers import epi
+
+    shape = (4, 32, 32)
+    image = np.ones(shape, dtype=np.complex64)
+    maps = torch.from_numpy(_maps(shape, coils=4))
+    sampled = torch.zeros(shape, dtype=torch.bool)
+    sampled[:, ::3] = True
+    kspace = _kspace(image, maps.numpy()) * sampled
+    steps = []
+    solve = epi.cg_sense
+
+    def counted(*args, **kwargs):
+        steps.append(args[3])
+        return solve(*args, **kwargs)
+
+    monkeypatch.setattr(epi, "cg_sense", counted)
+    plugin = epi.EpiRecon(0.003, 40, start_iterations=7)
+
+    plugin._solved(kspace, maps, SimpleNamespace(device=None))
+
+    assert steps == [7]
+
+
+@pytest.mark.parametrize(
+    ("partitions", "expected"),
+    [
+        (4, ["EPI_SLAB_START_ITERATIONS", "EPI_SLAB_ITERATIONS"]),
+        (1, ["EPI_ITERATIONS", "EPI_ITERATIONS"]),
+    ],
+)
+def test_a_slab_takes_the_slab_steps_and_a_slice_the_epi_steps(
+    monkeypatch, partitions, expected
+):
+    from pulserver.recon.handlers import epi
+
+    shape = (partitions, 32, 32)
+    maps = torch.from_numpy(_maps(shape, coils=4))
+    sampled = torch.zeros(shape, dtype=torch.bool)
+    sampled[:, ::3] = True
+    kspace = _kspace(np.ones(shape, dtype=np.complex64), maps.numpy()) * sampled
+    steps = []
+    monkeypatch.setattr(epi, "EPI_SLAB_ITERATIONS", 9)
+    monkeypatch.setattr(epi, "EPI_SLAB_START_ITERATIONS", 5)
+    monkeypatch.setattr(epi, "EPI_ITERATIONS", 7)
+    cg, pics = epi.cg_sense, epi.pics_image
+
+    def counted_cg(*args, **kwargs):
+        steps.append(args[3])
+        return cg(*args, **kwargs)
+
+    def counted_pics(*args, **kwargs):
+        steps.append(args[4])
+        return pics(*args, **kwargs)
+
+    monkeypatch.setattr(epi, "cg_sense", counted_cg)
+    monkeypatch.setattr(epi, "pics_image", counted_pics)
+
+    epi.EpiRecon(0.003)._solved(kspace, maps, SimpleNamespace(device=None))
+
+    assert steps == [getattr(epi, name) for name in expected]

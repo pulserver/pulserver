@@ -1,5 +1,6 @@
 """The pics reconstruction of Cartesian streams: the lines it solves from, the maps it takes and the noise it whitens with."""
 
+import math
 from types import SimpleNamespace
 
 import ismrmrd
@@ -818,3 +819,39 @@ def test_a_phase_encode_read_reversed_on_a_lattice_is_not_partial_fourier(step):
 
     assert not partial_fourier_axes(forward)
     assert not partial_fourier_axes(reversed_lines)
+
+
+def test_a_sense_slab_holds_every_coil_where_they_fit_and_at_least_one_otherwise(
+    monkeypatch,
+):
+    from pulserver.recon.handlers import pics
+
+    monkeypatch.setattr(pics, "SENSE_SLAB_BYTES", 10 * 32 * 1000)
+
+    assert pics.sense_coil_batch(8, (10, 10, 10)) == 0
+    assert pics.sense_coil_batch(12, (10, 10, 10)) == 10
+    assert pics.sense_coil_batch(12, (100, 100, 100)) == 1
+
+
+def test_a_wavelet_solve_is_the_same_whatever_coils_each_slab_holds(
+    device, monkeypatch
+):
+    import torch
+
+    from pulserver.recon.handlers import pics
+
+    kspace = vials()[:, None] * (1.0 + np.arange(4))[:, None, None]
+    kspace = np.fft.fftshift(
+        np.fft.fft(np.fft.ifftshift(kspace, axes=1), axis=1, norm="ortho"), axes=1
+    )
+    kspace[:, :, 1::2] = 0
+    kspace = torch.from_numpy(np.ascontiguousarray(kspace, dtype=np.complex64))
+    maps = pics.nlinv_estimate(kspace)
+    sampled = kspace.abs().sum(dim=0) > 0
+    whole = pics.pics_image(kspace, maps, sampled, 0.005, 30, device)
+
+    monkeypatch.setattr(pics, "SENSE_SLAB_BYTES", 32 * math.prod(kspace.shape[1:]))
+    assert pics.sense_coil_batch(kspace.shape[0], tuple(kspace.shape[1:])) == 1
+    sliced = pics.pics_image(kspace, maps, sampled, 0.005, 30, device)
+
+    assert relative_difference(sliced.numpy(), whole.numpy()) < 1e-5

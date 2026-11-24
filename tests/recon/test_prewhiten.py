@@ -144,6 +144,25 @@ def test_a_readout_at_another_dwell_time_is_scaled_by_the_square_root_of_the_rat
 
 
 @needs_bartorch
+def test_noise_readouts_of_zero_dwell_whiten_readouts_of_any_dwell_unscaled():
+    """A dwell of 0 states none, so no dwell ratio scales the whitening."""
+    psi = covariance()
+    plugin = Collect(recon.Prewhiten())
+
+    play(
+        plugin,
+        header(),
+        readouts(noise(psi, seed=1), NOISE, dwell_us=0.0)
+        + readouts(noise(psi, seed=2), last=LAST, dwell_us=16.0),
+    )
+
+    (unit,) = plugin.units
+    np.testing.assert_allclose(
+        channel_covariance(unit.data.kspace), np.eye(COILS), atol=STATISTICAL
+    )
+
+
+@needs_bartorch
 def test_noise_readouts_after_the_first_imaging_readout_are_consumed_and_not_used():
     psi = covariance()
     other = covariance(seed=5)
