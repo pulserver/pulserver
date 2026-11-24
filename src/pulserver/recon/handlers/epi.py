@@ -562,6 +562,13 @@ def _navigator_echo_scale(header) -> float | None:
     return train / navigator
 
 
+#: Solve steps of an EPI unit, and of a 3D slab with its start image's. In a
+#: 7T simulation of a 128 mm slab with every physical effect, brain NRMSE at
+#: 60 steps from a 30-step start was 0.112 at R3 x 2 and 0.104 at R4 x 2,
+#: against 0.114 and 0.113 at 30 from 30, for 0.13 s more per volume on an A40.
+EPI_ITERATIONS = 30
+EPI_SLAB_ITERATIONS, EPI_SLAB_START_ITERATIONS = 60, 30
+
 #: Correction matrices :class:`EpiPhaseCorrection` keeps before starting over.
 CORRECTIONS_KEPT = 64
 
@@ -719,12 +726,15 @@ class EpiRecon(PicsRecon):
         ``EPI_WAVELET_SEGMENTED_ACCELERATION``), ``EPI_WAVELET_SLAB`` for a
         multiband stack without calibrated slices, and ``EPI_WAVELET_SLICE``
         for a slice or a slab.
-    iterations : int, default=30
+    iterations : int | None, default=None
         Conjugate-gradient steps, or ``pics`` iterations with ``wavelet``.
+        ``None`` takes ``EPI_SLAB_ITERATIONS`` for a 3D slab and
+        ``EPI_ITERATIONS`` for any other unit.
     start_iterations : int | None, default=None
         Conjugate-gradient steps of the image a wavelet or partial-Fourier
-        solve starts from and takes its phase from; ``None`` takes
-        ``iterations``.
+        solve starts from and takes its phase from. ``None`` takes
+        ``EPI_SLAB_START_ITERATIONS`` for a 3D slab where ``iterations`` is
+        ``None``, else the unit's ``iterations``.
     l2 : float, default=0.0
         Tikhonov weight ``lambda`` of the conjugate-gradient solve, on data
         scaled as ``pics`` scales them.
@@ -745,7 +755,7 @@ class EpiRecon(PicsRecon):
     def __init__(
         self,
         wavelet: float | None = None,
-        iterations: int = 30,
+        iterations: int | None = None,
         *,
         start_iterations: int | None = None,
         l2: float = 0.0,
@@ -757,7 +767,7 @@ class EpiRecon(PicsRecon):
     ) -> None:
         super().__init__(
             0.0 if wavelet is None else wavelet,
-            iterations,
+            EPI_ITERATIONS if iterations is None else int(iterations),
             virtual_coils,
             kspace_filter=kspace_filter,
             gradient_unwarp=gradient_unwarp,
@@ -765,8 +775,9 @@ class EpiRecon(PicsRecon):
         )
         self.automatic_wavelet = wavelet is None
         self.l2 = float(l2)
+        self.stated_iterations = iterations is not None
         self.start_iterations = (
-            self.iterations if start_iterations is None else int(start_iterations)
+            None if start_iterations is None else int(start_iterations)
         )
         self.shot_phase = bool(shot_phase)
         self.shot_segments = None
@@ -1046,13 +1057,10 @@ class EpiRecon(PicsRecon):
         self.shot_segments = segments
         if fills:
             return sense_combined(volume, maps) if segments is None else start
+        steps, start_steps = self._steps(volume.shape[1] > 1 and not bands)
         if start is None:
-            steps = (
-                self.iterations
-                if wavelet <= 0 and not partial
-                else self.start_iterations
-            )
-            start = cg_sense(volume, maps, sampled, steps, context.device, l2=l2)
+            begin = start_steps if wavelet > 0 or partial else steps
+            start = cg_sense(volume, maps, sampled, begin, context.device, l2=l2)
         if partial:
             phase = self._phase(start, reference, sampled)
             if phase is not None:
@@ -1061,7 +1069,7 @@ class EpiRecon(PicsRecon):
                     maps,
                     sampled,
                     wavelet,
-                    self.iterations,
+                    steps,
                     context.device,
                     x0=(start * phase.conj()).real.to(start.dtype),
                     phase=phase,
@@ -1076,11 +1084,19 @@ class EpiRecon(PicsRecon):
             maps * phase,
             sampled,
             wavelet,
-            self.iterations,
+            steps,
             context.device,
             x0=start * phase.conj(),
             shots=segments,
         )
+
+    def _steps(self, slab: bool) -> tuple[int, int]:
+        """Return the solve's steps and its start image's for a unit, a 3D slab or not."""
+        if slab and not self.stated_iterations:
+            steps, start = EPI_SLAB_ITERATIONS, EPI_SLAB_START_ITERATIONS
+        else:
+            steps, start = self.iterations, self.iterations
+        return steps, start if self.start_iterations is None else self.start_iterations
 
     def _shot_phases(self, volume, maps, sampled, masks, templates, context, l2):
         """Return the ``(masks, phases)`` of a segmented unit and its conjugate-gradient image, or ``None`` and its image solved as one.

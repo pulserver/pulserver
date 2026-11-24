@@ -1004,3 +1004,42 @@ def test_a_wavelet_solve_starts_from_start_iterations_conjugate_gradient_steps(
     plugin._solved(kspace, maps, SimpleNamespace(device=None))
 
     assert steps == [7]
+
+
+@pytest.mark.parametrize(
+    ("partitions", "expected"),
+    [
+        (4, ["EPI_SLAB_START_ITERATIONS", "EPI_SLAB_ITERATIONS"]),
+        (1, ["EPI_ITERATIONS", "EPI_ITERATIONS"]),
+    ],
+)
+def test_a_slab_takes_the_slab_steps_and_a_slice_the_epi_steps(
+    monkeypatch, partitions, expected
+):
+    from pulserver.recon.handlers import epi
+
+    shape = (partitions, 32, 32)
+    maps = torch.from_numpy(_maps(shape, coils=4))
+    sampled = torch.zeros(shape, dtype=torch.bool)
+    sampled[:, ::3] = True
+    kspace = _kspace(np.ones(shape, dtype=np.complex64), maps.numpy()) * sampled
+    steps = []
+    monkeypatch.setattr(epi, "EPI_SLAB_ITERATIONS", 9)
+    monkeypatch.setattr(epi, "EPI_SLAB_START_ITERATIONS", 5)
+    monkeypatch.setattr(epi, "EPI_ITERATIONS", 7)
+    cg, pics = epi.cg_sense, epi.pics_image
+
+    def counted_cg(*args, **kwargs):
+        steps.append(args[3])
+        return cg(*args, **kwargs)
+
+    def counted_pics(*args, **kwargs):
+        steps.append(args[4])
+        return pics(*args, **kwargs)
+
+    monkeypatch.setattr(epi, "cg_sense", counted_cg)
+    monkeypatch.setattr(epi, "pics_image", counted_pics)
+
+    epi.EpiRecon(0.003)._solved(kspace, maps, SimpleNamespace(device=None))
+
+    assert steps == [getattr(epi, name) for name in expected]
