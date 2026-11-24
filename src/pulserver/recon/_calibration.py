@@ -901,17 +901,23 @@ def geometric_basis_of(lines: np.ndarray, n_virtual: int) -> Basis:
 
 
 def _to_hybrid(line: np.ndarray) -> np.ndarray:
-    """Return k-space along its last axis in image space, centred."""
-    return np.fft.fftshift(
-        np.fft.ifft(np.fft.ifftshift(line, axes=-1), axis=-1, norm="ortho"), axes=-1
-    )
+    """Return k-space along its last axis in image space (:func:`bartorch.fft`, centred, unitary)."""
+    import bartorch
+    import torch
+
+    return bartorch.fft(
+        torch.from_numpy(np.ascontiguousarray(line)), -1, inverse=True, unitary=True
+    ).numpy()
 
 
 def _to_kspace(line: np.ndarray) -> np.ndarray:
-    """Return image space along its last axis in k-space, centred."""
-    return np.fft.fftshift(
-        np.fft.fft(np.fft.ifftshift(line, axes=-1), axis=-1, norm="ortho"), axes=-1
-    )
+    """Return image space along its last axis in k-space (:func:`bartorch.fft`, centred, unitary)."""
+    import bartorch
+    import torch
+
+    return bartorch.fft(
+        torch.from_numpy(np.ascontiguousarray(line)), -1, unitary=True
+    ).numpy()
 
 
 def _compressed(buffer: ReconBuffer | None, basis: Basis) -> ReconBuffer | None:
