@@ -82,6 +82,7 @@ class RampSampling(Gadget):
     """
 
     delay_s = 0.0
+    last_operator = None
 
     def startup(self, context):
         super().startup(context)
@@ -131,11 +132,12 @@ class RampSampling(Gadget):
         it was. ``None`` for a readout already on its grid, or of a space without
         geometry.
         """
-        saved = (
-            acquisition.center_sample,
-            acquisition.discard_pre,
-            acquisition.discard_post,
-        )
+        fields = ("center_sample", "discard_pre", "discard_post")
+        saved = {
+            name: getattr(acquisition, name)
+            for name in fields
+            if hasattr(acquisition, name)
+        }
         identity = np.eye(int(samples), dtype=np.complex64)
         traj = getattr(acquisition, "traj", None)
         try:
@@ -145,15 +147,17 @@ class RampSampling(Gadget):
                     matrix = gadget(acquisition, matrix)
                 reverse = False
             else:
-                matrix = self.resample(acquisition, identity)
+                self.last_operator = None
+                self.resample(acquisition, identity[:1])
+                matrix = identity if self.last_operator is None else self.last_operator
                 k = np.asarray(traj, dtype=np.float64)[:, 0]
                 reverse = bool(k[-1] < k[0])
         finally:
-            (
-                acquisition.center_sample,
-                acquisition.discard_pre,
-                acquisition.discard_post,
-            ) = saved
+            for name in fields:
+                if name in saved:
+                    setattr(acquisition, name, saved[name])
+                elif hasattr(acquisition, name):
+                    delattr(acquisition, name)
         if matrix is identity:
             return None
         return np.asarray(matrix), reverse
@@ -197,6 +201,7 @@ class RampSampling(Gadget):
             columns - 1 - columns // 2 if positions[-1] < positions[0] else columns // 2
         )
         acquisition.discard_pre = acquisition.discard_post = 0
+        self.last_operator = self.operators[key]
         return data @ self.operators[key]
 
 

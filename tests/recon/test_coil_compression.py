@@ -620,6 +620,35 @@ def test_neighbouring_geometric_bases_give_each_virtual_channel_a_smooth_sensiti
     assert steps < 0.5 * np.abs(virtual).max()
 
 
+def test_a_geometric_projection_of_each_readout_is_barts_geometric_ccapply():
+    import torch
+    from bartorch import tools
+
+    from pulserver.recon._calibration import geometric_basis_of, projected_readout
+
+    sens, obj = _readout_varying_array()
+    lines = _readout_kspace(sens * obj[None])
+    basis = geometric_basis_of(lines, 3)
+    compression = tools.cc(
+        torch.from_numpy(lines).reshape(lines.shape[0], 1, *lines.shape[1:]),
+        p=3,
+        M=True,
+        A=True,
+        G=True,
+    )
+    bart = tools.ccapply(
+        torch.from_numpy(lines).reshape(lines.shape[0], 1, *lines.shape[1:]),
+        compression,
+        p=3,
+        G=True,
+    ).numpy()[:, 0]
+    ours = np.stack(
+        [projected_readout(lines[:, j], basis) for j in range(lines.shape[1])], 1
+    )
+
+    assert relative_difference(ours, bart) < 1e-5
+
+
 def test_a_geometric_basis_is_refused_a_readout_of_another_length():
     from pulserver.recon._calibration import geometric_basis_of, projected_readout
 

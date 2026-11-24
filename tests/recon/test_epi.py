@@ -46,6 +46,34 @@ def test_a_ramp_sampled_readout_is_resampled_onto_the_readout_grid():
         np.testing.assert_allclose(out[0], _sampled(grid)[order], atol=1e-3)
 
 
+def test_the_ramp_operator_resamples_as_the_gadget_does_and_leaves_the_readout_header():
+    u = np.linspace(-1, 1, 2 * COLUMNS)
+    positions = 0.5 * np.sin(0.5 * np.pi * u)
+    gadget = RampSampling()
+    gadget.geometry, gadget.operators = [(COLUMNS, FOV)], {}
+
+    for order, reversed_ in ((slice(None), False), (slice(None, None, -1), True)):
+        traj = (positions[order] * COLUMNS / FOV)[:, None]
+        acquisition = _acquisition(traj=traj)
+        acquisition.center_sample, acquisition.discard_pre = 2 * COLUMNS // 2, 0
+        acquisition.discard_post = 0
+        header = (
+            acquisition.center_sample,
+            acquisition.discard_pre,
+            acquisition.discard_post,
+        )
+        data = _sampled(positions[order])[None]
+        matrix, reverse = gadget.operator(acquisition, data.shape[-1])
+
+        assert reverse is reversed_
+        assert (
+            acquisition.center_sample,
+            acquisition.discard_pre,
+            acquisition.discard_post,
+        ) == header
+        np.testing.assert_allclose(data @ matrix, gadget(acquisition, data), atol=1e-6)
+
+
 def test_an_epi_with_additional_adc_samples_reconstructs_the_prescribed_readout_grid():
     import pypulseqpp as pp
     from pypulseqpp import sequences

@@ -77,8 +77,8 @@ class Basis:
     ``matrix`` is the unitary ``(coils, coils)`` matrix ``bartorch.tools.cc``
     returns, of which ``n_virtual`` virtual channels are kept; ``id``
     identifies the basis. A geometric basis (``geometric_basis_of``) is
-    ``(readout, coils, coils)``: one such matrix per position along the
-    readout, in image order.
+    ``(readout, n_virtual, coils)``: the projection onto the virtual channels
+    at each position along the readout, in image order.
     """
 
     matrix: np.ndarray
@@ -773,9 +773,7 @@ def _projected(maps: np.ndarray, basis: Basis) -> np.ndarray:
             f"{basis.matrix.shape[-1]}"
         )
     if basis.matrix.ndim == 3:
-        return np.einsum(
-            "xvc,c...x->v...x", basis.matrix[:, : basis.n_virtual].conj(), maps
-        ).astype(np.complex64)
+        return np.einsum("xvc,c...x->v...x", basis.matrix, maps).astype(np.complex64)
     virtual = tools.ccapply(
         torch.from_numpy(np.ascontiguousarray(maps)).reshape(coils, -1, 1, 1),
         torch.from_numpy(basis.matrix).reshape(coils, coils, 1, 1, 1),
@@ -841,53 +839,65 @@ def projected_readout(
         )
     if reverse:
         line = line[:, ::-1]
-    virtual = _to_kspace(
-        np.einsum(
-            "xvc,cx->vx",
-            basis.matrix[:, : basis.n_virtual].conj(),
-            _to_hybrid(line),
-        )
-    )
+    virtual = _to_kspace(np.einsum("xvc,cx->vx", basis.matrix, _to_hybrid(line)))
     if reverse:
         virtual = virtual[:, ::-1]
     if matrix is not None:
-        virtual = virtual @ np.linalg.pinv(matrix)
+        virtual = virtual @ _pseudo_inverse(matrix)
     return virtual.astype(data.dtype, copy=False)
 
 
+_PSEUDO_INVERSES: dict[int, tuple[np.ndarray, np.ndarray]] = {}
+
+
+def _pseudo_inverse(matrix: np.ndarray) -> np.ndarray:
+    """Return the pseudo-inverse of a resampling matrix, kept for as long as the matrix is."""
+    held = _PSEUDO_INVERSES.get(id(matrix))
+    if held is None or held[0] is not matrix:
+        if len(_PSEUDO_INVERSES) > 256:
+            _PSEUDO_INVERSES.clear()
+        held = (matrix, np.linalg.pinv(matrix).astype(np.complex64))
+        _PSEUDO_INVERSES[id(matrix)] = held
+    return held[1]
+
+
 def geometric_basis_of(lines: np.ndarray, n_virtual: int) -> Basis:
-    """Return the geometric basis of ``(coils, lines, readout)`` grid readouts: one aligned SVD basis per position along the readout.
+    """Return the geometric basis of ``(coils, lines, readout)`` grid readouts: BART's per-position coil compression (``bart cc -G``).
 
     At each position of the readout in image space, the channels' covariance
-    over the lines gives a basis of which the ``n_virtual`` strongest
-    channels are kept, so a channel that sees one side of the head is kept
-    where that side lies. Neighbouring bases are rotated onto each other,
-    outwards from the centre, so each virtual channel's sensitivity stays
-    smooth along the readout (Zhang et al., Magn Reson Med 2013,
-    doi:10.1002/mrm.24267).
+    over the lines gives the ``n_virtual`` strongest virtual channels, so a
+    channel that sees one side of the head is kept where that side lies, and
+    neighbouring positions are aligned so each virtual channel's sensitivity
+    stays smooth along the readout (Zhang et al., Magn Reson Med 2013,
+    doi:10.1002/mrm.24267; :func:`bartorch.tools.cc` and
+    :func:`bartorch.tools.ccapply`). The basis holds the projection
+    ``bart ccapply -G`` applies at each position, ``(readout, n_virtual,
+    coils)``, read off by applying it to one channel at a time.
 
     Raises
     ------
     ValueError
         If ``n_virtual`` exceeds the channels.
     """
+    import torch
+    from bartorch import tools
+
     coils, _, columns = lines.shape
     if n_virtual > coils:
         raise ValueError(f"cannot keep {n_virtual} virtual channels of {coils}")
-    hybrid = _to_hybrid(np.ascontiguousarray(lines, dtype=np.complex128))
-    bases = np.empty((columns, coils, coils), dtype=np.complex128)
-    for x in range(columns):
-        bases[x] = np.linalg.svd(hybrid[:, :, x], full_matrices=True)[0]
-    centre = columns // 2
-    for step in (1, -1):
-        for x in range(centre + step, columns if step > 0 else -1, step):
-            kept, previous = bases[x][:, :n_virtual], bases[x - step][:, :n_virtual]
-            left, _, right = np.linalg.svd(kept.conj().T @ previous)
-            bases[x][:, :n_virtual] = kept @ (left @ right)
-    matrix = np.ascontiguousarray(bases.transpose(0, 2, 1)).astype(np.complex64)
-    return Basis(
-        matrix, n_virtual, digest(matrix[:, :n_virtual], n_virtual, "geometric")
+    calibration = torch.from_numpy(
+        np.ascontiguousarray(lines, dtype=np.complex64)
+    ).reshape(coils, 1, lines.shape[1], columns)
+    compression = tools.cc(calibration, p=n_virtual, M=True, A=True, G=True)
+    channels = np.zeros((coils, 1, coils, columns), dtype=np.complex64)
+    channels[np.arange(coils), 0, np.arange(coils)] = 1.0
+    applied = tools.ccapply(
+        torch.from_numpy(_to_kspace(channels)), compression, p=n_virtual, G=True
     )
+    matrix = np.ascontiguousarray(
+        _to_hybrid(applied.cpu().numpy())[:, 0].transpose(2, 0, 1)
+    ).astype(np.complex64)
+    return Basis(matrix, n_virtual, digest(matrix, n_virtual, "geometric"))
 
 
 def _to_hybrid(line: np.ndarray) -> np.ndarray:
