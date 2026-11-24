@@ -804,11 +804,16 @@ def basis_of(samples: np.ndarray, n_virtual: int) -> Basis:
 
 
 def projected_readout(data: np.ndarray, basis: Basis) -> np.ndarray:
-    """Return a ``(coils, samples)`` readout on the virtual channels of ``basis``, as :func:`bartorch.tools.ccapply` projects k-space."""
-    virtual = basis.matrix[: basis.n_virtual].conj()
-    return (virtual.astype(data.dtype, copy=False) @ data).astype(
-        data.dtype, copy=False
+    """Return a ``(coils, samples)`` readout on the virtual channels of ``basis`` (:func:`bartorch.tools.ccapply_readout`)."""
+    import torch
+    from bartorch import tools
+
+    virtual = tools.ccapply_readout(
+        torch.from_numpy(np.ascontiguousarray(data)),
+        torch.from_numpy(basis.matrix),
+        p=basis.n_virtual,
     )
+    return virtual.numpy().astype(data.dtype, copy=False)
 
 
 def _compressed(buffer: ReconBuffer | None, basis: Basis) -> ReconBuffer | None:
