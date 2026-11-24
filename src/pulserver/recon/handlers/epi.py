@@ -214,10 +214,11 @@ class EpiPhaseCorrection(Gadget):
     changes from excitation to excitation within a shot. Each excitation's
     phase, a constant and a linear term across the readout, is fitted from
     its navigator: the mean of its forward navigator readouts, in hybrid
-    space, against the first such mean of its slice
-    (:func:`bartorch.tools.estimate_epi_phase` of ``[first, this, first]``),
-    and removed from every imaging readout of the excitation, forward and
-    reversed. ``excitation_phase=False`` leaves it.
+    space, against the first such mean of its navigator's encoding space and
+    slice (:func:`bartorch.tools.estimate_epi_phase` of
+    ``[first, this, first]``), and removed from every imaging readout of the
+    excitation in a 3D encoding space, forward and reversed.
+    ``excitation_phase=False`` leaves it.
 
     A delay of the read gradient moves every sample along the trajectory by
     the gradient times the delay, which on the ramps is not the shift a linear
@@ -415,7 +416,8 @@ class EpiPhaseCorrection(Gadget):
                     "a navigator: reversed lines are flipped but not phase "
                     "corrected, and the images will show an N/2 ghost"
                 )
-        if self.excitation is not None:
+        space = int(getattr(acquisition, "encoding_space_ref", 0) or 0)
+        if self.excitation is not None and space in self.slabs:
             if reverse:
                 phase = self.excitation if phase is None else phase + self.excitation
             else:
@@ -426,10 +428,8 @@ class EpiPhaseCorrection(Gadget):
         return tools.correct_lines([line], phase)[0].numpy()
 
     def _excitation_phase(self, acquisition):
-        """Return the coefficients removing the phase of the excitation whose navigator was just read, against its slice's first; ``None`` outside a 3D encoding space."""
-        if not self.excitation_phase:
-            return None
-        if int(getattr(acquisition, "encoding_space_ref", 0) or 0) not in self.slabs:
+        """Return the coefficients removing the phase of the excitation whose navigator was just read, against the first of its navigator's encoding space and slice; ``None`` for the first, or where no encoding space is 3D."""
+        if not self.excitation_phase or not self.slabs:
             return None
         from bartorch import tools
 
