@@ -120,16 +120,17 @@ def _phased(line, constant, linear):
     return _hybrid(_hybrid(line, True) * np.exp(1j * (constant + linear * u)), False)
 
 
-def _excitation(gadget, constant, linear):
-    """Read one excitation's three-line navigator, in an encoding space of its own, and a forward and a reversed imaging line, all carrying the phase ``constant + linear * u``; return the two imaging lines as corrected."""
+def _excitation(gadget, constant, linear, echo_scale=1.0):
+    """Read one excitation's three-line navigator, in an encoding space of its own, carrying the phase ``constant + linear * u``, and a forward and a reversed imaging line carrying ``echo_scale`` times it; return the two imaging lines as corrected."""
     grid = (np.arange(COLUMNS) - COLUMNS // 2) / COLUMNS
-    line = _phased(_sampled(grid), constant, linear)
+    navigator = _phased(_sampled(grid), constant, linear)
+    line = _phased(_sampled(grid), echo_scale * constant, echo_scale * linear)
     forward, backward = AcquisitionFlag(0), AcquisitionFlag.IS_REVERSE
     nav = AcquisitionFlag.IS_NAVIGATION_DATA
     for flags, data in (
-        (forward, line[None]),
-        (backward, line[::-1][None]),
-        (forward, line[None]),
+        (forward, navigator[None]),
+        (backward, navigator[::-1][None]),
+        (forward, navigator[None]),
     ):
         assert gadget(_acquisition(flags | nav, space=1), data) is None
     return (
@@ -164,6 +165,32 @@ def test_each_slab_excitation_has_its_navigator_phase_removed_from_every_readout
     expected = first if slab else [_phased(_sampled(grid), 0.7, -0.5)] * 2
     scale = np.abs(first[0]).max()
     for got, want in zip(later, expected, strict=True):
+        np.testing.assert_allclose(got, want, atol=1e-4 * scale)
+
+
+def _timed_header(train, navigator):
+    strings = [
+        SimpleNamespace(name="TrainEchoTime", value=str(train)),
+        SimpleNamespace(name="NavigatorEchoTime", value=str(navigator)),
+    ]
+    return SimpleNamespace(
+        encoding=(),
+        userParameters=SimpleNamespace(
+            userParameterLong=[], userParameterDouble=[], userParameterString=strings
+        ),
+    )
+
+
+def test_a_slab_excitation_phase_is_scaled_from_the_navigator_echo_time_to_the_train():
+    gadget = EpiPhaseCorrection()
+    gadget.startup(SimpleNamespace(header=_timed_header(0.025, 0.005)))
+    gadget.slabs = {0}
+    first = _excitation(gadget, 0.0, 0.0)
+
+    later = _excitation(gadget, 0.3, -0.1, echo_scale=5.0)
+
+    scale = np.abs(first[0]).max()
+    for got, want in zip(later, first, strict=True):
         np.testing.assert_allclose(got, want, atol=1e-4 * scale)
 
 

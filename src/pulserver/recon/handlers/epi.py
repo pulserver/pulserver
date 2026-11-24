@@ -220,6 +220,13 @@ class EpiPhaseCorrection(Gadget):
     excitation in a 3D encoding space, forward and reversed.
     ``excitation_phase=False`` leaves it.
 
+    A breath changes the field, and the phase a field offset adds grows with
+    the time since the excitation, so the fitted phase is scaled from the
+    navigator's echo time to the train's: by the ``TrainEchoTime`` over the
+    ``NavigatorEchoTime`` the header states (in s, as user parameters), the
+    constant taken within half a turn of zero first. A header without them
+    has the phase removed as the navigator reads it, and the log says so.
+
     A delay of the read gradient moves every sample along the trajectory by
     the gradient times the delay, which on the ramps is not the shift a linear
     phase removes. The first reference train, or the first navigator, of the
@@ -260,6 +267,7 @@ class EpiPhaseCorrection(Gadget):
         }
         self.navigator = []
         self.navigator_profiles = {}
+        self.echo_scale = _navigator_echo_scale(getattr(context, "header", None))
         self.excitation = None
         self.phase = None
         self.pending = {}
@@ -448,12 +456,33 @@ class EpiPhaseCorrection(Gadget):
         if first is profile:
             _log.info(
                 "each excitation's phase is fitted to its navigator against the "
-                "first of encoding space %d, slice %d, and removed from its "
-                "readouts in a 3D encoding space",
+                "first of encoding space %d, slice %d, scaled by %.3f to the "
+                "train's echo time%s, and removed from its readouts in a 3D "
+                "encoding space",
                 *location,
+                self.echo_scale,
+                ""
+                if self.echo_scale != 1.0
+                else " (the header states no NavigatorEchoTime and TrainEchoTime)",
             )
             return None
-        return tools.estimate_epi_phase([first, profile, first])
+        phase = tools.estimate_epi_phase([first, profile, first])
+        phase[0] = math.remainder(float(phase[0]), 2.0 * math.pi)
+        return phase * self.echo_scale
+
+
+def _navigator_echo_scale(header) -> float:
+    """Return the header's ``TrainEchoTime`` over its ``NavigatorEchoTime``; 1 where either is missing or not positive."""
+    if header is None:
+        return 1.0
+    try:
+        train = float(user_parameter(header, "TrainEchoTime", 0.0))
+        navigator = float(user_parameter(header, "NavigatorEchoTime", 0.0))
+    except (TypeError, ValueError):
+        return 1.0
+    if train <= 0.0 or navigator <= 0.0:
+        return 1.0
+    return train / navigator
 
 
 #: First trial delay of the read gradient (s), and the secant steps after it.
