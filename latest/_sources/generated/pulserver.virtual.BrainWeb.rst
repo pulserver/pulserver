@@ -27,5 +27,6 @@
    :nosignatures:
 
    ~BrainWeb.DIFFUSION
+   ~BrainWeb.FAT_PEAKS
    ~BrainWeb.field_ppm
    ~BrainWeb.fractions
