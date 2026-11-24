@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 import pypulseqpp as pp
+from blochsim.simulators.gradient_echo import FAT_SPECTRA
 
 from ._coils import Coil
 
@@ -110,19 +111,13 @@ class BrainWeb:
         a single peak at pypulseqpp's fat shift without one.
     """
 
-    #: The six-peak spectrum of subcutaneous fat measured at 7 T (Ren et al.,
-    #: J Lipid Res 49:2055, 2008), ``(shift_ppm, fraction)`` relative to
-    #: water at 4.7 ppm: the methyl, methylene, allylic, diallylic, glycerol
-    #: and olefinic resonances. The olefinic peak lies on the water side, out
-    #: of reach of a fat-saturation pulse centred on the methylene peak.
-    FAT_PEAKS = (
-        (-3.80, 0.087),
-        (-3.40, 0.693),
-        (-2.60, 0.128),
-        (-1.94, 0.004),
-        (-0.39, 0.039),
-        (0.60, 0.048),
-    )
+    #: The six-peak spectrum of fat, ``(shift_ppm, fraction)`` relative to
+    #: water: blochsim's ``middleton2009`` entry of
+    #: ``blochsim.simulators.gradient_echo.FAT_SPECTRA``, the methyl,
+    #: methylene, allylic, diallylic, glycerol and olefinic resonances. The
+    #: olefinic peak lies on the water side, out of reach of a fat-saturation
+    #: pulse centred on the methylene peak.
+    FAT_PEAKS = FAT_SPECTRA["middleton2009"]
 
     #: Isotropic diffusion coefficients, in m²/s, of the tissue classes whose
     #: water diffusion is measured: the apparent diffusion coefficients of

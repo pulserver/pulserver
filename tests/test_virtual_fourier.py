@@ -847,3 +847,76 @@ def test_a_moment_to_the_edge_of_k_space_does_not_shift_the_states_on_either_sid
     rounded = np.array([edge * (1 - 1e-12), edge, edge * (1 + 1e-12)])
     assert not _fourier._dephases(rounded).any()
     assert _fourier._dephases(np.array([1.5 * edge])).all()
+
+
+def test_a_noisy_scan_is_the_noiseless_scan_plus_the_noise_of_each_readout(converted):
+    tissue = virtual.Phantom(
+        [virtual.Ellipse((0.0, 0.0, 0.0), (0.02, 0.02))], coils=2
+    ).tissue(2e-3)
+    noise = virtual.ReceiveNoise(np.array([[1.0, 0.4], [0.4, 1.0]]), std=0.1, seed=2)
+    path = converted / "gre_2d_3sl.seq"
+
+    clean = virtual.simulate(path, tissue, device="cpu")
+    noisy = virtual.simulate(path, tissue, device="cpu", noise=noise)
+
+    for at, (a, b) in enumerate(zip(clean, noisy, strict=True)):
+        np.testing.assert_allclose(b - a, noise(at, a.shape[1]), atol=1e-5)
+
+
+def test_a_played_inversion_turns_each_group_by_its_profile_not_as_an_ideal_inversion():
+    from blochsim.sequence import EventType, RfUse
+
+    stream = _fourier._Stream(
+        kind=np.array([1, 1, 0]),
+        time_us=np.array([0.0, 1000.0, 2000.0]),
+        selector=np.array([0, 0, -1]),
+        flip=np.array([np.pi, np.pi / 2, 0.0]),
+        use=np.array([int(RfUse.INVERSION), int(RfUse.EXCITATION), 0]),
+        phase=np.zeros(3),
+        orders=np.zeros(3, dtype=np.int64),
+        shift_us=np.zeros(3),
+        readout=np.array([-1, -1, 0]),
+    )
+
+    description = _fourier._description(stream, np.zeros((1, 1), dtype=np.int64), "cpu")
+
+    uses = [e.rf_use for e in description.events if e.type is EventType.RF]
+    assert RfUse.INVERSION not in uses
+    assert uses[1] is RfUse.EXCITATION
+
+
+def _inverted_then_read(path, offset_hz):
+    """A hyperbolic-secant inversion ``offset_hz`` off resonance, a spoiler, then a 90 degree hard pulse read once."""
+    system = pp.Opts(
+        max_grad=30, grad_unit="mT/m", max_slew=120, slew_unit="T/m/s", B0=3.0
+    )
+    seq = pp.Sequence(system)
+    if offset_hz is not None:
+        inversion = pp.make_adiabatic_pulse(
+            "hypsec", duration=20e-3, beta=300.0, freq_offset=offset_hz, system=system
+        )
+        seq.add_block(inversion)
+        seq.add_block(pp.make_trapezoid("z", area=4.0 / 1e-3, system=system))
+    seq.add_block(pp.make_delay(20e-3))
+    seq.add_block(pp.make_block_pulse(np.pi / 2, duration=2e-4, system=system))
+    seq.add_block(pp.make_adc(64, duration=3.2e-3, system=system))
+    seq.write(str(path))
+    ir.convert(path, SYSTEM)
+    return path
+
+
+def test_an_inversion_far_off_the_water_resonance_leaves_the_water_signal_alone(
+    tmp_path,
+):
+    tissue = virtual.Phantom(
+        [virtual.Ellipse((0.0, 0.0, 0.0), (0.02, 0.02), t1=1.0, t2=0.1)]
+    ).tissue(4e-3)
+
+    def signal(offset_hz, name):
+        path = _inverted_then_read(tmp_path / name, offset_hz)
+        (readout,) = virtual.simulate(path, tissue, device="cpu")
+        return complex(np.asarray(readout).sum())
+
+    plain = signal(None, "plain.seq")
+    assert signal(-1500.0, "off.seq") / plain == pytest.approx(1.0, abs=0.02)
+    assert (signal(0.0, "on.seq") / plain).real < -0.8

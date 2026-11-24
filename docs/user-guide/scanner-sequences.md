@@ -192,7 +192,7 @@ of the sequences of a chain:
 ...         return Evaluation(protocol.replace(achieved), sequences.duration(seq))
 >>> reply = Resolved().validate(system, {"TE": TEPreset.MINIMUM, "nx": 96})
 >>> reply.valid, round(reply.duration, 3), reply.info
-(True, 38.25, '')
+(True, 41.0, '')
 >>> {name: reply.values[name] for name in ("TE", "TR", "fov", "nx")}
 {'TE': 3080, 'TR': 250000, 'fov': 220.0, 'nx': 96}
 
