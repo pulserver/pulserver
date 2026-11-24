@@ -1748,7 +1748,10 @@ def _description(stream: _Stream, groups: np.ndarray, device) -> object:
             )
         return amplitudes[key]
 
-    uses = {int(use) for use in RfUse}
+    # The kernels play a pulse tagged as an inversion as an ideal
+    # Mz -> -Mz on every isochromat; a played pulse is the rotation its
+    # profile gives, so a spectrally selective inversion leaves water alone.
+    uses = {int(use) for use in RfUse} - {int(RfUse.INVERSION)}
     events = []
     for kind, when, selector, flip, use, phase, orders, shift_us in zip(
         stream.kind.tolist(),
@@ -1766,7 +1769,11 @@ def _description(stream: _Stream, groups: np.ndarray, device) -> object:
                 SequenceEvent.rf(
                     when,
                     0,
-                    RfUse(use) if use in uses else RfUse.UNKNOWN,
+                    RfUse(use)
+                    if use in uses
+                    else RfUse.OTHER
+                    if use == RfUse.INVERSION
+                    else RfUse.UNKNOWN,
                     amplitude(selector, flip),
                     phase,
                 )
