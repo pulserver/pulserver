@@ -2323,8 +2323,12 @@ SLAB_FIELD_SMOOTHNESS = 3000.0
 
 #: PyHySCO smoothness weight of a slice's field, on the same scale. A slice
 #: has no neighbours to constrain its field, and at PyHySCO's own weight the
-#: field of a 3T spin-echo pair takes up the anatomy of the pair's images.
-SLICE_FIELD_SMOOTHNESS = 3000.0
+#: field of a 3T spin-echo pair takes up the anatomy of the pair's images. In
+#: a noisy 7T simulation of a 3-shot R 2 slice, a weight of 3000 leaves detail
+#: along the phase encode in the field that the unwarping draws as bands
+#: across the image; at this weight the bands are gone and the unwarped slice
+#: is closer to a gradient echo in every case tried.
+SLICE_FIELD_SMOOTHNESS = 10000.0
 
 
 def undistorted(image, field, voxel_size):
