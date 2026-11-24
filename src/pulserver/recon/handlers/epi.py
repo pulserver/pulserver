@@ -208,6 +208,25 @@ class EpiPhaseCorrection(Gadget):
     discards are mirrored with it. Navigator readouts are consumed whether or
     not a reference serves.
 
+    In a 3D encoding space, each excitation of a slab is read over a few
+    partitions only, and a shot of a segmented slab is a run of excitations
+    through every partition, so the phase a breath or a field drift adds
+    changes from excitation to excitation within a shot. Each excitation's
+    phase, a constant and a linear term across the readout, is fitted from
+    its navigator: the mean of its forward navigator readouts, in hybrid
+    space, against the first such mean of its navigator's encoding space and
+    slice (:func:`bartorch.tools.estimate_epi_phase` of
+    ``[first, this, first]``), and removed from every imaging readout of the
+    excitation in a 3D encoding space, forward and reversed.
+    ``excitation_phase=False`` leaves it.
+
+    A breath changes the field, and the phase a field offset adds grows with
+    the time since the excitation, so the fitted phase is scaled from the
+    navigator's echo time to the train's: by the ``TrainEchoTime`` over the
+    ``NavigatorEchoTime`` the header states (in s, as user parameters), the
+    constant taken within half a turn of zero first. A header without them
+    has the phase removed as the navigator reads it, and the log says so.
+
     A delay of the read gradient moves every sample along the trajectory by
     the gradient times the delay, which on the ramps is not the shift a linear
     phase removes. The first reference train, or the first navigator, of the
@@ -219,6 +238,12 @@ class EpiPhaseCorrection(Gadget):
     resampled with the delay. Without a :class:`RampSampling` (``ramp`` is
     ``None``), the reference and navigator readouts are taken as they come.
 
+    Parameters
+    ----------
+    excitation_phase : bool, default=True
+        Remove each excitation's navigator phase from the readouts of a 3D
+        encoding space.
+
     Attributes
     ----------
     ramp : RampSampling or None
@@ -228,9 +253,24 @@ class EpiPhaseCorrection(Gadget):
 
     ramp = None
 
+    def __init__(self, excitation_phase: bool = True) -> None:
+        super().__init__()
+        self.excitation_phase = bool(excitation_phase)
+
     def startup(self, context):
         super().startup(context)
+        encodings = getattr(getattr(context, "header", None), "encoding", None) or ()
+        self.slabs = {
+            index
+            for index in range(len(encodings))
+            if len(EncodingSpace.from_header(context.header, index).recon_matrix) == 3
+        }
         self.navigator = []
+        self.navigator_profiles = {}
+        stated = _navigator_echo_scale(getattr(context, "header", None))
+        self.echo_scale = 1.0 if stated is None else stated
+        self.echo_scale_stated = stated is not None
+        self.excitation = None
         self.phase = None
         self.pending = {}
         self.references = {}
@@ -366,6 +406,7 @@ class EpiPhaseCorrection(Gadget):
                     lambda d: float(self._navigator_phase(d)[1]), self.navigator
                 )
                 self.phase = self._navigator_phase()
+                self.excitation = self._excitation_phase(acquisition)
                 self.navigator = []
             return None
         line = (torch.from_numpy(np.ascontiguousarray(data)), reverse)
@@ -385,7 +426,65 @@ class EpiPhaseCorrection(Gadget):
                     "a navigator: reversed lines are flipped but not phase "
                     "corrected, and the images will show an N/2 ghost"
                 )
+        space = int(getattr(acquisition, "encoding_space_ref", 0) or 0)
+        if self.excitation is not None and space in self.slabs:
+            if reverse:
+                phase = self.excitation if phase is None else phase + self.excitation
+            else:
+                # A forward line takes the phase correct_lines gives a
+                # reversed one, flipped back into its own order first.
+                line = (torch.flip(line[0], [-1]), True)
+                phase = self.excitation
         return tools.correct_lines([line], phase)[0].numpy()
+
+    def _excitation_phase(self, acquisition):
+        """Return the coefficients removing the phase of the excitation whose navigator was just read, against the first of its navigator's encoding space and slice; ``None`` for the first, or where no encoding space is 3D."""
+        if not self.excitation_phase or not self.slabs:
+            return None
+        from bartorch import tools
+
+        lines = self._lines(self.navigator)
+        forward = [
+            line
+            for line, (_, _, reverse) in zip(lines, self.navigator, strict=True)
+            if not reverse
+        ]
+        profile = sum(forward) / len(forward)
+        location = (
+            int(getattr(acquisition, "encoding_space_ref", 0) or 0),
+            int(acquisition_label(acquisition, "slice", 0) or 0),
+        )
+        first = self.navigator_profiles.setdefault(location, profile)
+        if first is profile:
+            _log.info(
+                "each excitation's phase is fitted to its navigator against the "
+                "first of encoding space %d, slice %d, scaled by %.3f to the "
+                "train's echo time%s, and removed from its readouts in a 3D "
+                "encoding space",
+                *location,
+                self.echo_scale,
+                ""
+                if self.echo_scale_stated
+                else " (the header states no NavigatorEchoTime and TrainEchoTime)",
+            )
+            return None
+        phase = tools.estimate_epi_phase([first, profile, first])
+        phase[0] = math.remainder(float(phase[0]), 2.0 * math.pi)
+        return phase * self.echo_scale
+
+
+def _navigator_echo_scale(header) -> float | None:
+    """Return the header's ``TrainEchoTime`` over its ``NavigatorEchoTime``; ``None`` where either is missing or not positive."""
+    if header is None:
+        return None
+    try:
+        train = float(user_parameter(header, "TrainEchoTime", 0.0))
+        navigator = float(user_parameter(header, "NavigatorEchoTime", 0.0))
+    except (TypeError, ValueError):
+        return None
+    if train <= 0.0 or navigator <= 0.0:
+        return None
+    return train / navigator
 
 
 #: First trial delay of the read gradient (s), and the secant steps after it.
@@ -446,8 +545,10 @@ class EpiRecon(PicsRecon):
     gradient echo at 7T does near air-tissue interfaces, the unit is left
     zero-filled and a warning says why.
 
-    A unit whose lines come from several segments (``SEG``), the interleaved
-    shots of a segmented scan, is solved with the phase each shot adds to the
+    A 3D slab is solved as one, the phase of each of its excitations removed
+    from its navigator as its readouts arrive (:class:`EpiPhaseCorrection`). A
+    slice or multiband unit whose lines come from several segments
+    (``SEG``), the interleaved shots of a segmented scan, is solved with the phase each shot adds to the
     image, as MUSE solves it (Chen et al., NeuroImage 2013,
     doi:10.1016/j.neuroimage.2013.01.076): breathing and motion change the
     field and the phase of the image from shot to shot, and lines encoded as
@@ -535,8 +636,9 @@ class EpiRecon(PicsRecon):
         calibrated slices (``EPI_WAVELET_SLICE`` for one read in shots enough
         to bring its acceleration per shot to
         ``EPI_WAVELET_SEGMENTED_ACCELERATION``), ``EPI_WAVELET_SLAB`` for any
-        other unit of more than one partition and ``EPI_WAVELET_SLICE`` for a
-        slice.
+        other unit of more than one partition accelerated beyond
+        ``EPI_WAVELET_SLAB_ACCELERATION`` and ``EPI_WAVELET_SLICE`` for a
+        slice or a slab accelerated no more.
     iterations : int, default=30
         Conjugate-gradient steps, or ``pics`` iterations with ``wavelet``.
     l2 : float, default=0.0
@@ -550,8 +652,10 @@ class EpiRecon(PicsRecon):
     kspace_filter, gradient_unwarp, intensity_correction : bool, default=True
         As :class:`~pulserver.recon.handlers.pics.PicsRecon`.
     shot_phase : bool, default=True
-        Fit and encode the phase each shot of a segmented unit adds to the
-        image; ``False`` solves every unit as one.
+        Fit and encode the phase each shot of a segmented slice or multiband
+        unit adds to the image; ``False`` solves every unit as one. A 3D slab
+        is solved as one, each of its excitations' phase removed from its
+        navigator (:class:`EpiPhaseCorrection`).
     """
 
     def __init__(
@@ -669,8 +773,12 @@ class EpiRecon(PicsRecon):
 
         volume = kspace if kspace.ndim == 4 else kspace[:, None]
         volume = torch.from_numpy(np.ascontiguousarray(volume, dtype=np.complex64))
+        in_plane = self._band_positions(data, volume.shape[1]) is not None
+        slab = volume.shape[1] > 1 and not in_plane
         shots = (
-            shot_masks(data.data, tuple(volume.shape[1:])) if self.shot_phase else None
+            shot_masks(data.data, tuple(volume.shape[1:]))
+            if self.shot_phase and not slab
+            else None
         )
         maps = (
             self._maps(context, data, volume)
@@ -678,7 +786,6 @@ class EpiRecon(PicsRecon):
             else self._maps(context, data, volume, segmented=True)
         )
         location = int(data.counters.get("slice", 0))
-        in_plane = self._band_positions(data, volume.shape[1]) is not None
         reference = self.phase_references.get(location)
         templates = None
         if shots is not None:
@@ -807,13 +914,18 @@ class EpiRecon(PicsRecon):
         A multiband unit read in several shots whose in-plane line step times
         its bands, divided by its shots, is at most
         ``EPI_WAVELET_SEGMENTED_ACCELERATION`` takes ``EPI_WAVELET_SLICE``;
-        any other multiband unit ``EPI_WAVELET_MULTIBAND``.
+        any other multiband unit ``EPI_WAVELET_MULTIBAND``. A slab
+        accelerated at most ``EPI_WAVELET_SLAB_ACCELERATION`` (R3 x 2) takes
+        ``EPI_WAVELET_SLICE``, and a slab accelerated further
+        ``EPI_WAVELET_SLAB``.
         """
         if not self.automatic_wavelet:
             return self.wavelet
         if volume.shape[1] == 1:
             return EPI_WAVELET_SLICE
         if not bands:
+            if _acceleration(volume) <= EPI_WAVELET_SLAB_ACCELERATION:
+                return EPI_WAVELET_SLICE
             return EPI_WAVELET_SLAB
         if shots > 1:
             per_shot = _line_step(volume) * volume.shape[1] / shots
@@ -1374,18 +1486,28 @@ def plane_positions(acquisition, space, count) -> list[float]:
     return [centre + (index - count // 2) * depth for index in range(count)]
 
 
-#: Wavelet ``lambda`` of an undersampled 3D EPI slab, 2D EPI multiband unit
-#: and 2D EPI slice, on data scaled as ``pics`` scales them. A slab's
-#: partition and CAIPI unfolding amplifies noise and converges slowly without
-#: the prior; a slice's prior is weak enough to keep the cortex and the deep
-#: grey nuclei. A multiband unit unfolds its bands and its in-plane aliases
-#: together: in a noisy 7T simulation of a 2 mm stack at MB2 and R 2 to 4 with
-#: six virtual channels, its bands are closest to a fully sampled gradient
-#: echo near this weight, the slab's smoothing R 2 and a slice's leaving R 4
-#: aliased.
-EPI_WAVELET_SLAB = 0.1
+#: Wavelet ``lambda`` of an undersampled 3D EPI slab accelerated beyond
+#: ``EPI_WAVELET_SLAB_ACCELERATION``, 2D EPI multiband unit and 2D EPI slice,
+#: on data scaled as ``pics`` scales them. A slice's prior is weak enough to
+#: keep the cortex and the deep grey nuclei. A multiband unit unfolds its
+#: bands and its in-plane aliases together: in a noisy 7T simulation of a
+#: 2 mm stack at MB2 and R 2 to 4 with six virtual channels, its bands are
+#: closest to a fully sampled gradient echo near this weight, a slice's
+#: leaving R 4 aliased.
+EPI_WAVELET_SLAB = 0.03
 EPI_WAVELET_MULTIBAND = 0.03
 EPI_WAVELET_SLICE = 0.003
+
+#: Largest acceleration of a 3D EPI slab, the encoded lines of its partition
+#: and phase-encode extent over those read, solved at ``EPI_WAVELET_SLICE``
+#: instead of ``EPI_WAVELET_SLAB``. In the noisy 7T simulation of a 2 mm slab
+#: of 16 partitions in the susceptibility field, unwarped, against the fully
+#: sampled gradient echo: R2 x 2 in 3 shots with six virtual channels came
+#: out at 0.106 brain NRMSE at the slice weight and by conjugate gradients
+#: alike, and R3 x 2 with twelve virtual channels at 0.176 at the slice
+#: weight, 0.188 at the slab weight and 0.185 by conjugate gradients (0.129,
+#: and 0.137 by conjugate gradients, in 2 shots).
+EPI_WAVELET_SLAB_ACCELERATION = 6.0
 
 #: Largest in-plane line step times bands, divided by its shots, of a
 #: segmented multiband unit solved at ``EPI_WAVELET_SLICE`` instead of
@@ -1722,6 +1844,17 @@ def virtual_coils_for(virtual_coils: int, acceleration: float) -> int:
     return virtual_coils
 
 
+def _acceleration(volume) -> float:
+    """Return the lines of the partition and phase-encode extent ``(coils, z, y, x)`` k-space acquired, over those it holds; 1 where it holds none."""
+    magnitude = volume.abs().cpu().numpy() if hasattr(volume, "cpu") else np.abs(volume)
+    read = magnitude.sum(axis=(0, 3)) > 0
+    if not read.any():
+        return 1.0
+    extent = [np.flatnonzero(read.any(axis=1 - axis)) for axis in (0, 1)]
+    box = np.prod([found[-1] - found[0] + 1 for found in extent])
+    return float(box / read.sum())
+
+
 def _line_step(volume) -> int:
     """Return the most common step between the phase-encode lines ``(coils, z, y, x)`` k-space holds, on any partition; 1 where it holds fewer than two."""
     magnitude = volume.abs().cpu().numpy() if hasattr(volume, "cpu") else np.abs(volume)
@@ -1848,6 +1981,11 @@ SHOT_PHASE_TOLERANCE = 0.02
 #: fraction of the mean curvature.
 SHOT_PHASE_STEPS = 2
 SHOT_PHASE_DAMPING = 1e-3
+
+#: Phase basis functions carried through the forward and adjoint model at
+#: once while a shot's Gauss-Newton curvature is built. Each holds the coils
+#: times the volume, so the peak memory of the fit grows with it.
+SHOT_PHASE_TERMS_AT_ONCE = 28
 
 #: Constant phases, evenly spaced over a turn, tried for each shot of a
 #: segmented unit with no reference image, and the conjugate-gradient steps of
@@ -2098,10 +2236,21 @@ def fit_shot_phases(kspace, maps, masks, image, phases, basis):
             residual = _shot_forward(maps, mask, shifted) - data
             slope = (shifted.conj() * _shot_adjoint(maps, mask, residual)).imag
             gradient = flat @ slope.reshape(-1)
-            normal = _shot_adjoint(
-                maps, mask, _shot_forward(maps, mask, 1j * basis * shifted)
+            curvature = torch.cat(
+                [
+                    flat
+                    @ (
+                        shifted.conj()
+                        * _shot_adjoint(
+                            maps, mask, _shot_forward(maps, mask, 1j * chunk * shifted)
+                        )
+                    )
+                    .imag.reshape(chunk.shape[0], -1)
+                    .T
+                    for chunk in basis.split(SHOT_PHASE_TERMS_AT_ONCE)
+                ],
+                dim=1,
             )
-            curvature = flat @ (shifted.conj() * normal).imag.reshape(terms, -1).T
             curvature = 0.5 * (curvature + curvature.T)
             curvature = curvature + SHOT_PHASE_DAMPING * torch.trace(
                 curvature

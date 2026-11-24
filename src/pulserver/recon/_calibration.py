@@ -365,7 +365,7 @@ def volume_coil_maps(
     from bartorch import fft
 
     kspace = fft(torch.from_numpy(stack), (1,), unitary=True).reshape(stack.shape)
-    maps = estimate(kspace.contiguous())
+    maps = estimate(kspace.contiguous().to(_device(context)))
     maps = np.asarray(maps.detach().cpu().numpy(), dtype=np.complex64)
     if maps.shape != stack.shape:
         raise ValueError(
@@ -600,6 +600,11 @@ def _zero_filled(ref: ReconBuffer) -> np.ndarray:
     return kspace
 
 
+def _device(context: ReconContext) -> str:
+    """Return the device the stream reconstructs on, where its calibration is fitted; ``'cpu'`` when it names none."""
+    return getattr(context, "device", None) or "cpu"
+
+
 def _estimated(
     context: ReconContext, ref: ReconBuffer, estimate: Any
 ) -> CoilSensitivities:
@@ -607,7 +612,7 @@ def _estimated(
     import torch
 
     kspace = _zero_filled(ref)
-    maps = estimate(torch.from_numpy(kspace))
+    maps = estimate(torch.from_numpy(kspace).to(_device(context)))
     maps = np.asarray(maps.detach().cpu().numpy(), dtype=np.complex64)
     if maps.shape != kspace.shape:
         raise ValueError(
