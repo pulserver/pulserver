@@ -446,6 +446,12 @@ class EpiPhaseCorrection(Gadget):
         )
         first = self.navigator_profiles.setdefault(location, profile)
         if first is profile:
+            _log.info(
+                "each excitation's phase is fitted to its navigator against the "
+                "first of encoding space %d, slice %d, and removed from its "
+                "readouts in a 3D encoding space",
+                *location,
+            )
             return None
         return tools.estimate_epi_phase([first, profile, first])
 

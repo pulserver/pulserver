@@ -138,6 +138,17 @@ def _excitation(gadget, constant, linear):
     )
 
 
+def test_the_log_says_when_excitation_phases_are_fitted(caplog):
+    gadget = EpiPhaseCorrection()
+    gadget.startup(SimpleNamespace(header=None))
+    gadget.slabs = {0}
+
+    with caplog.at_level("INFO", logger="pulserver.recon"):
+        _excitation(gadget, 0.0, 0.0)
+
+    assert "fitted to its navigator" in caplog.text
+
+
 @pytest.mark.parametrize("slab", [True, False])
 def test_each_slab_excitation_has_its_navigator_phase_removed_from_every_readout(
     slab,
