@@ -109,6 +109,65 @@ def test_the_navigator_phase_is_removed_from_the_reversed_readouts():
     np.testing.assert_allclose(corrected[0], line, atol=1e-4 * np.abs(line).max())
 
 
+def _hybrid(data, inverse):
+    transform = np.fft.ifft if inverse else np.fft.fft
+    return np.fft.fftshift(transform(np.fft.ifftshift(data)))
+
+
+def _phased(line, constant, linear):
+    """``line`` with the phase ``constant + linear * u`` across the readout, in hybrid space."""
+    u = np.linspace(-1, 1, COLUMNS)
+    return _hybrid(_hybrid(line, True) * np.exp(1j * (constant + linear * u)), False)
+
+
+def _excitation(gadget, constant, linear):
+    """Read one excitation's three-line navigator and a forward and a reversed imaging line, all carrying the phase ``constant + linear * u``; return the two imaging lines as corrected."""
+    grid = (np.arange(COLUMNS) - COLUMNS // 2) / COLUMNS
+    line = _phased(_sampled(grid), constant, linear)
+    forward, backward = AcquisitionFlag(0), AcquisitionFlag.IS_REVERSE
+    nav = AcquisitionFlag.IS_NAVIGATION_DATA
+    for flags, data in (
+        (forward, line[None]),
+        (backward, line[::-1][None]),
+        (forward, line[None]),
+    ):
+        assert gadget(_acquisition(flags | nav), data) is None
+    return (
+        gadget(_acquisition(forward), line[None])[0],
+        gadget(_acquisition(backward), line[::-1][None])[0],
+    )
+
+
+@pytest.mark.parametrize("slab", [True, False])
+def test_each_slab_excitation_has_its_navigator_phase_removed_from_every_readout(
+    slab,
+):
+    gadget = EpiPhaseCorrection()
+    gadget.startup(SimpleNamespace(header=None))
+    gadget.slabs = {0} if slab else set()
+    first = _excitation(gadget, 0.0, 0.0)
+
+    later = _excitation(gadget, 0.7, -0.5)
+
+    grid = (np.arange(COLUMNS) - COLUMNS // 2) / COLUMNS
+    expected = first if slab else [_phased(_sampled(grid), 0.7, -0.5)] * 2
+    scale = np.abs(first[0]).max()
+    for got, want in zip(later, expected, strict=True):
+        np.testing.assert_allclose(got, want, atol=1e-4 * scale)
+
+
+def test_the_excitation_phase_is_left_when_it_is_not_asked_for():
+    gadget = EpiPhaseCorrection(excitation_phase=False)
+    gadget.startup(SimpleNamespace(header=None))
+    gadget.slabs = {0}
+    _excitation(gadget, 0.0, 0.0)
+
+    later = _excitation(gadget, 0.7, -0.5)
+
+    grid = (np.arange(COLUMNS) - COLUMNS // 2) / COLUMNS
+    np.testing.assert_allclose(later[0], _phased(_sampled(grid), 0.7, -0.5), atol=1e-4)
+
+
 def _ramp_positions():
     """Twofold oversampled positions, denser on the ramps, in cycles per pixel."""
     u = np.linspace(-1, 1, 2 * COLUMNS)

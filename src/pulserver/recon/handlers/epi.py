@@ -208,6 +208,17 @@ class EpiPhaseCorrection(Gadget):
     discards are mirrored with it. Navigator readouts are consumed whether or
     not a reference serves.
 
+    In a 3D encoding space, each excitation of a slab is read over a few
+    partitions only, and a shot of a segmented slab is a run of excitations
+    through every partition, so the phase a breath or a field drift adds
+    changes from excitation to excitation within a shot. Each excitation's
+    phase, a constant and a linear term across the readout, is fitted from
+    its navigator: the mean of its forward navigator readouts, in hybrid
+    space, against the first such mean of its slice
+    (:func:`bartorch.tools.estimate_epi_phase` of ``[first, this, first]``),
+    and removed from every imaging readout of the excitation, forward and
+    reversed. ``excitation_phase=False`` leaves it.
+
     A delay of the read gradient moves every sample along the trajectory by
     the gradient times the delay, which on the ramps is not the shift a linear
     phase removes. The first reference train, or the first navigator, of the
@@ -219,6 +230,12 @@ class EpiPhaseCorrection(Gadget):
     resampled with the delay. Without a :class:`RampSampling` (``ramp`` is
     ``None``), the reference and navigator readouts are taken as they come.
 
+    Parameters
+    ----------
+    excitation_phase : bool, default=True
+        Remove each excitation's navigator phase from the readouts of a 3D
+        encoding space.
+
     Attributes
     ----------
     ramp : RampSampling or None
@@ -228,9 +245,21 @@ class EpiPhaseCorrection(Gadget):
 
     ramp = None
 
+    def __init__(self, excitation_phase: bool = True) -> None:
+        super().__init__()
+        self.excitation_phase = bool(excitation_phase)
+
     def startup(self, context):
         super().startup(context)
+        encodings = getattr(getattr(context, "header", None), "encoding", None) or ()
+        self.slabs = {
+            index
+            for index in range(len(encodings))
+            if len(EncodingSpace.from_header(context.header, index).recon_matrix) == 3
+        }
         self.navigator = []
+        self.navigator_profiles = {}
+        self.excitation = None
         self.phase = None
         self.pending = {}
         self.references = {}
@@ -366,6 +395,7 @@ class EpiPhaseCorrection(Gadget):
                     lambda d: float(self._navigator_phase(d)[1]), self.navigator
                 )
                 self.phase = self._navigator_phase()
+                self.excitation = self._excitation_phase(acquisition)
                 self.navigator = []
             return None
         line = (torch.from_numpy(np.ascontiguousarray(data)), reverse)
@@ -385,7 +415,39 @@ class EpiPhaseCorrection(Gadget):
                     "a navigator: reversed lines are flipped but not phase "
                     "corrected, and the images will show an N/2 ghost"
                 )
+        if self.excitation is not None:
+            if reverse:
+                phase = self.excitation if phase is None else phase + self.excitation
+            else:
+                # A forward line takes the phase correct_lines gives a
+                # reversed one, flipped back into its own order first.
+                line = (torch.flip(line[0], [-1]), True)
+                phase = self.excitation
         return tools.correct_lines([line], phase)[0].numpy()
+
+    def _excitation_phase(self, acquisition):
+        """Return the coefficients removing the phase of the excitation whose navigator was just read, against its slice's first; ``None`` outside a 3D encoding space."""
+        if not self.excitation_phase:
+            return None
+        if int(getattr(acquisition, "encoding_space_ref", 0) or 0) not in self.slabs:
+            return None
+        from bartorch import tools
+
+        lines = self._lines(self.navigator)
+        forward = [
+            line
+            for line, (_, _, reverse) in zip(lines, self.navigator, strict=True)
+            if not reverse
+        ]
+        profile = sum(forward) / len(forward)
+        location = (
+            int(getattr(acquisition, "encoding_space_ref", 0) or 0),
+            int(acquisition_label(acquisition, "slice", 0) or 0),
+        )
+        first = self.navigator_profiles.setdefault(location, profile)
+        if first is profile:
+            return None
+        return tools.estimate_epi_phase([first, profile, first])
 
 
 #: First trial delay of the read gradient (s), and the secant steps after it.
@@ -446,8 +508,10 @@ class EpiRecon(PicsRecon):
     gradient echo at 7T does near air-tissue interfaces, the unit is left
     zero-filled and a warning says why.
 
-    A unit whose lines come from several segments (``SEG``), the interleaved
-    shots of a segmented scan, is solved with the phase each shot adds to the
+    A 3D slab is solved as one, the phase of each of its excitations removed
+    from its navigator as its readouts arrive (:class:`EpiPhaseCorrection`). A
+    slice or multiband unit whose lines come from several segments
+    (``SEG``), the interleaved shots of a segmented scan, is solved with the phase each shot adds to the
     image, as MUSE solves it (Chen et al., NeuroImage 2013,
     doi:10.1016/j.neuroimage.2013.01.076): breathing and motion change the
     field and the phase of the image from shot to shot, and lines encoded as
@@ -551,8 +615,10 @@ class EpiRecon(PicsRecon):
     kspace_filter, gradient_unwarp, intensity_correction : bool, default=True
         As :class:`~pulserver.recon.handlers.pics.PicsRecon`.
     shot_phase : bool, default=True
-        Fit and encode the phase each shot of a segmented unit adds to the
-        image; ``False`` solves every unit as one.
+        Fit and encode the phase each shot of a segmented slice or multiband
+        unit adds to the image; ``False`` solves every unit as one. A 3D slab
+        is solved as one, each of its excitations' phase removed from its
+        navigator (:class:`EpiPhaseCorrection`).
     """
 
     def __init__(
@@ -670,8 +736,12 @@ class EpiRecon(PicsRecon):
 
         volume = kspace if kspace.ndim == 4 else kspace[:, None]
         volume = torch.from_numpy(np.ascontiguousarray(volume, dtype=np.complex64))
+        in_plane = self._band_positions(data, volume.shape[1]) is not None
+        slab = volume.shape[1] > 1 and not in_plane
         shots = (
-            shot_masks(data.data, tuple(volume.shape[1:])) if self.shot_phase else None
+            shot_masks(data.data, tuple(volume.shape[1:]))
+            if self.shot_phase and not slab
+            else None
         )
         maps = (
             self._maps(context, data, volume)
@@ -679,7 +749,6 @@ class EpiRecon(PicsRecon):
             else self._maps(context, data, volume, segmented=True)
         )
         location = int(data.counters.get("slice", 0))
-        in_plane = self._band_positions(data, volume.shape[1]) is not None
         reference = self.phase_references.get(location)
         templates = None
         if shots is not None:
