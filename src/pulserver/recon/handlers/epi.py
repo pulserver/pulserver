@@ -1716,10 +1716,18 @@ def fully_encoded_maps(kspace):
 
 
 def epi_nlinv_estimate(kspace):
-    """Return the coil maps of EPI calibration k-space by :func:`~pulserver.recon.handlers.pics.nlinv_estimate` at ``EPI_SOBOLEV``."""
-    if EPI_SOBOLEV is None:
-        return nlinv_estimate(kspace)
-    return nlinv_estimate(kspace, sobolev=EPI_SOBOLEV)
+    """Return the coil maps of EPI calibration k-space by :func:`~pulserver.recon.handlers.pics.nlinv_estimate` at ``EPI_SOBOLEV``.
+
+    A slab's maps are fitted without phase-pole correction: at ``EPI_SOBOLEV``
+    the correction makes BART's fit of a 7T head calibration over ten times
+    slower, and in a simulation of a 128 mm slab the images came out as close
+    to the fully sampled gradient echo without it, with no dark spot.
+    """
+    slab = kspace.ndim == 4 and kspace.shape[1] > 1
+    options = {} if EPI_SOBOLEV is None else {"sobolev": EPI_SOBOLEV}
+    if slab:
+        options["phase_pole"] = False
+    return nlinv_estimate(kspace, **options)
 
 
 def band_maps(context, data, shape):

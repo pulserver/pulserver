@@ -419,8 +419,9 @@ def nlinv_estimate(
     shape: tuple[int, ...] | None = None,
     *,
     sobolev: float | None = None,
+    phase_pole: bool = True,
 ) -> Any:
-    """Return the coil maps :func:`bartorch.apps.nlinv_maps` fits to ``kspace``, with phase-pole correction.
+    """Return the coil maps :func:`bartorch.apps.nlinv_maps` fits to ``kspace``, with phase-pole correction unless ``phase_pole`` is false.
 
     ``bart nlinv -m 1 --phase-pole 0`` on a calibration grid of
     ``CALIBRATION_LINES`` points an axis, capped at the axis: the central
@@ -439,7 +440,7 @@ def nlinv_estimate(
 
     image = kspace.shape[1:] if traj is None else (shape or ())
     grid = [min(CALIBRATION_LINES, n) for n in image if n > 1]
-    detectable = not grid or min(grid) > math.ceil(max(grid) / 20)
+    detectable = phase_pole and (not grid or min(grid) > math.ceil(max(grid) / 20))
     return apps.nlinv_maps(
         kspace,
         traj,

@@ -469,9 +469,12 @@ def test_each_calibration_slice_of_a_stack_is_fitted_its_own_maps(monkeypatch):
     assert len(plugin.slice_calibrations) == 3
 
 
-@pytest.mark.parametrize("shape", [(2, 4, 4, 4), (2, 1, 4, 4), (2, 4, 4)])
-def test_a_slab_or_slice_calibration_is_fitted_at_the_epi_sobolev_weight(
-    monkeypatch, shape
+@pytest.mark.parametrize(
+    ("shape", "pole"),
+    [((2, 4, 4, 4), {"phase_pole": False}), ((2, 1, 4, 4), {}), ((2, 4, 4), {})],
+)
+def test_a_calibration_is_fitted_at_the_epi_sobolev_weight_and_a_slab_without_phase_poles(
+    monkeypatch, shape, pole
 ):
     from pulserver.recon.handlers import epi
 
@@ -483,7 +486,7 @@ def test_a_slab_or_slice_calibration_is_fitted_at_the_epi_sobolev_weight(
 
     epi.epi_nlinv_estimate(np.ones(shape, np.complex64))
 
-    assert given == {"sobolev": 1.0}
+    assert given == {"sobolev": 1.0, **pole}
 
 
 @pytest.mark.parametrize(
