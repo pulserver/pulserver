@@ -446,6 +446,7 @@ class FourierPlayer:
         frequencies. Entries sharing a position share one point of the
         transform.
         """
+        import bartorch
         from bartorch import linop
 
         timeline = self._timeline
@@ -506,11 +507,9 @@ class FourierPlayer:
             )
             held[: last - first, 0] = weights[:, first:last].T
             spectrum = spread.H(held)[: last - first]
-            spectrum = spectrum * (math.sqrt(grid.points) * cube)
-            images[first:last] = torch.fft.fftshift(
-                torch.fft.ifftn(torch.fft.ifftshift(spectrum, dim=dims), dim=dims),
-                dim=dims,
-            )
+            images[first:last] = bartorch.fft(
+                spectrum * cube, dims, inverse=True, unitary=True
+            ).reshape(spectrum.shape)
         grid.images = images
         grid.sensitivities = grid.coils(tissue, rotation, self.device)
         return grid
