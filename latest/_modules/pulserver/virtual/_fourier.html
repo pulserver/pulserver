@@ -441,6 +441,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">._girf</span><span class="w"> </span><span class="kn">import</span> <span class="n">Girf</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._motion</span><span class="w"> </span><span class="kn">import</span> <span class="n">RigidMotion</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._noise</span><span class="w"> </span><span class="kn">import</span> <span class="n">ReceiveNoise</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">._physiology</span><span class="w"> </span><span class="kn">import</span> <span class="n">PhysiologicalField</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._timeline</span><span class="w"> </span><span class="kn">import</span> <span class="n">Timeline</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._tissue</span><span class="w"> </span><span class="kn">import</span> <span class="n">Tissue</span>
 
@@ -611,6 +612,9 @@
 <span class="sd">        The impulse response the gradients play through.</span>
 <span class="sd">    noise : ReceiveNoise, default=None</span>
 <span class="sd">        Receive noise added to every readout; none by default.</span>
+<span class="sd">    physiology : PhysiologicalField, default=None</span>
+<span class="sd">        Field offset common to the object, taken at each readout's excitation;</span>
+<span class="sd">        none by default.</span>
 
 <span class="sd">    Attributes</span>
 <span class="sd">    ----------</span>
@@ -631,6 +635,7 @@
         <span class="n">motion</span><span class="p">:</span> <span class="n">RigidMotion</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">girf</span><span class="p">:</span> <span class="n">Girf</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">noise</span><span class="p">:</span> <span class="n">ReceiveNoise</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">physiology</span><span class="p">:</span> <span class="n">PhysiologicalField</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">if</span> <span class="n">device</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">device</span> <span class="o">=</span> <span class="s2">"cuda"</span> <span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">()</span> <span class="k">else</span> <span class="s2">"cpu"</span>
@@ -644,6 +649,9 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_coils</span> <span class="o">=</span> <span class="n">tissue</span><span class="o">.</span><span class="n">coils</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_noise</span> <span class="o">=</span> <span class="n">noise</span>
         <span class="n">pulses</span> <span class="o">=</span> <span class="n">timeline</span><span class="o">.</span><span class="n">pulses</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_physiology</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="kc">None</span> <span class="k">if</span> <span class="n">physiology</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">_physiological</span><span class="p">(</span><span class="n">timeline</span><span class="p">,</span> <span class="n">physiology</span><span class="p">)</span>
+        <span class="p">)</span>
         <span class="n">events</span> <span class="o">=</span> <span class="n">_events</span><span class="p">(</span><span class="n">timeline</span><span class="p">)</span>
         <span class="n">everything</span> <span class="o">=</span> <span class="n">_Entries</span><span class="o">.</span><span class="n">of</span><span class="p">(</span><span class="n">tissue</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
         <span class="n">voxel</span> <span class="o">=</span> <span class="n">_voxel</span><span class="p">(</span><span class="n">timeline</span><span class="p">,</span> <span class="n">everything</span><span class="p">,</span> <span class="n">tissue</span><span class="o">.</span><span class="n">spacing</span><span class="p">)</span>
@@ -712,6 +720,12 @@
         <span class="n">firsts</span> <span class="o">=</span> <span class="n">timeline</span><span class="o">.</span><span class="n">readouts</span><span class="o">.</span><span class="n">first</span> <span class="o">-</span> <span class="n">timeline</span><span class="o">.</span><span class="n">readouts</span><span class="o">.</span><span class="n">first</span><span class="p">[</span><span class="n">begin</span><span class="p">]</span>
         <span class="k">for</span> <span class="n">at</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">start</span><span class="p">,</span> <span class="n">stop</span><span class="p">):</span>
             <span class="n">readout</span> <span class="o">=</span> <span class="n">samples</span><span class="p">[:,</span> <span class="n">firsts</span><span class="p">[</span><span class="n">at</span><span class="p">]</span> <span class="p">:</span> <span class="n">firsts</span><span class="p">[</span><span class="n">at</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]]</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_physiology</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">offset_hz</span><span class="p">,</span> <span class="n">start_s</span><span class="p">,</span> <span class="n">dwell_s</span> <span class="o">=</span> <span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="n">at</span><span class="p">]</span> <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_physiology</span><span class="p">)</span>
+                <span class="n">since</span> <span class="o">=</span> <span class="n">start_s</span> <span class="o">+</span> <span class="n">dwell_s</span> <span class="o">*</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">readout</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span> <span class="o">+</span> <span class="mf">0.5</span><span class="p">)</span>
+                <span class="n">readout</span> <span class="o">=</span> <span class="n">readout</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="mi">2</span><span class="n">j</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span> <span class="o">*</span> <span class="n">offset_hz</span> <span class="o">*</span> <span class="n">since</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span>
+                    <span class="n">np</span><span class="o">.</span><span class="n">complex64</span>
+                <span class="p">)</span>
             <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_noise</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
                 <span class="n">readout</span> <span class="o">=</span> <span class="n">readout</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">_noise</span><span class="p">(</span><span class="n">at</span><span class="p">,</span> <span class="n">readout</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
             <span class="k">yield</span> <span class="n">readout</span></div>
@@ -1100,6 +1114,7 @@
     <span class="n">motion</span><span class="p">:</span> <span class="n">RigidMotion</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">girf</span><span class="p">:</span> <span class="n">Girf</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">noise</span><span class="p">:</span> <span class="n">ReceiveNoise</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">physiology</span><span class="p">:</span> <span class="n">PhysiologicalField</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">"""Return every readout the cache beside a sequence file acquires of a phantom's tissue.</span>
 
@@ -1117,9 +1132,29 @@
         <span class="n">motion</span><span class="o">=</span><span class="n">motion</span><span class="p">,</span>
         <span class="n">girf</span><span class="o">=</span><span class="n">girf</span><span class="p">,</span>
         <span class="n">noise</span><span class="o">=</span><span class="n">noise</span><span class="p">,</span>
+        <span class="n">physiology</span><span class="o">=</span><span class="n">physiology</span><span class="p">,</span>
     <span class="p">)</span>
     <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="n">player</span><span class="o">.</span><span class="n">readouts</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">player</span><span class="o">.</span><span class="n">blocks</span><span class="p">))</span></div>
 
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_physiological</span><span class="p">(</span>
+    <span class="n">timeline</span><span class="p">:</span> <span class="n">Timeline</span><span class="p">,</span> <span class="n">field</span><span class="p">:</span> <span class="n">PhysiologicalField</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Return each readout's offset (Hz) at its excitation, its first sample's start from that excitation (s) and its dwell (s).</span>
+
+<span class="sd">    A readout before the first excitation takes no offset.</span>
+<span class="sd">    """</span>
+    <span class="n">readouts</span><span class="p">,</span> <span class="n">pulses</span><span class="p">,</span> <span class="n">played</span> <span class="o">=</span> <span class="n">timeline</span><span class="o">.</span><span class="n">readouts</span><span class="p">,</span> <span class="n">timeline</span><span class="o">.</span><span class="n">pulses</span><span class="p">,</span> <span class="n">timeline</span><span class="o">.</span><span class="n">played</span>
+    <span class="n">excitations</span> <span class="o">=</span> <span class="n">pulses</span><span class="o">.</span><span class="n">time_us</span><span class="p">[</span><span class="n">pulses</span><span class="o">.</span><span class="n">use</span> <span class="o">==</span> <span class="n">_EXCITATION</span><span class="p">]</span>
+    <span class="n">block</span> <span class="o">=</span> <span class="n">readouts</span><span class="o">.</span><span class="n">block</span>
+    <span class="n">start_us</span> <span class="o">=</span> <span class="n">timeline</span><span class="o">.</span><span class="n">starts_us</span><span class="p">[</span><span class="n">block</span><span class="p">]</span> <span class="o">+</span> <span class="n">played</span><span class="p">[</span><span class="s2">"adc_delay_us"</span><span class="p">][</span><span class="n">block</span><span class="p">]</span>
+    <span class="n">dwell_s</span> <span class="o">=</span> <span class="mf">1e-9</span> <span class="o">*</span> <span class="n">played</span><span class="p">[</span><span class="s2">"adc_dwell_ns"</span><span class="p">][</span><span class="n">block</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+    <span class="n">last</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">searchsorted</span><span class="p">(</span><span class="n">excitations</span><span class="p">,</span> <span class="n">start_us</span><span class="p">,</span> <span class="n">side</span><span class="o">=</span><span class="s2">"right"</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span>
+    <span class="n">excited</span> <span class="o">=</span> <span class="n">last</span> <span class="o">&gt;=</span> <span class="mi">0</span>
+    <span class="n">fired_us</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">excited</span><span class="p">,</span> <span class="n">excitations</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="n">last</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="kc">None</span><span class="p">)],</span> <span class="n">start_us</span><span class="p">)</span>
+    <span class="n">offset_hz</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">excited</span><span class="p">,</span> <span class="n">field</span><span class="p">(</span><span class="mf">1e-6</span> <span class="o">*</span> <span class="n">fired_us</span><span class="p">),</span> <span class="mf">0.0</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">offset_hz</span><span class="p">,</span> <span class="mf">1e-6</span> <span class="o">*</span> <span class="p">(</span><span class="n">start_us</span> <span class="o">-</span> <span class="n">fired_us</span><span class="p">),</span> <span class="n">dwell_s</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_poses</span><span class="p">(</span>

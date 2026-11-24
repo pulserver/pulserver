@@ -263,6 +263,7 @@ from.
    RigidMotion
    Girf
    ReceiveNoise
+   PhysiologicalField
    COIL_NOISE
    Scan
    Chunk

@@ -547,7 +547,10 @@ the images of the terms encoded along the trajectory by bartorch’s NUFFT.</p>
 <tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.virtual.ReceiveNoise.html#pulserver.virtual.ReceiveNoise" title="pulserver.virtual.ReceiveNoise"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ReceiveNoise</span></code></a></p></td>
 <td><p>Complex Gaussian receive noise, correlated between channels, added to every readout; drawn from the array’s sensitivities over the tissue plus each loop’s own coil noise.</p></td>
 </tr>
-<tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.virtual.COIL_NOISE.html#pulserver.virtual.COIL_NOISE" title="pulserver.virtual.COIL_NOISE"><code class="xref py py-obj docutils literal notranslate"><span class="pre">COIL_NOISE</span></code></a></p></td>
+<tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.virtual.PhysiologicalField.html#pulserver.virtual.PhysiologicalField" title="pulserver.virtual.PhysiologicalField"><code class="xref py py-obj docutils literal notranslate"><span class="pre">PhysiologicalField</span></code></a></p></td>
+<td><p>Respiratory and cardiac field offset common to the object, a sum of sinusoids of time, taken at each readout’s excitation.</p></td>
+</tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.virtual.COIL_NOISE.html#pulserver.virtual.COIL_NOISE" title="pulserver.virtual.COIL_NOISE"><code class="xref py py-obj docutils literal notranslate"><span class="pre">COIL_NOISE</span></code></a></p></td>
 <td><p>Each loop’s own coil and preamplifier noise variance, as a fraction of the mean variance the sample induces.</p></td>
 </tr>
 </tbody>
