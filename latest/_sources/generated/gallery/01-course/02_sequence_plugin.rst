@@ -394,9 +394,9 @@ The same three edits, now answered by your ``evaluate``:
 
  .. code-block:: none
 
-    8 ms: valid, TE 8.0 ms, scan time 38.2 s
+    8 ms: valid, TE 8.0 ms, scan time 41.0 s
     2 ms: refused, the requested TE of 2.000 ms is shorter than the 3.400 ms this readout can achieve
-    Minimum: valid, TE 3.4 ms, scan time 38.2 s
+    Minimum: valid, TE 3.4 ms, scan time 41.0 s
 
 
 
@@ -550,7 +550,7 @@ What this lesson built, stated the way you would ask an agent for it:
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 1.849 seconds)
+   **Total running time of the script:** (0 minutes 1.749 seconds)
 
 
 .. _sphx_glr_download_generated_gallery_01-course_02_sequence_plugin.py:

@@ -440,6 +440,7 @@
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">._girf</span><span class="w"> </span><span class="kn">import</span> <span class="n">Girf</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._motion</span><span class="w"> </span><span class="kn">import</span> <span class="n">RigidMotion</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">._noise</span><span class="w"> </span><span class="kn">import</span> <span class="n">ReceiveNoise</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._timeline</span><span class="w"> </span><span class="kn">import</span> <span class="n">Timeline</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._tissue</span><span class="w"> </span><span class="kn">import</span> <span class="n">Tissue</span>
 
@@ -608,6 +609,8 @@
 <span class="sd">        alone, its excitation, relaxation and coil sensitivities following it.</span>
 <span class="sd">    girf : Girf, default=None</span>
 <span class="sd">        The impulse response the gradients play through.</span>
+<span class="sd">    noise : ReceiveNoise, default=None</span>
+<span class="sd">        Receive noise added to every readout; none by default.</span>
 
 <span class="sd">    Attributes</span>
 <span class="sd">    ----------</span>
@@ -627,6 +630,7 @@
         <span class="n">tolerance</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">TOLERANCE</span><span class="p">,</span>
         <span class="n">motion</span><span class="p">:</span> <span class="n">RigidMotion</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">girf</span><span class="p">:</span> <span class="n">Girf</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">noise</span><span class="p">:</span> <span class="n">ReceiveNoise</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">if</span> <span class="n">device</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">device</span> <span class="o">=</span> <span class="s2">"cuda"</span> <span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">()</span> <span class="k">else</span> <span class="s2">"cpu"</span>
@@ -638,6 +642,7 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_phases</span> <span class="o">=</span> <span class="n">_framed</span><span class="p">(</span><span class="n">timeline</span><span class="p">,</span> <span class="n">centre</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_tolerance</span> <span class="o">=</span> <span class="n">tolerance</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_coils</span> <span class="o">=</span> <span class="n">tissue</span><span class="o">.</span><span class="n">coils</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_noise</span> <span class="o">=</span> <span class="n">noise</span>
         <span class="n">pulses</span> <span class="o">=</span> <span class="n">timeline</span><span class="o">.</span><span class="n">pulses</span>
         <span class="n">events</span> <span class="o">=</span> <span class="n">_events</span><span class="p">(</span><span class="n">timeline</span><span class="p">)</span>
         <span class="n">everything</span> <span class="o">=</span> <span class="n">_Entries</span><span class="o">.</span><span class="n">of</span><span class="p">(</span><span class="n">tissue</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
@@ -706,7 +711,10 @@
         <span class="n">begin</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">samples</span> <span class="o">=</span> <span class="n">held</span>
         <span class="n">firsts</span> <span class="o">=</span> <span class="n">timeline</span><span class="o">.</span><span class="n">readouts</span><span class="o">.</span><span class="n">first</span> <span class="o">-</span> <span class="n">timeline</span><span class="o">.</span><span class="n">readouts</span><span class="o">.</span><span class="n">first</span><span class="p">[</span><span class="n">begin</span><span class="p">]</span>
         <span class="k">for</span> <span class="n">at</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">start</span><span class="p">,</span> <span class="n">stop</span><span class="p">):</span>
-            <span class="k">yield</span> <span class="n">samples</span><span class="p">[:,</span> <span class="n">firsts</span><span class="p">[</span><span class="n">at</span><span class="p">]</span> <span class="p">:</span> <span class="n">firsts</span><span class="p">[</span><span class="n">at</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]]</span></div>
+            <span class="n">readout</span> <span class="o">=</span> <span class="n">samples</span><span class="p">[:,</span> <span class="n">firsts</span><span class="p">[</span><span class="n">at</span><span class="p">]</span> <span class="p">:</span> <span class="n">firsts</span><span class="p">[</span><span class="n">at</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]]</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_noise</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">readout</span> <span class="o">=</span> <span class="n">readout</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">_noise</span><span class="p">(</span><span class="n">at</span><span class="p">,</span> <span class="n">readout</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+            <span class="k">yield</span> <span class="n">readout</span></div>
 
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_ahead</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">start</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">stop</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
@@ -1091,6 +1099,7 @@
     <span class="n">device</span><span class="p">:</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">motion</span><span class="p">:</span> <span class="n">RigidMotion</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">girf</span><span class="p">:</span> <span class="n">Girf</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">noise</span><span class="p">:</span> <span class="n">ReceiveNoise</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">"""Return every readout the cache beside a sequence file acquires of a phantom's tissue.</span>
 
@@ -1107,6 +1116,7 @@
         <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">,</span>
         <span class="n">motion</span><span class="o">=</span><span class="n">motion</span><span class="p">,</span>
         <span class="n">girf</span><span class="o">=</span><span class="n">girf</span><span class="p">,</span>
+        <span class="n">noise</span><span class="o">=</span><span class="n">noise</span><span class="p">,</span>
     <span class="p">)</span>
     <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="n">player</span><span class="o">.</span><span class="n">readouts</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">player</span><span class="o">.</span><span class="n">blocks</span><span class="p">))</span></div>
 
@@ -2176,7 +2186,10 @@
             <span class="p">)</span>
         <span class="k">return</span> <span class="n">amplitudes</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
 
-    <span class="n">uses</span> <span class="o">=</span> <span class="p">{</span><span class="nb">int</span><span class="p">(</span><span class="n">use</span><span class="p">)</span> <span class="k">for</span> <span class="n">use</span> <span class="ow">in</span> <span class="n">RfUse</span><span class="p">}</span>
+    <span class="c1"># The kernels play a pulse tagged as an inversion as an ideal</span>
+    <span class="c1"># Mz -&gt; -Mz on every isochromat; a played pulse is the rotation its</span>
+    <span class="c1"># profile gives, so a spectrally selective inversion leaves water alone.</span>
+    <span class="n">uses</span> <span class="o">=</span> <span class="p">{</span><span class="nb">int</span><span class="p">(</span><span class="n">use</span><span class="p">)</span> <span class="k">for</span> <span class="n">use</span> <span class="ow">in</span> <span class="n">RfUse</span><span class="p">}</span> <span class="o">-</span> <span class="p">{</span><span class="nb">int</span><span class="p">(</span><span class="n">RfUse</span><span class="o">.</span><span class="n">INVERSION</span><span class="p">)}</span>
     <span class="n">events</span> <span class="o">=</span> <span class="p">[]</span>
     <span class="k">for</span> <span class="n">kind</span><span class="p">,</span> <span class="n">when</span><span class="p">,</span> <span class="n">selector</span><span class="p">,</span> <span class="n">flip</span><span class="p">,</span> <span class="n">use</span><span class="p">,</span> <span class="n">phase</span><span class="p">,</span> <span class="n">orders</span><span class="p">,</span> <span class="n">shift_us</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span>
         <span class="n">stream</span><span class="o">.</span><span class="n">kind</span><span class="o">.</span><span class="n">tolist</span><span class="p">(),</span>
@@ -2194,7 +2207,11 @@
                 <span class="n">SequenceEvent</span><span class="o">.</span><span class="n">rf</span><span class="p">(</span>
                     <span class="n">when</span><span class="p">,</span>
                     <span class="mi">0</span><span class="p">,</span>
-                    <span class="n">RfUse</span><span class="p">(</span><span class="n">use</span><span class="p">)</span> <span class="k">if</span> <span class="n">use</span> <span class="ow">in</span> <span class="n">uses</span> <span class="k">else</span> <span class="n">RfUse</span><span class="o">.</span><span class="n">UNKNOWN</span><span class="p">,</span>
+                    <span class="n">RfUse</span><span class="p">(</span><span class="n">use</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="n">use</span> <span class="ow">in</span> <span class="n">uses</span>
+                    <span class="k">else</span> <span class="n">RfUse</span><span class="o">.</span><span class="n">OTHER</span>
+                    <span class="k">if</span> <span class="n">use</span> <span class="o">==</span> <span class="n">RfUse</span><span class="o">.</span><span class="n">INVERSION</span>
+                    <span class="k">else</span> <span class="n">RfUse</span><span class="o">.</span><span class="n">UNKNOWN</span><span class="p">,</span>
                     <span class="n">amplitude</span><span class="p">(</span><span class="n">selector</span><span class="p">,</span> <span class="n">flip</span><span class="p">),</span>
                     <span class="n">phase</span><span class="p">,</span>
                 <span class="p">)</span>

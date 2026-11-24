@@ -85,7 +85,7 @@ written to a Pulseq file as pulserver writes it.
 
  .. code-block:: none
 
-    534 blocks, 22.25 s
+    600 blocks, 25.00 s
 
 
 
@@ -242,7 +242,7 @@ result is the **cache** the scanner loads, written beside the Pulseq file by
  .. code-block:: none
 
     gre2d.pseg
-    534 blocks = 89 TRs of 6 blocks
+    600 blocks = 100 TRs of 6 blocks
     segment 0: 5 block(s), RF, gradients and ADC
     segment 1: 1 block(s), a pure delay
 
@@ -339,7 +339,7 @@ What this lesson did, stated the way you would ask an agent for it:
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.623 seconds)
+   **Total running time of the script:** (0 minutes 0.795 seconds)
 
 
 .. _sphx_glr_download_generated_gallery_01-course_03_scanner_representation.py:

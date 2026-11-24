@@ -549,7 +549,7 @@ written to a Pulseq file as pulserver writes it.</p>
 </span><a class="sphx-glr-backref-module-pypulseqpp sphx-glr-backref-type-py-method reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.Sequence.write.html#pypulseqpp.Sequence.write" title="pypulseqpp.Sequence.write"><span class="n">seq</span><span class="o">.</span><span class="n">write</span></a><span class="p">(</span><a class="sphx-glr-backref-module-pathlib sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.PosixPath" title="pathlib.PosixPath"><span class="n">path</span></a><span class="p">)</span><span class="w">
 </span><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><a class="sphx-glr-backref-module-pypulseqpp sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.Sequence.html#pypulseqpp.Sequence" title="pypulseqpp.Sequence"><span class="n">seq</span></a><span class="o">.</span><span class="n">num_blocks</span><span class="si">}</span><span class="s2"> blocks, </span><span class="si">{</span><a class="sphx-glr-backref-module-pypulseqpp sphx-glr-backref-type-py-method reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.Sequence.duration.html#pypulseqpp.Sequence.duration" title="pypulseqpp.Sequence.duration"><span class="n">seq</span><span class="o">.</span><span class="n">duration</span></a><span class="p">(</span><span class="p">)</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2"> s</span><span class="s2">&quot;</span><span class="p">)</span><span class="w">
 </span></pre></div></div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>534 blocks, 22.25 s
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>600 blocks, 25.00 s
 </pre></div>
 </div>
 </section>
@@ -630,7 +630,7 @@ result is the <strong>cache</strong> the scanner loads, written beside the Pulse
 </span>    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="s2">segment </span><span class="si">{</span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="int"><span class="n">number</span></a><span class="si">}</span><span class="s2">: </span><span class="si">{</span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="int"><span class="n">segment</span></a><span class="p">[</span><span class="s1">'</span><span class="s1">num_blocks</span><span class="s1">'</span><span class="p">]</span><span class="si">}</span><span class="s2"> block(s), </span><span class="si">{</span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="str"><span class="n">kind</span></a><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span><span class="w">
 </span></pre></div></div>
 <div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>gre2d.pseg
-534 blocks = 89 TRs of 6 blocks
+600 blocks = 100 TRs of 6 blocks
 segment 0: 5 block(s), RF, gradients and ADC
 segment 1: 1 block(s), a pure delay
 </pre></div>
@@ -679,7 +679,7 @@ with pulserver.ir.convert, report its segments, and plot the
 phase-encoding amplitude and RF phase of every TR from pulserver.ir.play.
 </pre></div>
 </div>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.623 seconds)</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.795 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-generated-gallery-01-course-03-scanner-representation-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../../../_downloads/fa654f562122bb648cecb3c26391d482/03_scanner_representation.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">03_scanner_representation.ipynb</span></code></a></p>

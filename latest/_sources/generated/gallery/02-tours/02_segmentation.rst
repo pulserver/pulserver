@@ -99,8 +99,8 @@ write it to a file and convert it under the scanner limits.
 
  .. code-block:: none
 
-    585 blocks in the file; cache se2d.pseg
-    repetition: 9 blocks, TR 17.56 ms, played 65 times
+    810 blocks in the file; cache se2d.pseg
+    repetition: 9 blocks, TR 17.56 ms, played 90 times
     virtual segment 0: blocks 1-2, 3.56 ms, events
     virtual segment 1: blocks 3-3, 0.02 ms, pure delay
     virtual segment 2: blocks 4-8, 11.58 ms, events
@@ -178,10 +178,10 @@ phase-encoding amplitude.
  .. code-block:: none
 
        ny  slices   blocks  repetitions  virtual segments
-       64       1     1326          221                 2
-      128       1     1710          285                 2
-      256       1     2478          413                 2
-      256       4     8304         1384                 2
+       64       1     4428          738                 2
+      128       1     4812          802                 2
+      256       1     5580          930                 2
+      256       4    12336         2056                 2
 
 
 
@@ -226,9 +226,9 @@ reads the chain as the subsequences of one scan.
 
     ['epi.seq', 'epi_epi_2d_field_forward.seq', 'epi_epi_2d_field_reversed.seq', 'epi_epi_2d.seq']
     subsequence 0: 33 blocks per repetition, 3 repetitions
-    subsequence 1: 73 blocks per repetition, 6 repetitions
-    subsequence 2: 73 blocks per repetition, 6 repetitions
-    subsequence 3: 73 blocks per repetition, 6 repetitions
+    subsequence 1: 73 blocks per repetition, 39 repetitions
+    subsequence 2: 73 blocks per repetition, 39 repetitions
+    subsequence 3: 73 blocks per repetition, 39 repetitions
     virtual segments over the chain: 4
 
 
@@ -244,7 +244,7 @@ base block, so both subsequences play the virtual segments printed above.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.602 seconds)
+   **Total running time of the script:** (0 minutes 0.735 seconds)
 
 
 .. _sphx_glr_download_generated_gallery_02-tours_02_segmentation.py:

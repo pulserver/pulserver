@@ -175,7 +175,7 @@ sequence had to change: here the receiver bandwidth.
 
  .. code-block:: none
 
-    valid: True, scan time 22.2 s
+    valid: True, scan time 25.0 s
     bandwidth: requested 250000.0, achieved 100000.0
 
 
@@ -207,7 +207,7 @@ both in the store, under the scan that plays them.
 
  .. code-block:: none
 
-    GENERATED 0defbe2fbc93cb6af0
+    GENERATED a1ea28ce19c941b92d
 
     ['manifest.json', 'resolved.protocol', 'sequence.pseg', 'sequence.seq']
 
@@ -323,7 +323,7 @@ What this lesson did, stated the way you would ask an agent for it:
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 0.757 seconds)
+   **Total running time of the script:** (0 minutes 0.817 seconds)
 
 
 .. _sphx_glr_download_generated_gallery_01-course_01_protocol_to_image.py:

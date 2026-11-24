@@ -437,6 +437,7 @@
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">pypulseqpp</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pp</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">blochsim.simulators.gradient_echo</span><span class="w"> </span><span class="kn">import</span> <span class="n">FAT_SPECTRA</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">._coils</span><span class="w"> </span><span class="kn">import</span> <span class="n">Coil</span>
 
@@ -538,19 +539,13 @@
 <span class="sd">        a single peak at pypulseqpp's fat shift without one.</span>
 <span class="sd">    """</span>
 
-    <span class="c1">#: The six-peak spectrum of subcutaneous fat measured at 7 T (Ren et al.,</span>
-    <span class="c1">#: J Lipid Res 49:2055, 2008), ``(shift_ppm, fraction)`` relative to</span>
-    <span class="c1">#: water at 4.7 ppm: the methyl, methylene, allylic, diallylic, glycerol</span>
-    <span class="c1">#: and olefinic resonances. The olefinic peak lies on the water side, out</span>
-    <span class="c1">#: of reach of a fat-saturation pulse centred on the methylene peak.</span>
-    <span class="n">FAT_PEAKS</span> <span class="o">=</span> <span class="p">(</span>
-        <span class="p">(</span><span class="o">-</span><span class="mf">3.80</span><span class="p">,</span> <span class="mf">0.087</span><span class="p">),</span>
-        <span class="p">(</span><span class="o">-</span><span class="mf">3.40</span><span class="p">,</span> <span class="mf">0.693</span><span class="p">),</span>
-        <span class="p">(</span><span class="o">-</span><span class="mf">2.60</span><span class="p">,</span> <span class="mf">0.128</span><span class="p">),</span>
-        <span class="p">(</span><span class="o">-</span><span class="mf">1.94</span><span class="p">,</span> <span class="mf">0.004</span><span class="p">),</span>
-        <span class="p">(</span><span class="o">-</span><span class="mf">0.39</span><span class="p">,</span> <span class="mf">0.039</span><span class="p">),</span>
-        <span class="p">(</span><span class="mf">0.60</span><span class="p">,</span> <span class="mf">0.048</span><span class="p">),</span>
-    <span class="p">)</span>
+    <span class="c1">#: The six-peak spectrum of fat, ``(shift_ppm, fraction)`` relative to</span>
+    <span class="c1">#: water: blochsim's ``middleton2009`` entry of</span>
+    <span class="c1">#: ``blochsim.simulators.gradient_echo.FAT_SPECTRA``, the methyl,</span>
+    <span class="c1">#: methylene, allylic, diallylic, glycerol and olefinic resonances. The</span>
+    <span class="c1">#: olefinic peak lies on the water side, out of reach of a fat-saturation</span>
+    <span class="c1">#: pulse centred on the methylene peak.</span>
+    <span class="n">FAT_PEAKS</span> <span class="o">=</span> <span class="n">FAT_SPECTRA</span><span class="p">[</span><span class="s2">"middleton2009"</span><span class="p">]</span>
 
     <span class="c1">#: Isotropic diffusion coefficients, in m²/s, of the tissue classes whose</span>
     <span class="c1">#: water diffusion is measured: the apparent diffusion coefficients of</span>

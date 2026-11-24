@@ -262,6 +262,8 @@ from.
    Tissue
    RigidMotion
    Girf
+   ReceiveNoise
+   COIL_NOISE
    Scan
    Chunk
    SAMPLE_RATE

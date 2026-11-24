@@ -559,8 +559,8 @@ write it to a file and convert it under the scanner limits.
 </span>        <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="dict"><span class="n">segment</span></a><span class="p">[</span><span class="s1">'</span><span class="s1">duration_us</span><span class="s1">'</span><span class="p">]</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="mf">1e3</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2"> ms, </span><span class="si">{</span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="str"><span class="n">kind</span></a><span class="si">}</span><span class="s2">&quot;</span><span class="w">
 </span>    <span class="p">)</span><span class="w">
 </span></pre></div></div>
-<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>585 blocks in the file; cache se2d.pseg
-repetition: 9 blocks, TR 17.56 ms, played 65 times
+<div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>810 blocks in the file; cache se2d.pseg
+repetition: 9 blocks, TR 17.56 ms, played 90 times
 virtual segment 0: blocks 1-2, 3.56 ms, events
 virtual segment 1: blocks 3-3, 0.02 ms, pure delay
 virtual segment 2: blocks 4-8, 11.58 ms, events
@@ -596,10 +596,10 @@ phase-encoding amplitude.</p>
 </span>    <a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#list" title="list"><span class="n">rows</span></a><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="p">(</span><a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="int"><span class="n">n_y</span></a><span class="p">,</span> <a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="int"><span class="n">n_slices</span></a><span class="p">,</span> <a class="sphx-glr-backref-module-pypulseqpp sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://pulserver.github.io/pypulseqpp/latest/generated/pypulseqpp.Sequence.html#pypulseqpp.Sequence" title="pypulseqpp.Sequence"><span class="n">gre</span></a><span class="o">.</span><span class="n">num_blocks</span><span class="p">,</span> <a class="sphx-glr-backref-module-builtins sphx-glr-backref-type-py-class sphx-glr-backref-instance reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="dict"><span class="n">result</span></a><span class="p">)</span><span class="p">)</span><span class="w">
 </span></pre></div></div>
 <div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span> ny  slices   blocks  repetitions  virtual segments
- 64       1     1326          221                 2
-128       1     1710          285                 2
-256       1     2478          413                 2
-256       4     8304         1384                 2
+ 64       1     4428          738                 2
+128       1     4812          802                 2
+256       1     5580          930                 2
+256       4    12336         2056                 2
 </pre></div>
 </div>
 </section>
@@ -626,9 +626,9 @@ reads the chain as the subsequences of one scan.</p>
 </span></pre></div></div>
 <div class="sphx-glr-script-out highlight-none notranslate"><div class="highlight"><pre><span></span>['epi.seq', 'epi_epi_2d_field_forward.seq', 'epi_epi_2d_field_reversed.seq', 'epi_epi_2d.seq']
 subsequence 0: 33 blocks per repetition, 3 repetitions
-subsequence 1: 73 blocks per repetition, 6 repetitions
-subsequence 2: 73 blocks per repetition, 6 repetitions
-subsequence 3: 73 blocks per repetition, 6 repetitions
+subsequence 1: 73 blocks per repetition, 39 repetitions
+subsequence 2: 73 blocks per repetition, 39 repetitions
+subsequence 3: 73 blocks per repetition, 39 repetitions
 virtual segments over the chain: 4
 </pre></div>
 </div>
@@ -636,7 +636,7 @@ virtual segments over the chain: 4
 one. The reference prescan reverses the sign of the phase-encoding
 gradients. That sign is an amplitude of each segment instance, not part of a
 base block, so both subsequences play the virtual segments printed above.</p>
-<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.602 seconds)</p>
+<p class="sphx-glr-timing"><strong>Total running time of the script:</strong> (0 minutes 0.735 seconds)</p>
 <div class="sphx-glr-footer sphx-glr-footer-example docutils container" id="sphx-glr-download-generated-gallery-02-tours-02-segmentation-py">
 <div class="sphx-glr-download sphx-glr-download-jupyter docutils container">
 <p><a class="reference download internal" download="" href="../../../_downloads/cc3085e7aab3c1f88ed2d8edcaf455fc/02_segmentation.ipynb"><code class="xref download docutils literal notranslate"><span class="pre">Download</span> <span class="pre">Jupyter</span> <span class="pre">notebook:</span> <span class="pre">02_segmentation.ipynb</span></code></a></p>

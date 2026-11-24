@@ -30,6 +30,8 @@ the images of the terms encoded along the trajectory by bartorch's NUFFT.
 | {obj}`~pulserver.virtual.Tissue` | A phantom sampled for the Fourier engine: each cube's position, proton density, relaxation times and frequency, the transmit field it sees and the coils' receive sensitivities. |
 | {obj}`~pulserver.virtual.RigidMotion` | A subject's rigid pose against scan time: a rotation about a centre and a translation, applied to each readout at its echo. |
 | {obj}`~pulserver.virtual.Girf` | A gradient impulse response per physical axis, through which the played gradients' moment is filtered. |
+| {obj}`~pulserver.virtual.ReceiveNoise` | Complex Gaussian receive noise, correlated between channels, added to every readout; drawn from the array's sensitivities over the tissue plus each loop's own coil noise. |
+| {obj}`~pulserver.virtual.COIL_NOISE` | Each loop's own coil and preamplifier noise variance, as a fraction of the mean variance the sample induces. |
 
 ## Scan clock and sound
 

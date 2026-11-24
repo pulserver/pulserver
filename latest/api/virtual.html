@@ -544,6 +544,12 @@ the images of the terms encoded along the trajectory by bartorch’s NUFFT.</p>
 <tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.virtual.Girf.html#pulserver.virtual.Girf" title="pulserver.virtual.Girf"><code class="xref py py-obj docutils literal notranslate"><span class="pre">Girf</span></code></a></p></td>
 <td><p>A gradient impulse response per physical axis, through which the played gradients’ moment is filtered.</p></td>
 </tr>
+<tr class="row-odd"><td><p><a class="reference internal" href="../generated/pulserver.virtual.ReceiveNoise.html#pulserver.virtual.ReceiveNoise" title="pulserver.virtual.ReceiveNoise"><code class="xref py py-obj docutils literal notranslate"><span class="pre">ReceiveNoise</span></code></a></p></td>
+<td><p>Complex Gaussian receive noise, correlated between channels, added to every readout; drawn from the array’s sensitivities over the tissue plus each loop’s own coil noise.</p></td>
+</tr>
+<tr class="row-even"><td><p><a class="reference internal" href="../generated/pulserver.virtual.COIL_NOISE.html#pulserver.virtual.COIL_NOISE" title="pulserver.virtual.COIL_NOISE"><code class="xref py py-obj docutils literal notranslate"><span class="pre">COIL_NOISE</span></code></a></p></td>
+<td><p>Each loop’s own coil and preamplifier noise variance, as a fraction of the mean variance the sample induces.</p></td>
+</tr>
 </tbody>
 </table>
 </div>
