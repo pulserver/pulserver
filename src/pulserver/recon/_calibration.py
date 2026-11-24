@@ -831,34 +831,47 @@ def projected_readout(
             data.dtype, copy=False
         )
     matrix, reverse = grid if grid is not None else (None, False)
-    line = data if matrix is None else data @ matrix
-    if line.shape[-1] != basis.matrix.shape[0]:
+    columns = basis.matrix.shape[0]
+    if (data.shape[-1] if matrix is None else matrix.shape[-1]) != columns:
         raise ValueError(
-            f"a readout of {line.shape[-1]} grid points cannot be projected onto a "
-            f"geometric basis of {basis.matrix.shape[0]}"
+            f"a readout of "
+            f"{data.shape[-1] if matrix is None else matrix.shape[-1]} grid "
+            f"points cannot be projected onto a geometric basis of {columns}"
         )
-    if reverse:
-        line = line[:, ::-1]
-    virtual = _to_kspace(np.einsum("xvc,cx->vx", basis.matrix, _to_hybrid(line)))
-    if reverse:
-        virtual = virtual[:, ::-1]
-    if matrix is not None:
-        virtual = virtual @ _pseudo_inverse(matrix)
+    into, out_of = _grid_transforms(matrix, reverse, columns)
+    hybrid = data.astype(np.complex64, copy=False) @ into
+    virtual = np.einsum("xvc,cx->vx", basis.matrix, hybrid) @ out_of
     return virtual.astype(data.dtype, copy=False)
 
 
-_PSEUDO_INVERSES: dict[int, tuple[np.ndarray, np.ndarray]] = {}
+_GRID_TRANSFORMS: dict[tuple, tuple] = {}
 
 
-def _pseudo_inverse(matrix: np.ndarray) -> np.ndarray:
-    """Return the pseudo-inverse of a resampling matrix, kept for as long as the matrix is."""
-    held = _PSEUDO_INVERSES.get(id(matrix))
+def _grid_transforms(
+    matrix: np.ndarray | None, reverse: bool, columns: int
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return the linear maps of a readout onto image space along its grid and back to its samples, kept for as long as ``matrix`` is.
+
+    ``into`` takes the samples onto the grid, runs it backwards where
+    ``reverse``, and transforms it to image space (:func:`_to_hybrid`);
+    ``out_of`` transforms back (:func:`_to_kspace`), undoes the reversal and
+    returns to the samples through the pseudo-inverse of ``matrix``.
+    """
+    key = (id(matrix), bool(reverse), columns)
+    held = _GRID_TRANSFORMS.get(key)
     if held is None or held[0] is not matrix:
-        if len(_PSEUDO_INVERSES) > 256:
-            _PSEUDO_INVERSES.clear()
-        held = (matrix, np.linalg.pinv(matrix).astype(np.complex64))
-        _PSEUDO_INVERSES[id(matrix)] = held
-    return held[1]
+        if len(_GRID_TRANSFORMS) > 256:
+            _GRID_TRANSFORMS.clear()
+        identity = np.eye(columns, dtype=np.complex64)
+        order = slice(None, None, -1) if reverse else slice(None)
+        to_image = _to_hybrid(identity[order])
+        to_kspace = _to_kspace(identity)[:, order]
+        if matrix is not None:
+            to_image = matrix.astype(np.complex64) @ to_image
+            to_kspace = to_kspace @ np.linalg.pinv(matrix).astype(np.complex64)
+        held = (matrix, to_image.astype(np.complex64), to_kspace.astype(np.complex64))
+        _GRID_TRANSFORMS[key] = held
+    return held[1], held[2]
 
 
 def geometric_basis_of(lines: np.ndarray, n_virtual: int) -> Basis:
