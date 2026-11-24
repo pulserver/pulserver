@@ -104,7 +104,7 @@ class PicsRecon(ReconPlugin):
     the lines missing at one end outnumber the widest gap between sampled
     lines. A unit with such an axis is solved again for a real image times
     the phase of its first solve over the k-space sampled on both sides of
-    the centre (:func:`symmetric_phase`), the maps
+    the centre (:func:`bartorch.apps.partial_fourier_phase`), the maps
     carrying the phase (:func:`pics_image` with ``phase``), so the k-space it
     leaves unsampled is the conjugate of what it samples. bartorch is
     imported when the first unit is reconstructed.
@@ -270,6 +270,7 @@ class PicsRecon(ReconPlugin):
         stream's :attr:`corrections` say so.
         """
         import torch
+        from bartorch import apps
 
         volume = kspace if kspace.ndim == 4 else kspace[:, None]
         volume = torch.from_numpy(np.ascontiguousarray(volume, dtype=np.complex64))
@@ -285,7 +286,7 @@ class PicsRecon(ReconPlugin):
             volume, maps, sampled, self.wavelet, self.iterations, context.device
         )
         if partial_fourier_axes(sampled.numpy()):
-            phase = symmetric_phase(image, sampled)
+            phase = apps.partial_fourier_phase(image, sampled)
             image = pics_image(
                 volume,
                 maps,
@@ -506,13 +507,13 @@ def pics_image(
 
     With ``shots``, the ``(masks, phases)`` of a segmented unit, each shot's
     lines are encoded from the image times that shot's phase
-    (:func:`shot_encoding`), so the phase that changes from shot to shot does
+    (:func:`bartorch.tools.shot_encoding`), so the phase that changes from shot to shot does
     not alias the image; with ``phase`` as well, shot ``s`` sees ``phase``
     times its own.
     """
     import bartorch
     import torch
-    from bartorch import linop, optim, priors
+    from bartorch import linop, optim, priors, tools
 
     grid = tuple(kspace.shape[2:] if kspace.shape[1] == 1 else kspace.shape[1:])
     pattern = sampled.reshape(grid).to(torch.complex64)
@@ -524,7 +525,7 @@ def pics_image(
         maps.reshape(maps.shape[0], *grid), grid, pattern=pattern, device=device
     )
     if shots is not None:
-        encoding = shot_encoding(encoding, shots, grid)
+        encoding = tools.shot_encoding(encoding, *shots)
     if phase is not None:
         encoding = encoding @ linop.Real(grid)
     scaling = optim.data_scaling(shifted) or optim.data_scaling(
@@ -546,39 +547,6 @@ def pics_image(
     if phase is None:
         return image
     return image.real.to(torch.complex64) * phase.reshape(image.shape)
-
-
-def shot_encoding(encoding: Any, shots: Any, grid: tuple[int, ...]) -> Any:
-    """Return the encoding of a segmented unit whose shots each multiply the image by their own phase.
-
-    ``sum_s diag(M_s) E diag(c_s)`` (:func:`bartorch.linop.FieldCorrected`
-    with its coefficients given): shot ``s`` reads the lines ``M_s`` of the
-    image times its phase ``c_s``, as MUSE (Chen et al., NeuroImage 2013,
-    doi:10.1016/j.neuroimage.2013.01.076) encodes them.
-
-    Parameters
-    ----------
-    encoding : bartorch.linop.LinearOperator
-        :class:`bartorch.linop.CartesianSense` over ``grid``.
-    shots : tuple of torch.Tensor
-        ``(masks, phases)``: ``(shots, z, y)`` booleans, the lines each shot
-        placed, and ``(shots, z, y, x)`` unit-magnitude phases.
-    grid : tuple of int
-        The encoding's image grid, ``(y, x)`` for one partition.
-
-    Returns
-    -------
-    bartorch.linop.LinearOperator
-    """
-    import torch
-    from bartorch import linop
-
-    masks, phases = shots
-    count = int(masks.shape[0])
-    rows = masks.reshape(count, 1, *grid[:-1], 1).expand(count, 1, *grid)
-    weights = rows.to(torch.complex64).contiguous()
-    phases = phases.reshape(count, *grid).to(torch.complex64)
-    return linop.FieldCorrected(encoding, coefficients=(weights, phases))
 
 
 def smooth_phase(image):
@@ -611,77 +579,14 @@ def smooth_phase(image):
     return torch.exp(1j * torch.angle(smooth.reshape(image.shape))).to(torch.complex64)
 
 
-def symmetric_phase(image: Any, sampled: Any) -> Any:
-    """Return the unit-magnitude phase of ``image`` from the k-space a partial-Fourier ``sampled`` holds on both sides of the centre.
-
-    Along each partial-Fourier axis (:func:`_acquired_range`) the k-space of
-    ``image`` is kept where both a sample and its conjugate lie in the
-    acquired range, the phase of a homodyne reconstruction.
-
-    Parameters
-    ----------
-    image : torch.Tensor
-        Complex ``(z, y, x)`` image, the transform centred.
-    sampled : torch.Tensor
-        Boolean mask of the acquired samples, with the shape of ``image``.
-
-    Returns
-    -------
-    torch.Tensor
-        ``exp(i angle(image_low))``, complex64.
-    """
-    import bartorch
-    import torch
-
-    mask = sampled.cpu().numpy()
-    kept = np.ones(mask.shape, dtype=bool)
-    for axis in range(mask.ndim):
-        lines = _acquired_range(mask, axis)
-        if lines is None:
-            continue
-        inside = np.zeros(mask.shape[axis], dtype=bool)
-        inside[lines[0] : lines[1] + 1] = True
-        shape = [1] * mask.ndim
-        shape[axis] = mask.shape[axis]
-        kept = kept & inside.reshape(shape)
-    axes = tuple(range(-1, -mask.ndim - 1, -1))
-    # Index i of a centred axis of n points holds the conjugate of index
-    # 2 (n // 2) - i, the mirror image shifted by one point where n is even.
-    mirrored = np.roll(np.flip(kept), [1 - n % 2 for n in mask.shape], axis=axes)
-    symmetric = torch.from_numpy((kept & mirrored).astype(np.float32))
-    kspace = bartorch.fft(image.to(torch.complex64), axes, unitary=True)
-    low = bartorch.fft(
-        kspace.reshape(image.shape) * symmetric.to(image.device),
-        axes,
-        inverse=True,
-        unitary=True,
-    ).reshape(image.shape)
-    return torch.exp(1j * torch.angle(low)).to(torch.complex64)
-
-
 def partial_fourier_axes(sampled: np.ndarray) -> bool:
-    """Return whether any axis of the boolean mask ``sampled`` is partial Fourier (:func:`_acquired_range`)."""
+    """Return whether any axis of the boolean mask ``sampled`` is partial Fourier (:func:`bartorch.apps.partial_fourier_range`)."""
+    from bartorch import apps
+
     return any(
-        _acquired_range(sampled, axis) is not None for axis in range(sampled.ndim)
+        apps.partial_fourier_range(sampled, axis) is not None
+        for axis in range(sampled.ndim)
     )
-
-
-def _acquired_range(mask: np.ndarray, axis: int) -> tuple[int, int] | None:
-    """Return the first and last line acquired along a partial-Fourier ``axis``; ``None`` where it is not one."""
-    profile = mask.any(axis=tuple(a for a in range(mask.ndim) if a != axis))
-    lines = np.flatnonzero(profile)
-    if lines.size < 2:
-        return None
-    gap = int(np.diff(lines).max()) - 1
-    low, high = int(lines[0]), profile.size - 1 - int(lines[-1])
-    # Line 0 of an even axis has no conjugate on the grid: a scan that
-    # reverses its phase encode leaves it out without being partial Fourier,
-    # and on an undersampled lattice the reversed lines then start one line
-    # further from the edge than they end.
-    unpaired = int(profile.size % 2 == 0 and low == high + 1)
-    if max(low, high) - unpaired <= gap:
-        return None
-    return int(lines[0]), int(lines[-1])
 
 
 def wavelet_axes(shape: tuple[int, ...], axes: tuple[int, ...]) -> tuple[int, ...]:
