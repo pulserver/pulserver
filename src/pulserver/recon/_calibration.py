@@ -76,7 +76,9 @@ class Basis:
 
     ``matrix`` is the unitary ``(coils, coils)`` matrix ``bartorch.tools.cc``
     returns, of which ``n_virtual`` virtual channels are kept; ``id``
-    identifies the basis.
+    identifies the basis. A geometric basis (``geometric_basis_of``) is
+    ``(readout, coils, coils)``: one such matrix per position along the
+    readout, in image order.
     """
 
     matrix: np.ndarray
@@ -765,11 +767,15 @@ def _projected(maps: np.ndarray, basis: Basis) -> np.ndarray:
     from bartorch import tools
 
     coils = maps.shape[0]
-    if coils != basis.matrix.shape[0]:
+    if coils != basis.matrix.shape[-1]:
         raise ValueError(
             f"{coils} channels cannot be projected onto a basis of "
-            f"{basis.matrix.shape[0]}"
+            f"{basis.matrix.shape[-1]}"
         )
+    if basis.matrix.ndim == 3:
+        return np.einsum(
+            "xvc,c...x->v...x", basis.matrix[:, : basis.n_virtual].conj(), maps
+        ).astype(np.complex64)
     virtual = tools.ccapply(
         torch.from_numpy(np.ascontiguousarray(maps)).reshape(coils, -1, 1, 1),
         torch.from_numpy(basis.matrix).reshape(coils, coils, 1, 1, 1),
@@ -803,11 +809,98 @@ def basis_of(samples: np.ndarray, n_virtual: int) -> Basis:
     return Basis(matrix, n_virtual, digest(matrix[:, :n_virtual], n_virtual))
 
 
-def projected_readout(data: np.ndarray, basis: Basis) -> np.ndarray:
-    """Return a ``(coils, samples)`` readout on the virtual channels of ``basis``, as :func:`bartorch.tools.ccapply` projects k-space."""
-    virtual = basis.matrix[: basis.n_virtual].conj()
-    return (virtual.astype(data.dtype, copy=False) @ data).astype(
-        data.dtype, copy=False
+def projected_readout(
+    data: np.ndarray, basis: Basis, grid: tuple[np.ndarray, bool] | None = None
+) -> np.ndarray:
+    """Return a ``(coils, samples)`` readout on the virtual channels of ``basis``, as :func:`bartorch.tools.ccapply` projects k-space.
+
+    A geometric basis acts at each position along the readout: the readout is
+    taken onto its grid by ``grid``, ``(matrix, reverse)`` with
+    ``data @ matrix`` the readout on a grid of the basis's length, run
+    backwards where ``reverse`` (the readout as sampled where ``grid`` is
+    ``None``), projected position by position, and returned to its own
+    samples through the pseudo-inverse of ``matrix``, so that taking the
+    result onto the grid gives the projected grid readout.
+
+    Raises
+    ------
+    ValueError
+        If a geometric basis has another length than the readout's grid.
+    """
+    if basis.matrix.ndim == 2:
+        virtual = basis.matrix[: basis.n_virtual].conj()
+        return (virtual.astype(data.dtype, copy=False) @ data).astype(
+            data.dtype, copy=False
+        )
+    matrix, reverse = grid if grid is not None else (None, False)
+    line = data if matrix is None else data @ matrix
+    if line.shape[-1] != basis.matrix.shape[0]:
+        raise ValueError(
+            f"a readout of {line.shape[-1]} grid points cannot be projected onto a "
+            f"geometric basis of {basis.matrix.shape[0]}"
+        )
+    if reverse:
+        line = line[:, ::-1]
+    virtual = _to_kspace(
+        np.einsum(
+            "xvc,cx->vx",
+            basis.matrix[:, : basis.n_virtual].conj(),
+            _to_hybrid(line),
+        )
+    )
+    if reverse:
+        virtual = virtual[:, ::-1]
+    if matrix is not None:
+        virtual = virtual @ np.linalg.pinv(matrix)
+    return virtual.astype(data.dtype, copy=False)
+
+
+def geometric_basis_of(lines: np.ndarray, n_virtual: int) -> Basis:
+    """Return the geometric basis of ``(coils, lines, readout)`` grid readouts: one aligned SVD basis per position along the readout.
+
+    At each position of the readout in image space, the channels' covariance
+    over the lines gives a basis of which the ``n_virtual`` strongest
+    channels are kept, so a channel that sees one side of the head is kept
+    where that side lies. Neighbouring bases are rotated onto each other,
+    outwards from the centre, so each virtual channel's sensitivity stays
+    smooth along the readout (Zhang et al., Magn Reson Med 2013,
+    doi:10.1002/mrm.24267).
+
+    Raises
+    ------
+    ValueError
+        If ``n_virtual`` exceeds the channels.
+    """
+    coils, _, columns = lines.shape
+    if n_virtual > coils:
+        raise ValueError(f"cannot keep {n_virtual} virtual channels of {coils}")
+    hybrid = _to_hybrid(np.ascontiguousarray(lines, dtype=np.complex128))
+    bases = np.empty((columns, coils, coils), dtype=np.complex128)
+    for x in range(columns):
+        bases[x] = np.linalg.svd(hybrid[:, :, x], full_matrices=True)[0]
+    centre = columns // 2
+    for step in (1, -1):
+        for x in range(centre + step, columns if step > 0 else -1, step):
+            kept, previous = bases[x][:, :n_virtual], bases[x - step][:, :n_virtual]
+            left, _, right = np.linalg.svd(kept.conj().T @ previous)
+            bases[x][:, :n_virtual] = kept @ (left @ right)
+    matrix = np.ascontiguousarray(bases.transpose(0, 2, 1)).astype(np.complex64)
+    return Basis(
+        matrix, n_virtual, digest(matrix[:, :n_virtual], n_virtual, "geometric")
+    )
+
+
+def _to_hybrid(line: np.ndarray) -> np.ndarray:
+    """Return k-space along its last axis in image space, centred."""
+    return np.fft.fftshift(
+        np.fft.ifft(np.fft.ifftshift(line, axes=-1), axis=-1, norm="ortho"), axes=-1
+    )
+
+
+def _to_kspace(line: np.ndarray) -> np.ndarray:
+    """Return image space along its last axis in k-space, centred."""
+    return np.fft.fftshift(
+        np.fft.fft(np.fft.ifftshift(line, axes=-1), axis=-1, norm="ortho"), axes=-1
     )
 
 

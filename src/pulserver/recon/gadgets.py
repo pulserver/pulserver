@@ -23,6 +23,7 @@ from ._calibration import (
     basis_of,
     coil_labels,
     digest,
+    geometric_basis_of,
     projected_readout,
 )
 from ._units import carries
@@ -173,6 +174,19 @@ class CompressChannels(Gadget):
     any gadget that changes the header of a readout: a held readout is given
     on with its acquisition as this gadget received it.
 
+    With ``geometric``, the basis is one per position along the readout in
+    image space, estimated from the held calibration readouts on their
+    readout grid, neighbouring bases rotated onto each other so each virtual
+    channel's sensitivity stays smooth along the readout (Zhang et al., Magn
+    Reson Med 2013, doi:10.1002/mrm.24267), and each readout is projected
+    position by position. A
+    readout is taken onto its grid by ``grid(acquisition, samples)``, which
+    returns ``(matrix, reverse)`` with ``data @ matrix`` the readout on the
+    grid, run backwards where ``reverse``, or ``None`` for a readout sampled
+    on its grid; the projected readout is returned on its own samples, so the
+    resampling that follows takes it onto the grid unchanged. Without
+    ``grid`` every readout is taken as sampled on its grid.
+
     Corresponds to Gadgetron's ``PCACoilGadget`` and
     ``CoilReductionGadget``.
 
@@ -180,12 +194,29 @@ class CompressChannels(Gadget):
     ----------
     n_virtual : int
         Virtual channels kept.
+    geometric : bool, default=False
+        Keep a basis per position along the readout.
+
+    Attributes
+    ----------
+    grid : Callable or None
+        Takes ``(acquisition, samples)`` to the readout's grid matrix and
+        direction.
     """
 
-    def __init__(self, n_virtual: int) -> None:
+    grid = None
+
+    def __init__(self, n_virtual: int, geometric: bool = False) -> None:
         if n_virtual < 1:
             raise ValueError(f"n_virtual is {n_virtual}; it has to be at least 1")
         self.n_virtual = int(n_virtual)
+        self.geometric = bool(geometric)
+
+    def _project(self, acquisition: Any, data: np.ndarray, basis: Any) -> np.ndarray:
+        if basis.matrix.ndim == 2:
+            return projected_readout(data, basis)
+        grid = None if self.grid is None else self.grid(acquisition, data.shape[-1])
+        return projected_readout(data, basis, grid)
 
     def startup(self, context):
         super().startup(context)
@@ -198,7 +229,7 @@ class CompressChannels(Gadget):
             return data
         basis = self.context.coil_compression
         if basis is not None:
-            return projected_readout(data, basis)
+            return self._project(acquisition, data, basis)
         if data.shape[0] <= self.n_virtual:
             self._passing = True
             return self._unchanged(acquisition, data)
@@ -242,7 +273,8 @@ class CompressChannels(Gadget):
         basis = self.context.coil_compression or self._basis()
         held, self._held = self._held, []
         return [
-            (acquisition, projected_readout(data, basis)) for acquisition, data in held
+            (acquisition, self._project(acquisition, data, basis))
+            for acquisition, data in held
         ]
 
     def _basis(self) -> Any:
@@ -262,11 +294,36 @@ class CompressChannels(Gadget):
                 for acquisition, data in calibration
                 if int(acquisition_label(acquisition, "contrast", 0) or 0) == 0
             ]
+            if self.geometric:
+                lines = [
+                    (acquisition, data)
+                    for acquisition, data in calibration
+                    if not carries(acquisition, _FOLLOWING)
+                ] or calibration
+                chosen = [
+                    (acquisition, data)
+                    for acquisition, data in lines
+                    if int(acquisition_label(acquisition, "contrast", 0) or 0) == 0
+                ] or lines
+                self.context.coil_compression = geometric_basis_of(
+                    np.stack([self._on_grid(a, d) for a, d in chosen], axis=1),
+                    self.n_virtual,
+                )
+                return self.context.coil_compression
             readouts = first or [data for _, data in calibration]
             self.context.coil_compression = basis_of(
                 np.concatenate(readouts, axis=1), self.n_virtual
             )
         return self.context.coil_compression
+
+    def _on_grid(self, acquisition: Any, data: np.ndarray) -> np.ndarray:
+        """Return a readout on its grid, in image order."""
+        grid = None if self.grid is None else self.grid(acquisition, data.shape[-1])
+        if grid is None:
+            return data
+        matrix, reverse = grid
+        line = data @ matrix
+        return line[:, ::-1] if reverse else line
 
 
 class AsymmetricEcho(Gadget):

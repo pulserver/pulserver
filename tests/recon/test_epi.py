@@ -985,3 +985,16 @@ def test_a_stream_of_a_highly_accelerated_header_compresses_to_twelve_channels_f
 
     assert recon.gadgets[1] is recon.gadget(CompressChannels)
     assert recon.gadget(CompressChannels).n_virtual == recon.virtual_coils == 12
+
+
+def test_epi_compresses_first_with_a_geometric_basis_on_the_ramp_resampling_grid():
+    from pulserver.recon.gadgets import CompressChannels, Prewhiten
+    from pulserver.recon.handlers.epi import EpiRecon, RampSampling
+
+    recon = EpiRecon()
+    recon.startup(SimpleNamespace(header=SimpleNamespace(), exam={}))
+    compress = recon.gadget(CompressChannels)
+
+    assert isinstance(recon.gadgets[0], Prewhiten) and recon.gadgets[1] is compress
+    assert compress.geometric
+    assert compress.grid == recon.gadget(RampSampling).operator

@@ -121,6 +121,43 @@ class RampSampling(Gadget):
             return data
         return self.resample(acquisition, data)
 
+    def operator(self, acquisition, samples):
+        """Return the matrix that takes a readout of ``samples`` samples onto its space's readout grid, as this gadget does, and whether the grid runs reversed.
+
+        ``(samples, columns)``, so that ``data @ matrix`` is the readout on
+        the grid, at the current :attr:`delay_s`; a navigator or
+        phase-reference readout is taken onto the grid as
+        :class:`EpiPhaseCorrection` resamples it. The acquisition is left as
+        it was. ``None`` for a readout already on its grid, or of a space without
+        geometry.
+        """
+        saved = (
+            acquisition.center_sample,
+            acquisition.discard_pre,
+            acquisition.discard_post,
+        )
+        identity = np.eye(int(samples), dtype=np.complex64)
+        traj = getattr(acquisition, "traj", None)
+        try:
+            if traj is None or np.size(traj) == 0:
+                matrix = identity
+                for gadget in self.uniform:
+                    matrix = gadget(acquisition, matrix)
+                reverse = False
+            else:
+                matrix = self.resample(acquisition, identity)
+                k = np.asarray(traj, dtype=np.float64)[:, 0]
+                reverse = bool(k[-1] < k[0])
+        finally:
+            (
+                acquisition.center_sample,
+                acquisition.discard_pre,
+                acquisition.discard_post,
+            ) = saved
+        if matrix is identity:
+            return None
+        return np.asarray(matrix), reverse
+
     def resample(self, acquisition, data, delay_s=None):
         """Return one readout resampled onto its space's readout grid, the trajectory delayed by ``delay_s``.
 
@@ -500,9 +537,12 @@ class EpiRecon(PicsRecon):
 
     Each readout is whitened (:class:`~pulserver.recon.Prewhiten`), projected
     onto ``virtual_coils`` channels (:class:`~pulserver.recon.CompressChannels`,
-    one basis for the stream from the calibration of every slice, so the
-    bands of a multiband unit share their virtual channels with the slices
-    whose maps unfold them, and no later step holds every receive channel),
+    one geometric basis for the stream from the calibration of every slice: a
+    basis per position along the readout, which keeps at each position the
+    channels that see it, so few virtual channels still unfold a whole-head
+    slab; the bands of a multiband unit share their virtual channels with the
+    slices whose maps unfold them, and no later step holds every receive
+    channel),
     ramp-resampled along its k-space trajectory (:class:`RampSampling`) and
     has its odd/even phase removed (:class:`EpiPhaseCorrection`, from the
     blip-free reference train ``ACQ_IS_PHASECORR_DATA`` the sequence plays in
@@ -687,7 +727,7 @@ class EpiRecon(PicsRecon):
         compression = (
             ()
             if self.virtual_coils is None
-            else (CompressChannels(self.virtual_coils),)
+            else (CompressChannels(self.virtual_coils, geometric=True),)
         )
         self.gadgets = (
             Prewhiten(),
@@ -702,6 +742,7 @@ class EpiRecon(PicsRecon):
         super().startup(context)
         self.gadget(EpiPhaseCorrection).ramp = self.gadget(RampSampling)
         if self.virtual_coils is not None:
+            self.gadget(CompressChannels).grid = self.gadget(RampSampling).operator
             self.virtual_coils = virtual_coils_for(
                 self.virtual_coils,
                 float(user_parameter(context.header, ACCELERATION_PER_SOLVE, 1.0)),

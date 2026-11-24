@@ -519,3 +519,112 @@ def test_a_unit_of_streamed_readouts_holds_the_virtual_channels_in_arrival_order
     assert unit.data.coils == 4
     assert unit.acquisitions == acquisitions
     assert unit.data.mask.all()
+
+
+def _readout_varying_array(coils=8, lines=24, columns=32, seed=0):
+    """Coils each seeing one stretch of the readout, with a smooth object: (sensitivities (c, y, x), object (y, x))."""
+    rng = np.random.default_rng(seed)
+    x = np.arange(columns)
+    centres = np.linspace(0, columns - 1, coils)
+    sens = np.exp(-((x[None, :] - centres[:, None]) ** 2) / 30.0)[:, None, :] * np.exp(
+        1j * rng.uniform(0, 2 * np.pi, (coils, 1, 1))
+    )
+    sens = sens * (1 + 0.3 * np.cos(np.arange(lines) / lines * np.pi))[None, :, None]
+    obj = rng.standard_normal((lines, columns)) + 1j * rng.standard_normal(
+        (lines, columns)
+    )
+    return sens.astype(np.complex64), obj.astype(np.complex64)
+
+
+def _readout_kspace(image):
+    from pulserver.recon._calibration import _to_kspace
+
+    return _to_kspace(image)
+
+
+def test_a_geometric_basis_keeps_more_of_an_array_that_varies_along_the_readout_than_one_svd_basis():
+    from pulserver.recon._calibration import (
+        basis_of,
+        geometric_basis_of,
+        projected_readout,
+    )
+
+    sens, obj = _readout_varying_array()
+    lines = _readout_kspace(sens * obj[None])
+    kept = {}
+    for name, basis in (
+        ("svd", basis_of(lines.reshape(lines.shape[0], -1), 3)),
+        ("geometric", geometric_basis_of(lines, 3)),
+    ):
+        projected = np.stack(
+            [projected_readout(lines[:, j], basis) for j in range(lines.shape[1])], 1
+        )
+        kept[name] = np.sum(np.abs(projected) ** 2) / np.sum(np.abs(lines) ** 2)
+
+    assert kept["geometric"] > 0.99
+    assert kept["geometric"] > kept["svd"] + 0.1
+
+
+def test_geometrically_projected_kspace_is_the_kspace_of_the_object_seen_by_the_projected_maps():
+    from pulserver.recon._calibration import (
+        _projected,
+        geometric_basis_of,
+        projected_readout,
+    )
+
+    sens, obj = _readout_varying_array()
+    lines = _readout_kspace(sens * obj[None])
+    basis = geometric_basis_of(lines, 3)
+    projected = np.stack(
+        [projected_readout(lines[:, j], basis) for j in range(lines.shape[1])], 1
+    )
+    expected = _readout_kspace(_projected(sens, basis) * obj[None])
+
+    assert relative_difference(projected, expected) < ROUND_OFF
+
+
+def test_a_ramp_sampled_readout_projected_geometrically_resamples_to_the_projected_grid_readout():
+    from pulserver.recon._calibration import geometric_basis_of, projected_readout
+
+    rng = np.random.default_rng(1)
+    sens, obj = _readout_varying_array()
+    basis = geometric_basis_of(_readout_kspace(sens * obj[None]), 3)
+    samples, columns = 48, sens.shape[-1]
+    resample = (
+        rng.standard_normal((samples, columns))
+        + 1j * rng.standard_normal((samples, columns))
+    ).astype(np.complex64)
+    raw = (
+        rng.standard_normal((sens.shape[0], samples))
+        + 1j * rng.standard_normal((sens.shape[0], samples))
+    ).astype(np.complex64)
+
+    for reverse in (False, True):
+        on_grid = raw @ resample
+        forward = on_grid[:, ::-1] if reverse else on_grid
+        expected = projected_readout(forward, basis)
+        expected = expected[:, ::-1] if reverse else expected
+        compressed = projected_readout(raw, basis, (resample, reverse))
+
+        assert relative_difference(compressed @ resample, expected) < 1e-4
+
+
+def test_neighbouring_geometric_bases_give_each_virtual_channel_a_smooth_sensitivity_along_the_readout():
+    from pulserver.recon._calibration import _projected, geometric_basis_of
+
+    sens, obj = _readout_varying_array()
+    basis = geometric_basis_of(_readout_kspace(sens * obj[None]), 3)
+    virtual = _projected(sens, basis)[:, sens.shape[1] // 2]
+    steps = np.abs(np.diff(virtual, axis=-1)).max()
+
+    assert steps < 0.5 * np.abs(virtual).max()
+
+
+def test_a_geometric_basis_is_refused_a_readout_of_another_length():
+    from pulserver.recon._calibration import geometric_basis_of, projected_readout
+
+    sens, obj = _readout_varying_array()
+    basis = geometric_basis_of(_readout_kspace(sens * obj[None]), 3)
+
+    with pytest.raises(ValueError, match="geometric basis"):
+        projected_readout(np.ones((sens.shape[0], 10), np.complex64), basis)
