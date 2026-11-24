@@ -277,13 +277,10 @@ class Readouts:
 
 
 def _centred_fft(x: Any, dim: int, inverse: bool = False) -> Any:
-    """Return the orthonormal centred DFT of ``x`` along ``dim``, sample ``n // 2`` the centre."""
-    import torch
+    """Return the orthonormal centred DFT of ``x`` along ``dim``, sample ``n // 2`` the centre (:func:`bartorch.fft`)."""
+    import bartorch
 
-    transform = torch.fft.ifft if inverse else torch.fft.fft
-    return torch.fft.fftshift(
-        transform(torch.fft.ifftshift(x, dim=dim), dim=dim, norm="ortho"), dim=dim
-    )
+    return bartorch.fft(x, dim, inverse=inverse, unitary=True).reshape(x.shape)
 
 
 def acquired_lines(kspace: Any) -> slice:
@@ -301,11 +298,11 @@ def readout_cropped(kspace: Any, samples: int) -> Any:
     readout oversampled against the field of view reconstructs on the image
     grid with the same pixel values.
     """
+    import bartorch
+
     if kspace.shape[-1] <= samples:
         return kspace
-    columns = _centred_fft(kspace, -1, inverse=True)
-    start = kspace.shape[-1] // 2 - samples // 2
-    return _centred_fft(columns[..., start : start + samples].contiguous(), -1)
+    return bartorch.remove_readout_oversampling(kspace, samples, axis=-1)
 
 
 def maps_resampled(maps: Any, lines: slice, samples: int) -> Any:

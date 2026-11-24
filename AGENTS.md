@@ -10,15 +10,74 @@ them.
 Orchestrator for MR acquisitions: sequence design, scanner preparation and
 reconstruction.
 
-Pulserver sits on top of two engines it does not reimplement: sequence design
-is [`pypulseqpp`](https://github.com/pulserver/pypulseqpp) and the
-reconstruction engine is [`bartorch`](https://github.com/mcencini/bartorch).
+Pulserver sits on top of three engines it does not reimplement: sequence
+design is [`pypulseqpp`](https://github.com/pulserver/pypulseqpp), the
+reconstruction engine is [`bartorch`](https://github.com/mcencini/bartorch) and
+the spin simulation engine is [`blochsim`](https://github.com/pulserver/blochsim).
 Vendor-specific playout and data conversion live in the scanner-side
 interpreters; they call pulserver's public API and carry no sequence or
 reconstruction logic of their own. Code that belongs to an engine goes
 upstream into that engine, not into a copy here. The virtual scanner, which
-stands in for a scanner and its interpreter, is pulserver's own, and so is the
-Fourier engine it plays the IR cache with: neither engine reads the cache.
+stands in for a scanner and its interpreter, is pulserver's own. Its Fourier
+engine plays the IR cache on a phantom with blochsim for the spin physics and
+bartorch for every transform (`bartorch.fft`, `bartorch.linop.NUFFT`); neither
+engine reads the cache.
+
+## Rule 1: use bartorch and blochsim, never reimplement them
+
+Before writing any numerical routine (an FFT, a solver, an encoding operator,
+a NUFFT, coil compression, coil maps, GRAPPA or SPIRiT, partial Fourier,
+wavelets, a Bloch or EPG simulation, a dictionary or subspace, a fit), search
+the bartorch and blochsim APIs and call what is there:
+
+```bash
+python -c "import bartorch.tools as m; print(m.__all__)"   # also bartorch, .linop, .apps, .optim, .priors, .nlop
+python -c "import blochsim as m; print(m.__all__)"         # also .simulators, .estimators, .optim, .trains
+```
+
+- BART runs only through bartorch's Python API (`bartorch.tools`,
+  `bartorch.apps`, `bartorch.linop`, ...). Never call the `bart` binary through
+  `subprocess`, `os.system` or a shell.
+- When something is missing, add it to bartorch or blochsim in a pull request
+  there and call it from here. Do not write a local version meanwhile.
+- Every report names the bartorch and blochsim calls the work used.
+
+### Where each need lives
+
+`import bartorch as bt`, `import blochsim as bs`. If a name below does not
+resolve, the installed API is right and this table is wrong: fix the table.
+
+| Need | Call |
+|---|---|
+| Centred FFT / IFFT | `bt.fft(x, axes)`, `bt.ifft(x, axes)` (`unitary=True` for orthonormal); operator `bt.linop.FFT(shape, axes)`; `bt.fftmod` |
+| NUFFT | `bt.nufft`, `bt.nufft_adjoint`, `bt.linop.NUFFT(traj, image_shape)`; density `bt.estimate_density` |
+| Non-Cartesian onto the grid | `bt.tools.igrog(kspace, traj, shape, calib)`, then `bt.linop.CartesianSense` |
+| SENSE encoding | `bt.linop.CartesianSense(maps, image_shape, pattern)`, `bt.linop.NoncartesianSense`, `bt.linop.WaveSense` |
+| Off-resonance in the model | `bt.linop.FieldCorrected(encoding, field_map, readout_time, method="svd")`; field from phase `bt.tools.field_map_from_phase` |
+| CG and other solvers | `bt.optim.cg(y, A, lambda_)` or `bt.optim.CG(...)`; `bt.optim.ADMM`, `FISTA`, `IST`, `PRIDU`, `POCS` / `bt.optim.pocs`; step size `bt.optim.maxeigen` |
+| Regularised SENSE (PICS) | `bt.apps.pics(kspace, maps, regularizers=[...])` with `bt.priors.Wavelet`, `TotalVariation`, `TotalGeneralizedVariation`, `LocallyLowRank`; `bt.apps.pocsense` |
+| Noise prewhitening | `bt.tools.whiten(kspace, noise)` |
+| Coil compression (SVD / geometric) | `bt.tools.cc(calib, p=8, M=True, G=True)` for the matrix, `bt.tools.ccapply(kspace, matrix, p=8, G=True)` to apply it (`S=True` for SVD) |
+| Field-of-view rejection before compression | `bt.tools.rovir_fov(kspace, traj, coils)` (non-Cartesian), `bt.tools.rovir` |
+| Coil maps | `bt.apps.nlinv_maps(kspace, traj, size=24)` (default choice), `bt.tools.nlinv`; ESPIRiT `bt.tools.ecalib`; Walsh `bt.tools.walsh` |
+| Coil combination | `bt.rss(x, axes)` |
+| GRAPPA / SPIRiT / slice GRAPPA | `bt.tools.spirit_kernel`, `bt.linop.spirit_consistency`, `bt.tools.slice_grappa_kernel`, `bt.tools.slice_grappa`, `bt.tools.calmat` |
+| Partial Fourier | `bt.apps.partial_fourier(image, sampled)` (homodyne), `bt.tools.homodyne`; POCS through `bt.optim.pocs` |
+| Wavelets | `bt.fwt`, `bt.iwt` |
+| EPI corrections | `bt.tools.estimate_epi_phase`, `bt.tools.estimate_epi_echo_phase`, `bt.tools.epi_ramp_operator`, `bt.tools.correct_susceptibility` |
+| Shift and registration | `bt.tools.estimate_shift`, `bt.tools.fovshift`, `bt.tools.register_affine`, `bt.tools.register_nonrigid`, `bt.tools.warp` |
+| Image metrics | `bt.tools.nrmse`, `bt.tools.ssim`, `bt.tools.psnr`, `bt.tools.mse` |
+| Model-based reconstruction | `bt.apps.moba`, `bt.apps.mobafit`, `bt.nlop.*`, `bt.nlop.irgnm` |
+| Closed-form and EPG signals | `bs.spgr_sim`, `bs.bssfp_sim`, `bs.fse_sim`, `bs.mprage_sim`, `bs.mp2rage_sim`, `bs.mrf_sim` |
+| Sequence models | `bs.simulators.SPGRSimulator`, `FSESimulator`, `MPRAGESimulator`, `MOLLISimulator`, ...; any sequence through `bs.Simulator.from_pulseq` / `from_description` |
+| Derivatives of a signal | `Simulator.jacobian(diff, **tissue)` (autograd; never finite differences) |
+| RF pulse rotation | `bs.compose_spinor(drive, turn_z)` (Cayley-Klein pair) |
+| Temporal subspace | `bs.Subspace.fit(signals, rank)`, then `.project`, `.expand` |
+| Dictionary matching | `bs.estimators.DictionaryMatcher(acquisition, ...)` |
+| Parameter estimation (PERK) | `bs.estimators.PERK(acquisition, ...)`; one unknown from a monotonic curve `bs.estimators.LookupTable` |
+| Signal model in a reconstruction | `bs.ModelOperator(acquisition, *unknown)` |
+| Cramér-Rao bound, sequence design | `bs.optim.crlb(jacobian, noise_variance=...)`, `bs.optim.SequenceDesign` |
+| Refocusing trains | `bs.trains.prescribed_flips` |
 
 ## Build and test
 
