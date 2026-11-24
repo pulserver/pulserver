@@ -920,3 +920,41 @@ def test_an_inversion_far_off_the_water_resonance_leaves_the_water_signal_alone(
     plain = signal(None, "plain.seq")
     assert signal(-1500.0, "off.seq") / plain == pytest.approx(1.0, abs=0.02)
     assert (signal(0.0, "on.seq") / plain).real < -0.8
+
+
+def test_a_constant_physiological_field_shifts_the_readouts_as_a_frequency_offset_of_the_object_does(
+    tmp_path,
+):
+    system = pp.Opts(B0=3.0)
+    seq = pp.Sequence(system)
+    seq.add_block(pp.make_block_pulse(np.pi / 6, duration=2e-4, system=system))
+    seq.add_block(pp.make_adc(64, duration=6.4e-3, system=system))
+    path = tmp_path / "fid.seq"
+    seq.write(str(path))
+    ir.convert(path, SYSTEM)
+    ppm = 0.2
+
+    def disk(shift_ppm):
+        return virtual.Phantom(
+            [
+                virtual.Ellipse(
+                    (0.0, 0.0, 0.0), (0.02, 0.02), t1=1.0, t2=0.1, shift_ppm=shift_ppm
+                )
+            ]
+        ).tissue(4e-3, field_t=3.0)
+
+    shifted = virtual.simulate(path, disk(ppm), device="cpu")
+    offset_hz = ppm * 1e-6 * SYSTEM.gamma * SYSTEM.B0
+    steady = virtual.PhysiologicalField([offset_hz], [1e9], phases_rad=[np.pi / 2])
+    moved = virtual.simulate(path, disk(0.0), device="cpu", physiology=steady)
+
+    for a, b in zip(shifted, moved, strict=True):
+        np.testing.assert_allclose(b, a, atol=2e-3 * np.abs(a).max())
+
+
+def test_a_physiological_field_is_the_sum_of_its_sinusoids():
+    field = virtual.PhysiologicalField([2.0, 0.5], [4.0, 1.0], phases_rad=[0.0, 0.0])
+    assert field(1.0) == pytest.approx(2.0)
+    assert field(0.25) == pytest.approx(2.0 * np.sin(np.pi / 8) + 0.5)
+    with pytest.raises(ValueError):
+        virtual.PhysiologicalField([1.0], [0.0])
