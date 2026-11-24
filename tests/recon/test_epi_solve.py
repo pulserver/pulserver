@@ -978,3 +978,29 @@ def test_the_shot_phase_fit_is_the_same_whichever_number_of_basis_terms_it_carri
 
     for terms in (1, 7):
         assert torch.allclose(fitted[terms], fitted[basis.shape[0]], atol=1e-5)
+
+
+def test_a_wavelet_solve_starts_from_start_iterations_conjugate_gradient_steps(
+    monkeypatch,
+):
+    from pulserver.recon.handlers import epi
+
+    shape = (4, 32, 32)
+    image = np.ones(shape, dtype=np.complex64)
+    maps = torch.from_numpy(_maps(shape, coils=4))
+    sampled = torch.zeros(shape, dtype=torch.bool)
+    sampled[:, ::3] = True
+    kspace = _kspace(image, maps.numpy()) * sampled
+    steps = []
+    solve = epi.cg_sense
+
+    def counted(*args, **kwargs):
+        steps.append(args[3])
+        return solve(*args, **kwargs)
+
+    monkeypatch.setattr(epi, "cg_sense", counted)
+    plugin = epi.EpiRecon(0.003, 40, start_iterations=7)
+
+    plugin._solved(kspace, maps, SimpleNamespace(device=None))
+
+    assert steps == [7]

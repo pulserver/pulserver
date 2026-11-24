@@ -43,6 +43,7 @@ from .pics import (
     nlinv_estimate,
     partial_fourier_axes,
     pics_image,
+    sense_coil_batch,
     smooth_phase,
 )
 
@@ -720,6 +721,10 @@ class EpiRecon(PicsRecon):
         for a slice or a slab.
     iterations : int, default=30
         Conjugate-gradient steps, or ``pics`` iterations with ``wavelet``.
+    start_iterations : int | None, default=None
+        Conjugate-gradient steps of the image a wavelet or partial-Fourier
+        solve starts from and takes its phase from; ``None`` takes
+        ``iterations``.
     l2 : float, default=0.0
         Tikhonov weight ``lambda`` of the conjugate-gradient solve, on data
         scaled as ``pics`` scales them.
@@ -742,6 +747,7 @@ class EpiRecon(PicsRecon):
         wavelet: float | None = None,
         iterations: int = 30,
         *,
+        start_iterations: int | None = None,
         l2: float = 0.0,
         virtual_coils: int | None = VIRTUAL_COILS,
         kspace_filter: bool = True,
@@ -759,6 +765,9 @@ class EpiRecon(PicsRecon):
         )
         self.automatic_wavelet = wavelet is None
         self.l2 = float(l2)
+        self.start_iterations = (
+            self.iterations if start_iterations is None else int(start_iterations)
+        )
         self.shot_phase = bool(shot_phase)
         self.shot_segments = None
         self.phase_references = {}
@@ -1038,9 +1047,12 @@ class EpiRecon(PicsRecon):
         if fills:
             return sense_combined(volume, maps) if segments is None else start
         if start is None:
-            start = cg_sense(
-                volume, maps, sampled, self.iterations, context.device, l2=l2
+            steps = (
+                self.iterations
+                if wavelet <= 0 and not partial
+                else self.start_iterations
             )
+            start = cg_sense(volume, maps, sampled, steps, context.device, l2=l2)
         if partial:
             phase = self._phase(start, reference, sampled)
             if phase is not None:
@@ -2000,7 +2012,11 @@ def cg_sense(kspace, maps, sampled, iterations, device, *, l2=0.0, shots=None):
     pattern = sampled.reshape(grid).to(torch.complex64)
     measured = kspace * sampled
     encoding = linop.CartesianSense(
-        maps.reshape(maps.shape[0], *grid), grid, pattern=pattern, device=device
+        maps.reshape(maps.shape[0], *grid),
+        grid,
+        pattern=pattern,
+        device=device,
+        coil_batch=sense_coil_batch(maps.shape[0], grid),
     )
     if shots is not None:
         encoding = tools.shot_encoding(encoding, *shots)

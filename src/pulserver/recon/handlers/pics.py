@@ -52,6 +52,14 @@ CG_MIN_L2 = 1e-6
 #: grows it without bound.
 REAL_SOLVE_MIN_L2 = 1e-4
 
+#: Bytes of device memory the coil slabs of a SENSE encoding may take at
+#: once, and the bytes a coil of one grid point takes in them
+#: (:func:`sense_coil_batch`). A slab of every coil runs the FFTs of all
+#: coils in one launch; a 3D volume at laminar resolution takes fewer coils
+#: per slab to stay within a 16 GB card.
+SENSE_SLAB_BYTES = 2 << 30
+SENSE_BYTES_PER_POINT = 32
+
 #: Standard deviation, in lines, of the in-plane Gaussian k-space window that
 #: smooths that phase. At 7T the off-resonance phase near the sinuses wraps
 #: within a few voxels by a BOLD echo time; a wavelet prior on that complex
@@ -522,7 +530,11 @@ def pics_image(
     if phase is not None:
         maps = maps * phase.reshape(1, *maps.shape[1:])
     encoding = linop.CartesianSense(
-        maps.reshape(maps.shape[0], *grid), grid, pattern=pattern, device=device
+        maps.reshape(maps.shape[0], *grid),
+        grid,
+        pattern=pattern,
+        device=device,
+        coil_batch=sense_coil_batch(maps.shape[0], grid),
     )
     if shots is not None:
         encoding = tools.shot_encoding(encoding, *shots)
@@ -549,6 +561,12 @@ def pics_image(
     if phase is None:
         return image
     return image.real.to(torch.complex64) * phase.reshape(image.shape)
+
+
+def sense_coil_batch(coils: int, grid: tuple[int, ...]) -> int:
+    """Return the coils per slab of a SENSE encoding over ``grid``: ``0``, every coil at once, where they fit in ``SENSE_SLAB_BYTES``, else as many as fit, at least one."""
+    fitting = SENSE_SLAB_BYTES // (SENSE_BYTES_PER_POINT * math.prod(grid))
+    return 0 if fitting >= coils else max(1, int(fitting))
 
 
 def smooth_phase(image):
