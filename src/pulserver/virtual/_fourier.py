@@ -15,6 +15,7 @@ import torch
 from ._girf import Girf
 from ._motion import RigidMotion
 from ._noise import ReceiveNoise
+from ._physiology import PhysiologicalField
 from ._timeline import Timeline
 from ._tissue import Tissue
 
@@ -183,6 +184,9 @@ class FourierPlayer:
         The impulse response the gradients play through.
     noise : ReceiveNoise, default=None
         Receive noise added to every readout; none by default.
+    physiology : PhysiologicalField, default=None
+        Field offset common to the object, taken at each readout's excitation;
+        none by default.
 
     Attributes
     ----------
@@ -203,6 +207,7 @@ class FourierPlayer:
         motion: RigidMotion | None = None,
         girf: Girf | None = None,
         noise: ReceiveNoise | None = None,
+        physiology: PhysiologicalField | None = None,
     ) -> None:
         if device is None:
             device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -216,6 +221,9 @@ class FourierPlayer:
         self._coils = tissue.coils
         self._noise = noise
         pulses = timeline.pulses
+        self._physiology = (
+            None if physiology is None else _physiological(timeline, physiology)
+        )
         events = _events(timeline)
         everything = _Entries.of(tissue, self.device)
         voxel = _voxel(timeline, everything, tissue.spacing)
@@ -279,6 +287,12 @@ class FourierPlayer:
         firsts = timeline.readouts.first - timeline.readouts.first[begin]
         for at in range(start, stop):
             readout = samples[:, firsts[at] : firsts[at + 1]]
+            if self._physiology is not None:
+                offset_hz, start_s, dwell_s = (row[at] for row in self._physiology)
+                since = start_s + dwell_s * (np.arange(readout.shape[1]) + 0.5)
+                readout = readout * np.exp(-2j * np.pi * offset_hz * since).astype(
+                    np.complex64
+                )
             if self._noise is not None:
                 readout = readout + self._noise(at, readout.shape[1])
             yield readout
@@ -663,6 +677,7 @@ def simulate(
     motion: RigidMotion | None = None,
     girf: Girf | None = None,
     noise: ReceiveNoise | None = None,
+    physiology: PhysiologicalField | None = None,
 ) -> list[np.ndarray]:
     """Return every readout the cache beside a sequence file acquires of a phantom's tissue.
 
@@ -680,8 +695,28 @@ def simulate(
         motion=motion,
         girf=girf,
         noise=noise,
+        physiology=physiology,
     )
     return list(player.readouts(0, player.blocks))
+
+
+def _physiological(
+    timeline: Timeline, field: PhysiologicalField
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Return each readout's offset (Hz) at its excitation, its first sample's start from that excitation (s) and its dwell (s).
+
+    A readout before the first excitation takes no offset.
+    """
+    readouts, pulses, played = timeline.readouts, timeline.pulses, timeline.played
+    excitations = pulses.time_us[pulses.use == _EXCITATION]
+    block = readouts.block
+    start_us = timeline.starts_us[block] + played["adc_delay_us"][block]
+    dwell_s = 1e-9 * played["adc_dwell_ns"][block].astype(np.float64)
+    last = np.searchsorted(excitations, start_us, side="right") - 1
+    excited = last >= 0
+    fired_us = np.where(excited, excitations[np.clip(last, 0, None)], start_us)
+    offset_hz = np.where(excited, field(1e-6 * fired_us), 0.0)
+    return offset_hz, 1e-6 * (start_us - fired_us), dwell_s
 
 
 def _poses(

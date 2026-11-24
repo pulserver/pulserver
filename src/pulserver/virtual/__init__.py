@@ -11,6 +11,7 @@ from ._localizer import localizer
 from ._motion import RigidMotion
 from ._noise import COIL_NOISE, ReceiveNoise
 from ._phantom import Ellipse, Phantom
+from ._physiology import PhysiologicalField
 from ._stream import SAMPLE_RATE, Chunk, Scan
 from ._tissue import Tissue
 
@@ -32,6 +33,7 @@ __all__ = [
     "FourierPlayer",
     "Girf",
     "Phantom",
+    "PhysiologicalField",
     "ReceiveNoise",
     "RigidMotion",
     "Scan",
