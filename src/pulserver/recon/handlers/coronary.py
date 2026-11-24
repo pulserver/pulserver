@@ -177,20 +177,40 @@ class CoronaryRecon(PicsRecon):
 def _matched(
     reference: np.ndarray, image: np.ndarray, window: tuple[slice, slice]
 ) -> tuple[float, float]:
-    """Return the displacement ``(y, x)`` of ``image`` from ``reference``, in pixels, within the reference's ``window`` of rows and columns.
+    """Return the displacement ``(y, x)`` of ``image`` from ``reference``, in pixels, by matching the reference's ``window`` of rows and columns.
 
-    The sub-pixel shift is the phase of the cross-spectrum of the two windows
-    (:func:`bartorch.tools.estimate_shift`, BART's ``estshift``).
+    The template is the reference over ``window``; the image is moved by
+    every whole pixel up to a quarter of the window along each axis, and
+    the move of the largest normalised
+    correlation with the template is refined by a parabola through its
+    neighbours along each axis.
     """
-    import torch
-    from bartorch import tools
+    template = reference[window]
+    template = template - template.mean()
+    reach_x = max(1, (window[1].stop - window[1].start) // 4)
+    reach_y = max(1, (window[0].stop - window[0].start) // 4)
+    moves_y = np.arange(-reach_y, reach_y + 1)
+    moves_x = np.arange(-reach_x, reach_x + 1)
+    score = np.empty((moves_y.size, moves_x.size))
+    for i, dy in enumerate(moves_y):
+        for j, dx in enumerate(moves_x):
+            part = np.roll(image, (-dy, -dx), axis=(0, 1))[window]
+            part = part - part.mean()
+            norm = np.linalg.norm(part) * np.linalg.norm(template)
+            score[i, j] = float(np.sum(part * template) / norm) if norm > 0 else 0.0
+    i, j = np.unravel_index(int(np.argmax(score)), score.shape)
 
-    shift = tools.estimate_shift(
-        torch.from_numpy(np.ascontiguousarray(reference[window], dtype=np.complex64)),
-        torch.from_numpy(np.ascontiguousarray(image[window], dtype=np.complex64)),
-        (0, 1),
+    def refined(values: np.ndarray, at: int) -> float:
+        if at == 0 or at == values.size - 1:
+            return 0.0
+        left, centre, right = values[at - 1], values[at], values[at + 1]
+        curvature = left - 2 * centre + right
+        return 0.5 * (left - right) / curvature if curvature < 0 else 0.0
+
+    return (
+        float(moves_y[i] + refined(score[:, j], i)),
+        float(moves_x[j] + refined(score[i, :], j)),
     )
-    return -float(shift[0]), -float(shift[1])
 
 
 def _encoded_fov(encoding: Any) -> tuple[float, float]:
