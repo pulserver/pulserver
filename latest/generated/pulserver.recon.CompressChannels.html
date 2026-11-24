@@ -527,11 +527,30 @@ passes unchanged, as do noise readouts. Place the gadget after
 <a class="reference internal" href="pulserver.recon.Prewhiten.html#pulserver.recon.Prewhiten" title="pulserver.recon.Prewhiten"><code class="xref py py-class docutils literal notranslate"><span class="pre">Prewhiten</span></code></a>, so the basis is that of whitened channels, and before
 any gadget that changes the header of a readout: a held readout is given
 on with its acquisition as this gadget received it.</p>
+<p>With <code class="docutils literal notranslate"><span class="pre">geometric</span></code>, the basis is one per position along the readout in
+image space, estimated from the held calibration readouts on their
+readout grid, neighbouring bases rotated onto each other so each virtual
+channel’s sensitivity stays smooth along the readout (Zhang et al., Magn
+Reson Med 2013, doi:10.1002/mrm.24267), and each readout is projected
+position by position. A
+readout is taken onto its grid by <code class="docutils literal notranslate"><span class="pre">grid(acquisition,</span> <span class="pre">samples)</span></code>, which
+returns <code class="docutils literal notranslate"><span class="pre">(matrix,</span> <span class="pre">reverse)</span></code> with <code class="docutils literal notranslate"><span class="pre">data</span> <span class="pre">&#64;</span> <span class="pre">matrix</span></code> the readout on the
+grid, run backwards where <code class="docutils literal notranslate"><span class="pre">reverse</span></code>, or <code class="docutils literal notranslate"><span class="pre">None</span></code> for a readout sampled
+on its grid; the projected readout is returned on its own samples, so the
+resampling that follows takes it onto the grid unchanged. Without
+<code class="docutils literal notranslate"><span class="pre">grid</span></code> every readout is taken as sampled on its grid.</p>
 <p>Corresponds to Gadgetron’s <code class="docutils literal notranslate"><span class="pre">PCACoilGadget</span></code> and
 <code class="docutils literal notranslate"><span class="pre">CoilReductionGadget</span></code>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>n_virtual</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a>) – Virtual channels kept.</p>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>n_virtual</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a>) – Virtual channels kept.</p></li>
+<li><p><strong>geometric</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>default=False</em>) – Keep a basis per position along the readout.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Attributes<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>grid</strong> (<em>Callable or None</em>) – Takes <code class="docutils literal notranslate"><span class="pre">(acquisition,</span> <span class="pre">samples)</span></code> to the readout’s grid matrix and
+direction.</p>
 </dd>
 </dl>
 </dd></dl>
@@ -544,6 +563,15 @@ on with its acquisition as this gadget received it.</p>
 </tr>
 <tr class="row-even"><td><p><a class="reference internal" href="pulserver.recon.CompressChannels.startup.html#pulserver.recon.CompressChannels.startup" title="pulserver.recon.CompressChannels.startup"><code class="xref py py-obj docutils literal notranslate"><span class="pre">startup</span></code></a></p></td>
 <td><p>Prepare for one stream; the default stores <code class="docutils literal notranslate"><span class="pre">context</span></code>, so overrides call it.</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p class="rubric">Attributes</p>
+<div class="pst-scrollable-table-container"><table class="autosummary longtable table">
+<tbody>
+<tr class="row-odd"><td><p><a class="reference internal" href="pulserver.recon.CompressChannels.grid.html#pulserver.recon.CompressChannels.grid" title="pulserver.recon.CompressChannels.grid"><code class="xref py py-obj docutils literal notranslate"><span class="pre">grid</span></code></a></p></td>
+<td><p></p></td>
 </tr>
 </tbody>
 </table>

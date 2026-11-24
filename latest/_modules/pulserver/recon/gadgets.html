@@ -449,6 +449,7 @@
     <span class="n">basis_of</span><span class="p">,</span>
     <span class="n">coil_labels</span><span class="p">,</span>
     <span class="n">digest</span><span class="p">,</span>
+    <span class="n">geometric_basis_of</span><span class="p">,</span>
     <span class="n">projected_readout</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._units</span><span class="w"> </span><span class="kn">import</span> <span class="n">carries</span>
@@ -610,6 +611,19 @@
 <span class="sd">    any gadget that changes the header of a readout: a held readout is given</span>
 <span class="sd">    on with its acquisition as this gadget received it.</span>
 
+<span class="sd">    With ``geometric``, the basis is one per position along the readout in</span>
+<span class="sd">    image space, estimated from the held calibration readouts on their</span>
+<span class="sd">    readout grid, neighbouring bases rotated onto each other so each virtual</span>
+<span class="sd">    channel's sensitivity stays smooth along the readout (Zhang et al., Magn</span>
+<span class="sd">    Reson Med 2013, doi:10.1002/mrm.24267), and each readout is projected</span>
+<span class="sd">    position by position. A</span>
+<span class="sd">    readout is taken onto its grid by ``grid(acquisition, samples)``, which</span>
+<span class="sd">    returns ``(matrix, reverse)`` with ``data @ matrix`` the readout on the</span>
+<span class="sd">    grid, run backwards where ``reverse``, or ``None`` for a readout sampled</span>
+<span class="sd">    on its grid; the projected readout is returned on its own samples, so the</span>
+<span class="sd">    resampling that follows takes it onto the grid unchanged. Without</span>
+<span class="sd">    ``grid`` every readout is taken as sampled on its grid.</span>
+
 <span class="sd">    Corresponds to Gadgetron's ``PCACoilGadget`` and</span>
 <span class="sd">    ``CoilReductionGadget``.</span>
 
@@ -617,12 +631,29 @@
 <span class="sd">    ----------</span>
 <span class="sd">    n_virtual : int</span>
 <span class="sd">        Virtual channels kept.</span>
+<span class="sd">    geometric : bool, default=False</span>
+<span class="sd">        Keep a basis per position along the readout.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    grid : Callable or None</span>
+<span class="sd">        Takes ``(acquisition, samples)`` to the readout's grid matrix and</span>
+<span class="sd">        direction.</span>
 <span class="sd">    """</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n_virtual</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="n">grid</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n_virtual</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">geometric</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">if</span> <span class="n">n_virtual</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"n_virtual is </span><span class="si">{</span><span class="n">n_virtual</span><span class="si">}</span><span class="s2">; it has to be at least 1"</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">n_virtual</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">n_virtual</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">geometric</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="n">geometric</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_project</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">acquisition</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">basis</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">basis</span><span class="o">.</span><span class="n">matrix</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">projected_readout</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">basis</span><span class="p">)</span>
+        <span class="n">grid</span> <span class="o">=</span> <span class="kc">None</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">grid</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+        <span class="k">return</span> <span class="n">projected_readout</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">basis</span><span class="p">,</span> <span class="n">grid</span><span class="p">)</span>
 
 <div class="viewcode-block" id="CompressChannels.startup">
 <a class="viewcode-back" href="../../../generated/pulserver.recon.CompressChannels.startup.html#pulserver.recon.CompressChannels.startup">[docs]</a>
@@ -638,7 +669,7 @@
             <span class="k">return</span> <span class="n">data</span>
         <span class="n">basis</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">coil_compression</span>
         <span class="k">if</span> <span class="n">basis</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">projected_readout</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">basis</span><span class="p">)</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_project</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">basis</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&lt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_virtual</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">_passing</span> <span class="o">=</span> <span class="kc">True</span>
             <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_unchanged</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="n">data</span><span class="p">)</span>
@@ -684,7 +715,8 @@
         <span class="n">basis</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">coil_compression</span> <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">_basis</span><span class="p">()</span>
         <span class="n">held</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_held</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_held</span><span class="p">,</span> <span class="p">[]</span>
         <span class="k">return</span> <span class="p">[</span>
-            <span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="n">projected_readout</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">basis</span><span class="p">))</span> <span class="k">for</span> <span class="n">acquisition</span><span class="p">,</span> <span class="n">data</span> <span class="ow">in</span> <span class="n">held</span>
+            <span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_project</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">basis</span><span class="p">))</span>
+            <span class="k">for</span> <span class="n">acquisition</span><span class="p">,</span> <span class="n">data</span> <span class="ow">in</span> <span class="n">held</span>
         <span class="p">]</span></div>
 
 
@@ -705,11 +737,36 @@
                 <span class="k">for</span> <span class="n">acquisition</span><span class="p">,</span> <span class="n">data</span> <span class="ow">in</span> <span class="n">calibration</span>
                 <span class="k">if</span> <span class="nb">int</span><span class="p">(</span><span class="n">acquisition_label</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="s2">"contrast"</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="ow">or</span> <span class="mi">0</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span>
             <span class="p">]</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">geometric</span><span class="p">:</span>
+                <span class="n">lines</span> <span class="o">=</span> <span class="p">[</span>
+                    <span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="n">data</span><span class="p">)</span>
+                    <span class="k">for</span> <span class="n">acquisition</span><span class="p">,</span> <span class="n">data</span> <span class="ow">in</span> <span class="n">calibration</span>
+                    <span class="k">if</span> <span class="ow">not</span> <span class="n">carries</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="n">_FOLLOWING</span><span class="p">)</span>
+                <span class="p">]</span> <span class="ow">or</span> <span class="n">calibration</span>
+                <span class="n">chosen</span> <span class="o">=</span> <span class="p">[</span>
+                    <span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="n">data</span><span class="p">)</span>
+                    <span class="k">for</span> <span class="n">acquisition</span><span class="p">,</span> <span class="n">data</span> <span class="ow">in</span> <span class="n">lines</span>
+                    <span class="k">if</span> <span class="nb">int</span><span class="p">(</span><span class="n">acquisition_label</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="s2">"contrast"</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="ow">or</span> <span class="mi">0</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span>
+                <span class="p">]</span> <span class="ow">or</span> <span class="n">lines</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">coil_compression</span> <span class="o">=</span> <span class="n">geometric_basis_of</span><span class="p">(</span>
+                    <span class="n">np</span><span class="o">.</span><span class="n">stack</span><span class="p">([</span><span class="bp">self</span><span class="o">.</span><span class="n">_on_grid</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">d</span><span class="p">)</span> <span class="k">for</span> <span class="n">a</span><span class="p">,</span> <span class="n">d</span> <span class="ow">in</span> <span class="n">chosen</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">),</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">n_virtual</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">coil_compression</span>
             <span class="n">readouts</span> <span class="o">=</span> <span class="n">first</span> <span class="ow">or</span> <span class="p">[</span><span class="n">data</span> <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">data</span> <span class="ow">in</span> <span class="n">calibration</span><span class="p">]</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">coil_compression</span> <span class="o">=</span> <span class="n">basis_of</span><span class="p">(</span>
                 <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span><span class="n">readouts</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">n_virtual</span>
             <span class="p">)</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">coil_compression</span></div>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">context</span><span class="o">.</span><span class="n">coil_compression</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_on_grid</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">acquisition</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Return a readout on its grid, in image order."""</span>
+        <span class="n">grid</span> <span class="o">=</span> <span class="kc">None</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">grid</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="n">acquisition</span><span class="p">,</span> <span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+        <span class="k">if</span> <span class="n">grid</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">data</span>
+        <span class="n">matrix</span><span class="p">,</span> <span class="n">reverse</span> <span class="o">=</span> <span class="n">grid</span>
+        <span class="n">line</span> <span class="o">=</span> <span class="n">data</span> <span class="o">@</span> <span class="n">matrix</span>
+        <span class="k">return</span> <span class="n">line</span><span class="p">[:,</span> <span class="p">::</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="k">if</span> <span class="n">reverse</span> <span class="k">else</span> <span class="n">line</span></div>
 
 
 
@@ -856,7 +913,7 @@
 <span class="k">def</span><span class="w"> </span><span class="nf">_whitening</span><span class="p">(</span>
     <span class="n">readouts</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">],</span> <span class="n">dwell_us</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">header</span><span class="p">:</span> <span class="n">Any</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Whitening</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Return the whitening of noise readouts ``(coils, samples)`` sampled with ``dwell_us``."""</span>
+<span class="w">    </span><span class="sd">"""Return the whitening of noise readouts ``(coils, samples)`` sampled with ``dwell_us``, a dwell of 0 or ``None`` stating none."""</span>
     <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
     <span class="kn">from</span><span class="w"> </span><span class="nn">bartorch</span><span class="w"> </span><span class="kn">import</span> <span class="n">tools</span>
 
@@ -872,6 +929,7 @@
     <span class="n">_</span><span class="p">,</span> <span class="n">matrix</span> <span class="o">=</span> <span class="n">tools</span><span class="o">.</span><span class="n">whiten</span><span class="p">(</span><span class="n">noise</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="p">:</span><span class="mi">1</span><span class="p">],</span> <span class="n">noise</span><span class="p">,</span> <span class="n">return_matrix</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
     <span class="n">matrix</span> <span class="o">=</span> <span class="n">matrix</span><span class="o">.</span><span class="n">numpy</span><span class="p">()[:,</span> <span class="p">:,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span>
     <span class="n">labels</span> <span class="o">=</span> <span class="n">coil_labels</span><span class="p">(</span><span class="n">header</span><span class="p">)</span>
+    <span class="n">dwell_us</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">dwell_us</span><span class="p">)</span> <span class="k">if</span> <span class="n">dwell_us</span> <span class="k">else</span> <span class="kc">None</span>
     <span class="k">return</span> <span class="n">Whitening</span><span class="p">(</span><span class="n">matrix</span><span class="p">,</span> <span class="n">labels</span><span class="p">,</span> <span class="n">dwell_us</span><span class="p">,</span> <span class="n">digest</span><span class="p">(</span><span class="n">matrix</span><span class="p">,</span> <span class="n">labels</span><span class="p">,</span> <span class="n">dwell_us</span><span class="p">))</span>
 
 

@@ -18,3 +18,11 @@
    ~CompressChannels.startup
 
 
+
+.. rubric:: Attributes
+
+.. autosummary::
+   :toctree:
+   :nosignatures:
+
+   ~CompressChannels.grid

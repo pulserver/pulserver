@@ -505,7 +505,9 @@
 
 <span class="sd">    ``matrix`` is the unitary ``(coils, coils)`` matrix ``bartorch.tools.cc``</span>
 <span class="sd">    returns, of which ``n_virtual`` virtual channels are kept; ``id``</span>
-<span class="sd">    identifies the basis.</span>
+<span class="sd">    identifies the basis. A geometric basis (``geometric_basis_of``) is</span>
+<span class="sd">    ``(readout, n_virtual, coils)``: the projection onto the virtual channels</span>
+<span class="sd">    at each position along the readout, in image order.</span>
 <span class="sd">    """</span>
 
     <span class="n">matrix</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
@@ -1209,11 +1211,13 @@
     <span class="kn">from</span><span class="w"> </span><span class="nn">bartorch</span><span class="w"> </span><span class="kn">import</span> <span class="n">tools</span>
 
     <span class="n">coils</span> <span class="o">=</span> <span class="n">maps</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
-    <span class="k">if</span> <span class="n">coils</span> <span class="o">!=</span> <span class="n">basis</span><span class="o">.</span><span class="n">matrix</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span>
+    <span class="k">if</span> <span class="n">coils</span> <span class="o">!=</span> <span class="n">basis</span><span class="o">.</span><span class="n">matrix</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]:</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
             <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">coils</span><span class="si">}</span><span class="s2"> channels cannot be projected onto a basis of "</span>
-            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">basis</span><span class="o">.</span><span class="n">matrix</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">}</span><span class="s2">"</span>
+            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">basis</span><span class="o">.</span><span class="n">matrix</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="si">}</span><span class="s2">"</span>
         <span class="p">)</span>
+    <span class="k">if</span> <span class="n">basis</span><span class="o">.</span><span class="n">matrix</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">3</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">"xvc,c...x-&gt;v...x"</span><span class="p">,</span> <span class="n">basis</span><span class="o">.</span><span class="n">matrix</span><span class="p">,</span> <span class="n">maps</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">complex64</span><span class="p">)</span>
     <span class="n">virtual</span> <span class="o">=</span> <span class="n">tools</span><span class="o">.</span><span class="n">ccapply</span><span class="p">(</span>
         <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">maps</span><span class="p">))</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">coils</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
         <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">basis</span><span class="o">.</span><span class="n">matrix</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">coils</span><span class="p">,</span> <span class="n">coils</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
@@ -1247,17 +1251,135 @@
     <span class="k">return</span> <span class="n">Basis</span><span class="p">(</span><span class="n">matrix</span><span class="p">,</span> <span class="n">n_virtual</span><span class="p">,</span> <span class="n">digest</span><span class="p">(</span><span class="n">matrix</span><span class="p">[:,</span> <span class="p">:</span><span class="n">n_virtual</span><span class="p">],</span> <span class="n">n_virtual</span><span class="p">))</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">projected_readout</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">basis</span><span class="p">:</span> <span class="n">Basis</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Return a ``(coils, samples)`` readout on the virtual channels of ``basis`` (:func:`bartorch.tools.ccapply_readout`)."""</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">projected_readout</span><span class="p">(</span>
+    <span class="n">data</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">basis</span><span class="p">:</span> <span class="n">Basis</span><span class="p">,</span> <span class="n">grid</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="nb">bool</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return a ``(coils, samples)`` readout on the virtual channels of ``basis``, by :func:`bartorch.tools.ccapply_readout` for an SVD basis.</span>
+
+<span class="sd">    A geometric basis acts at each position along the readout: the readout is</span>
+<span class="sd">    taken onto its grid by ``grid``, ``(matrix, reverse)`` with</span>
+<span class="sd">    ``data @ matrix`` the readout on a grid of the basis's length, run</span>
+<span class="sd">    backwards where ``reverse`` (the readout as sampled where ``grid`` is</span>
+<span class="sd">    ``None``), projected position by position, and returned to its own</span>
+<span class="sd">    samples through the pseudo-inverse of ``matrix``, so that taking the</span>
+<span class="sd">    result onto the grid gives the projected grid readout.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If a geometric basis has another length than the readout's grid.</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="n">basis</span><span class="o">.</span><span class="n">matrix</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">bartorch</span><span class="w"> </span><span class="kn">import</span> <span class="n">tools</span>
+
+        <span class="n">virtual</span> <span class="o">=</span> <span class="n">tools</span><span class="o">.</span><span class="n">ccapply_readout</span><span class="p">(</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">data</span><span class="p">)),</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">basis</span><span class="o">.</span><span class="n">matrix</span><span class="p">),</span>
+            <span class="n">p</span><span class="o">=</span><span class="n">basis</span><span class="o">.</span><span class="n">n_virtual</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">virtual</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">copy</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">matrix</span><span class="p">,</span> <span class="n">reverse</span> <span class="o">=</span> <span class="n">grid</span> <span class="k">if</span> <span class="n">grid</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+    <span class="n">columns</span> <span class="o">=</span> <span class="n">basis</span><span class="o">.</span><span class="n">matrix</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="k">if</span> <span class="n">matrix</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">matrix</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span> <span class="o">!=</span> <span class="n">columns</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"a readout of "</span>
+            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="n">matrix</span><span class="w"> </span><span class="ow">is</span><span class="w"> </span><span class="kc">None</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="n">matrix</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="si">}</span><span class="s2"> grid "</span>
+            <span class="sa">f</span><span class="s2">"points cannot be projected onto a geometric basis of </span><span class="si">{</span><span class="n">columns</span><span class="si">}</span><span class="s2">"</span>
+        <span class="p">)</span>
+    <span class="n">into</span><span class="p">,</span> <span class="n">out_of</span> <span class="o">=</span> <span class="n">_grid_transforms</span><span class="p">(</span><span class="n">matrix</span><span class="p">,</span> <span class="n">reverse</span><span class="p">,</span> <span class="n">columns</span><span class="p">)</span>
+    <span class="n">hybrid</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">complex64</span><span class="p">,</span> <span class="n">copy</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span> <span class="o">@</span> <span class="n">into</span>
+    <span class="n">virtual</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">"xvc,cx-&gt;vx"</span><span class="p">,</span> <span class="n">basis</span><span class="o">.</span><span class="n">matrix</span><span class="p">,</span> <span class="n">hybrid</span><span class="p">)</span> <span class="o">@</span> <span class="n">out_of</span>
+    <span class="k">return</span> <span class="n">virtual</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">copy</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+
+<span class="n">_GRID_TRANSFORMS</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">tuple</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_grid_transforms</span><span class="p">(</span>
+    <span class="n">matrix</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">reverse</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span> <span class="n">columns</span><span class="p">:</span> <span class="nb">int</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Return the linear maps of a readout onto image space along its grid and back to its samples, kept for as long as ``matrix`` is.</span>
+
+<span class="sd">    ``into`` takes the samples onto the grid, runs it backwards where</span>
+<span class="sd">    ``reverse``, and transforms it to image space (:func:`_to_hybrid`);</span>
+<span class="sd">    ``out_of`` transforms back (:func:`_to_kspace`), undoes the reversal and</span>
+<span class="sd">    returns to the samples through the pseudo-inverse of ``matrix``.</span>
+<span class="sd">    """</span>
+    <span class="n">key</span> <span class="o">=</span> <span class="p">(</span><span class="nb">id</span><span class="p">(</span><span class="n">matrix</span><span class="p">),</span> <span class="nb">bool</span><span class="p">(</span><span class="n">reverse</span><span class="p">),</span> <span class="n">columns</span><span class="p">)</span>
+    <span class="n">held</span> <span class="o">=</span> <span class="n">_GRID_TRANSFORMS</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">held</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">held</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">matrix</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">_GRID_TRANSFORMS</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">256</span><span class="p">:</span>
+            <span class="n">_GRID_TRANSFORMS</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+        <span class="n">identity</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="n">columns</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">complex64</span><span class="p">)</span>
+        <span class="n">order</span> <span class="o">=</span> <span class="nb">slice</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="k">if</span> <span class="n">reverse</span> <span class="k">else</span> <span class="nb">slice</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
+        <span class="n">to_image</span> <span class="o">=</span> <span class="n">_to_hybrid</span><span class="p">(</span><span class="n">identity</span><span class="p">[</span><span class="n">order</span><span class="p">])</span>
+        <span class="n">to_kspace</span> <span class="o">=</span> <span class="n">_to_kspace</span><span class="p">(</span><span class="n">identity</span><span class="p">)[:,</span> <span class="n">order</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">matrix</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">to_image</span> <span class="o">=</span> <span class="n">matrix</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">complex64</span><span class="p">)</span> <span class="o">@</span> <span class="n">to_image</span>
+            <span class="n">to_kspace</span> <span class="o">=</span> <span class="n">to_kspace</span> <span class="o">@</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">pinv</span><span class="p">(</span><span class="n">matrix</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">complex64</span><span class="p">)</span>
+        <span class="n">held</span> <span class="o">=</span> <span class="p">(</span><span class="n">matrix</span><span class="p">,</span> <span class="n">to_image</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">complex64</span><span class="p">),</span> <span class="n">to_kspace</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">complex64</span><span class="p">))</span>
+        <span class="n">_GRID_TRANSFORMS</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">held</span>
+    <span class="k">return</span> <span class="n">held</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">held</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">geometric_basis_of</span><span class="p">(</span><span class="n">lines</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">n_virtual</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Basis</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the geometric basis of ``(coils, lines, readout)`` grid readouts: BART's per-position coil compression (``bart cc -G``).</span>
+
+<span class="sd">    At each position of the readout in image space, the channels' covariance</span>
+<span class="sd">    over the lines gives the ``n_virtual`` strongest virtual channels, so a</span>
+<span class="sd">    channel that sees one side of the head is kept where that side lies, and</span>
+<span class="sd">    neighbouring positions are aligned so each virtual channel's sensitivity</span>
+<span class="sd">    stays smooth along the readout (Zhang et al., Magn Reson Med 2013,</span>
+<span class="sd">    doi:10.1002/mrm.24267; :func:`bartorch.tools.cc` and</span>
+<span class="sd">    :func:`bartorch.tools.ccapply`). The basis holds the projection</span>
+<span class="sd">    ``bart ccapply -G`` applies at each position, ``(readout, n_virtual,</span>
+<span class="sd">    coils)``, read off by applying it to one channel at a time.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If ``n_virtual`` exceeds the channels.</span>
+<span class="sd">    """</span>
     <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
     <span class="kn">from</span><span class="w"> </span><span class="nn">bartorch</span><span class="w"> </span><span class="kn">import</span> <span class="n">tools</span>
 
-    <span class="n">virtual</span> <span class="o">=</span> <span class="n">tools</span><span class="o">.</span><span class="n">ccapply_readout</span><span class="p">(</span>
-        <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">data</span><span class="p">)),</span>
-        <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">basis</span><span class="o">.</span><span class="n">matrix</span><span class="p">),</span>
-        <span class="n">p</span><span class="o">=</span><span class="n">basis</span><span class="o">.</span><span class="n">n_virtual</span><span class="p">,</span>
+    <span class="n">coils</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">columns</span> <span class="o">=</span> <span class="n">lines</span><span class="o">.</span><span class="n">shape</span>
+    <span class="k">if</span> <span class="n">n_virtual</span> <span class="o">&gt;</span> <span class="n">coils</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"cannot keep </span><span class="si">{</span><span class="n">n_virtual</span><span class="si">}</span><span class="s2"> virtual channels of </span><span class="si">{</span><span class="n">coils</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+    <span class="n">calibration</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">lines</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">complex64</span><span class="p">)</span>
+    <span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">coils</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">lines</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">columns</span><span class="p">)</span>
+    <span class="n">compression</span> <span class="o">=</span> <span class="n">tools</span><span class="o">.</span><span class="n">cc</span><span class="p">(</span><span class="n">calibration</span><span class="p">,</span> <span class="n">p</span><span class="o">=</span><span class="n">n_virtual</span><span class="p">,</span> <span class="n">M</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">A</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">G</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">channels</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">coils</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">coils</span><span class="p">,</span> <span class="n">columns</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">complex64</span><span class="p">)</span>
+    <span class="n">channels</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">coils</span><span class="p">),</span> <span class="mi">0</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">coils</span><span class="p">)]</span> <span class="o">=</span> <span class="mf">1.0</span>
+    <span class="n">applied</span> <span class="o">=</span> <span class="n">tools</span><span class="o">.</span><span class="n">ccapply</span><span class="p">(</span>
+        <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">_to_kspace</span><span class="p">(</span><span class="n">channels</span><span class="p">)),</span> <span class="n">compression</span><span class="p">,</span> <span class="n">p</span><span class="o">=</span><span class="n">n_virtual</span><span class="p">,</span> <span class="n">G</span><span class="o">=</span><span class="kc">True</span>
     <span class="p">)</span>
-    <span class="k">return</span> <span class="n">virtual</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">copy</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">matrix</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span>
+        <span class="n">_to_hybrid</span><span class="p">(</span><span class="n">applied</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">())[:,</span> <span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">transpose</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">complex64</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">Basis</span><span class="p">(</span><span class="n">matrix</span><span class="p">,</span> <span class="n">n_virtual</span><span class="p">,</span> <span class="n">digest</span><span class="p">(</span><span class="n">matrix</span><span class="p">,</span> <span class="n">n_virtual</span><span class="p">,</span> <span class="s2">"geometric"</span><span class="p">))</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_to_hybrid</span><span class="p">(</span><span class="n">line</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return k-space along its last axis in image space (:func:`bartorch.fft`, centred, unitary)."""</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">bartorch</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+
+    <span class="k">return</span> <span class="n">bartorch</span><span class="o">.</span><span class="n">fft</span><span class="p">(</span>
+        <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">line</span><span class="p">)),</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">inverse</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">unitary</span><span class="o">=</span><span class="kc">True</span>
+    <span class="p">)</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_to_kspace</span><span class="p">(</span><span class="n">line</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return image space along its last axis in k-space (:func:`bartorch.fft`, centred, unitary)."""</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">bartorch</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+
+    <span class="k">return</span> <span class="n">bartorch</span><span class="o">.</span><span class="n">fft</span><span class="p">(</span>
+        <span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">line</span><span class="p">)),</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">unitary</span><span class="o">=</span><span class="kc">True</span>
+    <span class="p">)</span><span class="o">.</span><span class="n">numpy</span><span class="p">()</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_compressed</span><span class="p">(</span><span class="n">buffer</span><span class="p">:</span> <span class="n">ReconBuffer</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="n">basis</span><span class="p">:</span> <span class="n">Basis</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ReconBuffer</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
