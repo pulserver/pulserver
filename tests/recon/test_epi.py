@@ -1026,3 +1026,29 @@ def test_epi_compresses_first_with_a_geometric_basis_on_the_ramp_resampling_grid
     assert isinstance(recon.gadgets[0], Prewhiten) and recon.gadgets[1] is compress
     assert compress.geometric
     assert compress.grid == recon.gadget(RampSampling).operator
+
+
+def test_the_readouts_of_one_excitation_share_one_correction_equal_to_bartorch():
+    import torch
+    from bartorch import tools
+
+    gadget = EpiPhaseCorrection()
+    gadget.startup(SimpleNamespace(header=None))
+    gadget.slabs = {0}
+    _excitation(gadget, 0.0, 0.0)
+    _excitation(gadget, 0.4, 0.2)
+    rng = np.random.default_rng(0)
+    data = rng.standard_normal((4, 3, COLUMNS)) + 1j * rng.standard_normal(
+        (4, 3, COLUMNS)
+    )
+    data = data.astype(np.complex64)
+    kept = len(gadget._corrections)
+
+    for line in data:
+        want = tools.correct_lines([(torch.from_numpy(line), True)], gadget.excitation)[
+            0
+        ]
+        got = gadget(_acquisition(AcquisitionFlag.IS_REVERSE), line)
+        np.testing.assert_allclose(got, want.numpy(), atol=1e-5 * np.abs(line).max())
+
+    assert len(gadget._corrections) == kept

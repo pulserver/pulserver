@@ -297,6 +297,7 @@ class EpiPhaseCorrection(Gadget):
     def __init__(self, excitation_phase: bool = True) -> None:
         super().__init__()
         self.excitation_phase = bool(excitation_phase)
+        self._corrections = {}
 
     def startup(self, context):
         super().startup(context)
@@ -318,6 +319,7 @@ class EpiPhaseCorrection(Gadget):
         self.latest = None
         self._warned = False
         self._delay_fitted = False
+        self._corrections = {}
 
     def _lines(self, collected, delay=None):
         """Return the readouts of ``collected``, ``(acquisition, data, reverse)``, resampled and in forward order."""
@@ -424,7 +426,6 @@ class EpiPhaseCorrection(Gadget):
 
     def __call__(self, acquisition, data):
         import torch
-        from bartorch import tools
 
         reverse = has_acquisition_flag(acquisition, "ACQ_IS_REVERSE")
         if has_acquisition_flag(acquisition, "ACQ_IS_PHASECORR_DATA"):
@@ -476,7 +477,36 @@ class EpiPhaseCorrection(Gadget):
                 # reversed one, flipped back into its own order first.
                 line = (torch.flip(line[0], [-1]), True)
                 phase = self.excitation
-        return tools.correct_lines([line], phase)[0].numpy()
+        data = line[0].numpy()
+        if not line[1]:
+            return data.astype(np.complex64, copy=False)
+        if phase is None:
+            return np.ascontiguousarray(data[..., ::-1], dtype=np.complex64)
+        return data.astype(np.complex64, copy=False) @ self._correction(
+            phase, data.shape[-1]
+        )
+
+    def _correction(self, phase, samples):
+        """Return the ``(samples, samples)`` matrix ``M`` with ``data @ M`` the reversed readout ``data`` flipped and corrected by ``phase`` (:func:`bartorch.tools.correct_lines`).
+
+        Matrices are kept per phase and sample count while the phases repeat,
+        so the transforms run once per excitation rather than once per readout.
+        """
+        import torch
+        from bartorch import tools
+
+        coefficients = np.asarray(phase, dtype=np.float64)
+        key = (samples, coefficients.tobytes())
+        matrix = self._corrections.get(key)
+        if matrix is None:
+            if len(self._corrections) >= CORRECTIONS_KEPT:
+                self._corrections.clear()
+            identity = torch.eye(samples, dtype=torch.complex64)
+            matrix = tools.correct_lines(
+                [(identity, True)], torch.from_numpy(coefficients)
+            )[0].numpy()
+            self._corrections[key] = matrix
+        return matrix
 
     def _excitation_phase(self, acquisition):
         """Return the coefficients removing the phase of the excitation whose navigator was just read, against the first of its navigator's encoding space and slice; ``None`` for the first, or where no encoding space is 3D."""
@@ -527,6 +557,9 @@ def _navigator_echo_scale(header) -> float | None:
         return None
     return train / navigator
 
+
+#: Correction matrices :class:`EpiPhaseCorrection` keeps before starting over.
+CORRECTIONS_KEPT = 64
 
 #: First trial delay of the read gradient (s), and the secant steps after it.
 DELAY_STEP_S, DELAY_ITERATIONS = 1e-6, 3
