@@ -810,7 +810,7 @@ def basis_of(samples: np.ndarray, n_virtual: int) -> Basis:
 def projected_readout(
     data: np.ndarray, basis: Basis, grid: tuple[np.ndarray, bool] | None = None
 ) -> np.ndarray:
-    """Return a ``(coils, samples)`` readout on the virtual channels of ``basis``, as :func:`bartorch.tools.ccapply` projects k-space.
+    """Return a ``(coils, samples)`` readout on the virtual channels of ``basis``, by :func:`bartorch.tools.ccapply_readout` for an SVD basis.
 
     A geometric basis acts at each position along the readout: the readout is
     taken onto its grid by ``grid``, ``(matrix, reverse)`` with
@@ -826,10 +826,15 @@ def projected_readout(
         If a geometric basis has another length than the readout's grid.
     """
     if basis.matrix.ndim == 2:
-        virtual = basis.matrix[: basis.n_virtual].conj()
-        return (virtual.astype(data.dtype, copy=False) @ data).astype(
-            data.dtype, copy=False
+        import torch
+        from bartorch import tools
+
+        virtual = tools.ccapply_readout(
+            torch.from_numpy(np.ascontiguousarray(data)),
+            torch.from_numpy(basis.matrix),
+            p=basis.n_virtual,
         )
+        return virtual.numpy().astype(data.dtype, copy=False)
     matrix, reverse = grid if grid is not None else (None, False)
     columns = basis.matrix.shape[0]
     if (data.shape[-1] if matrix is None else matrix.shape[-1]) != columns:
