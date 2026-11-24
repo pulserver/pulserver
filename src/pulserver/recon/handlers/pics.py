@@ -492,11 +492,10 @@ def pics_image(
     (:func:`bartorch.optim.data_scaling`), and FISTA over the wavelet term of
     weight
     ``wavelet`` along the axes of at least ``WAVELET_MIN_POINTS`` points. A
-    volume of one partition is solved as a plane. The k-space, the maps and
-    the iteration's vectors stay on the host, and the encoding computes on
-    ``device``; ``None`` is the host. FISTA starts from the image ``x0``,
-    ``(z, y, x)``, when one is given, and from zero otherwise. The image is
-    on the host.
+    volume of one partition is solved as a plane. The iteration, its
+    proximal steps included, runs on ``device``; ``None`` is the host. FISTA
+    starts from the image ``x0``, ``(z, y, x)``, when one is given, and from
+    zero otherwise. The image is returned on the device of ``kspace``.
 
     With ``phase``, a unit-magnitude ``(z, y, x)`` image, the image is that
     phase times a real image ``m``, and the encoding is that of ``m``: the
@@ -543,8 +542,10 @@ def pics_image(
     else:
         solve = optim.CG(lambda_=max(float(l2), CG_MIN_L2), maxiter=int(iterations))
     data = (measured * (1.0 / scaling)).reshape(kspace.shape[0], *grid)
-    start = {} if x0 is None else {"x0": (x0 * (1.0 / scaling)).reshape(grid)}
-    image = (scaling * solve(data, encoding, **start)).reshape(kspace.shape[1:])
+    on = torch.device(device) if device is not None else data.device
+    start = {} if x0 is None else {"x0": (x0 * (1.0 / scaling)).reshape(grid).to(on)}
+    image = scaling * solve(data.to(on), encoding, **start)
+    image = image.to(kspace.device).reshape(kspace.shape[1:])
     if phase is None:
         return image
     return image.real.to(torch.complex64) * phase.reshape(image.shape)

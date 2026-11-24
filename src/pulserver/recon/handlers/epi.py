@@ -1949,11 +1949,12 @@ def cg_sense(kspace, maps, sampled, iterations, device, *, l2=0.0, shots=None):
     """Return the image ``(z, y, x)`` minimising ``|P F S x - y|^2 + l2 |x|^2``, ``l2`` at least ``CG_MIN_L2``, by conjugate gradients from zero.
 
     The encoding is :class:`bartorch.linop.CartesianSense` of ``maps`` over
-    the ``sampled`` lines, on ``device``, with ``shots``, the ``(masks,
-    phases)`` of a segmented unit, each shot's phase in it
-    (:func:`bartorch.tools.shot_encoding`); stopping after
-    ``iterations`` steps regularizes the solve. The data are scaled as
-    ``pics`` scales them.
+    the ``sampled`` lines, with ``shots``, the ``(masks, phases)`` of a
+    segmented unit, each shot's phase in it
+    (:func:`bartorch.tools.shot_encoding`); stopping after ``iterations``
+    steps regularizes the solve. The data are scaled as ``pics`` scales them.
+    The iteration runs on ``device`` (the host where ``None``), and the image
+    is returned on the device of ``kspace``.
     """
     import bartorch
     import torch
@@ -1971,8 +1972,10 @@ def cg_sense(kspace, maps, sampled, iterations, device, *, l2=0.0, shots=None):
     scaling = optim.data_scaling(shifted.reshape(kspace.shape[0], *grid), A=encoding)
     scaling = scaling or 1.0
     data = (measured * (1.0 / scaling)).reshape(kspace.shape[0], *grid)
+    on = torch.device(device) if device is not None else data.device
     solve = optim.CG(lambda_=max(float(l2), CG_MIN_L2), maxiter=int(iterations))
-    return (scaling * solve(data, encoding)).reshape(kspace.shape[1:])
+    image = scaling * solve(data.to(on), encoding)
+    return image.to(kspace.device).reshape(kspace.shape[1:])
 
 
 #: Degree of the Legendre polynomials in plane, per partition, that a shot's
