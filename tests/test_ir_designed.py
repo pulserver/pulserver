@@ -60,11 +60,13 @@ def _assert_agrees(ours, theirs, key):
         a, b = np.asarray(ours), np.asarray(theirs)
         assert a.shape == b.shape, key
         for column in PHASES.get(key, ()):
-            # A phase near a whole turn wraps either way.
-            a = a.copy()
-            a[:, column] = b[:, column] + np.angle(
-                np.exp(1j * (a[:, column] - b[:, column]))
-            )
+            # A phase near a whole turn wraps either way. The FOV-shift phase
+            # integrates the gradients from the start of the scan, so the
+            # float32 shapes' error accumulates over the events: each event's
+            # phase is compared as its step from the one before.
+            a, b = a.copy(), b.copy()
+            wrapped = np.angle(np.exp(1j * (a[:, column] - b[:, column])))
+            a[:, column] = b[:, column] + np.diff(wrapped, prepend=0.0)
         if a.dtype.kind == "f":
             scale = np.abs(b).max(initial=0)
             np.testing.assert_allclose(a, b, rtol=1e-6, atol=1e-6 * scale, err_msg=key)
