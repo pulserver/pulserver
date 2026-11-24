@@ -805,7 +805,7 @@
     <span class="kn">from</span><span class="w"> </span><span class="nn">bartorch</span><span class="w"> </span><span class="kn">import</span> <span class="n">fft</span>
 
     <span class="n">kspace</span> <span class="o">=</span> <span class="n">fft</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">stack</span><span class="p">),</span> <span class="p">(</span><span class="mi">1</span><span class="p">,),</span> <span class="n">unitary</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">stack</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
-    <span class="n">maps</span> <span class="o">=</span> <span class="n">estimate</span><span class="p">(</span><span class="n">kspace</span><span class="o">.</span><span class="n">contiguous</span><span class="p">())</span>
+    <span class="n">maps</span> <span class="o">=</span> <span class="n">estimate</span><span class="p">(</span><span class="n">kspace</span><span class="o">.</span><span class="n">contiguous</span><span class="p">()</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">_device</span><span class="p">(</span><span class="n">context</span><span class="p">)))</span>
     <span class="n">maps</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">maps</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">(),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">complex64</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">maps</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="n">stack</span><span class="o">.</span><span class="n">shape</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
@@ -1044,6 +1044,11 @@
     <span class="k">return</span> <span class="n">kspace</span>
 
 
+<span class="k">def</span><span class="w"> </span><span class="nf">_device</span><span class="p">(</span><span class="n">context</span><span class="p">:</span> <span class="n">ReconContext</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Return the device the stream reconstructs on, where its calibration is fitted; ``'cpu'`` when it names none."""</span>
+    <span class="k">return</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">context</span><span class="p">,</span> <span class="s2">"device"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">or</span> <span class="s2">"cpu"</span>
+
+
 <span class="k">def</span><span class="w"> </span><span class="nf">_estimated</span><span class="p">(</span>
     <span class="n">context</span><span class="p">:</span> <span class="n">ReconContext</span><span class="p">,</span> <span class="n">ref</span><span class="p">:</span> <span class="n">ReconBuffer</span><span class="p">,</span> <span class="n">estimate</span><span class="p">:</span> <span class="n">Any</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">CoilSensitivities</span><span class="p">:</span>
@@ -1051,7 +1056,7 @@
     <span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 
     <span class="n">kspace</span> <span class="o">=</span> <span class="n">_zero_filled</span><span class="p">(</span><span class="n">ref</span><span class="p">)</span>
-    <span class="n">maps</span> <span class="o">=</span> <span class="n">estimate</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">kspace</span><span class="p">))</span>
+    <span class="n">maps</span> <span class="o">=</span> <span class="n">estimate</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">from_numpy</span><span class="p">(</span><span class="n">kspace</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">_device</span><span class="p">(</span><span class="n">context</span><span class="p">)))</span>
     <span class="n">maps</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">maps</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">cpu</span><span class="p">()</span><span class="o">.</span><span class="n">numpy</span><span class="p">(),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">complex64</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">maps</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="n">kspace</span><span class="o">.</span><span class="n">shape</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
