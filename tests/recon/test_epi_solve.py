@@ -513,12 +513,11 @@ def test_an_undersampled_unit_takes_the_wavelet_of_a_slab_multiband_unit_or_slic
         (2, 2, "EPI_WAVELET_SLICE"),
         (4, 1, "EPI_WAVELET_SLICE"),
         (3, 2, "EPI_WAVELET_SLICE"),
-        (2, 4, "EPI_WAVELET_SLAB"),
+        (2, 4, "EPI_WAVELET_SLICE"),
+        (3, 3, "EPI_WAVELET_SLICE"),
     ],
 )
-def test_a_slab_takes_the_slice_wavelet_up_to_sixfold_acceleration_and_the_slab_wavelet_beyond(
-    ry, rz, expected
-):
+def test_a_slab_takes_the_slice_wavelet_at_every_caipi_lattice(ry, rz, expected):
     from pulserver.recon.handlers import epi
 
     volume = np.zeros((2, 8, 24, 8), np.complex64)

@@ -680,10 +680,9 @@ class EpiRecon(PicsRecon):
         ``EPI_WAVELET_MULTIBAND`` for a multiband unit whose bands lie on
         calibrated slices (``EPI_WAVELET_SLICE`` for one read in shots enough
         to bring its acceleration per shot to
-        ``EPI_WAVELET_SEGMENTED_ACCELERATION``), ``EPI_WAVELET_SLAB`` for any
-        other unit of more than one partition accelerated beyond
-        ``EPI_WAVELET_SLAB_ACCELERATION`` and ``EPI_WAVELET_SLICE`` for a
-        slice or a slab accelerated no more.
+        ``EPI_WAVELET_SEGMENTED_ACCELERATION``), ``EPI_WAVELET_SLAB`` for a
+        multiband stack without calibrated slices, and ``EPI_WAVELET_SLICE``
+        for a slice or a slab.
     iterations : int, default=30
         Conjugate-gradient steps, or ``pics`` iterations with ``wavelet``.
     l2 : float, default=0.0
@@ -960,19 +959,15 @@ class EpiRecon(PicsRecon):
         A multiband unit read in several shots whose in-plane line step times
         its bands, divided by its shots, is at most
         ``EPI_WAVELET_SEGMENTED_ACCELERATION`` takes ``EPI_WAVELET_SLICE``;
-        any other multiband unit ``EPI_WAVELET_MULTIBAND``. A slab
-        accelerated at most ``EPI_WAVELET_SLAB_ACCELERATION`` (R3 x 2) takes
-        ``EPI_WAVELET_SLICE``, and a slab accelerated further
-        ``EPI_WAVELET_SLAB``.
+        any other multiband unit ``EPI_WAVELET_MULTIBAND``. A slab takes
+        ``EPI_WAVELET_SLICE``.
         """
         if not self.automatic_wavelet:
             return self.wavelet
         if volume.shape[1] == 1:
             return EPI_WAVELET_SLICE
         if not bands:
-            if _acceleration(volume) <= EPI_WAVELET_SLAB_ACCELERATION:
-                return EPI_WAVELET_SLICE
-            return EPI_WAVELET_SLAB
+            return EPI_WAVELET_SLICE
         if shots > 1:
             per_shot = _line_step(volume) * volume.shape[1] / shots
             if per_shot <= EPI_WAVELET_SEGMENTED_ACCELERATION:
@@ -1532,28 +1527,23 @@ def plane_positions(acquisition, space, count) -> list[float]:
     return [centre + (index - count // 2) * depth for index in range(count)]
 
 
-#: Wavelet ``lambda`` of an undersampled 3D EPI slab accelerated beyond
-#: ``EPI_WAVELET_SLAB_ACCELERATION``, 2D EPI multiband unit and 2D EPI slice,
-#: on data scaled as ``pics`` scales them. A slice's prior is weak enough to
-#: keep the cortex and the deep grey nuclei. A multiband unit unfolds its
-#: bands and its in-plane aliases together: in a noisy 7T simulation of a
-#: 2 mm stack at MB2 and R 2 to 4 with six virtual channels, its bands are
-#: closest to a fully sampled gradient echo near this weight, a slice's
-#: leaving R 4 aliased.
+#: Wavelet ``lambda`` of an undersampled 2D EPI multiband unit, 2D EPI slice
+#: and 3D EPI slab, on data scaled as ``pics`` scales them. A slice's prior is
+#: weak enough to keep the cortex and the deep grey nuclei. A multiband unit
+#: unfolds its bands and its in-plane aliases together: in a noisy 7T
+#: simulation of a 2 mm stack at MB2 and R 2 to 4 with six virtual channels,
+#: its bands are closest to a fully sampled gradient echo near this weight, a
+#: slice's leaving R 4 aliased. A slab takes the slice's weight at every
+#: CAIPI lattice: in a 7T simulation of a 128 mm slab of 2 mm partitions with
+#: the field, gradient delays, fat, B1+, motion, respiration and correlated
+#: noise, twelve geometrically compressed channels, against the fully
+#: sampled gradient echo, R3 x 3 came out at 0.118 brain NRMSE at the slice
+#: weight against 0.143 at the multiband weight, and R4 x 2 at 0.102 against
+#: 0.133. ``EPI_WAVELET_SLAB`` is that of a multiband stack whose bands have
+#: no calibrated slices of their own.
 EPI_WAVELET_SLAB = 0.03
 EPI_WAVELET_MULTIBAND = 0.03
 EPI_WAVELET_SLICE = 0.003
-
-#: Largest acceleration of a 3D EPI slab, the encoded lines of its partition
-#: and phase-encode extent over those read, solved at ``EPI_WAVELET_SLICE``
-#: instead of ``EPI_WAVELET_SLAB``. In the noisy 7T simulation of a 2 mm slab
-#: of 16 partitions in the susceptibility field, unwarped, against the fully
-#: sampled gradient echo: R2 x 2 in 3 shots with six virtual channels came
-#: out at 0.106 brain NRMSE at the slice weight and by conjugate gradients
-#: alike, and R3 x 2 with twelve virtual channels at 0.176 at the slice
-#: weight, 0.188 at the slab weight and 0.185 by conjugate gradients (0.129,
-#: and 0.137 by conjugate gradients, in 2 shots).
-EPI_WAVELET_SLAB_ACCELERATION = 6.0
 
 #: Largest in-plane line step times bands, divided by its shots, of a
 #: segmented multiband unit solved at ``EPI_WAVELET_SLICE`` instead of
@@ -1888,17 +1878,6 @@ def virtual_coils_for(virtual_coils: int, acceleration: float) -> int:
     if acceleration >= EPI_ACCELERATED_SOLVE:
         return max(virtual_coils, EPI_VIRTUAL_COILS_ACCELERATED)
     return virtual_coils
-
-
-def _acceleration(volume) -> float:
-    """Return the lines of the partition and phase-encode extent ``(coils, z, y, x)`` k-space acquired, over those it holds; 1 where it holds none."""
-    magnitude = volume.abs().cpu().numpy() if hasattr(volume, "cpu") else np.abs(volume)
-    read = magnitude.sum(axis=(0, 3)) > 0
-    if not read.any():
-        return 1.0
-    extent = [np.flatnonzero(read.any(axis=1 - axis)) for axis in (0, 1)]
-    box = np.prod([found[-1] - found[0] + 1 for found in extent])
-    return float(box / read.sum())
 
 
 def _line_step(volume) -> int:
