@@ -14,9 +14,9 @@ pytest.importorskip("bartorch")
 COLUMNS, FOV = 32, 0.2
 
 
-def _acquisition(flags=0, traj=None):
+def _acquisition(flags=0, traj=None, space=0):
     return SimpleNamespace(
-        flags=int(getattr(flags, "value", flags)), traj=traj, encoding_space_ref=0
+        flags=int(getattr(flags, "value", flags)), traj=traj, encoding_space_ref=space
     )
 
 
@@ -121,7 +121,7 @@ def _phased(line, constant, linear):
 
 
 def _excitation(gadget, constant, linear):
-    """Read one excitation's three-line navigator and a forward and a reversed imaging line, all carrying the phase ``constant + linear * u``; return the two imaging lines as corrected."""
+    """Read one excitation's three-line navigator, in an encoding space of its own, and a forward and a reversed imaging line, all carrying the phase ``constant + linear * u``; return the two imaging lines as corrected."""
     grid = (np.arange(COLUMNS) - COLUMNS // 2) / COLUMNS
     line = _phased(_sampled(grid), constant, linear)
     forward, backward = AcquisitionFlag(0), AcquisitionFlag.IS_REVERSE
@@ -131,7 +131,7 @@ def _excitation(gadget, constant, linear):
         (backward, line[::-1][None]),
         (forward, line[None]),
     ):
-        assert gadget(_acquisition(flags | nav), data) is None
+        assert gadget(_acquisition(flags | nav, space=1), data) is None
     return (
         gadget(_acquisition(forward), line[None])[0],
         gadget(_acquisition(backward), line[::-1][None])[0],
