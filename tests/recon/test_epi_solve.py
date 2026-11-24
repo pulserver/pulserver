@@ -778,7 +778,9 @@ def _shot_phase(shape=(1, 48, 48), constant=0.9):
 
 
 def test_the_phase_a_second_shot_adds_is_fitted_against_a_reference_image():
-    from pulserver.recon.handlers.epi import fit_shot_phases, phase_basis
+    from bartorch.tools import shot_phase_basis as phase_basis
+
+    from pulserver.recon.handlers.epi import fit_shot_phases
 
     phase = _shot_phase()
     image, maps, kspace, masks = _segmented(phase)
@@ -796,11 +798,9 @@ def test_the_phase_a_second_shot_adds_is_fitted_against_a_reference_image():
 
 def test_the_default_phase_basis_fits_a_local_shot_phase_that_degree_three_misses():
     """A blob of phase a fifth of the object wide: the frame-to-frame shot phase of breathing below the head."""
-    from pulserver.recon.handlers.epi import (
-        SHOT_PHASE_ORDER,
-        fit_shot_phases,
-        phase_basis,
-    )
+    from bartorch.tools import shot_phase_basis as phase_basis
+
+    from pulserver.recon.handlers.epi import SHOT_PHASE_ORDER, fit_shot_phases
 
     shape = (1, 48, 48)
     _, y, x = np.meshgrid(*(np.arange(n) - n // 2 for n in shape), indexing="ij")
@@ -959,8 +959,10 @@ def test_the_shot_masks_take_each_line_to_its_segment_and_a_single_segment_none(
 def test_the_shot_phase_fit_is_the_same_whichever_number_of_basis_terms_it_carries_at_once(
     monkeypatch,
 ):
+    from bartorch.tools import shot_phase_basis as phase_basis
+
     from pulserver.recon.handlers import epi
-    from pulserver.recon.handlers.epi import fit_shot_phases, phase_basis
+    from pulserver.recon.handlers.epi import fit_shot_phases
 
     shape = (2, 32, 32)
     phase = _shot_phase(shape)

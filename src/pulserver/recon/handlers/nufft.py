@@ -182,9 +182,13 @@ class NufftRecon(ReconPlugin):
                 kspace = self.corrections.filtered_along(
                     kspace, 1, (played.shape[0], *extent)
                 )
-            kspace = np.fft.fftshift(
-                np.fft.ifft(np.fft.ifftshift(kspace, axes=1), axis=1), axes=1
-            )
+            import bartorch
+            import torch
+
+            planes = torch.from_numpy(np.ascontiguousarray(kspace))
+            kspace = bartorch.fft(planes, 1, inverse=True, unitary=True).reshape(
+                planes.shape
+            ).numpy() / float(np.sqrt(planes.shape[1]))
             stack = [
                 (kspace[:, part], trajectory[part], played[part])
                 for part in range(played.shape[0])

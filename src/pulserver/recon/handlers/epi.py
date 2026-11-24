@@ -43,7 +43,6 @@ from .pics import (
     nlinv_estimate,
     partial_fourier_axes,
     pics_image,
-    shot_encoding,
     smooth_phase,
 )
 
@@ -600,7 +599,7 @@ class EpiRecon(PicsRecon):
     if they shared one phase alias each other. Each shot's phase relative to
     the first shot's is a sum of Legendre polynomials in plane of degree
     ``SHOT_PHASE_ORDER``, per partition, so per band of a multiband unit
-    (:func:`phase_basis`), fitted by Gauss-Newton against an image of the unit
+    (:func:`bartorch.tools.shot_phase_basis`), fitted by Gauss-Newton against an image of the unit
     (:func:`fit_shot_phases`). The images tried are the full-k phase reference
     of its slice where the stream holds one of the unit's shape; for a unit
     read with the phase encode forward, its field pair's forward planes, read
@@ -613,7 +612,7 @@ class EpiRecon(PicsRecon):
     segmented scan reads one partition of the blipped-CAIPI lattice, its bands
     superimposed. From each image the fit and the joint solve, which encodes
     each shot's lines from the image times its phase
-    (:func:`~pulserver.recon.handlers.pics.shot_encoding`), alternate until
+    (:func:`bartorch.tools.shot_encoding`), alternate until
     the data residual settles (``SHOT_PHASE_TOLERANCE``, at most
     ``SHOT_PHASE_ITERATIONS`` times); every template is tried, the constant
     search only where no template lowers the residual by more than
@@ -1049,7 +1048,7 @@ class EpiRecon(PicsRecon):
         the unit solved with the constant phase per shot, out of
         ``SHOT_PHASE_CONSTANTS``, that leaves the least data residual
         (:func:`shot_constants`). From each start, the fit and the joint solve
-        with the phases (:func:`~pulserver.recon.handlers.pics.shot_encoding`)
+        with the phases (:func:`bartorch.tools.shot_encoding`)
         alternate until an alternation lowers the data residual by less than
         ``SHOT_PHASE_TOLERANCE``, at most ``SHOT_PHASE_ITERATIONS`` times. The
         phases of the start that leaves the least residual are kept where it
@@ -1059,6 +1058,7 @@ class EpiRecon(PicsRecon):
         solves do; the phases and the image are returned on the host.
         """
         import torch
+        from bartorch import tools
 
         begin = time.perf_counter()
         device = context.device
@@ -1067,10 +1067,10 @@ class EpiRecon(PicsRecon):
         merged = cg_sense(volume, maps, sampled, self.iterations, device, l2=l2)
         count = int(masks.shape[0])
         flat = torch.zeros((count, *volume.shape[1:]), device=on)
-        before = shot_residual(*placed, merged.to(on), flat)
+        before = tools.shot_residual(*placed, merged.to(on), flat)
         if before <= SHOT_PHASE_FLOOR:
             return None, merged
-        basis = phase_basis(tuple(volume.shape[1:]), SHOT_PHASE_ORDER).to(on)
+        basis = tools.shot_phase_basis(tuple(volume.shape[1:]), SHOT_PHASE_ORDER).to(on)
 
         def joint(phases):
             return cg_sense(
@@ -1104,11 +1104,11 @@ class EpiRecon(PicsRecon):
             else:
                 phases = shot_constants(volume, maps, sampled, masks, device).to(on)
                 image = joint(phases)
-                residual = shot_residual(*placed, image, phases)
+                residual = tools.shot_residual(*placed, image, phases)
             for _ in range(SHOT_PHASE_ITERATIONS):
                 fitted = fit_shot_phases(*placed, image, phases, basis)
                 solved = joint(fitted)
-                lower = shot_residual(*placed, solved, fitted)
+                lower = tools.shot_residual(*placed, solved, fitted)
                 if lower >= residual:
                     break
                 image, phases, previous, residual = solved, fitted, residual, lower
@@ -1647,12 +1647,8 @@ def full_resolution_maps(kspace, calibration, maps, device):
 
 #: Root-sum-of-squares, as a fraction of its 99th percentile, at which the
 #: maps of :func:`fully_encoded_maps` weigh a pixel's own coil images and
-#: those of its neighbourhood equally.
+#: the NLINV maps equally.
 ENCODED_MAPS_FLOOR = 0.02
-
-#: Standard deviation, in pixels, of the Gaussian neighbourhood whose coil
-#: images give :func:`fully_encoded_maps` its maps where a pixel has no signal.
-ENCODED_MAPS_REACH = 8.0
 
 
 def fully_encoded(kspace):
@@ -1669,10 +1665,9 @@ def fully_encoded_maps(kspace):
     signal of that pixel is received with, also where the field has piled
     the signal of several places, each at its own phase, onto one pixel:
     there no map smooth in space, and none fitted at another echo time,
-    unfolds the imaging. Where a pixel has little signal its maps are the
-    principal direction of the coil images' covariance over a Gaussian
-    neighbourhood (``ENCODED_MAPS_REACH``), the sensitivity of the signal
-    nearby, smooth into the air around the head.
+    unfolds the imaging. Where a pixel has little signal its maps are those
+    NLINV fits to the central lines of the same k-space
+    (:func:`epi_nlinv_estimate`), smooth into the air around the head.
 
     Parameters
     ----------
@@ -1697,17 +1692,8 @@ def fully_encoded_maps(kspace):
     floor = ENCODED_MAPS_FLOOR * torch.quantile(rss.flatten(), 0.99)
     weight = rss.square() / (rss.square() + floor.square()).clamp_min(1e-30)
     drawn = images / rss.clamp_min(1e-12)
-    ny, nx = shape[-2:]
-    y = (torch.arange(ny, dtype=torch.float32) - ny // 2) / ny
-    x = (torch.arange(nx, dtype=torch.float32) - nx // 2) / nx
-    window = torch.exp(
-        -2 * (math.pi * ENCODED_MAPS_REACH) ** 2 * (y[:, None] ** 2 + x[None] ** 2)
-    )
-    covariance = images[:, None] * images[None].conj()
-    spectrum = bartorch.fft(covariance, axes, unitary=True).reshape(covariance.shape)
-    covariance = bartorch.fft(spectrum * window, axes, inverse=True, unitary=True)
-    covariance = covariance.reshape(shape[0], *shape).permute(2, 3, 0, 1)
-    nearby = torch.linalg.eigh(covariance).eigenvectors[..., -1].permute(2, 0, 1)
+    nearby = torch.as_tensor(epi_nlinv_estimate(kspace.to(torch.complex64)[:, None]))
+    nearby = nearby.reshape(shape).to(images.device, torch.complex64)
     phase = torch.exp(1j * torch.angle((nearby.conj() * drawn).sum(dim=0)))
     blended = weight * drawn + (1 - weight) * nearby * phase
     return (blended / blended.abs().square().sum(dim=0).sqrt().clamp_min(1e-12)).to(
@@ -1922,13 +1908,12 @@ def _within_acquired_range(image, sampled):
     """Return ``image``, ``(z, y, x)``, with its k-space outside the range of lines ``sampled`` acquires along each axis removed."""
     import bartorch
     import torch
-
-    from .pics import _acquired_range
+    from bartorch import apps
 
     mask = sampled.cpu().numpy()
     kept = np.ones(mask.shape, dtype=bool)
     for axis in range(mask.ndim):
-        lines = _acquired_range(mask, axis)
+        lines = apps.partial_fourier_range(mask, axis)
         if lines is None:
             continue
         inside = np.zeros(mask.shape[axis], dtype=bool)
@@ -1966,13 +1951,13 @@ def cg_sense(kspace, maps, sampled, iterations, device, *, l2=0.0, shots=None):
     The encoding is :class:`bartorch.linop.CartesianSense` of ``maps`` over
     the ``sampled`` lines, on ``device``, with ``shots``, the ``(masks,
     phases)`` of a segmented unit, each shot's phase in it
-    (:func:`~pulserver.recon.handlers.pics.shot_encoding`); stopping after
+    (:func:`bartorch.tools.shot_encoding`); stopping after
     ``iterations`` steps regularizes the solve. The data are scaled as
     ``pics`` scales them.
     """
     import bartorch
     import torch
-    from bartorch import linop, optim
+    from bartorch import linop, optim, tools
 
     grid = tuple(kspace.shape[2:] if kspace.shape[1] == 1 else kspace.shape[1:])
     pattern = sampled.reshape(grid).to(torch.complex64)
@@ -1981,7 +1966,7 @@ def cg_sense(kspace, maps, sampled, iterations, device, *, l2=0.0, shots=None):
         maps.reshape(maps.shape[0], *grid), grid, pattern=pattern, device=device
     )
     if shots is not None:
-        encoding = shot_encoding(encoding, shots, grid)
+        encoding = tools.shot_encoding(encoding, *shots)
     shifted = bartorch.fftmod(measured, axes=(-1, -2, -3), inverse=True)
     scaling = optim.data_scaling(shifted.reshape(kspace.shape[0], *grid), A=encoding)
     scaling = scaling or 1.0
@@ -1991,7 +1976,7 @@ def cg_sense(kspace, maps, sampled, iterations, device, *, l2=0.0, shots=None):
 
 
 #: Degree of the Legendre polynomials in plane, per partition, that a shot's
-#: phase is fitted on (:func:`phase_basis`). The fit error turns into frame-
+#: phase is fitted on (:func:`bartorch.tools.shot_phase_basis`). The fit error turns into frame-
 #: to-frame magnitude change: in a 7T simulation of R2 x MB2 in 3 shots, 20
 #: frames each with its own shot phase (0.04 to 0.2 rad across the head plus
 #: blobs of 0.06 to 0.12 rad), brain tSNR was 73, 88, 93, 95 and 97 at degrees
@@ -2082,78 +2067,6 @@ def shot_masks(buffer, shape):
     return torch.from_numpy(masks)
 
 
-def phase_basis(shape, order):
-    """Return ``(terms, z, y, x)`` products of Legendre polynomials in ``y`` and ``x`` of total degree at most ``order``, one set per partition.
-
-    The polynomials run over ``[-1, 1]`` across the field of view, so a
-    shot's phase is fitted to each partition (each band of a multiband unit)
-    on its own.
-    """
-    import torch
-
-    planes, rows, columns = shape
-    y = torch.linspace(-1.0, 1.0, rows)
-    x = torch.linspace(-1.0, 1.0, columns)
-
-    def legendre(degree, t):
-        low, high = torch.ones_like(t), t
-        if degree == 0:
-            return low
-        for n in range(1, degree):
-            low, high = high, ((2 * n + 1) * t * high - n * low) / (n + 1)
-        return high
-
-    terms = [(i, j) for i in range(order + 1) for j in range(order + 1 - i)]
-    basis = torch.zeros((planes * len(terms), *shape))
-    for plane in range(planes):
-        for index, (i, j) in enumerate(terms):
-            basis[plane * len(terms) + index, plane] = (
-                legendre(i, y)[:, None] * legendre(j, x)[None]
-            )
-    return basis
-
-
-def _centred(values, axes, inverse=False):
-    """Return the centred unitary transform over ``axes``, as :class:`bartorch.linop.CartesianSense` applies it."""
-    import torch
-
-    shifted = torch.fft.ifftshift(values, dim=axes)
-    if inverse:
-        shifted = torch.fft.ifftn(shifted, dim=axes, norm="ortho")
-    else:
-        shifted = torch.fft.fftn(shifted, dim=axes, norm="ortho")
-    return torch.fft.fftshift(shifted, dim=axes)
-
-
-def _shot_axes(maps):
-    return (-1, -2, -3) if maps.shape[1] > 1 else (-1, -2)
-
-
-def _shot_forward(maps, mask, images):
-    """``(..., coils, z, y, x)`` k-space of ``(..., z, y, x)`` images on the lines ``mask``, ``(z, y)``."""
-    coils = maps * images.unsqueeze(-4)
-    return _centred(coils, _shot_axes(maps)) * mask[..., None]
-
-
-def _shot_adjoint(maps, mask, kspace):
-    """Return the adjoint of :func:`_shot_forward`."""
-    images = _centred(kspace * mask[..., None], _shot_axes(maps), inverse=True)
-    return (maps.conj() * images).sum(dim=-4)
-
-
-def shot_residual(kspace, maps, masks, image, phases):
-    """Return the data residual of ``image`` under the shot ``phases`` (rad), relative to the k-space the shots placed."""
-    import torch
-
-    model = torch.zeros_like(kspace)
-    for mask, phase in zip(masks, phases, strict=True):
-        model = model + _shot_forward(
-            maps, mask.to(kspace.dtype), torch.exp(1j * phase) * image
-        )
-    placed = kspace * masks.any(dim=0)[..., None]
-    return float((model - placed).norm() / placed.norm().clamp_min(1e-30))
-
-
 def shot_corrected(kspace, masks, phases, iterations=SHOT_PHASE_COIL_STEPS):
     """Return ``(coils, z, y, x)`` k-space with the phase of each shot removed, coil by coil.
 
@@ -2163,41 +2076,29 @@ def shot_corrected(kspace, masks, phases, iterations=SHOT_PHASE_COIL_STEPS):
     k-space returned is that of ``u``.
     """
     import torch
+    from bartorch import linop, optim
 
-    unit = torch.ones((1, *kspace.shape[1:]), dtype=kspace.dtype, device=kspace.device)
-    rows = [mask.to(kspace.dtype) for mask in masks]
-
-    def normal(images):
-        out = torch.zeros_like(images)
-        for row, phase in zip(rows, phases, strict=True):
-            read = _shot_forward(unit, row, phase * images)
-            out = out + phase.conj() * _shot_adjoint(unit, row, read)
-        return out
-
-    axes = _shot_axes(unit)
-    data = kspace[:, None]
-    rhs = sum(
-        phase.conj() * _shot_adjoint(unit, row, data)
-        for row, phase in zip(rows, phases, strict=True)
+    shape = tuple(kspace.shape)
+    axes = (-1, -2, -3) if shape[1] > 1 else (-1, -2)
+    transform = linop.FFT(shape, axes)
+    shots = [
+        linop.Diagonal(mask.to(kspace.dtype)[None, ..., None].contiguous(), shape)
+        @ transform
+        @ linop.Diagonal(phase[None].to(kspace.dtype).contiguous(), shape)
+        for mask, phase in zip(masks, phases, strict=True)
+    ]
+    data = torch.stack([kspace * mask.to(kspace.dtype)[..., None] for mask in masks])
+    images = transform.H(kspace.contiguous())
+    solved = optim.CG(maxiter=int(iterations))(
+        data.contiguous(), linop.stack(shots), x0=images
     )
-    images = _centred(kspace, axes, inverse=True)
-    residual = rhs - normal(images)
-    direction = residual.clone()
-    power = (residual.conj() * residual).real.sum()
-    for _ in range(iterations):
-        product = normal(direction)
-        step = power / (direction.conj() * product).real.sum().clamp_min(1e-30)
-        images = images + step * direction
-        residual = residual - step * product
-        updated = (residual.conj() * residual).real.sum()
-        direction = residual + (updated / power.clamp_min(1e-30)) * direction
-        power = updated
-    return _centred(images, axes)
+    return transform(solved.reshape(shape).contiguous()).reshape(shape)
 
 
 def shot_constants(kspace, maps, sampled, masks, device):
     """Return ``(shots, z, y, x)`` constant phases (rad), the first shot's zero: each later shot's, in turn, the one of ``SHOT_PHASE_CONSTANTS`` whose solve (``SHOT_PHASE_SEARCH_STEPS`` steps) leaves the least data residual, the solves and residuals on ``device``."""
     import torch
+    from bartorch import tools
 
     on = torch.device(device) if device is not None else kspace.device
     placed = (kspace.to(on), maps.to(on), masks.to(on))
@@ -2217,7 +2118,7 @@ def shot_constants(kspace, maps, sampled, masks, device):
                 device,
                 shots=(masks, torch.exp(1j * trial)),
             )
-            residual = shot_residual(*placed, image.to(on), trial.to(on))
+            residual = tools.shot_residual(*placed, image.to(on), trial.to(on))
             if best is None or residual < best[0]:
                 best = (residual, float(constant))
         phases[shot] = best[1]
@@ -2227,70 +2128,24 @@ def shot_constants(kspace, maps, sampled, masks, device):
 def fit_shot_phases(kspace, maps, masks, image, phases, basis):
     """Return the ``(shots, z, y, x)`` phases (rad) each shot adds to ``image``, relative to the first shot's.
 
-    Shot ``s`` reads ``kspace`` on the lines ``masks[s]`` of ``image`` times
-    ``exp(i phi_s)``. Each ``phi_s`` is moved, from ``phases``, by its
-    closed-form constant and then by ``SHOT_PHASE_STEPS`` Gauss-Newton steps
-    over the smooth ``basis``, ``(terms, z, y, x)``: the residual's Jacobian
-    along term ``k`` is the forward model of ``i B_k exp(i phi_s) image``.
-    The phases are then taken relative to the first shot's.
-
-    Parameters
-    ----------
-    kspace, maps : torch.Tensor
-        ``(coils, z, y, x)``: the unit's k-space and coil maps.
-    masks : torch.Tensor
-        ``(shots, z, y)`` booleans, the lines each shot placed.
-    image : torch.Tensor
-        ``(z, y, x)`` complex image the shots are fitted against.
-    phases : torch.Tensor
-        ``(shots, z, y, x)`` starting phases, in rad.
-    basis : torch.Tensor
-        ``(terms, z, y, x)`` real functions the phases move along
-        (:func:`phase_basis`).
-
-    Returns
-    -------
-    torch.Tensor
-        ``(shots, z, y, x)`` float32 phases, the first zero.
+    :func:`bartorch.tools.estimate_shot_phases` with ``SHOT_PHASE_STEPS``
+    Gauss-Newton steps, ``SHOT_PHASE_DAMPING`` and
+    ``SHOT_PHASE_TERMS_AT_ONCE``; ``basis`` is
+    :func:`bartorch.tools.shot_phase_basis`.
     """
-    import torch
+    from bartorch import tools
 
-    phases = phases.clone()
-    terms = basis.shape[0]
-    flat = basis.reshape(terms, -1)
-    for shot in range(masks.shape[0]):
-        mask = masks[shot].to(kspace.dtype)
-        data = kspace * mask[..., None]
-        shifted = torch.exp(1j * phases[shot]) * image
-        model = _shot_forward(maps, mask, shifted)
-        phases[shot] += float(torch.angle((model.conj() * data).sum()))
-        for _ in range(SHOT_PHASE_STEPS):
-            shifted = torch.exp(1j * phases[shot]) * image
-            residual = _shot_forward(maps, mask, shifted) - data
-            slope = (shifted.conj() * _shot_adjoint(maps, mask, residual)).imag
-            gradient = flat @ slope.reshape(-1)
-            curvature = torch.cat(
-                [
-                    flat
-                    @ (
-                        shifted.conj()
-                        * _shot_adjoint(
-                            maps, mask, _shot_forward(maps, mask, 1j * chunk * shifted)
-                        )
-                    )
-                    .imag.reshape(chunk.shape[0], -1)
-                    .T
-                    for chunk in basis.split(SHOT_PHASE_TERMS_AT_ONCE)
-                ],
-                dim=1,
-            )
-            curvature = 0.5 * (curvature + curvature.T)
-            curvature = curvature + SHOT_PHASE_DAMPING * torch.trace(
-                curvature
-            ) / terms * torch.eye(terms, device=curvature.device)
-            step = torch.linalg.solve(curvature.double(), -gradient.double())
-            phases[shot] += (step.float() @ flat).reshape(phases.shape[1:])
-    return (phases - phases[:1]).float()
+    return tools.estimate_shot_phases(
+        kspace,
+        maps,
+        masks,
+        image,
+        phases,
+        basis,
+        steps=SHOT_PHASE_STEPS,
+        damping=SHOT_PHASE_DAMPING,
+        terms_at_once=SHOT_PHASE_TERMS_AT_ONCE,
+    )
 
 
 def susceptibility_field(image, reverse, voxel_size):
