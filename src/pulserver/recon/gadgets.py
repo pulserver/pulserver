@@ -460,7 +460,7 @@ def _dwell(acquisition: Any) -> float | None:
 def _whitening(
     readouts: list[np.ndarray], dwell_us: float | None, header: Any
 ) -> Whitening:
-    """Return the whitening of noise readouts ``(coils, samples)`` sampled with ``dwell_us``."""
+    """Return the whitening of noise readouts ``(coils, samples)`` sampled with ``dwell_us``, a dwell of 0 or ``None`` stating none."""
     import torch
     from bartorch import tools
 
@@ -476,6 +476,7 @@ def _whitening(
     _, matrix = tools.whiten(noise[..., :1], noise, return_matrix=True)
     matrix = matrix.numpy()[:, :, 0, 0, 0]
     labels = coil_labels(header)
+    dwell_us = float(dwell_us) if dwell_us else None
     return Whitening(matrix, labels, dwell_us, digest(matrix, labels, dwell_us))
 
 
