@@ -82,6 +82,23 @@ def test_fat_precesses_at_its_shift_at_the_field_beside_the_off_resonance(model)
     np.testing.assert_allclose(brain.frequency, [20.0, fat + 20.0])
 
 
+def test_fat_split_into_its_peaks_keeps_its_density_and_precesses_at_each_shift(model):
+    model.fractions[1, 1, 1, FAT] = 1.0
+    peaks = virtual.BrainWeb.FAT_PEAKS
+
+    single = virtual.BrainWeb(susceptibility=False).tissue(field_t=7.0)
+    split = virtual.BrainWeb(susceptibility=False, fat_peaks=peaks).tissue(field_t=7.0)
+
+    per_ppm = 1e-6 * pp.Opts().gamma * 7.0
+    np.testing.assert_allclose(
+        split.frequency, [per_ppm * ppm for ppm, _ in peaks], rtol=1e-6
+    )
+    weights = np.array([w for _, w in peaks])
+    np.testing.assert_allclose(
+        split.density, single.density[0] * weights / weights.sum(), rtol=1e-6
+    )
+
+
 def test_each_entry_precesses_at_the_mean_field_its_head_adds_over_its_cube(model):
     model.fractions[..., WHITE] = 1.0
     field = np.arange(model.fractions[..., 0].size, dtype=np.float32).reshape(

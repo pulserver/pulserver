@@ -1106,7 +1106,8 @@ class EpiRecon(PicsRecon):
         image of the unit, from each start in turn: each of ``templates``,
         ``(name, image)``, whose image has the unit's shape (its slice's full-k
         phase reference, then its field pair's forward planes,
-        :meth:`_pair_template`), then, for at most ``SHOT_PHASE_SEARCH_SHOTS``
+        :meth:`_pair_template`), scaled onto the unit's solve as one by
+        :func:`matched_template`, then, for at most ``SHOT_PHASE_SEARCH_SHOTS``
         shots and unless a template lowered the residual by more than
         ``SHOT_PHASE_CLEAR_GAIN`` against the solve that ignores the phases,
         the unit solved with the constant phase per shot, out of
@@ -1163,7 +1164,7 @@ class EpiRecon(PicsRecon):
             ):
                 break
             if template is not None:
-                image, phases = template.to(on), flat
+                image, phases = matched_template(template.to(on), merged.to(on)), flat
                 residual = math.inf
             else:
                 phases = shot_constants(volume, maps, sampled, masks, device).to(on)
@@ -2103,6 +2104,10 @@ SHOT_PHASE_COIL_STEPS = 20
 #: does not describe the unit lower it as little.
 SHOT_PHASE_CLEAR_GAIN = 0.05
 
+#: Fraction of the peak magnitude of a segmented unit's solve as one above
+#: which a template is matched to it (:func:`matched_template`).
+SHOT_PHASE_TEMPLATE_SUPPORT = 0.15
+
 #: Data residual of a segmented unit solved as one, relative to its k-space,
 #: below which its shots agree and no shot phase is fitted.
 SHOT_PHASE_FLOOR = 1e-3
@@ -2166,33 +2171,68 @@ def shot_corrected(kspace, masks, phases, iterations=SHOT_PHASE_COIL_STEPS):
     return transform(solved.reshape(shape).contiguous()).reshape(shape)
 
 
+def matched_template(template, image):
+    """Return ``template`` times the complex factor that matches it to ``image`` in the least-squares sense.
+
+    The factor is fitted over the voxels where ``|image|`` exceeds
+    ``SHOT_PHASE_TEMPLATE_SUPPORT`` of its peak. The first shot's phase is
+    held at zero in the fit, so a global gain and phase between a template
+    (another unit's image, such as the field pair's forward planes) and the
+    unit would otherwise be carried into the later shots' phases.
+    """
+    support = image.abs() > SHOT_PHASE_TEMPLATE_SUPPORT * image.abs().max()
+    t, m = template[support], image[support]
+    power = (t.conj() @ t).real
+    if not power > 0:
+        return template
+    return (t.conj() @ m) / power * template
+
+
 def shot_constants(kspace, maps, sampled, masks, device):
-    """Return ``(shots, z, y, x)`` constant phases (rad), the first shot's zero: each later shot's, in turn, the one of ``SHOT_PHASE_CONSTANTS`` whose solve (``SHOT_PHASE_SEARCH_STEPS`` steps) leaves the least data residual, the solves and residuals on ``device``."""
+    """Return ``(shots, z, y, x)`` constant phases (rad), the first shot's zero.
+
+    Each later shot's, in turn, is the one of ``SHOT_PHASE_CONSTANTS`` evenly
+    spaced over a turn whose solve (``SHOT_PHASE_SEARCH_STEPS`` steps) leaves
+    the least data residual, moved to the vertex of the parabola through the
+    residuals of it and its two neighbours on the grid, where that vertex
+    leaves a lower residual still. The solves and residuals run on
+    ``device``.
+    """
     import torch
     from bartorch import tools
 
     on = torch.device(device) if device is not None else kspace.device
     placed = (kspace.to(on), maps.to(on), masks.to(on))
     phases = torch.zeros((masks.shape[0], *kspace.shape[1:]))
+    grid = np.linspace(-math.pi, math.pi, SHOT_PHASE_CONSTANTS, endpoint=False)
+    step = 2.0 * math.pi / SHOT_PHASE_CONSTANTS
+
+    def residual(shot, constant):
+        trial = phases.clone()
+        trial[shot] = float(constant)
+        image = cg_sense(
+            kspace,
+            maps,
+            sampled,
+            SHOT_PHASE_SEARCH_STEPS,
+            device,
+            shots=(masks, torch.exp(1j * trial)),
+        )
+        return float(tools.shot_residual(*placed, image.to(on), trial.to(on)))
+
     for shot in range(1, masks.shape[0]):
-        best = None
-        for constant in np.linspace(
-            -math.pi, math.pi, SHOT_PHASE_CONSTANTS, endpoint=False
-        ):
-            trial = phases.clone()
-            trial[shot] = float(constant)
-            image = cg_sense(
-                kspace,
-                maps,
-                sampled,
-                SHOT_PHASE_SEARCH_STEPS,
-                device,
-                shots=(masks, torch.exp(1j * trial)),
-            )
-            residual = tools.shot_residual(*placed, image.to(on), trial.to(on))
-            if best is None or residual < best[0]:
-                best = (residual, float(constant))
-        phases[shot] = best[1]
+        residuals = [residual(shot, constant) for constant in grid]
+        best = int(np.argmin(residuals))
+        chosen, lowest = float(grid[best]), residuals[best]
+        below = residuals[(best - 1) % grid.size]
+        above = residuals[(best + 1) % grid.size]
+        curvature = below - 2.0 * lowest + above
+        if curvature > 0.0:
+            vertex = chosen + 0.5 * step * (below - above) / curvature
+            refined = residual(shot, vertex)
+            if refined < lowest:
+                chosen = vertex
+        phases[shot] = chosen
     return phases
 
 

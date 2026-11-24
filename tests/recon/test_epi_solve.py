@@ -777,6 +777,23 @@ def _shot_phase(shape=(1, 48, 48), constant=0.9):
     return np.stack([np.zeros(shape), second]).astype(np.float32)
 
 
+def test_a_constant_shot_phase_between_grid_points_is_found_closer_than_the_grid_step():
+    from pulserver.recon.handlers.epi import SHOT_PHASE_CONSTANTS, shot_constants
+
+    shape = (1, 48, 48)
+    true = 1.07
+    phase = np.stack([np.zeros(shape), np.full(shape, true)]).astype(np.float32)
+    _, maps, kspace, masks = _segmented(phase, shape=shape)
+
+    sampled = masks.any(dim=0)[..., None].expand(kspace.shape[1:])
+    found = shot_constants(kspace, maps, sampled, masks, None)
+
+    grid = np.linspace(-np.pi, np.pi, SHOT_PHASE_CONSTANTS, endpoint=False)
+    nearest = np.abs(np.angle(np.exp(1j * (grid - true)))).min()
+    error = abs(np.angle(np.exp(1j * (float(found[1].flatten()[0]) - true))))
+    assert error < 0.5 * nearest
+
+
 def test_the_phase_a_second_shot_adds_is_fitted_against_a_reference_image():
     from bartorch.tools import shot_phase_basis as phase_basis
 
@@ -794,6 +811,39 @@ def test_the_phase_a_second_shot_adds_is_fitted_against_a_reference_image():
     inside = np.abs(image) > 0
     error = np.angle(np.exp(1j * (fitted.numpy() - phase)))[:, inside]
     assert np.abs(error).max() < 1e-3
+
+
+def test_a_template_is_scaled_onto_the_image_by_its_least_squares_complex_factor():
+    from pulserver.recon.handlers.epi import matched_template
+
+    image = torch.from_numpy(_phantom())
+    factor = 0.5 * np.exp(0.66j)
+
+    matched = matched_template(image / factor, image)
+
+    assert torch.allclose(matched, image, atol=1e-5)
+
+
+def test_a_template_off_by_a_global_gain_and_phase_still_gives_the_shot_phases():
+    """The field pair's forward planes, the full-k reference's template, differ from its own image by a complex factor."""
+    from bartorch.tools import shot_phase_basis as phase_basis
+
+    from pulserver.recon.handlers.epi import fit_shot_phases, matched_template
+
+    phase = _shot_phase()
+    image, maps, kspace, masks = _segmented(phase)
+    reference = torch.from_numpy(image) * (0.5 * np.exp(0.66j))
+    start = torch.zeros((2, *image.shape))
+    inside = np.abs(image) > 0
+
+    def error(template):
+        fitted = fit_shot_phases(
+            kspace, maps, masks, template, start, phase_basis(image.shape, 3)
+        )
+        return np.abs(np.angle(np.exp(1j * (fitted.numpy() - phase)))[:, inside]).max()
+
+    assert error(reference) > 0.1
+    assert error(matched_template(reference, torch.from_numpy(image))) < 1e-3
 
 
 def test_the_default_phase_basis_fits_a_local_shot_phase_that_degree_three_misses():
