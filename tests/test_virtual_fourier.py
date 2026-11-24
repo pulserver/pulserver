@@ -847,3 +847,17 @@ def test_a_moment_to_the_edge_of_k_space_does_not_shift_the_states_on_either_sid
     rounded = np.array([edge * (1 - 1e-12), edge, edge * (1 + 1e-12)])
     assert not _fourier._dephases(rounded).any()
     assert _fourier._dephases(np.array([1.5 * edge])).all()
+
+
+def test_a_noisy_scan_is_the_noiseless_scan_plus_the_noise_of_each_readout(converted):
+    tissue = virtual.Phantom(
+        [virtual.Ellipse((0.0, 0.0, 0.0), (0.02, 0.02))], coils=2
+    ).tissue(2e-3)
+    noise = virtual.ReceiveNoise(np.array([[1.0, 0.4], [0.4, 1.0]]), std=0.1, seed=2)
+    path = converted / "gre_2d_3sl.seq"
+
+    clean = virtual.simulate(path, tissue, device="cpu")
+    noisy = virtual.simulate(path, tissue, device="cpu", noise=noise)
+
+    for at, (a, b) in enumerate(zip(clean, noisy, strict=True)):
+        np.testing.assert_allclose(b - a, noise(at, a.shape[1]), atol=1e-5)

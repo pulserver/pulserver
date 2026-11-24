@@ -14,6 +14,7 @@ import torch
 
 from ._girf import Girf
 from ._motion import RigidMotion
+from ._noise import ReceiveNoise
 from ._timeline import Timeline
 from ._tissue import Tissue
 
@@ -180,6 +181,8 @@ class FourierPlayer:
         alone, its excitation, relaxation and coil sensitivities following it.
     girf : Girf, default=None
         The impulse response the gradients play through.
+    noise : ReceiveNoise, default=None
+        Receive noise added to every readout; none by default.
 
     Attributes
     ----------
@@ -199,6 +202,7 @@ class FourierPlayer:
         tolerance: float = TOLERANCE,
         motion: RigidMotion | None = None,
         girf: Girf | None = None,
+        noise: ReceiveNoise | None = None,
     ) -> None:
         if device is None:
             device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -210,6 +214,7 @@ class FourierPlayer:
         self._phases = _framed(timeline, centre)
         self._tolerance = tolerance
         self._coils = tissue.coils
+        self._noise = noise
         pulses = timeline.pulses
         events = _events(timeline)
         everything = _Entries.of(tissue, self.device)
@@ -273,7 +278,10 @@ class FourierPlayer:
         begin, _, samples = held
         firsts = timeline.readouts.first - timeline.readouts.first[begin]
         for at in range(start, stop):
-            yield samples[:, firsts[at] : firsts[at + 1]]
+            readout = samples[:, firsts[at] : firsts[at + 1]]
+            if self._noise is not None:
+                readout = readout + self._noise(at, readout.shape[1])
+            yield readout
 
     def _ahead(self, start: int, stop: int) -> int:
         """Return the readout before which a batch from ``start`` acquires.
@@ -654,6 +662,7 @@ def simulate(
     device: torch.device | str | None = None,
     motion: RigidMotion | None = None,
     girf: Girf | None = None,
+    noise: ReceiveNoise | None = None,
 ) -> list[np.ndarray]:
     """Return every readout the cache beside a sequence file acquires of a phantom's tissue.
 
@@ -670,6 +679,7 @@ def simulate(
         device=device,
         motion=motion,
         girf=girf,
+        noise=noise,
     )
     return list(player.readouts(0, player.blocks))
 
