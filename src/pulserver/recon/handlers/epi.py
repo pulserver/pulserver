@@ -2189,32 +2189,50 @@ def matched_template(template, image):
 
 
 def shot_constants(kspace, maps, sampled, masks, device):
-    """Return ``(shots, z, y, x)`` constant phases (rad), the first shot's zero: each later shot's, in turn, the one of ``SHOT_PHASE_CONSTANTS`` whose solve (``SHOT_PHASE_SEARCH_STEPS`` steps) leaves the least data residual, the solves and residuals on ``device``."""
+    """Return ``(shots, z, y, x)`` constant phases (rad), the first shot's zero.
+
+    Each later shot's, in turn, is the one of ``SHOT_PHASE_CONSTANTS`` evenly
+    spaced over a turn whose solve (``SHOT_PHASE_SEARCH_STEPS`` steps) leaves
+    the least data residual, moved to the vertex of the parabola through the
+    residuals of it and its two neighbours on the grid, where that vertex
+    leaves a lower residual still. The solves and residuals run on
+    ``device``.
+    """
     import torch
     from bartorch import tools
 
     on = torch.device(device) if device is not None else kspace.device
     placed = (kspace.to(on), maps.to(on), masks.to(on))
     phases = torch.zeros((masks.shape[0], *kspace.shape[1:]))
+    grid = np.linspace(-math.pi, math.pi, SHOT_PHASE_CONSTANTS, endpoint=False)
+    step = 2.0 * math.pi / SHOT_PHASE_CONSTANTS
+
+    def residual(shot, constant):
+        trial = phases.clone()
+        trial[shot] = float(constant)
+        image = cg_sense(
+            kspace,
+            maps,
+            sampled,
+            SHOT_PHASE_SEARCH_STEPS,
+            device,
+            shots=(masks, torch.exp(1j * trial)),
+        )
+        return float(tools.shot_residual(*placed, image.to(on), trial.to(on)))
+
     for shot in range(1, masks.shape[0]):
-        best = None
-        for constant in np.linspace(
-            -math.pi, math.pi, SHOT_PHASE_CONSTANTS, endpoint=False
-        ):
-            trial = phases.clone()
-            trial[shot] = float(constant)
-            image = cg_sense(
-                kspace,
-                maps,
-                sampled,
-                SHOT_PHASE_SEARCH_STEPS,
-                device,
-                shots=(masks, torch.exp(1j * trial)),
-            )
-            residual = tools.shot_residual(*placed, image.to(on), trial.to(on))
-            if best is None or residual < best[0]:
-                best = (residual, float(constant))
-        phases[shot] = best[1]
+        residuals = [residual(shot, constant) for constant in grid]
+        best = int(np.argmin(residuals))
+        chosen, lowest = float(grid[best]), residuals[best]
+        below = residuals[(best - 1) % grid.size]
+        above = residuals[(best + 1) % grid.size]
+        curvature = below - 2.0 * lowest + above
+        if curvature > 0.0:
+            vertex = chosen + 0.5 * step * (below - above) / curvature
+            refined = residual(shot, vertex)
+            if refined < lowest:
+                chosen = vertex
+        phases[shot] = chosen
     return phases
 
 
