@@ -1103,6 +1103,9 @@ def test_a_slab_takes_the_slab_steps_and_a_slice_the_epi_steps(
 def _nodding_slab(shape=(8, 32, 32), coils=8, voxel=(2e-3, 2e-3, 2e-3)):
     from bartorch import tools
 
+    if not hasattr(tools, "rigid_encoding"):
+        pytest.skip("the installed bartorch has no tools.rigid_encoding")
+
     z, y, x = np.meshgrid(*(np.arange(n) - n // 2 for n in shape), indexing="ij")
     image = np.exp(-((y / 10.0) ** 2 + (x / 9.0) ** 2 + (z / 3.0) ** 2) * 2)
     image = image + 0.5 * np.exp(-(((y - 4) / 3.0) ** 2 + ((x + 5) / 3.0) ** 2) * 2)
