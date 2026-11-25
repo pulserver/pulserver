@@ -6,7 +6,7 @@ __all__ = ["FourierPlayer", "simulate"]
 
 import math
 from collections.abc import Callable, Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
@@ -16,7 +16,7 @@ from ._girf import Girf
 from ._motion import RigidMotion
 from ._noise import ReceiveNoise
 from ._physiology import PhysiologicalField
-from ._timeline import Timeline
+from ._timeline import Timeline, _bilinear
 from ._tissue import Tissue
 
 #: Dephasing across a voxel, in cycles, beyond which the net moment between two
@@ -1211,6 +1211,7 @@ class _Selection:
     offsets: np.ndarray
     directions: np.ndarray
     along: np.ndarray
+    tables: dict = field(default_factory=dict)
 
     @classmethod
     def of(cls, pulses, motion: RigidMotion | None = None) -> _Selection:
@@ -1345,12 +1346,17 @@ def _profile(
     detuning, ratio = pulses.profiles[pulses.profile[pulse]]
     field = entries.frequency - float(selection.offsets[pulse])
     if pulses.trace[pulse] >= 0:
+        if not entries.positions.shape[0]:
+            return torch.zeros(0, dtype=torch.int8, device=device)
         along = entries.positions @ torch.as_tensor(
             selection.directions[pulse], dtype=torch.float32, device=device
         ) + float(selection.along[pulse])
+        axes, table = _traced(entries, pulse, pulses, selection)
         flip = torch.as_tensor(
-            pulses.traces[pulses.trace[pulse]].ratio(
-                field.double().cpu().numpy(), along.double().cpu().numpy()
+            _bilinear(
+                axes,
+                table,
+                (field.double().cpu().numpy(), along.double().cpu().numpy()),
             ),
             dtype=torch.float32,
             device=device,
@@ -1370,6 +1376,38 @@ def _profile(
     upper = table[(index + 1).clamp(max=detuning.size - 1)]
     flip = table[index] + (place - below) * (upper - table[index])
     return _level(torch.where(inside, flip, 0.0))
+
+
+def _traced(entries: _Entries, pulse: int, pulses, selection: _Selection):
+    """Return the table of the trace ``pulse`` plays, over the fields and the positions along it of the entries under every pulse that plays it about the same frequency.
+
+    One Bloch simulation serves every place a moving subject takes along the
+    pulse's axis.
+    """
+    trace = int(pulses.trace[pulse])
+    offset = float(selection.offsets[pulse])
+    key = (trace, round(offset, 3))
+    if key not in selection.tables:
+        alike = np.flatnonzero(
+            (pulses.trace == trace) & (np.round(selection.offsets, 3) == key[1])
+        )
+        placed = np.unique(
+            np.column_stack([selection.directions[alike], selection.along[alike]]),
+            axis=0,
+        )
+        positions = entries.positions.double()
+        ends = []
+        for row in placed:
+            along = positions @ torch.as_tensor(
+                row[:3], dtype=torch.float64, device=positions.device
+            ) + float(row[3])
+            ends += [float(along.min()), float(along.max())]
+        frequency = entries.frequency.double() - offset
+        selection.tables[key] = pulses.traces[trace].table(
+            np.array([float(frequency.min()), float(frequency.max())]),
+            np.array([min(ends), max(ends)]),
+        )
+    return selection.tables[key]
 
 
 def _level(flip: torch.Tensor) -> torch.Tensor:

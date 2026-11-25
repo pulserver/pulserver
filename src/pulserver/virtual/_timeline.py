@@ -138,14 +138,25 @@ class Trace:
         position_m = np.asarray(position_m, dtype=np.float64).reshape(-1)
         if not field_hz.size:
             return np.zeros(0)
+        axes, table = self.table(field_hz, position_m)
+        return _bilinear(axes, table, (field_hz, position_m))
+
+    def table(
+        self, field_hz: np.ndarray, position_m: np.ndarray
+    ) -> tuple[tuple[np.ndarray, np.ndarray], np.ndarray]:
+        """Return the grid :meth:`ratio` reads over the box the fields, in Hz, and positions, in m, span, and the ratio on it."""
         reach = self._reach()
         axes = (
-            _grid(field_hz, 1.0 / (self.dt * self.b1.size)),
-            _grid(position_m, 1.0 / reach if reach > 0.0 else math.inf),
+            _grid(
+                np.asarray(field_hz, dtype=np.float64), 1.0 / (self.dt * self.b1.size)
+            ),
+            _grid(
+                np.asarray(position_m, dtype=np.float64),
+                1.0 / reach if reach > 0.0 else math.inf,
+            ),
         )
         field, position = (a.ravel() for a in np.meshgrid(*axes, indexing="ij"))
-        table = self._tipped(field, position).reshape(axes[0].size, -1)
-        return _bilinear(axes, table, (field_hz, position_m))
+        return axes, self._tipped(field, position).reshape(axes[0].size, -1)
 
     @functools.cached_property
     def width(self) -> float:
