@@ -14,6 +14,8 @@ import torch
 
 from ._girf import Girf
 from ._motion import RigidMotion
+from ._noise import ReceiveNoise
+from ._physiology import PhysiologicalField
 from ._timeline import Timeline
 from ._tissue import Tissue
 
@@ -180,6 +182,11 @@ class FourierPlayer:
         alone, its excitation, relaxation and coil sensitivities following it.
     girf : Girf, default=None
         The impulse response the gradients play through.
+    noise : ReceiveNoise, default=None
+        Receive noise added to every readout; none by default.
+    physiology : PhysiologicalField, default=None
+        Field offset common to the object, taken at each readout's excitation;
+        none by default.
 
     Attributes
     ----------
@@ -199,6 +206,8 @@ class FourierPlayer:
         tolerance: float = TOLERANCE,
         motion: RigidMotion | None = None,
         girf: Girf | None = None,
+        noise: ReceiveNoise | None = None,
+        physiology: PhysiologicalField | None = None,
     ) -> None:
         if device is None:
             device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -210,7 +219,11 @@ class FourierPlayer:
         self._phases = _framed(timeline, centre)
         self._tolerance = tolerance
         self._coils = tissue.coils
+        self._noise = noise
         pulses = timeline.pulses
+        self._physiology = (
+            None if physiology is None else _physiological(timeline, physiology)
+        )
         events = _events(timeline)
         everything = _Entries.of(tissue, self.device)
         voxel = _voxel(timeline, everything, tissue.spacing)
@@ -273,7 +286,16 @@ class FourierPlayer:
         begin, _, samples = held
         firsts = timeline.readouts.first - timeline.readouts.first[begin]
         for at in range(start, stop):
-            yield samples[:, firsts[at] : firsts[at + 1]]
+            readout = samples[:, firsts[at] : firsts[at + 1]]
+            if self._physiology is not None:
+                offset_hz, start_s, dwell_s = (row[at] for row in self._physiology)
+                since = start_s + dwell_s * (np.arange(readout.shape[1]) + 0.5)
+                readout = readout * np.exp(-2j * np.pi * offset_hz * since).astype(
+                    np.complex64
+                )
+            if self._noise is not None:
+                readout = readout + self._noise(at, readout.shape[1])
+            yield readout
 
     def _ahead(self, start: int, stop: int) -> int:
         """Return the readout before which a batch from ``start`` acquires.
@@ -654,6 +676,8 @@ def simulate(
     device: torch.device | str | None = None,
     motion: RigidMotion | None = None,
     girf: Girf | None = None,
+    noise: ReceiveNoise | None = None,
+    physiology: PhysiologicalField | None = None,
 ) -> list[np.ndarray]:
     """Return every readout the cache beside a sequence file acquires of a phantom's tissue.
 
@@ -670,8 +694,29 @@ def simulate(
         device=device,
         motion=motion,
         girf=girf,
+        noise=noise,
+        physiology=physiology,
     )
     return list(player.readouts(0, player.blocks))
+
+
+def _physiological(
+    timeline: Timeline, field: PhysiologicalField
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Return each readout's offset (Hz) at its excitation, its first sample's start from that excitation (s) and its dwell (s).
+
+    A readout before the first excitation takes no offset.
+    """
+    readouts, pulses, played = timeline.readouts, timeline.pulses, timeline.played
+    excitations = pulses.time_us[pulses.use == _EXCITATION]
+    block = readouts.block
+    start_us = timeline.starts_us[block] + played["adc_delay_us"][block]
+    dwell_s = 1e-9 * played["adc_dwell_ns"][block].astype(np.float64)
+    last = np.searchsorted(excitations, start_us, side="right") - 1
+    excited = last >= 0
+    fired_us = np.where(excited, excitations[np.clip(last, 0, None)], start_us)
+    offset_hz = np.where(excited, field(1e-6 * fired_us), 0.0)
+    return offset_hz, 1e-6 * (start_us - fired_us), dwell_s
 
 
 def _poses(
@@ -682,20 +727,66 @@ def _poses(
     A subject at ``R p + s`` acquires at k what the subject at rest acquires
     at ``R^T k``, times exp(-2 pi i k . s): per readout, ``R^T`` along the
     logical axes, ``(n, 3, 3)``, and ``s`` along them, ``(n, 3)`` in m.
+
+    The excitation's profile stays where the subject at rest lies, so a
+    subject moved through a slice its readout's k does not resolve, less than
+    a cycle across the slice, takes no part of ``s`` along the slice: the
+    spins the slice holds stay at its position. Through-slice motion therefore
+    changes neither which tissue a slice holds nor its encoding phase.
     """
     rotation = timeline.rotation
     readouts = timeline.readouts
+    across = _selections(timeline)
     turns = np.empty((len(readouts), 3, 3))
     shifts = np.empty((len(readouts), 3))
     for at, echo_us in enumerate(readouts.echo_us):
         turn, shift = motion.transform(1e-6 * float(echo_us))
         turns[at] = rotation.T @ turn.T @ rotation
         shifts[at] = rotation.T @ shift
+        slab = across(float(echo_us))
+        if slab is not None:
+            direction, width = slab
+            if float(readouts.reach[at] @ np.abs(direction)) * width < 1.0:
+                shifts[at] -= (shifts[at] @ direction) * direction
     readouts.reach[:] = np.einsum("nij,nj->ni", np.abs(turns), readouts.reach)
     return (
         torch.as_tensor(turns, device=device),
         torch.as_tensor(shifts, device=device),
     )
+
+
+def _selections(timeline: Timeline):
+    """Return a lookup of the slab the last excitation at or before a time, in µs, selects.
+
+    The slab is the logical unit axis the excitation selects along and its
+    full width at half maximum, in m; None before the first excitation or
+    where it selects none.
+    """
+    pulses, rotation = timeline.pulses, timeline.rotation
+    excitations = np.flatnonzero(pulses.use == _EXCITATION)
+    slabs = []
+    for at in excitations:
+        if pulses.trace[at] >= 0:
+            axis = pulses.direction[at]
+            width = pulses.traces[pulses.trace[at]].width
+        else:
+            gradient = pulses.gradient[at]
+            strength = float(np.linalg.norm(gradient))
+            if strength == 0.0:
+                slabs.append(None)
+                continue
+            axis = gradient / strength
+            detuning, ratio = pulses.profiles[pulses.profile[at]]
+            half = detuning[ratio >= 0.5]
+            width = float(half[-1] - half[0]) / strength if half.size else 0.0
+        slabs.append(None if not np.isfinite(width) else (rotation.T @ axis, width))
+    times = pulses.time_us[excitations]
+
+    def across(time_us: float):
+        last = int(np.searchsorted(times, time_us, side="right")) - 1
+        return slabs[last] if last >= 0 else None
+
+    return across
 
 
 def _b_values(
@@ -1738,7 +1829,10 @@ def _description(stream: _Stream, groups: np.ndarray, device) -> object:
             )
         return amplitudes[key]
 
-    uses = {int(use) for use in RfUse}
+    # The kernels play a pulse tagged as an inversion as an ideal
+    # Mz -> -Mz on every isochromat; a played pulse is the rotation its
+    # profile gives, so a spectrally selective inversion leaves water alone.
+    uses = {int(use) for use in RfUse} - {int(RfUse.INVERSION)}
     events = []
     for kind, when, selector, flip, use, phase, orders, shift_us in zip(
         stream.kind.tolist(),
@@ -1756,7 +1850,11 @@ def _description(stream: _Stream, groups: np.ndarray, device) -> object:
                 SequenceEvent.rf(
                     when,
                     0,
-                    RfUse(use) if use in uses else RfUse.UNKNOWN,
+                    RfUse(use)
+                    if use in uses
+                    else RfUse.OTHER
+                    if use == RfUse.INVERSION
+                    else RfUse.UNKNOWN,
                     amplitude(selector, flip),
                     phase,
                 )

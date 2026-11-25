@@ -847,3 +847,179 @@ def test_a_moment_to_the_edge_of_k_space_does_not_shift_the_states_on_either_sid
     rounded = np.array([edge * (1 - 1e-12), edge, edge * (1 + 1e-12)])
     assert not _fourier._dephases(rounded).any()
     assert _fourier._dephases(np.array([1.5 * edge])).all()
+
+
+def test_a_noisy_scan_is_the_noiseless_scan_plus_the_noise_of_each_readout(converted):
+    tissue = virtual.Phantom(
+        [virtual.Ellipse((0.0, 0.0, 0.0), (0.02, 0.02))], coils=2
+    ).tissue(2e-3)
+    noise = virtual.ReceiveNoise(np.array([[1.0, 0.4], [0.4, 1.0]]), std=0.1, seed=2)
+    path = converted / "gre_2d_3sl.seq"
+
+    clean = virtual.simulate(path, tissue, device="cpu")
+    noisy = virtual.simulate(path, tissue, device="cpu", noise=noise)
+
+    for at, (a, b) in enumerate(zip(clean, noisy, strict=True)):
+        np.testing.assert_allclose(b - a, noise(at, a.shape[1]), atol=1e-5)
+
+
+def test_a_played_inversion_turns_each_group_by_its_profile_not_as_an_ideal_inversion():
+    from blochsim.sequence import EventType, RfUse
+
+    stream = _fourier._Stream(
+        kind=np.array([1, 1, 0]),
+        time_us=np.array([0.0, 1000.0, 2000.0]),
+        selector=np.array([0, 0, -1]),
+        flip=np.array([np.pi, np.pi / 2, 0.0]),
+        use=np.array([int(RfUse.INVERSION), int(RfUse.EXCITATION), 0]),
+        phase=np.zeros(3),
+        orders=np.zeros(3, dtype=np.int64),
+        shift_us=np.zeros(3),
+        readout=np.array([-1, -1, 0]),
+    )
+
+    description = _fourier._description(stream, np.zeros((1, 1), dtype=np.int64), "cpu")
+
+    uses = [e.rf_use for e in description.events if e.type is EventType.RF]
+    assert RfUse.INVERSION not in uses
+    assert uses[1] is RfUse.EXCITATION
+
+
+def _inverted_then_read(path, offset_hz):
+    """A hyperbolic-secant inversion ``offset_hz`` off resonance, a spoiler, then a 90 degree hard pulse read once."""
+    system = pp.Opts(
+        max_grad=30, grad_unit="mT/m", max_slew=120, slew_unit="T/m/s", B0=3.0
+    )
+    seq = pp.Sequence(system)
+    if offset_hz is not None:
+        inversion = pp.make_adiabatic_pulse(
+            "hypsec", duration=20e-3, beta=300.0, freq_offset=offset_hz, system=system
+        )
+        seq.add_block(inversion)
+        seq.add_block(pp.make_trapezoid("z", area=4.0 / 1e-3, system=system))
+    seq.add_block(pp.make_delay(20e-3))
+    seq.add_block(pp.make_block_pulse(np.pi / 2, duration=2e-4, system=system))
+    seq.add_block(pp.make_adc(64, duration=3.2e-3, system=system))
+    seq.write(str(path))
+    ir.convert(path, SYSTEM)
+    return path
+
+
+def test_an_inversion_far_off_the_water_resonance_leaves_the_water_signal_alone(
+    tmp_path,
+):
+    tissue = virtual.Phantom(
+        [virtual.Ellipse((0.0, 0.0, 0.0), (0.02, 0.02), t1=1.0, t2=0.1)]
+    ).tissue(4e-3)
+
+    def signal(offset_hz, name):
+        path = _inverted_then_read(tmp_path / name, offset_hz)
+        (readout,) = virtual.simulate(path, tissue, device="cpu")
+        return complex(np.asarray(readout).sum())
+
+    plain = signal(None, "plain.seq")
+    assert signal(-1500.0, "off.seq") / plain == pytest.approx(1.0, abs=0.02)
+    assert (signal(0.0, "on.seq") / plain).real < -0.8
+
+
+def test_a_constant_physiological_field_shifts_the_readouts_as_a_frequency_offset_of_the_object_does(
+    tmp_path,
+):
+    system = pp.Opts(B0=3.0)
+    seq = pp.Sequence(system)
+    seq.add_block(pp.make_block_pulse(np.pi / 6, duration=2e-4, system=system))
+    seq.add_block(pp.make_adc(64, duration=6.4e-3, system=system))
+    path = tmp_path / "fid.seq"
+    seq.write(str(path))
+    ir.convert(path, SYSTEM)
+    ppm = 0.2
+
+    def disk(shift_ppm):
+        return virtual.Phantom(
+            [
+                virtual.Ellipse(
+                    (0.0, 0.0, 0.0), (0.02, 0.02), t1=1.0, t2=0.1, shift_ppm=shift_ppm
+                )
+            ]
+        ).tissue(4e-3, field_t=3.0)
+
+    shifted = virtual.simulate(path, disk(ppm), device="cpu")
+    offset_hz = ppm * 1e-6 * SYSTEM.gamma * SYSTEM.B0
+    steady = virtual.PhysiologicalField([offset_hz], [1e9], phases_rad=[np.pi / 2])
+    moved = virtual.simulate(path, disk(0.0), device="cpu", physiology=steady)
+
+    for a, b in zip(shifted, moved, strict=True):
+        np.testing.assert_allclose(b, a, atol=2e-3 * np.abs(a).max())
+
+
+def test_a_physiological_field_is_the_sum_of_its_sinusoids():
+    field = virtual.PhysiologicalField([2.0, 0.5], [4.0, 1.0], phases_rad=[0.0, 0.0])
+    assert field(1.0) == pytest.approx(2.0)
+    assert field(0.25) == pytest.approx(2.0 * np.sin(np.pi / 8) + 0.5)
+    with pytest.raises(ValueError):
+        virtual.PhysiologicalField([1.0], [0.0])
+
+
+def _multiband_epi(path):
+    """A two-slice multiband 2D EPI, CAIPI blips along z, written to ``path`` and converted."""
+    main = sequences.epi2D_sequence(
+        n_x=32, n_y=16, n_slices=2, multiband=2, n_dummy=0, slice_spacing=8e-3
+    )[-1]
+    sequences.write(path, main)
+    ir.convert(path, SYSTEM)
+    return path
+
+
+def test_a_subject_moved_through_multiband_slices_takes_no_encoding_phase_from_the_move(
+    tmp_path,
+):
+    path = _multiband_epi(tmp_path / "mb.seq")
+    tissue = virtual.Phantom(
+        [
+            virtual.Ellipse((0.0, 0.0, z), (0.06, 0.04), t1=1.0, t2=0.1)
+            for z in np.arange(-0.02, 0.0201, 1e-3)
+        ]
+    ).tissue(2e-3)
+    still = np.concatenate(virtual.simulate(path, tissue, device="cpu"), axis=1)
+    through = np.concatenate(
+        virtual.simulate(
+            path,
+            tissue,
+            device="cpu",
+            motion=virtual.RigidMotion(offset=lambda t: [0.0, 0.0, 2e-3]),
+        ),
+        axis=1,
+    )
+    within = np.concatenate(
+        virtual.simulate(
+            path,
+            tissue,
+            device="cpu",
+            motion=virtual.RigidMotion(offset=lambda t: [1e-2, 0.0, 0.0]),
+        ),
+        axis=1,
+    )
+
+    assert np.linalg.norm(through - still) < 1e-6 * np.linalg.norm(still)
+    assert np.linalg.norm(within - still) > 0.1 * np.linalg.norm(still)
+
+
+def test_a_subject_moved_along_z_in_a_non_selective_3d_scan_keeps_its_encoding_phase(
+    converted,
+):
+    path = converted / "zte_3d.seq"
+    tissue = virtual.Phantom(
+        [virtual.Ellipse((0.0, 0.0, 0.0), (0.05, 0.04), t1=1.0, t2=0.1)]
+    ).tissue(2e-3)
+    still = np.concatenate(virtual.simulate(path, tissue, device="cpu"), axis=1)
+    moved = np.concatenate(
+        virtual.simulate(
+            path,
+            tissue,
+            device="cpu",
+            motion=virtual.RigidMotion(offset=lambda t: [0.0, 0.0, 1e-2]),
+        ),
+        axis=1,
+    )
+
+    assert np.linalg.norm(moved - still) > 0.1 * np.linalg.norm(still)

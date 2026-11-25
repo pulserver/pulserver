@@ -9,7 +9,9 @@ from ._export import export
 from ._girf import Girf
 from ._localizer import localizer
 from ._motion import RigidMotion
+from ._noise import COIL_NOISE, ReceiveNoise
 from ._phantom import Ellipse, Phantom
+from ._physiology import PhysiologicalField
 from ._stream import SAMPLE_RATE, Chunk, Scan
 from ._tissue import Tissue
 
@@ -21,6 +23,7 @@ COILS = _coils.COILS
 
 __all__ = [
     "COILS",
+    "COIL_NOISE",
     "SAMPLE_RATE",
     "BrainWeb",
     "Chunk",
@@ -30,6 +33,8 @@ __all__ = [
     "FourierPlayer",
     "Girf",
     "Phantom",
+    "PhysiologicalField",
+    "ReceiveNoise",
     "RigidMotion",
     "Scan",
     "Tissue",

@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import functools
 import math
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING
 
 import numpy as np
 import pypulseqpp as pp
+from blochsim.simulators.gradient_echo import FAT_SPECTRA
 
 from ._coils import Coil
 
@@ -78,7 +79,8 @@ class BrainWeb:
     the T1, T2 and T2' :meth:`relaxation` derives at the field it is scanned
     at from the parameters BrainWeb's simulator gives it at 1.5 T (Kwan et
     al., IEEE Trans Med Imaging 18:1085, 1999), and has the proton density
-    the simulator gives it. Fat precesses at pypulseqpp's fat shift, and every
+    the simulator gives it. Fat precesses at pypulseqpp's fat shift, or at
+    each peak of ``fat_peaks``, and every
     voxel at the field :attr:`field_ppm` its head adds. The coils are those of
     :class:`~pulserver.virtual.Phantom`, fixed in the physical frame.
 
@@ -101,7 +103,21 @@ class BrainWeb:
     diffusion : Mapping[str, float], default=None
         Isotropic diffusion coefficient, in m²/s, by tissue class, as
         :attr:`DIFFUSION` gives them; a class without one does not diffuse.
+    fat_peaks : Sequence[tuple[float, float]], default=None
+        Fat's spectrum, ``(shift_ppm, fraction)`` per peak, the shift
+        relative to water: each fat entry is split into one entry per peak
+        holding that fraction of its density (the fractions scaled to sum to
+        one), as :attr:`FAT_PEAKS` gives them;
+        a single peak at pypulseqpp's fat shift without one.
     """
+
+    #: The six-peak spectrum of fat, ``(shift_ppm, fraction)`` relative to
+    #: water: blochsim's ``middleton2009`` entry of
+    #: ``blochsim.simulators.gradient_echo.FAT_SPECTRA``, the methyl,
+    #: methylene, allylic, diallylic, glycerol and olefinic resonances. The
+    #: olefinic peak lies on the water side, out of reach of a fat-saturation
+    #: pulse centred on the methylene peak.
+    FAT_PEAKS = FAT_SPECTRA["middleton2009"]
 
     #: Isotropic diffusion coefficients, in m²/s, of the tissue classes whose
     #: water diffusion is measured: the apparent diffusion coefficients of
@@ -130,6 +146,7 @@ class BrainWeb:
         susceptibility: bool = True,
         t2_prime: Mapping[str, float] | None = None,
         diffusion: Mapping[str, float] | None = None,
+        fat_peaks: Sequence[tuple[float, float]] | None = None,
     ) -> None:
         for given in (t2_prime, diffusion):
             unknown = set(given or ()) - set(TISSUES)
@@ -141,6 +158,14 @@ class BrainWeb:
         self.susceptibility = susceptibility
         self.t2_prime = dict(t2_prime or {})
         self.diffusion = dict(diffusion or {})
+        self.fat_peaks = None
+        if fat_peaks is not None:
+            total = sum(fraction for _, fraction in fat_peaks)
+            if not total > 0.0:
+                raise ValueError("fat needs at least one peak of positive fraction")
+            self.fat_peaks = tuple(
+                (ppm, fraction / total) for ppm, fraction in fat_peaks
+            )
 
     @functools.cached_property
     def fractions(self) -> np.ndarray:
@@ -284,7 +309,13 @@ class BrainWeb:
         if self.susceptibility:
             field = _cubes(self.field_ppm[..., None], step)[..., 0]
         per_ppm = 1e-6 * pp.Opts().gamma * field_t
-        shifts = [per_ppm * FAT_SHIFT_PPM if name == "fat" else 0.0 for name in TISSUES]
+        fat = self.fat_peaks or ((FAT_SHIFT_PPM, 1.0),)
+        spectra = [
+            [(per_ppm * ppm, weight) for ppm, weight in fat]
+            if name == "fat"
+            else [(0.0, 1.0)]
+            for name in TISSUES
+        ]
         fractions = cubes.reshape(-1, len(TISSUES))
         inhomogeneity = per_ppm * field.reshape(-1)
         index = np.indices(cubes.shape[:3]).reshape(3, -1).T
@@ -299,24 +330,25 @@ class BrainWeb:
             t1, t2, t2_prime = relaxed[name]
             fraction = fractions[:, tissue]
             kept = np.flatnonzero((fraction > 0.0) & (density > 0.0))
-            shift = shifts[tissue]
-            frequency = shift + off_resonance_hz + inhomogeneity[kept]
-            if region is not None:
-                inside = region(positions[kept], frequency)
-                kept, frequency = kept[inside], frequency[inside]
-            points.append(positions[kept])
-            rows.append(
-                np.column_stack(
-                    [
-                        density * fraction[kept] * (step * 1e-3) ** 3,
-                        np.full(kept.size, t1),
-                        np.full(kept.size, t2),
-                        frequency,
-                        np.full(kept.size, t2_prime),
-                        np.full(kept.size, self.diffusion.get(name, 0.0)),
-                    ]
+            for shift, weight in spectra[tissue]:
+                frequency = shift + off_resonance_hz + inhomogeneity[kept]
+                held = kept
+                if region is not None:
+                    inside = region(positions[held], frequency)
+                    held, frequency = held[inside], frequency[inside]
+                points.append(positions[held])
+                rows.append(
+                    np.column_stack(
+                        [
+                            weight * density * fraction[held] * (step * 1e-3) ** 3,
+                            np.full(held.size, t1),
+                            np.full(held.size, t2),
+                            frequency,
+                            np.full(held.size, t2_prime),
+                            np.full(held.size, self.diffusion.get(name, 0.0)),
+                        ]
+                    )
                 )
-            )
         return (np.concatenate(points), *np.concatenate(rows).T)
 
 
