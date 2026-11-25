@@ -1165,20 +1165,66 @@
 <span class="sd">    A subject at ``R p + s`` acquires at k what the subject at rest acquires</span>
 <span class="sd">    at ``R^T k``, times exp(-2 pi i k . s): per readout, ``R^T`` along the</span>
 <span class="sd">    logical axes, ``(n, 3, 3)``, and ``s`` along them, ``(n, 3)`` in m.</span>
+
+<span class="sd">    The excitation's profile stays where the subject at rest lies, so a</span>
+<span class="sd">    subject moved through a slice its readout's k does not resolve, less than</span>
+<span class="sd">    a cycle across the slice, takes no part of ``s`` along the slice: the</span>
+<span class="sd">    spins the slice holds stay at its position. Through-slice motion therefore</span>
+<span class="sd">    changes neither which tissue a slice holds nor its encoding phase.</span>
 <span class="sd">    """</span>
     <span class="n">rotation</span> <span class="o">=</span> <span class="n">timeline</span><span class="o">.</span><span class="n">rotation</span>
     <span class="n">readouts</span> <span class="o">=</span> <span class="n">timeline</span><span class="o">.</span><span class="n">readouts</span>
+    <span class="n">across</span> <span class="o">=</span> <span class="n">_selections</span><span class="p">(</span><span class="n">timeline</span><span class="p">)</span>
     <span class="n">turns</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">((</span><span class="nb">len</span><span class="p">(</span><span class="n">readouts</span><span class="p">),</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">))</span>
     <span class="n">shifts</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">((</span><span class="nb">len</span><span class="p">(</span><span class="n">readouts</span><span class="p">),</span> <span class="mi">3</span><span class="p">))</span>
     <span class="k">for</span> <span class="n">at</span><span class="p">,</span> <span class="n">echo_us</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">readouts</span><span class="o">.</span><span class="n">echo_us</span><span class="p">):</span>
         <span class="n">turn</span><span class="p">,</span> <span class="n">shift</span> <span class="o">=</span> <span class="n">motion</span><span class="o">.</span><span class="n">transform</span><span class="p">(</span><span class="mf">1e-6</span> <span class="o">*</span> <span class="nb">float</span><span class="p">(</span><span class="n">echo_us</span><span class="p">))</span>
         <span class="n">turns</span><span class="p">[</span><span class="n">at</span><span class="p">]</span> <span class="o">=</span> <span class="n">rotation</span><span class="o">.</span><span class="n">T</span> <span class="o">@</span> <span class="n">turn</span><span class="o">.</span><span class="n">T</span> <span class="o">@</span> <span class="n">rotation</span>
         <span class="n">shifts</span><span class="p">[</span><span class="n">at</span><span class="p">]</span> <span class="o">=</span> <span class="n">rotation</span><span class="o">.</span><span class="n">T</span> <span class="o">@</span> <span class="n">shift</span>
+        <span class="n">slab</span> <span class="o">=</span> <span class="n">across</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">echo_us</span><span class="p">))</span>
+        <span class="k">if</span> <span class="n">slab</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">direction</span><span class="p">,</span> <span class="n">width</span> <span class="o">=</span> <span class="n">slab</span>
+            <span class="k">if</span> <span class="nb">float</span><span class="p">(</span><span class="n">readouts</span><span class="o">.</span><span class="n">reach</span><span class="p">[</span><span class="n">at</span><span class="p">]</span> <span class="o">@</span> <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">direction</span><span class="p">))</span> <span class="o">*</span> <span class="n">width</span> <span class="o">&lt;</span> <span class="mf">1.0</span><span class="p">:</span>
+                <span class="n">shifts</span><span class="p">[</span><span class="n">at</span><span class="p">]</span> <span class="o">-=</span> <span class="p">(</span><span class="n">shifts</span><span class="p">[</span><span class="n">at</span><span class="p">]</span> <span class="o">@</span> <span class="n">direction</span><span class="p">)</span> <span class="o">*</span> <span class="n">direction</span>
     <span class="n">readouts</span><span class="o">.</span><span class="n">reach</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">"nij,nj-&gt;ni"</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">turns</span><span class="p">),</span> <span class="n">readouts</span><span class="o">.</span><span class="n">reach</span><span class="p">)</span>
     <span class="k">return</span> <span class="p">(</span>
         <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">turns</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">),</span>
         <span class="n">torch</span><span class="o">.</span><span class="n">as_tensor</span><span class="p">(</span><span class="n">shifts</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">device</span><span class="p">),</span>
     <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_selections</span><span class="p">(</span><span class="n">timeline</span><span class="p">:</span> <span class="n">Timeline</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""Return a lookup of the slab the last excitation at or before a time, in µs, selects.</span>
+
+<span class="sd">    The slab is the logical unit axis the excitation selects along and its</span>
+<span class="sd">    full width at half maximum, in m; None before the first excitation or</span>
+<span class="sd">    where it selects none.</span>
+<span class="sd">    """</span>
+    <span class="n">pulses</span><span class="p">,</span> <span class="n">rotation</span> <span class="o">=</span> <span class="n">timeline</span><span class="o">.</span><span class="n">pulses</span><span class="p">,</span> <span class="n">timeline</span><span class="o">.</span><span class="n">rotation</span>
+    <span class="n">excitations</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">flatnonzero</span><span class="p">(</span><span class="n">pulses</span><span class="o">.</span><span class="n">use</span> <span class="o">==</span> <span class="n">_EXCITATION</span><span class="p">)</span>
+    <span class="n">slabs</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">at</span> <span class="ow">in</span> <span class="n">excitations</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">pulses</span><span class="o">.</span><span class="n">trace</span><span class="p">[</span><span class="n">at</span><span class="p">]</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">axis</span> <span class="o">=</span> <span class="n">pulses</span><span class="o">.</span><span class="n">direction</span><span class="p">[</span><span class="n">at</span><span class="p">]</span>
+            <span class="n">width</span> <span class="o">=</span> <span class="n">pulses</span><span class="o">.</span><span class="n">traces</span><span class="p">[</span><span class="n">pulses</span><span class="o">.</span><span class="n">trace</span><span class="p">[</span><span class="n">at</span><span class="p">]]</span><span class="o">.</span><span class="n">width</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">gradient</span> <span class="o">=</span> <span class="n">pulses</span><span class="o">.</span><span class="n">gradient</span><span class="p">[</span><span class="n">at</span><span class="p">]</span>
+            <span class="n">strength</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">gradient</span><span class="p">))</span>
+            <span class="k">if</span> <span class="n">strength</span> <span class="o">==</span> <span class="mf">0.0</span><span class="p">:</span>
+                <span class="n">slabs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
+                <span class="k">continue</span>
+            <span class="n">axis</span> <span class="o">=</span> <span class="n">gradient</span> <span class="o">/</span> <span class="n">strength</span>
+            <span class="n">detuning</span><span class="p">,</span> <span class="n">ratio</span> <span class="o">=</span> <span class="n">pulses</span><span class="o">.</span><span class="n">profiles</span><span class="p">[</span><span class="n">pulses</span><span class="o">.</span><span class="n">profile</span><span class="p">[</span><span class="n">at</span><span class="p">]]</span>
+            <span class="n">half</span> <span class="o">=</span> <span class="n">detuning</span><span class="p">[</span><span class="n">ratio</span> <span class="o">&gt;=</span> <span class="mf">0.5</span><span class="p">]</span>
+            <span class="n">width</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">half</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">half</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="o">/</span> <span class="n">strength</span> <span class="k">if</span> <span class="n">half</span><span class="o">.</span><span class="n">size</span> <span class="k">else</span> <span class="mf">0.0</span>
+        <span class="n">slabs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="kc">None</span> <span class="k">if</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">width</span><span class="p">)</span> <span class="k">else</span> <span class="p">(</span><span class="n">rotation</span><span class="o">.</span><span class="n">T</span> <span class="o">@</span> <span class="n">axis</span><span class="p">,</span> <span class="n">width</span><span class="p">))</span>
+    <span class="n">times</span> <span class="o">=</span> <span class="n">pulses</span><span class="o">.</span><span class="n">time_us</span><span class="p">[</span><span class="n">excitations</span><span class="p">]</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">across</span><span class="p">(</span><span class="n">time_us</span><span class="p">:</span> <span class="nb">float</span><span class="p">):</span>
+        <span class="n">last</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">searchsorted</span><span class="p">(</span><span class="n">times</span><span class="p">,</span> <span class="n">time_us</span><span class="p">,</span> <span class="n">side</span><span class="o">=</span><span class="s2">"right"</span><span class="p">))</span> <span class="o">-</span> <span class="mi">1</span>
+        <span class="k">return</span> <span class="n">slabs</span><span class="p">[</span><span class="n">last</span><span class="p">]</span> <span class="k">if</span> <span class="n">last</span> <span class="o">&gt;=</span> <span class="mi">0</span> <span class="k">else</span> <span class="kc">None</span>
+
+    <span class="k">return</span> <span class="n">across</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_b_values</span><span class="p">(</span>
