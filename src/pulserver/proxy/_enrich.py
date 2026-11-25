@@ -103,10 +103,11 @@ class TableSpace:
         ``None`` for a space with a trajectory, whose readouts are not echoes
         of one grid, and for a space with no readout.
     partitions
-        Partitions the space's readouts encode: twice the larger distance,
-        in ``PAR`` counts, from ``centre_partition`` to either end of the
-        written ``PAR`` range, the end past the last one included. ``None``
-        without a ``PAR`` label or a centre partition, and for a navigator.
+        Partitions the space's readouts are encoded on: twice the larger of
+        ``centre_partition`` and the distance from it to the end of the
+        written ``PAR`` range, so that a calibration reading only the centre
+        of a slab with a margin shares its grid. ``None`` without a ``PAR``
+        label or a centre partition, and for a navigator.
     ramp_sampled
         Whether the space's readouts are sampled on the ramps of their
         trapezoid, so that a Cartesian readout still carries its k as a 1D
@@ -811,7 +812,7 @@ def _encoded_partitions(
     written = np.asarray(partitions)[members]
     if not written.size:
         return None
-    return 2 * max(centre - int(written.min()), int(written.max()) + 1 - centre)
+    return 2 * max(centre, int(written.max()) + 1 - centre)
 
 
 def _is_slice_stack(

@@ -882,15 +882,16 @@ def test_the_header_states_the_acceleration_per_solve_of_the_main_sequence(tmp_p
 
 
 @pytest.mark.parametrize(
-    ("written_partitions", "encoded"), [(range(6), 6), (range(4), 4), (range(1, 4), 4)]
+    ("written_partitions", "encoded"),
+    [(range(6), 6), (range(4), 4), (range(1, 4), 4), (range(2, 5), 6)],
 )
-def test_the_encoded_partitions_are_those_the_readouts_encode_about_the_centre(
+def test_the_encoded_partitions_reach_from_zero_to_twice_the_centre_or_the_last_written(
     tmp_path, written_partitions, encoded
 ):
     seq = pp.Sequence(pp.Opts())
     seq.set_definition("Matrix", [SAMPLES, 1, 4])
     seq.set_definition("FOV", [0.2, 0.2, 0.02])
-    seq.set_definition("kSpaceCenterPartition", 3 if encoded == 6 else 2)
+    seq.set_definition("kSpaceCenterPartition", encoded // 2)
     for partition in written_partitions:
         add_partial_readout(seq, 0.5, pp.make_label("PAR", "SET", partition))
     table = written(seq, tmp_path)
