@@ -797,7 +797,7 @@ int pulseg__read4(FILE *f, void *p, int count);
  * includes the dot; NULL/empty -> PULSEG_CACHE_EXT_DEFAULT). Caller frees. */
 char *pulseg__make_cache_path(const char *seq_path, const char *ext);
 
-/* --- Shared block-definition predicates (pulseg_structure.c) --- */
+/* --- Shared block-definition predicates (structure/pulseg_descriptor.c) --- */
 int pulseg__block_def_is_pure_delay(const pulseg_base_block *b);
 
 /* PULSEG_RF_USE_* of an RF event: its tag, or, untagged, refocusing at a flip
@@ -1001,7 +1001,7 @@ int pulseg__get_unique_blocks(
     const pulseg_opts *opts,
     pulseq_shape *adopt_shapes);
 
-/* --- pulseg_structure.c --- */
+/* --- src/cpp/ir/structure.cpp --- */
 int pulseg__get_tr_in_sequence(
     pulseg_sequence_descriptor *desc,
     const pulseq_file *seq,

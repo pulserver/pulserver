@@ -2674,7 +2674,7 @@ static int load_cache_from_seq_path(
  * quantity it needs (the representative instance's block definition, RF
  * amplitude, gradient definition/shot/amplitude, digital-output event) is
  * frozen into the segment definitions' initial-state records at parse time
- * (pulseg_structure.c step 11e). SHAPES is required both for the waveforms
+ * (src/cpp/ir/structure.cpp step 11e). SHAPES is required both for the waveforms
  * themselves and for pulseg__build_segment_remap()'s content comparison. */
 int pulseg__load_geninstructions_cache_ext(
     pulseg_collection **out_coll,

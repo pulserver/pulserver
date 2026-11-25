@@ -1,4 +1,4 @@
-"""Store of generated and imported designs: one directory per scan, each design in it addressed by its content."""
+"""Store of generated and imported designs: one directory per scan, each design in it named by a hash of its inputs."""
 
 from __future__ import annotations
 

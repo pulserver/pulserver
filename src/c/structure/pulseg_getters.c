@@ -99,7 +99,7 @@ static int resolve_block(
 
 /* The per-(segment, block-position) record frozen at parse time from the
  * segment's representative (max-energy) scan instance -- see
- * pulseg_structure.c step 11e.  NULL when the descriptor predates the record
+ * src/cpp/ir/structure.cpp step 11e.  NULL when the descriptor predates the record
  * (no representative resolvable); callers then use the same fallbacks the
  * pre-computation resolution used when no instance was found. */
 static const pulseg_block_initial_state *resolve_initial_state(
@@ -2890,7 +2890,7 @@ static int block_has_adc(const pulseg_collection *coll, int seg_idx, int blk_idx
 }
 
 /* True iff this block position's duration actually differs across at least
- * two scan-table instances of the segment (see pulseg_structure.c step 11d).
+ * two scan-table instances of the segment (see src/cpp/ir/structure.cpp step 11d).
  * A NULL is_dynamic_delay array (pre-11d sequences / older cache) falls back
  * to the pre-existing conservative behavior of always treating an adjustable
  * pure delay as dynamic. */

@@ -61,8 +61,9 @@ class CheckLimits:
         axes. Without any, the resonance check is left out.
     vops
         VOPs and the global SAR matrices of their body models, or the ``.mat``
-        or ``.npz`` file holding them, which :func:`sar_ratios` reads; nothing
-        is refused on SAR.
+        or ``.npz`` file holding them, which :func:`sar_ratios` reads. The
+        ratios are reported, never refused on their value; VOPs written for
+        another transmit configuration are refused.
     drive_per_hz
         Channel drive per Hz of RF amplitude, in the VOPs' drive unit: one
         value, or one per channel. A scale common to every channel cancels in
