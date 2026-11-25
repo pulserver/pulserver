@@ -16,7 +16,7 @@ from ._girf import Girf
 from ._motion import RigidMotion
 from ._noise import ReceiveNoise
 from ._physiology import PhysiologicalField
-from ._timeline import Timeline, _bilinear
+from ._timeline import Timeline
 from ._tissue import Tissue
 
 #: Dephasing across a voxel, in cycles, beyond which the net moment between two
@@ -1352,16 +1352,7 @@ def _profile(
             selection.directions[pulse], dtype=torch.float32, device=device
         ) + float(selection.along[pulse])
         axes, table = _traced(entries, pulse, pulses, selection)
-        flip = torch.as_tensor(
-            _bilinear(
-                axes,
-                table,
-                (field.double().cpu().numpy(), along.double().cpu().numpy()),
-            ),
-            dtype=torch.float32,
-            device=device,
-        )
-        return _level(flip)
+        return _level(_interpolated(axes, table, field, along))
     if np.any(selection.gradients[pulse]):
         gradient = torch.as_tensor(
             selection.gradients[pulse], dtype=torch.float32, device=device
@@ -1403,11 +1394,39 @@ def _traced(entries: _Entries, pulse: int, pulses, selection: _Selection):
             ) + float(row[3])
             ends += [float(along.min()), float(along.max())]
         frequency = entries.frequency.double() - offset
-        selection.tables[key] = pulses.traces[trace].table(
+        axes, table = pulses.traces[trace].table(
             np.array([float(frequency.min()), float(frequency.max())]),
             np.array([min(ends), max(ends)]),
         )
+        selection.tables[key] = (
+            axes,
+            torch.as_tensor(table, dtype=torch.float32, device=positions.device),
+        )
     return selection.tables[key]
+
+
+def _interpolated(
+    axes: tuple[np.ndarray, np.ndarray],
+    table: torch.Tensor,
+    first: torch.Tensor,
+    second: torch.Tensor,
+) -> torch.Tensor:
+    """Return ``table``, sampled on the uniform grid ``axes``, interpolated bilinearly at ``(first, second)``, clamped to the grid."""
+    corners = []
+    for grid, values in zip(axes, (first, second), strict=True):
+        if grid.size == 1:
+            below = torch.zeros_like(values, dtype=torch.int64)
+            weight = torch.zeros_like(values)
+        else:
+            place = (values - float(grid[0])) / float(grid[1] - grid[0])
+            below = torch.floor(place).clamp(0, grid.size - 2)
+            weight = (place - below).clamp(0.0, 1.0)
+            below = below.long()
+        corners.append((below, (below + 1).clamp(max=grid.size - 1), weight))
+    (f0, f1, wf), (s0, s1, ws) = corners
+    return (1.0 - wf) * ((1.0 - ws) * table[f0, s0] + ws * table[f0, s1]) + wf * (
+        (1.0 - ws) * table[f1, s0] + ws * table[f1, s1]
+    )
 
 
 def _level(flip: torch.Tensor) -> torch.Tensor:
