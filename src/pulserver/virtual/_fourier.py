@@ -68,10 +68,11 @@ _RARE = 1e-3
 #: are.
 _GRADIENTS = 16
 
-# Steps a subject's pose is held to at each pulse, in rad and m: far below a
-# slice, so that a pulse that selects is placed in the moving subject to well
-# within its profile, while poses that differ by less play one selector.
-_POSE_TURN, _POSE_SHIFT = 2e-4, 2e-5
+# Steps a subject's pose is held to at each pulse, in rad and m: a turn moves
+# a point 0.1 m from the centre by 0.1 mm, an eighth of the thinnest slice or
+# partition held to this engine's resolution, while poses that differ by less
+# play one selector and keep the groups of entries few.
+_POSE_TURN, _POSE_SHIFT = 1e-3, 1e-4
 
 #: Widest steps, in Hz, of the frequencies the basis across a readout is
 #: tabulated at and fitted to; and the cycles neighbouring frequencies part by
@@ -1443,7 +1444,8 @@ def _merged(
     """Return the groups that hold all but :data:`_RARE` of the entries' density, and each entry's group among them.
 
     A rarer group's entries join the kept group nearest in their flip angles
-    among those the same selectors turn; one with none such is kept.
+    among those the same selectors turn; where there is none, the first of
+    them is kept and the others join it.
     """
     count = groups.shape[0]
     mass = torch.zeros(count, dtype=density.dtype, device=density.device)
@@ -1461,17 +1463,28 @@ def _merged(
     kept = np.zeros(count, dtype=bool)
     kept[order[:held].cpu().numpy()] = True
     rows = groups.cpu().numpy()
-    flips = _LEVELS[rows]
-    turned = rows > 0
+    flips = torch.as_tensor(_LEVELS[rows], dtype=torch.float32, device=groups.device)
+    packed = np.packbits(rows > 0, axis=1)
+    _, pattern = np.unique(
+        packed.view(np.dtype((np.void, packed.shape[1]))).ravel(), return_inverse=True
+    )
     target = np.arange(count)
-    for group in np.flatnonzero(~kept):
-        alike = np.flatnonzero(kept & (turned == turned[group]).all(axis=1))
+    rare = np.flatnonzero(~kept)
+    for turned in np.unique(pattern[rare]):
+        alike = np.flatnonzero(kept & (pattern == turned))
+        lone = rare[pattern[rare] == turned]
         if not alike.size:
-            kept[group] = True
+            kept[lone[0]] = True
+            target[lone[1:]] = lone[0]
             continue
-        target[group] = alike[
-            np.argmin(np.abs(flips[alike] - flips[group]).sum(axis=1))
-        ]
+        among = flips[torch.as_tensor(alike, device=flips.device)]
+        chunk = max(1, _BUDGET // (4 * max(alike.size, 1) * max(rows.shape[1], 1)))
+        for first in range(0, lone.size, chunk):
+            some = lone[first : first + chunk]
+            distance = torch.cdist(
+                flips[torch.as_tensor(some, device=flips.device)], among, p=1.0
+            )
+            target[some] = alike[distance.argmin(dim=1).cpu().numpy()]
     place = np.cumsum(kept) - 1
     renumbered = torch.as_tensor(place[target], device=group_of.device)
     return groups[torch.as_tensor(kept, device=groups.device)], renumbered[group_of]
