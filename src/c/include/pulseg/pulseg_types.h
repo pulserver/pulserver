@@ -565,7 +565,7 @@ typedef struct pulseg_block_instance
     float adc_freq_hz;   /**< ADC frequency offset (Hz)         */
     float adc_phase_rad; /**< ADC phase offset (rad)            */
 
-    /* Safety group (sticky pulseq TRID, 0 = ungrouped) */
+    /* Sticky pulseq TRID in force, 0 = none; reported only, nothing decides on it */
     int trid;
 
     /* RF use (appended; do not reorder above): PULSEG_RF_USE_* of the RF
