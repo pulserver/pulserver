@@ -490,6 +490,7 @@ def pics_image(
     phase: Any = None,
     l2: float = 0.0,
     shots: Any = None,
+    motion: Any = None,
 ) -> Any:
     """Return the complex image ``(z, y, x)`` of ``bart pics -S -R W`` over host k-space ``(coils, z, y, x)``.
 
@@ -518,6 +519,10 @@ def pics_image(
     (:func:`bartorch.tools.shot_encoding`), so the phase that changes from shot to shot does
     not alias the image; with ``phase`` as well, shot ``s`` sees ``phase``
     times its own.
+
+    With ``motion``, the ``(masks, voxel_size, rotations, shifts)`` of a
+    segmented 3D unit, each shot's lines are encoded from the image in that
+    shot's rigid pose (:func:`bartorch.tools.rigid_encoding`).
     """
     import bartorch
     import torch
@@ -529,12 +534,8 @@ def pics_image(
     shifted = bartorch.fftmod(measured, axes=(-1, -2, -3), inverse=True)
     if phase is not None:
         maps = maps * phase.reshape(1, *maps.shape[1:])
-    encoding = linop.CartesianSense(
-        maps.reshape(maps.shape[0], *grid),
-        grid,
-        pattern=pattern,
-        device=device,
-        coil_batch=sense_coil_batch(maps.shape[0], grid),
+    encoding = sense_encoding(
+        maps.reshape(maps.shape[0], *grid), pattern, device, motion
     )
     if shots is not None:
         encoding = tools.shot_encoding(encoding, *shots)
@@ -561,6 +562,25 @@ def pics_image(
     if phase is None:
         return image
     return image.real.to(torch.complex64) * phase.reshape(image.shape)
+
+
+def sense_encoding(maps, pattern, device, motion=None):
+    """Return the SENSE encoding of ``maps`` ``(coils, *grid)`` over ``pattern``, or, with ``motion`` ``(masks, voxel_size, rotations, shifts)``, of each shot's lines in its rigid pose (:func:`bartorch.tools.rigid_encoding`)."""
+    from bartorch import linop, tools
+
+    grid = tuple(pattern.shape)
+    if motion is not None:
+        masks, voxel, rotations, shifts = motion
+        return tools.rigid_encoding(
+            maps, masks, voxel, rotations, shifts, device=device
+        )
+    return linop.CartesianSense(
+        maps,
+        grid,
+        pattern=pattern,
+        device=device,
+        coil_batch=sense_coil_batch(maps.shape[0], grid),
+    )
 
 
 def sense_coil_batch(coils: int, grid: tuple[int, ...]) -> int:
