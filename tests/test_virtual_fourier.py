@@ -958,3 +958,68 @@ def test_a_physiological_field_is_the_sum_of_its_sinusoids():
     assert field(0.25) == pytest.approx(2.0 * np.sin(np.pi / 8) + 0.5)
     with pytest.raises(ValueError):
         virtual.PhysiologicalField([1.0], [0.0])
+
+
+def _multiband_epi(path):
+    """A two-slice multiband 2D EPI, CAIPI blips along z, written to ``path`` and converted."""
+    main = sequences.epi2D_sequence(
+        n_x=32, n_y=16, n_slices=2, multiband=2, n_dummy=0, slice_spacing=8e-3
+    )[-1]
+    sequences.write(path, main)
+    ir.convert(path, SYSTEM)
+    return path
+
+
+def test_a_subject_moved_through_multiband_slices_takes_no_encoding_phase_from_the_move(
+    tmp_path,
+):
+    path = _multiband_epi(tmp_path / "mb.seq")
+    tissue = virtual.Phantom(
+        [
+            virtual.Ellipse((0.0, 0.0, z), (0.06, 0.04), t1=1.0, t2=0.1)
+            for z in np.arange(-0.02, 0.0201, 1e-3)
+        ]
+    ).tissue(2e-3)
+    still = np.concatenate(virtual.simulate(path, tissue, device="cpu"), axis=1)
+    through = np.concatenate(
+        virtual.simulate(
+            path,
+            tissue,
+            device="cpu",
+            motion=virtual.RigidMotion(offset=lambda t: [0.0, 0.0, 2e-3]),
+        ),
+        axis=1,
+    )
+    within = np.concatenate(
+        virtual.simulate(
+            path,
+            tissue,
+            device="cpu",
+            motion=virtual.RigidMotion(offset=lambda t: [1e-2, 0.0, 0.0]),
+        ),
+        axis=1,
+    )
+
+    assert np.linalg.norm(through - still) < 1e-6 * np.linalg.norm(still)
+    assert np.linalg.norm(within - still) > 0.1 * np.linalg.norm(still)
+
+
+def test_a_subject_moved_along_z_in_a_non_selective_3d_scan_keeps_its_encoding_phase(
+    converted,
+):
+    path = converted / "zte_3d.seq"
+    tissue = virtual.Phantom(
+        [virtual.Ellipse((0.0, 0.0, 0.0), (0.05, 0.04), t1=1.0, t2=0.1)]
+    ).tissue(2e-3)
+    still = np.concatenate(virtual.simulate(path, tissue, device="cpu"), axis=1)
+    moved = np.concatenate(
+        virtual.simulate(
+            path,
+            tissue,
+            device="cpu",
+            motion=virtual.RigidMotion(offset=lambda t: [0.0, 0.0, 1e-2]),
+        ),
+        axis=1,
+    )
+
+    assert np.linalg.norm(moved - still) > 0.1 * np.linalg.norm(still)
