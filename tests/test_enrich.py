@@ -879,3 +879,26 @@ def test_the_header_states_the_acceleration_per_solve_of_the_main_sequence(tmp_p
     enrich_header(enriched, written(seq, tmp_path))
 
     assert float(user_parameter(enriched, ACCELERATION_PER_SOLVE)) == 3.0
+
+
+@pytest.mark.parametrize(
+    ("written_partitions", "encoded"), [(range(6), 6), (range(4), 4), (range(1, 4), 4)]
+)
+def test_the_encoded_partitions_are_those_the_readouts_encode_about_the_centre(
+    tmp_path, written_partitions, encoded
+):
+    seq = pp.Sequence(pp.Opts())
+    seq.set_definition("Matrix", [SAMPLES, 1, 4])
+    seq.set_definition("FOV", [0.2, 0.2, 0.02])
+    seq.set_definition("kSpaceCenterPartition", 3 if encoded == 6 else 2)
+    for partition in written_partitions:
+        add_partial_readout(seq, 0.5, pp.make_label("PAR", "SET", partition))
+    table = written(seq, tmp_path)
+
+    encoding = enriched_encoding(table)
+
+    assert table.spaces[0].partitions == encoded
+    assert encoding.encodedSpace.matrixSize.z == encoded
+    assert encoding.encodedSpace.fieldOfView_mm.z == pytest.approx(20.0 * encoded / 4)
+    assert encoding.reconSpace.matrixSize.z == 4
+    assert encoding.reconSpace.fieldOfView_mm.z == pytest.approx(20.0)

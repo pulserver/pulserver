@@ -102,6 +102,11 @@ class TableSpace:
         of the echo that is symmetric about the readout's ``center_sample``.
         ``None`` for a space with a trajectory, whose readouts are not echoes
         of one grid, and for a space with no readout.
+    partitions
+        Partitions the space's readouts encode: twice the larger distance,
+        in ``PAR`` counts, from ``centre_partition`` to either end of the
+        written ``PAR`` range, the end past the last one included. ``None``
+        without a ``PAR`` label or a centre partition, and for a navigator.
     ramp_sampled
         Whether the space's readouts are sampled on the ramps of their
         trapezoid, so that a Cartesian readout still carries its k as a 1D
@@ -119,6 +124,7 @@ class TableSpace:
     centre_line: int | None = None
     centre_partition: int | None = None
     readout_samples: int | None = None
+    partitions: int | None = None
     ramp_sampled: bool = False
     bands: int = 1
 
@@ -501,9 +507,10 @@ def enrich_header(header: Any, table: SequenceTable) -> None:
     For every space, sets ``reconSpace`` from the sequence's matrix and field
     of view when defined, and ``encodedSpace`` from them with the readout of a
     Cartesian space widened to the samples of its full echo
-    (:attr:`TableSpace.readout_samples`), the field of view along it growing in
-    proportion, so that the ratio of the encoded to the reconstructed field of
-    view is the readout oversampling. ``encodingLimits`` are the extremes of
+    (:attr:`TableSpace.readout_samples`) and its partitions to those its
+    readouts encode where they exceed the matrix (:attr:`TableSpace.partitions`),
+    the field of view along each growing in proportion, so that the ratio of
+    the encoded to the reconstructed field of view is the oversampling. ``encodingLimits`` are the extremes of
     the counters of its readouts, with the centre the sequence defines for
     ``kspace_encoding_step_1`` and ``_2`` and the middle of the range for the
     others, and ``trajectory`` is ``OTHER`` or ``CARTESIAN``. Other fields of
@@ -762,6 +769,11 @@ def _map_readouts(
                     readouts.center_sample[members],
                     reverse[members],
                 ),
+                partitions=None
+                if is_navigator
+                else _encoded_partitions(
+                    labels.get("PAR"), members, definitions.centre_partition
+                ),
                 ramp_sampled=not trajectory
                 and (bool(members.any()) if navigates else count > 0)
                 and _ramp_sampled(
@@ -788,6 +800,18 @@ def _map_readouts(
         else np.zeros(count),
     }
     return part, spaces
+
+
+def _encoded_partitions(
+    partitions: np.ndarray | None, members: Any, centre: int | None
+) -> int | None:
+    """Return :attr:`TableSpace.partitions` of the readouts ``members``."""
+    if partitions is None or centre is None:
+        return None
+    written = np.asarray(partitions)[members]
+    if not written.size:
+        return None
+    return 2 * max(centre - int(written.min()), int(written.max()) + 1 - centre)
 
 
 def _is_slice_stack(
@@ -993,22 +1017,31 @@ def _encoding_space(space: TableSpace, current: Any, *, widened: bool = False) -
     Each field the space leaves undefined is taken from ``current``.
 
     With ``widened``, a defined matrix has as many samples along the readout as
-    the space's full echo, and a defined field of view the extent of them.
+    the space's full echo, and as many partitions as its readouts encode where
+    those are more than it states (:attr:`TableSpace.partitions`); a defined
+    field of view grows along each axis in the same proportion.
     """
     grown = 1.0
+    deeper = 1.0
     if space.matrix is not None:
         samples = space.matrix[0]
+        depth = space.matrix[2]
         if widened and space.readout_samples and samples > 0:
             grown = space.readout_samples / samples
             samples = space.readout_samples
-        matrix = xsd.matrixSizeType(x=samples, y=space.matrix[1], z=space.matrix[2])
+        if widened and space.partitions and depth > 1 and space.partitions > depth:
+            deeper = space.partitions / depth
+            depth = space.partitions
+        matrix = xsd.matrixSizeType(x=samples, y=space.matrix[1], z=depth)
     elif current is not None:
         matrix = current.matrixSize
     else:
         matrix = xsd.matrixSizeType()
     if space.fov_mm is not None:
         fov = xsd.fieldOfViewMm(
-            x=round(space.fov_mm[0] * grown, 9), y=space.fov_mm[1], z=space.fov_mm[2]
+            x=round(space.fov_mm[0] * grown, 9),
+            y=space.fov_mm[1],
+            z=round(space.fov_mm[2] * deeper, 9),
         )
     elif current is not None:
         fov = current.fieldOfView_mm
