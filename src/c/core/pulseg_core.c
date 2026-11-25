@@ -1004,7 +1004,7 @@ static int seg_adc_def_equal(
 }
 
 /* Resolve the block DEFINITION that materialises block b of a segment.
- * Reads the frozen max-energy-representative record (pulseg_structure.c step
+ * Reads the frozen max-energy-representative record (src/cpp/ir/structure.cpp step
  * 11e) so the compared content matches the actually-built buffer without the
  * per-instance tables; falls back to the segment's first-instance
  * unique_block_indices when no representative was recorded. */

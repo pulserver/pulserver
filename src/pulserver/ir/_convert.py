@@ -92,8 +92,11 @@ class Grouping:
     :attr:`boundary_gradient_hz_per_m` of zero at the join. A boundary must
     fall where the ``NOROT`` or ``PMC`` label changes, since the interpreter
     sets one prescription rotation per segment instance; conversion fails when
-    such a change falls under a gradient. The ``split_*`` attributes add
-    boundaries.
+    such a change falls under a gradient. ``split_by_pulses`` and
+    ``split_by_readouts`` move no boundary: repetitions whose blocks play other
+    definitions at the same positions (duration, RF and gradient definitions,
+    or readouts) become variants of the segment; ``split_navigators`` and
+    ``split_edge_delays`` add boundaries.
 
     The default suits an interpreter that begins a segment by setting its
     gradients, so that a boundary falls only where they are at rest.
@@ -662,8 +665,9 @@ def summary(
 def prescribe(sequence: pp.Sequence, fov_offset: Sequence[float]) -> pp.Sequence:
     """Move a logical-frame sequence to a prescribed field-of-view centre, in place.
 
-    An offset along the slice axis becomes an RF frequency, an in-plane offset
-    an RF and ADC phase, each referenced to the excitation it follows; blocks
+    An offset along the slice axis becomes an RF frequency, one along the
+    readout an ADC frequency, and the gradient area played since the excitation
+    sets the RF and ADC phases, which carry the phase-encoding offset; blocks
     labelled ``NOPOS`` are exempt. The gradient area is counted from the
     sequence's first block. A block that carries a rotation extension is moved
     by the gradients it plays: those it draws, turned by that rotation.

@@ -99,7 +99,7 @@ static int resolve_block(
 
 /* The per-(segment, block-position) record frozen at parse time from the
  * segment's representative (max-energy) scan instance -- see
- * pulseg_structure.c step 11e.  NULL when the descriptor predates the record
+ * src/cpp/ir/structure.cpp step 11e.  NULL when the descriptor predates the record
  * (no representative resolvable); callers then use the same fallbacks the
  * pre-computation resolution used when no instance was found. */
 static const pulseg_block_initial_state *resolve_initial_state(
@@ -826,7 +826,7 @@ static int pulseg__rf_costed_instance(const pulseg_sequence_descriptor *desc, in
  *   The block at canonical position @p pos in instance @p instance, when it
  *   plays an RF definition; @p canonical (that position in instance 0)
  *   otherwise. The pulse costed at a position is the costed instance's own:
- *   its definition, amplitude, shim and safety group.
+ *   its definition, amplitude, shim and TRID label.
  */
 static const pulseg_block_table_element *pulseg__rf_costed_block(
     const pulseg_sequence_descriptor *desc,
@@ -995,8 +995,9 @@ int pulseg_get_rf_array(const pulseg_collection *coll, pulseg_rf_stats **out_pul
         /* Set repetition count */
         (*out_pulses)[n].num_instances = num_instances;
 
-        /* The safety group (TRID) rides on the per-occurrence block-table
-         * entry, never on the deduplicated rfdef->stats hard-copied above. */
+        /* The TRID label in force rides on the per-occurrence block-table
+         * entry, never on the deduplicated rfdef->stats hard-copied above.
+         * It is reported only: no segmentation, check or playout uses it. */
         (*out_pulses)[n].trid = bte->trid;
 
         n++;
@@ -2889,7 +2890,7 @@ static int block_has_adc(const pulseg_collection *coll, int seg_idx, int blk_idx
 }
 
 /* True iff this block position's duration actually differs across at least
- * two scan-table instances of the segment (see pulseg_structure.c step 11d).
+ * two scan-table instances of the segment (see src/cpp/ir/structure.cpp step 11d).
  * A NULL is_dynamic_delay array (pre-11d sequences / older cache) falls back
  * to the pre-existing conservative behavior of always treating an adjustable
  * pure delay as dynamic. */
@@ -3461,7 +3462,7 @@ static int resolve_block_instance(
     /* RF shimming */
     inst->rf_shim_id = bte->rf_shim_id;
 
-    /* Safety group (TRID) */
+    /* TRID label in force (reported only; nothing decides on it) */
     inst->trid = bte->trid;
 
     /* Variable-amplitude flags (TR-level) */

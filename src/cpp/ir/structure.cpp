@@ -3081,11 +3081,10 @@ int pulseg__get_exec_stream_segments(
 
     /* ---- 11b. Tile main-section seg_id across all main TRs ---------
      *
-     * Steps 2a-2c only segment a single instance of each section.
-     * The main section's pattern (covering main_region_size blocks
-     * starting at main_region_start) repeats with the same period
-     * for every subsequent main TR.  Fill remaining -1 gaps by
-     * tiling; positions already assigned by prep/cooldown are kept. */
+     * Step 2 segments one region of whole repetitions (main_region_size
+     * blocks from main_region_start); there is no separate prep or
+     * cooldown pass. That pattern repeats with the same period over the
+     * rest of the stream: fill the remaining -1 gaps by tiling it. */
     if (main_region_size > 0)
     {
         int src_start = main_region_start;
