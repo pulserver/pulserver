@@ -1299,7 +1299,6 @@ class EpiRecon(PicsRecon):
             volume[:, 0],
             torch.from_numpy(np.ascontiguousarray(calibration, dtype=np.complex64)),
             maps[:, 0],
-            context.device,
         )[:, None]
         self.full_resolution_maps[location] = refined
         _log.info(
@@ -1650,7 +1649,7 @@ SPIRIT_ITERATIONS = 100
 SPIRIT_MAPS_FLOOR = 0.05
 
 
-def full_resolution_maps(kspace, calibration, maps, device):
+def full_resolution_maps(kspace, calibration, maps):
     """Return coil maps of a slice at the resolution of its fully encoded k-space.
 
     ``kspace`` is reconstructed coil by coil by SPIRiT, its kernel fitted to
@@ -1671,23 +1670,22 @@ def full_resolution_maps(kspace, calibration, maps, device):
         central lines.
     maps : torch.Tensor
         ``(coils, y, x)`` maps of the slice from its calibration.
-    device : str or torch.device
-        Device of the conjugate-gradient solve.
 
     Returns
     -------
     torch.Tensor
-        ``(coils, y, x)`` maps, of unit root-sum-of-squares.
+        ``(coils, y, x)`` maps, of unit root-sum-of-squares, on the device of
+        ``maps``. The SPIRiT solve runs on the host: bartorch builds its
+        consistency operator there.
     """
     import bartorch
     import torch
     from bartorch import linop, optim, tools
 
-    on = torch.device(device) if device is not None else kspace.device
     lines = torch.nonzero(calibration.abs().sum(dim=(0, 2)) > 0)[:, 0]
-    region = calibration[:, int(lines[0]) : int(lines[-1]) + 1].contiguous()
-    kernel = tools.spirit_kernel(region.to(torch.complex64), SPIRIT_KERNEL).to(on)
-    kspace = kspace.to(on, torch.complex64)
+    region = calibration[:, int(lines[0]) : int(lines[-1]) + 1].cpu().contiguous()
+    kernel = tools.spirit_kernel(region.to(torch.complex64), SPIRIT_KERNEL)
+    kspace = kspace.cpu().to(torch.complex64)
     grid = tuple(kspace.shape[1:])
     shape = tuple(kspace.shape)
     sampling = linop.Diagonal(
@@ -1698,17 +1696,17 @@ def full_resolution_maps(kspace, calibration, maps, device):
             SPIRIT_WEIGHT, operator=linop.spirit_consistency(kernel, grid)
         ),
         maxiter=SPIRIT_ITERATIONS,
-        device=device,
     )
-    filled = solve(kspace, sampling).reshape(shape).cpu()
+    filled = solve(kspace, sampling).reshape(shape)
     images = bartorch.fft(filled, (-1, -2), inverse=True, unitary=True).reshape(shape)
     rss = images.abs().square().sum(dim=0).sqrt()
     weight = rss / (rss + SPIRIT_MAPS_FLOOR * torch.quantile(rss.flatten(), 0.99))
     drawn = images / rss.clamp_min(1e-12)
-    phase = torch.exp(1j * torch.angle((maps.conj() * drawn).sum(dim=0)))
-    blended = weight * drawn + (1 - weight) * maps * phase
+    given = maps.cpu()
+    phase = torch.exp(1j * torch.angle((given.conj() * drawn).sum(dim=0)))
+    blended = weight * drawn + (1 - weight) * given * phase
     return (blended / blended.abs().square().sum(dim=0).sqrt().clamp_min(1e-12)).to(
-        maps.dtype
+        maps.device, maps.dtype
     )
 
 
