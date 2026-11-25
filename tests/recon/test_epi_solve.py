@@ -643,7 +643,7 @@ def test_full_resolution_maps_of_a_threefold_undersampled_slice_follow_steep_coi
     smooth = torch.from_numpy(_maps((1, 48, 48), coils=8)[:, 0])
 
     maps = full_resolution_maps(
-        (kspace * sampled).to(device), calibration.to(device), smooth.to(device)
+        (kspace * sampled).to(device), calibration.to(device), smooth.to(device), device
     )
 
     assert maps.device.type == device
