@@ -1000,7 +1000,7 @@ def test_a_subject_moved_through_multiband_slices_takes_no_encoding_phase_from_t
         axis=1,
     )
 
-    assert np.linalg.norm(through - still) < 1e-6 * np.linalg.norm(still)
+    assert np.linalg.norm(through - still) < 1e-3 * np.linalg.norm(still)
     assert np.linalg.norm(within - still) > 0.1 * np.linalg.norm(still)
 
 
@@ -1023,3 +1023,24 @@ def test_a_subject_moved_along_z_in_a_non_selective_3d_scan_keeps_its_encoding_p
     )
 
     assert np.linalg.norm(moved - still) > 0.1 * np.linalg.norm(still)
+
+
+def test_a_subject_moved_through_its_slices_is_excited_where_it_lies_at_the_pulse(
+    tmp_path,
+):
+    path = _multiband_epi(tmp_path / "mb.seq")
+    tissue = virtual.Phantom(
+        [
+            virtual.Ellipse((0.0, 0.0, z), (0.06, 0.04), t1=1.0, t2=0.1)
+            for z in np.arange(1e-3, 0.0201, 1e-3)
+        ]
+    ).tissue(2e-3)
+
+    def energy(offset_m):
+        motion = virtual.RigidMotion(offset=lambda t: [0.0, 0.0, offset_m])
+        readouts = virtual.simulate(path, tissue, device="cpu", motion=motion)
+        return np.linalg.norm(np.concatenate(readouts, axis=1))
+
+    still = energy(0.0)
+    assert energy(1.2e-2) < 0.05 * still
+    assert energy(-1.2e-2) > 1.5 * still

@@ -68,6 +68,11 @@ _RARE = 1e-3
 #: are.
 _GRADIENTS = 16
 
+# Steps a subject's pose is held to at each pulse, in rad and m: far below a
+# slice, so that a pulse that selects is placed in the moving subject to well
+# within its profile, while poses that differ by less play one selector.
+_POSE_TURN, _POSE_SHIFT = 2e-4, 2e-5
+
 #: Widest steps, in Hz, of the frequencies the basis across a readout is
 #: tabulated at and fitted to; and the cycles neighbouring frequencies part by
 #: over the longest time the basis spans, from which the steps narrow.
@@ -178,8 +183,9 @@ class FourierPlayer:
         Relative residual to which the temporal and readout bases span the
         signals; :data:`TOLERANCE` by default.
     motion : RigidMotion, default=None
-        How the subject moves, at each readout's echo; it moves its encoding
-        alone, its excitation, relaxation and coil sensitivities following it.
+        How the subject moves: at each pulse's centre it places the slab the
+        pulse selects in the subject, and at each readout's echo it moves the
+        encoding; relaxation and coil sensitivities follow the subject.
     girf : Girf, default=None
         The impulse response the gradients play through.
     noise : ReceiveNoise, default=None
@@ -232,16 +238,23 @@ class FourierPlayer:
         timeline.read_free_induction(np.flatnonzero(~_dephases(winds)))
         shifted = _shifted(timeline, events, voxel, spanned)
         self._poses = None if motion is None else _poses(timeline, motion, self.device)
-        selector_of, selectors = _selectors(pulses)
+        at_rest = _Selection.of(pulses)
+        station_of_pulse, _ = _selectors(pulses, at_rest)
+        selection = at_rest if motion is None else _Selection.of(pulses, motion)
+        selector_of, selectors = _selectors(pulses, selection)
         excitations = np.unique(selector_of[pulses.use == _EXCITATION])
         self._entries, groups, group_of = _grouped(
-            everything, selectors, pulses, excitations
+            everything, selectors, pulses, selection, excitations
         )
         groups, group_of = _merged(groups, group_of, self._entries.density)
         del everything
         self._groups = groups.cpu().numpy()
         self._group_of = group_of
-        self._stations, self._station_of = _stations(timeline, selector_of)
+        self._stations, self._station_of = _stations(timeline, station_of_pulse)
+        self._columns = {
+            station: np.unique(selector_of[station_of_pulse == station])
+            for station in self._stations
+        }
         step = _field_step(timeline, events, shifted)
         self._atoms = _Atoms(self._entries, step)
         self._b = _b_values(timeline, self._entries, tolerance)
@@ -313,7 +326,9 @@ class FourierPlayer:
         from blochsim.sequence import EpgEngine, TissueProperties, pack_description
 
         readouts = np.flatnonzero(self._station_of == station)
-        members = np.flatnonzero(self._groups[:, station] > 0)
+        members = np.flatnonzero(
+            (self._groups[:, self._columns[station]] > 0).any(axis=1)
+        )
         member_t = torch.as_tensor(members, device=self.device)
         local = torch.nonzero(torch.isin(self._group_of, member_t)).reshape(-1)
         if not local.numel():
@@ -728,11 +743,10 @@ def _poses(
     at ``R^T k``, times exp(-2 pi i k . s): per readout, ``R^T`` along the
     logical axes, ``(n, 3, 3)``, and ``s`` along them, ``(n, 3)`` in m.
 
-    The excitation's profile stays where the subject at rest lies, so a
-    subject moved through a slice its readout's k does not resolve, less than
-    a cycle across the slice, takes no part of ``s`` along the slice: the
-    spins the slice holds stay at its position. Through-slice motion therefore
-    changes neither which tissue a slice holds nor its encoding phase.
+    A slice its readout's k does not resolve, less than a cycle across it,
+    takes no part of ``s`` along the slice: the spins it holds lie at its
+    position whatever tissue :class:`_Selection` places there, so
+    through-slice motion takes no encoding phase.
     """
     rotation = timeline.rotation
     readouts = timeline.readouts
@@ -1183,19 +1197,80 @@ def _offsets(pulses) -> np.ndarray:
     return offset
 
 
-def _selectors(pulses) -> tuple[np.ndarray, np.ndarray]:
+@dataclass
+class _Selection:
+    """What each pulse selects in the frame of the subject at rest.
+
+    ``gradients`` ``(n, 3)`` in Hz/m and ``offsets`` ``(n,)`` in Hz as
+    :func:`_selecting` and :func:`_offsets` give them; ``directions``
+    ``(n, 3)`` the axis a pulse under a changing gradient selects along, and
+    ``along`` ``(n,)`` in m where along it the subject's origin lies.
+    """
+
+    gradients: np.ndarray
+    offsets: np.ndarray
+    directions: np.ndarray
+    along: np.ndarray
+
+    @classmethod
+    def of(cls, pulses, motion: RigidMotion | None = None) -> _Selection:
+        """Return what the pulses select, in a subject that moves as ``motion`` describes at each pulse's centre.
+
+        A subject at ``R p + s`` sees a gradient ``g`` as ``R^T g`` and an
+        offset ``g . s``: the slab moves through the subject at rest as the
+        subject moves through the slab. The pose is held to
+        :data:`_POSE_TURN` and :data:`_POSE_SHIFT`.
+        """
+        gradients = _selecting(pulses).astype(np.float64)
+        offsets = _offsets(pulses).astype(np.float64)
+        directions = np.asarray(pulses.direction, dtype=np.float64).copy()
+        along = np.zeros(len(offsets))
+        if motion is None:
+            return cls(gradients, offsets, directions, along)
+        selecting = np.flatnonzero(gradients.any(axis=1) | (pulses.trace >= 0))
+        for at in selecting:
+            turn, shift = _held_pose(motion, 1e-6 * float(pulses.time_us[at]))
+            if pulses.trace[at] >= 0:
+                along[at] = float(directions[at] @ shift)
+                directions[at] = turn.T @ directions[at]
+            else:
+                offsets[at] -= float(gradients[at] @ shift)
+                gradients[at] = turn.T @ gradients[at]
+        return cls(gradients, offsets, directions, along)
+
+
+def _held_pose(motion: RigidMotion, t: float) -> tuple[np.ndarray, np.ndarray]:
+    """Return the subject's pose at ``t`` held to :data:`_POSE_TURN` and :data:`_POSE_SHIFT`."""
+    from scipy.spatial.transform import Rotation
+
+    turn, shift = motion.transform(t)
+    vector = Rotation.from_matrix(turn).as_rotvec()
+    vector = _POSE_TURN * np.round(vector / _POSE_TURN)
+    return (
+        Rotation.from_rotvec(vector).as_matrix(),
+        _POSE_SHIFT * np.round(np.asarray(shift, dtype=np.float64) / _POSE_SHIFT),
+    )
+
+
+def _selectors(
+    pulses, selection: _Selection | None = None
+) -> tuple[np.ndarray, np.ndarray]:
     """Return which selector each pulse is, and each selector's first pulse.
 
     A selector is a gradient, a frequency and a profile, or the trace of a
-    pulse under a gradient that changes along one axis.
+    pulse under a gradient that changes along one axis and where along it the
+    subject lies; the subject at rest by default.
     """
+    if selection is None:
+        selection = _Selection.of(pulses)
     keys = np.column_stack(
         [
-            _selecting(pulses),
-            np.round(_offsets(pulses), 3),
+            np.round(selection.gradients, 3),
+            np.round(selection.offsets, 3),
             pulses.profile,
-            np.round(pulses.direction, 6),
+            np.round(selection.directions, 6),
             pulses.trace,
+            np.round(selection.along, 7),
         ]
     )
     _, selector_of = _rows(keys)
@@ -1204,7 +1279,12 @@ def _selectors(pulses) -> tuple[np.ndarray, np.ndarray]:
     return selector_of, first
 
 
-def _profiles(entries: _Entries, selectors: np.ndarray, pulses) -> torch.Tensor:
+def _profiles(
+    entries: _Entries,
+    selectors: np.ndarray,
+    pulses,
+    selection: _Selection | None = None,
+) -> torch.Tensor:
     """Return each entry's flip angle under each selector as a level of :data:`_LEVELS`.
 
     ``(entries, selectors)``: the nearest level of the angle over the one on
@@ -1215,57 +1295,59 @@ def _profiles(entries: _Entries, selectors: np.ndarray, pulses) -> torch.Tensor:
         dtype=torch.int8,
         device=entries.positions.device,
     )
-    gradients = _selecting(pulses)
-    offsets = _offsets(pulses)
+    if selection is None:
+        selection = _Selection.of(pulses)
     for at, pulse in enumerate(selectors):
-        held[:, at] = _profile(entries, pulse, pulses, gradients, offsets)
+        held[:, at] = _profile(entries, pulse, pulses, selection)
     return held
 
 
 def _grouped(
-    entries: _Entries, selectors: np.ndarray, pulses, excitations: np.ndarray
+    entries: _Entries,
+    selectors: np.ndarray,
+    pulses,
+    selection: _Selection,
+    excitations: np.ndarray,
 ) -> tuple[_Entries, torch.Tensor, torch.Tensor]:
     """Return the entries the selectors ``excitations`` turn, the distinct rows of their :func:`_profiles` in ascending order, and each one's row.
 
     The rows are told apart one selector at a time, so that no table of every
     entry under every selector is held.
     """
-    gradients = _selecting(pulses)
-    offsets = _offsets(pulses)
     excited = torch.zeros(
         entries.positions.shape[0], dtype=torch.bool, device=entries.positions.device
     )
     for at in excitations:
-        excited |= _profile(entries, selectors[at], pulses, gradients, offsets) > 0
+        excited |= _profile(entries, selectors[at], pulses, selection) > 0
     entries = entries.subset(torch.nonzero(excited).reshape(-1))
     count = entries.positions.shape[0]
     row_of = torch.zeros(count, dtype=torch.int64, device=excited.device)
     for pulse in selectors:
-        level = _profile(entries, pulse, pulses, gradients, offsets).long()
+        level = _profile(entries, pulse, pulses, selection).long()
         row_of = torch.unique(row_of * _LEVELS.size + level, return_inverse=True)[1]
     rows = int(row_of.max()) + 1 if count else 0
     first = torch.full((rows,), count, dtype=torch.int64, device=excited.device)
     first.scatter_reduce_(
         0, row_of, torch.arange(count, device=excited.device), reduce="amin"
     )
-    return entries, _profiles(entries.subset(first), selectors, pulses), row_of
+    return (
+        entries,
+        _profiles(entries.subset(first), selectors, pulses, selection),
+        row_of,
+    )
 
 
 def _profile(
-    entries: _Entries,
-    pulse: int,
-    pulses,
-    gradients: np.ndarray,
-    offsets: np.ndarray,
+    entries: _Entries, pulse: int, pulses, selection: _Selection
 ) -> torch.Tensor:
     """Return :func:`_profiles` under the selector whose first pulse is ``pulse``, ``(entries,)``."""
     device = entries.positions.device
     detuning, ratio = pulses.profiles[pulses.profile[pulse]]
-    field = entries.frequency - float(offsets[pulse])
+    field = entries.frequency - float(selection.offsets[pulse])
     if pulses.trace[pulse] >= 0:
         along = entries.positions @ torch.as_tensor(
-            pulses.direction[pulse], dtype=torch.float32, device=device
-        )
+            selection.directions[pulse], dtype=torch.float32, device=device
+        ) + float(selection.along[pulse])
         flip = torch.as_tensor(
             pulses.traces[pulses.trace[pulse]].ratio(
                 field.double().cpu().numpy(), along.double().cpu().numpy()
@@ -1274,9 +1356,9 @@ def _profile(
             device=device,
         )
         return _level(flip)
-    if np.any(gradients[pulse]):
+    if np.any(selection.gradients[pulse]):
         gradient = torch.as_tensor(
-            pulses.gradient[pulse], dtype=torch.float32, device=device
+            selection.gradients[pulse], dtype=torch.float32, device=device
         )
         field = field + entries.positions @ gradient
     step = float(detuning[1] - detuning[0]) if detuning.size > 1 else 1.0
