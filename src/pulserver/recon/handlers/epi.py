@@ -1683,9 +1683,11 @@ def full_resolution_maps(kspace, calibration, maps, device):
     import torch
     from bartorch import linop, optim, tools
 
+    on = torch.device(device) if device is not None else kspace.device
     lines = torch.nonzero(calibration.abs().sum(dim=(0, 2)) > 0)[:, 0]
     region = calibration[:, int(lines[0]) : int(lines[-1]) + 1].contiguous()
-    kernel = tools.spirit_kernel(region.to(torch.complex64), SPIRIT_KERNEL)
+    kernel = tools.spirit_kernel(region.to(torch.complex64), SPIRIT_KERNEL).to(on)
+    kspace = kspace.to(on, torch.complex64)
     grid = tuple(kspace.shape[1:])
     shape = tuple(kspace.shape)
     sampling = linop.Diagonal(
@@ -1698,7 +1700,7 @@ def full_resolution_maps(kspace, calibration, maps, device):
         maxiter=SPIRIT_ITERATIONS,
         device=device,
     )
-    filled = solve(kspace.to(torch.complex64), sampling).reshape(shape).cpu()
+    filled = solve(kspace, sampling).reshape(shape).cpu()
     images = bartorch.fft(filled, (-1, -2), inverse=True, unitary=True).reshape(shape)
     rss = images.abs().square().sum(dim=0).sqrt()
     weight = rss / (rss + SPIRIT_MAPS_FLOOR * torch.quantile(rss.flatten(), 0.99))
