@@ -727,20 +727,66 @@ def _poses(
     A subject at ``R p + s`` acquires at k what the subject at rest acquires
     at ``R^T k``, times exp(-2 pi i k . s): per readout, ``R^T`` along the
     logical axes, ``(n, 3, 3)``, and ``s`` along them, ``(n, 3)`` in m.
+
+    The excitation's profile stays where the subject at rest lies, so a
+    subject moved through a slice its readout's k does not resolve, less than
+    a cycle across the slice, takes no part of ``s`` along the slice: the
+    spins the slice holds stay at its position. Through-slice motion therefore
+    changes neither which tissue a slice holds nor its encoding phase.
     """
     rotation = timeline.rotation
     readouts = timeline.readouts
+    across = _selections(timeline)
     turns = np.empty((len(readouts), 3, 3))
     shifts = np.empty((len(readouts), 3))
     for at, echo_us in enumerate(readouts.echo_us):
         turn, shift = motion.transform(1e-6 * float(echo_us))
         turns[at] = rotation.T @ turn.T @ rotation
         shifts[at] = rotation.T @ shift
+        slab = across(float(echo_us))
+        if slab is not None:
+            direction, width = slab
+            if float(readouts.reach[at] @ np.abs(direction)) * width < 1.0:
+                shifts[at] -= (shifts[at] @ direction) * direction
     readouts.reach[:] = np.einsum("nij,nj->ni", np.abs(turns), readouts.reach)
     return (
         torch.as_tensor(turns, device=device),
         torch.as_tensor(shifts, device=device),
     )
+
+
+def _selections(timeline: Timeline):
+    """Return a lookup of the slab the last excitation at or before a time, in µs, selects.
+
+    The slab is the logical unit axis the excitation selects along and its
+    full width at half maximum, in m; None before the first excitation or
+    where it selects none.
+    """
+    pulses, rotation = timeline.pulses, timeline.rotation
+    excitations = np.flatnonzero(pulses.use == _EXCITATION)
+    slabs = []
+    for at in excitations:
+        if pulses.trace[at] >= 0:
+            axis = pulses.direction[at]
+            width = pulses.traces[pulses.trace[at]].width
+        else:
+            gradient = pulses.gradient[at]
+            strength = float(np.linalg.norm(gradient))
+            if strength == 0.0:
+                slabs.append(None)
+                continue
+            axis = gradient / strength
+            detuning, ratio = pulses.profiles[pulses.profile[at]]
+            half = detuning[ratio >= 0.5]
+            width = float(half[-1] - half[0]) / strength if half.size else 0.0
+        slabs.append(None if not np.isfinite(width) else (rotation.T @ axis, width))
+    times = pulses.time_us[excitations]
+
+    def across(time_us: float):
+        last = int(np.searchsorted(times, time_us, side="right")) - 1
+        return slabs[last] if last >= 0 else None
+
+    return across
 
 
 def _b_values(
