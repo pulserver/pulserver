@@ -616,7 +616,7 @@ def test_the_wavelet_solve_starts_from_the_conjugate_gradient_image(device):
     assert error / np.linalg.norm(np.abs(start.numpy())) < 0.05
 
 
-def test_full_resolution_maps_of_a_threefold_undersampled_slice_follow_steep_coil_sensitivities(
+def test_full_resolution_maps_of_a_threefold_undersampled_slice_follow_steep_coil_sensitivities_on_any_device(
     device,
 ):
     from pulserver.recon.handlers.epi import full_resolution_maps
@@ -642,7 +642,12 @@ def test_full_resolution_maps_of_a_threefold_undersampled_slice_follow_steep_coi
     calibration[:, 12:36] = kspace[:, 12:36]
     smooth = torch.from_numpy(_maps((1, 48, 48), coils=8)[:, 0])
 
-    maps = full_resolution_maps(kspace * sampled, calibration, smooth, device).numpy()
+    maps = full_resolution_maps(
+        (kspace * sampled).to(device), calibration.to(device), smooth.to(device)
+    )
+
+    assert maps.device.type == device
+    maps = maps.cpu().numpy()
 
     inside = np.abs(image[0]) > 0
     phase = np.exp(1j * np.angle((np.conj(maps) * true).sum(axis=0)))
