@@ -510,8 +510,11 @@ boundary may fall between two blocks only where every gradient is within
 <a class="reference internal" href="pulserver.ir.Grouping.boundary_gradient_hz_per_m.html#pulserver.ir.Grouping.boundary_gradient_hz_per_m" title="pulserver.ir.Grouping.boundary_gradient_hz_per_m"><code class="xref py py-attr docutils literal notranslate"><span class="pre">boundary_gradient_hz_per_m</span></code></a> of zero at the join. A boundary must
 fall where the <code class="docutils literal notranslate"><span class="pre">NOROT</span></code> or <code class="docutils literal notranslate"><span class="pre">PMC</span></code> label changes, since the interpreter
 sets one prescription rotation per segment instance; conversion fails when
-such a change falls under a gradient. The <code class="docutils literal notranslate"><span class="pre">split_*</span></code> attributes add
-boundaries.</p>
+such a change falls under a gradient. <code class="docutils literal notranslate"><span class="pre">split_by_pulses</span></code> and
+<code class="docutils literal notranslate"><span class="pre">split_by_readouts</span></code> move no boundary: repetitions whose blocks play other
+definitions at the same positions (duration, RF and gradient definitions,
+or readouts) become variants of the segment; <code class="docutils literal notranslate"><span class="pre">split_navigators</span></code> and
+<code class="docutils literal notranslate"><span class="pre">split_edge_delays</span></code> add boundaries.</p>
 <p>The default suits an interpreter that begins a segment by setting its
 gradients, so that a boundary falls only where they are at rest.</p>
 <dl class="field-list simple">

@@ -489,8 +489,9 @@
 <span class="sd">        axes. Without any, the resonance check is left out.</span>
 <span class="sd">    vops</span>
 <span class="sd">        VOPs and the global SAR matrices of their body models, or the ``.mat``</span>
-<span class="sd">        or ``.npz`` file holding them, which :func:`sar_ratios` reads; nothing</span>
-<span class="sd">        is refused on SAR.</span>
+<span class="sd">        or ``.npz`` file holding them, which :func:`sar_ratios` reads. The</span>
+<span class="sd">        ratios are reported, never refused on their value; VOPs written for</span>
+<span class="sd">        another transmit configuration are refused.</span>
 <span class="sd">    drive_per_hz</span>
 <span class="sd">        Channel drive per Hz of RF amplitude, in the VOPs' drive unit: one</span>
 <span class="sd">        value, or one per channel. A scale common to every channel cancels in</span>

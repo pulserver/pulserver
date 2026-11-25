@@ -515,8 +515,9 @@ or a SAFE description. <code class="docutils literal notranslate"><span class="p
 <li><p><strong>bands</strong> (<em>tuple[pypulseqpp.safety._resonance.ForbiddenBand, …]</em>) – Forbidden gradient bands of <code class="docutils literal notranslate"><span class="pre">check_mech_resonance</span></code>, on the physical
 axes. Without any, the resonance check is left out.</p></li>
 <li><p><strong>vops</strong> (<em>pypulseqpp.safety._sar.VopModel | pathlib.Path | str | None</em>) – VOPs and the global SAR matrices of their body models, or the <code class="docutils literal notranslate"><span class="pre">.mat</span></code>
-or <code class="docutils literal notranslate"><span class="pre">.npz</span></code> file holding them, which <a class="reference internal" href="pulserver.ir.sar_ratios.html#pulserver.ir.sar_ratios" title="pulserver.ir.sar_ratios"><code class="xref py py-func docutils literal notranslate"><span class="pre">sar_ratios()</span></code></a> reads; nothing
-is refused on SAR.</p></li>
+or <code class="docutils literal notranslate"><span class="pre">.npz</span></code> file holding them, which <a class="reference internal" href="pulserver.ir.sar_ratios.html#pulserver.ir.sar_ratios" title="pulserver.ir.sar_ratios"><code class="xref py py-func docutils literal notranslate"><span class="pre">sar_ratios()</span></code></a> reads. The
+ratios are reported, never refused on their value; VOPs written for
+another transmit configuration are refused.</p></li>
 <li><p><strong>drive_per_hz</strong> (<em>float | tuple[float, …]</em>) – Channel drive per Hz of RF amplitude, in the VOPs’ drive unit: one
 value, or one per channel. A scale common to every channel cancels in
 the ratios.</p></li>

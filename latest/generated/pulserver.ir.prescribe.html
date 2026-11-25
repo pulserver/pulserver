@@ -503,8 +503,9 @@
 <dt class="sig sig-object py" id="pulserver.ir.prescribe">
 <span class="sig-prename descclassname"><span class="pre">pulserver.ir.</span></span><span class="sig-name descname"><span class="pre">prescribe</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/pulserver/ir/_convert.html#prescribe"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#pulserver.ir.prescribe" title="Link to this definition">#</a></dt>
 <dd><p>Move a logical-frame sequence to a prescribed field-of-view centre, in place.</p>
-<p>An offset along the slice axis becomes an RF frequency, an in-plane offset
-an RF and ADC phase, each referenced to the excitation it follows; blocks
+<p>An offset along the slice axis becomes an RF frequency, one along the
+readout an ADC frequency, and the gradient area played since the excitation
+sets the RF and ADC phases, which carry the phase-encoding offset; blocks
 labelled <code class="docutils literal notranslate"><span class="pre">NOPOS</span></code> are exempt. The gradient area is counted from the
 sequence’s first block. A block that carries a rotation extension is moved
 by the gradients it plays: those it draws, turned by that rotation.</p>

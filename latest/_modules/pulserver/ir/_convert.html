@@ -532,8 +532,11 @@
 <span class="sd">    :attr:`boundary_gradient_hz_per_m` of zero at the join. A boundary must</span>
 <span class="sd">    fall where the ``NOROT`` or ``PMC`` label changes, since the interpreter</span>
 <span class="sd">    sets one prescription rotation per segment instance; conversion fails when</span>
-<span class="sd">    such a change falls under a gradient. The ``split_*`` attributes add</span>
-<span class="sd">    boundaries.</span>
+<span class="sd">    such a change falls under a gradient. ``split_by_pulses`` and</span>
+<span class="sd">    ``split_by_readouts`` move no boundary: repetitions whose blocks play other</span>
+<span class="sd">    definitions at the same positions (duration, RF and gradient definitions,</span>
+<span class="sd">    or readouts) become variants of the segment; ``split_navigators`` and</span>
+<span class="sd">    ``split_edge_delays`` add boundaries.</span>
 
 <span class="sd">    The default suits an interpreter that begins a segment by setting its</span>
 <span class="sd">    gradients, so that a boundary falls only where they are at rest.</span>
@@ -1135,8 +1138,9 @@
 <span class="k">def</span><span class="w"> </span><span class="nf">prescribe</span><span class="p">(</span><span class="n">sequence</span><span class="p">:</span> <span class="n">pp</span><span class="o">.</span><span class="n">Sequence</span><span class="p">,</span> <span class="n">fov_offset</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">float</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">pp</span><span class="o">.</span><span class="n">Sequence</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Move a logical-frame sequence to a prescribed field-of-view centre, in place.</span>
 
-<span class="sd">    An offset along the slice axis becomes an RF frequency, an in-plane offset</span>
-<span class="sd">    an RF and ADC phase, each referenced to the excitation it follows; blocks</span>
+<span class="sd">    An offset along the slice axis becomes an RF frequency, one along the</span>
+<span class="sd">    readout an ADC frequency, and the gradient area played since the excitation</span>
+<span class="sd">    sets the RF and ADC phases, which carry the phase-encoding offset; blocks</span>
 <span class="sd">    labelled ``NOPOS`` are exempt. The gradient area is counted from the</span>
 <span class="sd">    sequence's first block. A block that carries a rotation extension is moved</span>
 <span class="sd">    by the gradients it plays: those it draws, turned by that rotation.</span>
