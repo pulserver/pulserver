@@ -638,20 +638,36 @@ class FourierPlayer:
         traj = grid.trajectory(at).to(torch.float32)[None]
         terms = grid.images.shape[0]
         coils = grid.sensitivities.shape[0]
-        per_coil = max(1, min(coils, _BUDGET // (8 * grid.points * terms)))
-        transform = _transform(traj, (per_coil * terms, *grid.shape))
+        # A transform holds coils times image terms on the grid: whole coils
+        # of every term where they fit in the budget, else one coil's terms
+        # a batch at a time.
+        fitting = max(1, _BUDGET // (8 * grid.points))
+        per_coil = max(1, min(coils, fitting // terms))
+        per_term = terms if fitting >= terms else fitting
+        transforms = {}
         for c0 in range(0, coils, per_coil):
             c1 = min(c0 + per_coil, coils)
-            held = torch.zeros(
-                (per_coil, terms, *grid.shape), dtype=torch.complex64, device=device
-            )
-            held[: c1 - c0] = grid.sensitivity(c0, c1)[:, None] * grid.images[None]
-            transformed = transform(held.reshape(-1, *grid.shape)).reshape(
-                per_coil, terms, -1
-            )[: c1 - c0]
-            out[c0:c1, where] = (
-                torch.einsum("ctn,tn->cn", transformed, weights) * factor
-            )
+            sensitivity = grid.sensitivity(c0, c1)[:, None]
+            summed = 0
+            for t0 in range(0, terms, per_term):
+                t1 = min(t0 + per_term, terms)
+                if (per_coil, per_term) not in transforms:
+                    transforms[per_coil, per_term] = _transform(
+                        traj, (per_coil * per_term, *grid.shape)
+                    )
+                held = torch.zeros(
+                    (per_coil, per_term, *grid.shape),
+                    dtype=torch.complex64,
+                    device=device,
+                )
+                held[: c1 - c0, : t1 - t0] = sensitivity * grid.images[None, t0:t1]
+                transformed = transforms[per_coil, per_term](
+                    held.reshape(-1, *grid.shape)
+                ).reshape(per_coil, per_term, -1)[: c1 - c0, : t1 - t0]
+                summed = summed + torch.einsum(
+                    "ctn,tn->cn", transformed, weights[t0:t1]
+                )
+            out[c0:c1, where] = summed * factor
 
     def _span_ends(self) -> np.ndarray:
         """Return the blocks at which spans may end: after at least :data:`_SPAN_SAMPLES` samples, and the scan's end."""

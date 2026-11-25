@@ -1081,3 +1081,30 @@ def test_a_subject_moved_out_of_a_spectral_spatial_slab_is_no_longer_excited(
         return np.linalg.norm(np.concatenate(readouts, axis=1))
 
     assert energy(0.08) < 0.05 * energy(0.0)
+
+
+def test_readouts_transformed_one_image_term_at_a_time_match_those_transformed_at_once(
+    tmp_path, monkeypatch
+):
+    from pulserver.virtual import _fourier
+
+    path = _multiband_epi(tmp_path / "mb.seq")
+    tissue = virtual.Phantom(
+        [
+            virtual.Ellipse(
+                (0.0, 0.0, z), (0.06, 0.04), t1=1.0, t2=0.1, shift_ppm=0.5 * (z > 0)
+            )
+            for z in np.arange(-0.02, 0.0201, 1e-3)
+        ]
+        + [virtual.Ellipse((0.02, 0.0, 0.0), (0.02, 0.01), t1=0.3, t2=0.03)]
+    ).tissue(2e-3, field_t=3.0)
+    motion = virtual.RigidMotion(offset=lambda t: [0.0, 0.0, 2e-3 * t])
+    player = _fourier.FourierPlayer(path, tissue, device="cpu", motion=motion)
+    assert max(grid.images.shape[0] for grid in player._grids if grid) > 1
+    at_once = player._acquired(0, player._timeline.readouts.first.size - 1)
+    monkeypatch.setattr(_fourier, "_BUDGET", 1)
+    one_by_one = player._acquired(0, player._timeline.readouts.first.size - 1)
+
+    np.testing.assert_allclose(
+        one_by_one, at_once, rtol=1e-4, atol=1e-6 * np.abs(at_once).max()
+    )
