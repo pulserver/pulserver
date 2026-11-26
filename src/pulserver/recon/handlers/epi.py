@@ -1130,7 +1130,8 @@ class EpiRecon(PicsRecon):
         Each shot's rigid pose relative to the first's is fitted together with
         the image, from ``start`` (:func:`bartorch.tools.estimate_rigid_motion`,
         ``SHOT_MOTION_STEPS`` Gauss-Newton steps of
-        ``SHOT_MOTION_ITERATIONS`` conjugate gradients), and from the previous
+        ``SHOT_MOTION_ITERATIONS`` conjugate gradients on the central
+        ``SHOT_MOTION_CENTRE`` of k-space), and from the previous
         slab's poses where it had as many shots. The image returned is then
         solved in the poses by ``steps`` conjugate-gradient steps.
         """
@@ -1152,6 +1153,7 @@ class EpiRecon(PicsRecon):
             shifts,
             steps=SHOT_MOTION_STEPS,
             iterations=SHOT_MOTION_ITERATIONS,
+            centre=SHOT_MOTION_CENTRE,
             device=context.device,
         )
         self.shot_poses = (rotations, shifts)
@@ -2152,9 +2154,14 @@ SHOT_PHASE_ITERATIONS = 8
 SHOT_PHASE_TOLERANCE = 0.02
 
 #: Gauss-Newton steps of the joint fit of a segmented slab's image and shot
-#: poses, and the conjugate gradients of each (:meth:`EpiRecon._shot_poses`).
-SHOT_MOTION_STEPS = 3
-SHOT_MOTION_ITERATIONS = 40
+#: poses, the conjugate gradients of each, and the central fraction of
+#: k-space the fit reads (:meth:`EpiRecon._shot_poses`). In a 7T simulation
+#: of a 4x2 slab nodding 0.3 deg over 4 s, 4 steps of 60 brought the fitted
+#: turns to 0.75 of the simulated ones, against 0.5 after 3 of 40, and 4-shot
+#: NRMSE to 0.066 against 0.068; 6 steps gained no more at 4 shots.
+SHOT_MOTION_STEPS = 4
+SHOT_MOTION_ITERATIONS = 60
+SHOT_MOTION_CENTRE = 1.0
 
 #: Gauss-Newton steps of each shot-phase fit, and their Levenberg damping, a
 #: fraction of the mean curvature.
