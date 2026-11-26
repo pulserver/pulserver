@@ -1098,3 +1098,47 @@ def test_a_slab_takes_the_slab_steps_and_a_slice_the_epi_steps(
     epi.EpiRecon(0.003)._solved(kspace, maps, SimpleNamespace(device=None))
 
     assert steps == [getattr(epi, name) for name in expected]
+
+
+def _nodding_slab(shape=(8, 32, 32), coils=8, voxel=(2e-3, 2e-3, 2e-3)):
+    from bartorch import tools
+
+    if not hasattr(tools, "rigid_encoding"):
+        pytest.skip("the installed bartorch has no tools.rigid_encoding")
+
+    z, y, x = np.meshgrid(*(np.arange(n) - n // 2 for n in shape), indexing="ij")
+    image = np.exp(-((y / 10.0) ** 2 + (x / 9.0) ** 2 + (z / 3.0) ** 2) * 2)
+    image = image + 0.5 * np.exp(-(((y - 4) / 3.0) ** 2 + ((x + 5) / 3.0) ** 2) * 2)
+    image = torch.from_numpy(image.astype(np.complex64))
+    maps = torch.from_numpy(_maps(shape, coils)) * torch.exp(
+        1j * torch.linspace(0, 1, shape[0])
+    )[None, :, None, None].to(torch.complex64)
+    maps = maps / maps.abs().square().sum(0, keepdim=True).sqrt()
+    masks = torch.zeros(2, *shape[:2], dtype=torch.bool)
+    masks[0, :, 0::4], masks[1, :, 2::4] = True, True
+    half = 0.04 / 2
+    turn = torch.tensor(
+        [[1, 0, 0], [0, np.cos(half), -np.sin(half)], [0, np.sin(half), np.cos(half)]],
+        dtype=torch.float64,
+    )
+    rotations = torch.stack([torch.eye(3, dtype=torch.float64), turn @ turn])
+    shifts = torch.tensor([[0, 0, 0], [0, 0.6e-3, -0.8e-3]], dtype=torch.float64)
+    kspace = tools.rigid_encoding(maps, masks, voxel, rotations, shifts)(image)
+    return kspace, maps, masks, image, voxel
+
+
+def test_a_slab_whose_second_shot_nodded_is_solved_closer_to_the_object_with_its_shot_poses():
+    from pulserver.recon.handlers import epi
+
+    kspace, maps, masks, image, voxel = _nodding_slab()
+    context = SimpleNamespace(device=None)
+
+    def error(solved):
+        return float((solved - image).norm() / image.norm())
+
+    still = epi.EpiRecon(0.0, 20)._solved(kspace, maps, context)
+    recon = epi.EpiRecon(0.0, 20)
+    posed = recon._solved(kspace, maps, context, motion=(masks, voxel))
+
+    assert error(posed) < 0.5 * error(still)
+    assert abs(float(recon.shot_poses[1][1, 2]) + 0.8e-3) < 0.1e-3

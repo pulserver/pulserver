@@ -1000,7 +1000,7 @@ def test_a_subject_moved_through_multiband_slices_takes_no_encoding_phase_from_t
         axis=1,
     )
 
-    assert np.linalg.norm(through - still) < 1e-6 * np.linalg.norm(still)
+    assert np.linalg.norm(through - still) < 1e-3 * np.linalg.norm(still)
     assert np.linalg.norm(within - still) > 0.1 * np.linalg.norm(still)
 
 
@@ -1023,3 +1023,88 @@ def test_a_subject_moved_along_z_in_a_non_selective_3d_scan_keeps_its_encoding_p
     )
 
     assert np.linalg.norm(moved - still) > 0.1 * np.linalg.norm(still)
+
+
+def test_a_subject_moved_through_its_slices_is_excited_where_it_lies_at_the_pulse(
+    tmp_path,
+):
+    path = _multiband_epi(tmp_path / "mb.seq")
+    tissue = virtual.Phantom(
+        [
+            virtual.Ellipse((0.0, 0.0, z), (0.06, 0.04), t1=1.0, t2=0.1)
+            for z in np.arange(1e-3, 0.0201, 1e-3)
+        ]
+    ).tissue(2e-3)
+
+    def energy(offset_m):
+        motion = virtual.RigidMotion(offset=lambda t: [0.0, 0.0, offset_m])
+        readouts = virtual.simulate(path, tissue, device="cpu", motion=motion)
+        return np.linalg.norm(np.concatenate(readouts, axis=1))
+
+    still = energy(0.0)
+    assert energy(1.2e-2) < 0.05 * still
+    assert energy(-1.2e-2) > 1.5 * still
+
+
+def test_a_subject_moved_out_of_a_spectral_spatial_slab_is_no_longer_excited(
+    tmp_path,
+):
+    system = pp.Opts(
+        max_grad=80, grad_unit="mT/m", max_slew=200, slew_unit="T/m/s", B0=7.0
+    )
+    main = sequences.epi3D_sequence(
+        system,
+        n_x=16,
+        n_y=16,
+        n_z=8,
+        fov_x=0.2,
+        fov_y=0.2,
+        fov_z=0.04,
+        n_dummy=0,
+        excitation="spsp",
+        field_pair=False,
+        full_k_reference=False,
+    )[-1]
+    path = tmp_path / "spsp.seq"
+    sequences.write(path, main)
+    ir.convert(path, system)
+    tissue = virtual.Phantom(
+        [
+            virtual.Ellipse((0.0, 0.0, z), (0.07, 0.05), t1=1.0, t2=0.05)
+            for z in np.arange(-0.016, 0.0161, 2e-3)
+        ]
+    ).tissue(4e-3)
+
+    def energy(offset_m):
+        motion = virtual.RigidMotion(offset=lambda t: [0.0, 0.0, offset_m])
+        readouts = virtual.simulate(path, tissue, device="cpu", motion=motion)
+        return np.linalg.norm(np.concatenate(readouts, axis=1))
+
+    assert energy(0.08) < 0.05 * energy(0.0)
+
+
+def test_readouts_transformed_one_image_term_at_a_time_match_those_transformed_at_once(
+    tmp_path, monkeypatch
+):
+    from pulserver.virtual import _fourier
+
+    path = _multiband_epi(tmp_path / "mb.seq")
+    tissue = virtual.Phantom(
+        [
+            virtual.Ellipse(
+                (0.0, 0.0, z), (0.06, 0.04), t1=1.0, t2=0.1, shift_ppm=0.5 * (z > 0)
+            )
+            for z in np.arange(-0.02, 0.0201, 1e-3)
+        ]
+        + [virtual.Ellipse((0.02, 0.0, 0.0), (0.02, 0.01), t1=0.3, t2=0.03)]
+    ).tissue(2e-3, field_t=3.0)
+    motion = virtual.RigidMotion(offset=lambda t: [0.0, 0.0, 2e-3 * t])
+    player = _fourier.FourierPlayer(path, tissue, device="cpu", motion=motion)
+    assert max(grid.images.shape[0] for grid in player._grids if grid) > 1
+    at_once = player._acquired(0, player._timeline.readouts.first.size - 1)
+    monkeypatch.setattr(_fourier, "_BUDGET", 1)
+    one_by_one = player._acquired(0, player._timeline.readouts.first.size - 1)
+
+    np.testing.assert_allclose(
+        one_by_one, at_once, rtol=1e-4, atol=1e-6 * np.abs(at_once).max()
+    )

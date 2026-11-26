@@ -43,7 +43,7 @@ from .pics import (
     nlinv_estimate,
     partial_fourier_axes,
     pics_image,
-    sense_coil_batch,
+    sense_encoding,
     smooth_phase,
 )
 
@@ -750,6 +750,10 @@ class EpiRecon(PicsRecon):
         unit adds to the image; ``False`` solves every unit as one. A 3D slab
         is solved as one, each of its excitations' phase removed from its
         navigator (:class:`EpiPhaseCorrection`).
+    shot_motion : bool, default=True
+        Fit and encode the rigid pose of each shot of a segmented 3D slab
+        relative to its first (:meth:`_shot_poses`); ``False`` reads every
+        shot in one pose.
     """
 
     def __init__(
@@ -764,6 +768,7 @@ class EpiRecon(PicsRecon):
         gradient_unwarp: bool = True,
         intensity_correction: bool = True,
         shot_phase: bool = True,
+        shot_motion: bool = True,
     ) -> None:
         super().__init__(
             0.0 if wavelet is None else wavelet,
@@ -780,7 +785,9 @@ class EpiRecon(PicsRecon):
             None if start_iterations is None else int(start_iterations)
         )
         self.shot_phase = bool(shot_phase)
+        self.shot_motion = bool(shot_motion)
         self.shot_segments = None
+        self.shot_poses = None
         self.phase_references = {}
         self._skips_logged = set()
         compression = (
@@ -897,8 +904,9 @@ class EpiRecon(PicsRecon):
                         self._pair_template(data, volume),
                     )
                 )
+        motion = self._motion(context, data, volume) if slab else None
         image = self._solved(
-            volume, maps, context, reference, in_plane, shots, templates
+            volume, maps, context, reference, in_plane, shots, templates, motion
         )
         unit_set = int(data.counters.get("set", 0))
         if (
@@ -1038,8 +1046,9 @@ class EpiRecon(PicsRecon):
         bands=False,
         shots=None,
         templates=None,
+        motion=None,
     ):
-        """Return the image of ``(coils, z, y, x)`` k-space by the solve its sampling calls for, a partial-Fourier unit solved for a real image times its phase; ``bands`` marks the partitions as a multiband unit's (:meth:`_wavelet`), ``shots`` holds the ``(shots, z, y)`` lines of each segment of a segmented unit and ``templates`` the ``(name, image)`` its shot phases are fitted against, the full-k ``reference`` alone where it is not given (:meth:`_shot_phases`)."""
+        """Return the image of ``(coils, z, y, x)`` k-space by the solve its sampling calls for, a partial-Fourier unit solved for a real image times its phase; ``bands`` marks the partitions as a multiband unit's (:meth:`_wavelet`), ``shots`` holds the ``(shots, z, y)`` lines of each segment of a segmented unit and ``templates`` the ``(name, image)`` its shot phases are fitted against, the full-k ``reference`` alone where it is not given (:meth:`_shot_phases`); ``motion``, the ``(masks, voxel_size)`` of a segmented slab, has each shot's rigid pose fitted and encoded (:meth:`_shot_poses`)."""
         sampled = volume.abs().sum(dim=0) > 0
         partial = partial_fourier_axes(sampled.numpy())
         fills = _fills_acquired_range(sampled.numpy()) and not partial
@@ -1055,12 +1064,16 @@ class EpiRecon(PicsRecon):
                 volume, maps, sampled, shots, templates, context, l2
             )
         self.shot_segments = segments
-        if fills:
+        if fills and motion is None:
             return sense_combined(volume, maps) if segments is None else start
         steps, start_steps = self._steps(volume.shape[1] > 1 and not bands)
         if start is None:
             begin = start_steps if wavelet > 0 or partial else steps
             start = cg_sense(volume, maps, sampled, begin, context.device, l2=l2)
+            if motion is not None:
+                motion, start = self._shot_poses(
+                    volume, maps, sampled, motion, start, begin, context, l2
+                )
         if partial:
             phase = self._phase(start, reference, sampled)
             if phase is not None:
@@ -1075,6 +1088,7 @@ class EpiRecon(PicsRecon):
                     phase=phase,
                     l2=self.l2,
                     shots=segments,
+                    motion=motion,
                 )
         if wavelet <= 0:
             return start
@@ -1088,7 +1102,76 @@ class EpiRecon(PicsRecon):
             context.device,
             x0=start * phase.conj(),
             shots=segments,
+            motion=motion,
         )
+
+    def _motion(self, context, data, volume):
+        """Return the ``(masks, voxel_size)`` of a segmented slab whose shot poses are fitted, ``voxel_size`` ``(z, y, x)`` in metres from its encoded space; ``None`` where ``shot_motion`` is off, the unit has fewer than two shots or the header states no encoded field of view."""
+        if not self.shot_motion:
+            return None
+        masks = shot_masks(data.data, tuple(volume.shape[1:]))
+        encodings = getattr(context.header, "encoding", None) or ()
+        index = int(getattr(data.data.reference, "encoding_space_ref", 0) or 0)
+        if masks is None or index >= len(encodings):
+            return None
+        space = encodings[index].encodedSpace
+        fov, matrix = space.fieldOfView_mm, space.matrixSize
+        voxel = tuple(
+            float(getattr(fov, axis) or 0)
+            / 1000.0
+            / max(int(getattr(matrix, axis) or 1), 1)
+            for axis in ("z", "y", "x")
+        )
+        return None if min(voxel) <= 0 else (masks, voxel)
+
+    def _shot_poses(self, volume, maps, sampled, motion, start, steps, context, l2):
+        """Return the ``(masks, voxel_size, rotations, shifts)`` of a segmented slab and its conjugate-gradient image in those poses.
+
+        Each shot's rigid pose relative to the first's is fitted together with
+        the image, from ``start`` (:func:`bartorch.tools.estimate_rigid_motion`,
+        ``SHOT_MOTION_STEPS`` Gauss-Newton steps of
+        ``SHOT_MOTION_ITERATIONS`` conjugate gradients on the central
+        ``SHOT_MOTION_CENTRE`` of k-space), and from the previous
+        slab's poses where it had as many shots. The image returned is then
+        solved in the poses by ``steps`` conjugate-gradient steps.
+        """
+        from bartorch import tools
+
+        begin = time.perf_counter()
+        masks, voxel = motion
+        previous = self.shot_poses
+        rotations, shifts = (None, None)
+        if previous is not None and previous[0].shape[0] == masks.shape[0]:
+            rotations, shifts = previous
+        rotations, shifts, _, residual = tools.estimate_rigid_motion(
+            volume,
+            maps,
+            masks,
+            start,
+            voxel,
+            rotations,
+            shifts,
+            steps=SHOT_MOTION_STEPS,
+            iterations=SHOT_MOTION_ITERATIONS,
+            centre=SHOT_MOTION_CENTRE,
+            device=context.device,
+        )
+        self.shot_poses = (rotations, shifts)
+        posed = (masks, voxel, rotations, shifts)
+        image = cg_sense(
+            volume, maps, sampled, steps, context.device, l2=l2, motion=posed
+        )
+        turns = np.degrees(
+            np.arccos(np.clip((np.einsum("sii->s", rotations.numpy()) - 1) / 2, -1, 1))
+        )
+        _log.info(
+            "EPI slab shot poses: turn %s deg, shift %s mm, residual %.4f, %.1f s",
+            np.round(turns, 3).tolist(),
+            np.round(np.linalg.norm(shifts.numpy(), axis=1) * 1e3, 3).tolist(),
+            residual,
+            time.perf_counter() - begin,
+        )
+        return posed, image
 
     def _steps(self, slab: bool) -> tuple[int, int]:
         """Return the solve's steps and its start image's for a unit, a 3D slab or not."""
@@ -2012,30 +2095,31 @@ def sense_combined(kspace, maps):
     return torch.where(weight > 0, image / weight.clamp_min(1e-12), 0)
 
 
-def cg_sense(kspace, maps, sampled, iterations, device, *, l2=0.0, shots=None):
+def cg_sense(
+    kspace, maps, sampled, iterations, device, *, l2=0.0, shots=None, motion=None
+):
     """Return the image ``(z, y, x)`` minimising ``|P F S x - y|^2 + l2 |x|^2``, ``l2`` at least ``CG_MIN_L2``, by conjugate gradients from zero.
 
     The encoding is :class:`bartorch.linop.CartesianSense` of ``maps`` over
     the ``sampled`` lines, with ``shots``, the ``(masks, phases)`` of a
     segmented unit, each shot's phase in it
-    (:func:`bartorch.tools.shot_encoding`); stopping after ``iterations``
+    (:func:`bartorch.tools.shot_encoding`), or with ``motion``, the
+    ``(masks, voxel_size, rotations, shifts)`` of a segmented 3D unit, each
+    shot's lines read in its rigid pose
+    (:func:`bartorch.tools.rigid_encoding`); stopping after ``iterations``
     steps regularizes the solve. The data are scaled as ``pics`` scales them.
     The iteration runs on ``device`` (the host where ``None``), and the image
     is returned on the device of ``kspace``.
     """
     import bartorch
     import torch
-    from bartorch import linop, optim, tools
+    from bartorch import optim, tools
 
     grid = tuple(kspace.shape[2:] if kspace.shape[1] == 1 else kspace.shape[1:])
     pattern = sampled.reshape(grid).to(torch.complex64)
     measured = kspace * sampled
-    encoding = linop.CartesianSense(
-        maps.reshape(maps.shape[0], *grid),
-        grid,
-        pattern=pattern,
-        device=device,
-        coil_batch=sense_coil_batch(maps.shape[0], grid),
+    encoding = sense_encoding(
+        maps.reshape(maps.shape[0], *grid), pattern, device, motion
     )
     if shots is not None:
         encoding = tools.shot_encoding(encoding, *shots)
@@ -2068,6 +2152,16 @@ SHOT_PHASE_ORDER = 6
 #: 0.03 of the reference without shot phase after six, against 0.06 after one.
 SHOT_PHASE_ITERATIONS = 8
 SHOT_PHASE_TOLERANCE = 0.02
+
+#: Gauss-Newton steps of the joint fit of a segmented slab's image and shot
+#: poses, the conjugate gradients of each, and the central fraction of
+#: k-space the fit reads (:meth:`EpiRecon._shot_poses`). In a 7T simulation
+#: of a 4x2 slab nodding 0.3 deg over 4 s, 4 steps of 60 brought the fitted
+#: turns to 0.75 of the simulated ones, against 0.5 after 3 of 40, and 4-shot
+#: NRMSE to 0.066 against 0.068; 6 steps gained no more at 4 shots.
+SHOT_MOTION_STEPS = 4
+SHOT_MOTION_ITERATIONS = 60
+SHOT_MOTION_CENTRE = 1.0
 
 #: Gauss-Newton steps of each shot-phase fit, and their Levenberg damping, a
 #: fraction of the mean curvature.
