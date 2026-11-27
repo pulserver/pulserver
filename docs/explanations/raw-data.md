@@ -68,8 +68,9 @@ before and after.
 The scanner plays the offset as frequency and phase offsets at the middle of
 each window ({doc}`scanner-representation`), which is the whole phase only
 under a constant readout gradient. On ramp-sampled and non-Cartesian readouts
-the proxy applies the remainder, together with any ADC phase modulation the
-file stores:
+the proxy applies the remainder, computed from the unshifted design and the
+offset. An ADC phase modulation the file stores is not applied: Pulseq carries
+a shift computed at design time there, which would add to the converted one.
 
 $$
 \phi(t) = 2\pi\, \mathbf{c} \cdot \bigl(\mathbf{k}(t) - \mathbf{k}(t_c)

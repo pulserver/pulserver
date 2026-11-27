@@ -165,8 +165,8 @@ the object; the resolution of the images is the trajectory's whatever it is.
 The playout demodulates $S_c$ by $\exp(i\theta(t))$, where the receiver phase
 $\theta$ is the ADC phase offset at the ADC's start, advancing at its
 frequency offset. The cache carries no ADC phase modulation: the
-reconstruction proxy applies it to the received samples
-({doc}`../../explanations/raw-data`).
+reconstruction proxy applies the rest of the field-of-view phase to the
+received samples ({doc}`../../explanations/raw-data`).
 
 These are the conventions under which the field-of-view translation applied
 when the IR is built ({doc}`../../explanations/scanner-representation`) recentres an object. Where every block

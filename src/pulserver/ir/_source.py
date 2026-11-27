@@ -186,8 +186,7 @@ class SequenceLibraries:
         ``(A, 8)``: sample count; dwell in ns; delay in µs; the frequency and
         phase ppm offsets; the frequency offset in Hz; the phase offset in
         rad; 0 for the phase modulation shape id. The cache carries no phase
-        modulation: the reconstruction proxy applies it from the sequence
-        file, and the shapes only it names are empty.
+        modulation, and the shapes only it names are empty.
     rf_definitions, grad_definitions, adc_definitions : NDArray[np.int32]
         ``(R,)``, ``(G,)``, ``(A,)``: the definition each row was
         deduplicated onto, counted from 1, as
@@ -489,8 +488,7 @@ def _grad_statistics(sequence: Any) -> NDArray[np.float64]:
 def _receiver_only(tables: Any) -> set[int]:
     """Return the shapes only ADC phase modulation names.
 
-    The modulation is applied to the received samples by the reconstruction
-    proxy from the sequence file, so the cache carries neither it nor them.
+    The cache carries neither the modulation nor them.
     """
     modulation = np.asarray(tables.adc)[:, 7].astype(np.int64)
     named = _present(modulation[modulation > 0])

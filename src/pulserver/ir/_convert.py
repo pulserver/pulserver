@@ -461,9 +461,10 @@ def convert(
     prescription's rotation is not applied here: the scanner plays the cache
     through its rotation matrix, composed after each block's own rotation.
 
-    ADC phase modulation is not stored in the cache: the reconstruction proxy
-    applies it to the received samples from the sequence
-    (:class:`~pulserver.proxy.SequenceTable`).
+    ADC phase modulation is not stored in the cache. The phase the offset adds
+    to a readout beyond its frequency and phase offsets is applied to the
+    received samples by the reconstruction proxy, which computes it from the
+    sequence and the offset (:class:`~pulserver.proxy.SequenceTable`).
 
     Parameters
     ----------
@@ -820,8 +821,7 @@ def play(
           readout, one phase per sample in radians, concatenated in play
           order; the receiver phase of a sample is the ADC phase offset, plus
           its frequency offset times the time since the ADC's start, plus
-          this. Empty for a cache converted here, which leaves the
-          modulation to the reconstruction proxy;
+          this. Empty for a cache converted here;
         - ``adc_modulation_span``: ``(blocks, 2)``, the start and stop of each
           block's modulation in that array; empty without one.
 

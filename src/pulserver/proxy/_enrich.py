@@ -241,14 +241,16 @@ class SequenceTable:
     ) -> np.ndarray | None:
         """Return the phase one readout's samples are corrected by, in rad, or None.
 
-        The phase modulation its ADC stores, plus what the shift
-        :attr:`fov_offset_m` the cache was converted at adds beyond the
-        frequency and phase offsets the scanner plays at the middle of the
-        sampling window. ``fov_offset_m``, in m along the logical axes, is the
-        position the object is at when it differs from that shift, as a
-        motion update states it: the difference is applied in full, as
-        ``2 pi (fov_offset_m - self.fov_offset_m) . k``. None when nothing is
-        applied.
+        What the shift :attr:`fov_offset_m` the cache was converted at adds
+        beyond the frequency and phase offsets the scanner plays: the
+        curvature about the line through the middle of the sampling window,
+        computed from this table's k-space. ``fov_offset_m``, in m along the
+        logical axes, is the position the object is at when it differs from
+        that shift: the difference is applied in full, as
+        ``2 pi (fov_offset_m - self.fov_offset_m) . k``. A phase modulation
+        the sequence file stores is not applied: Pulseq carries a shift
+        computed at design time there, and the shift applied is the
+        converted one. None when nothing is applied.
         """
         converted = np.asarray(self.fov_offset_m, dtype=np.float64)
         moved = (
@@ -256,16 +258,9 @@ class SequenceTable:
             if fov_offset_m is None
             else (np.asarray(fov_offset_m, dtype=np.float64) - converted)
         )
-        file = int(np.searchsorted(self._first_rows, index, side="right")) - 1
-        stored = self._files[file].readout_phase_modulation(
-            index - int(self._first_rows[file])
-        )
         if not converted.any() and not moved.any():
-            return stored
-        phase = _shift_phase(self.readout_k(index), converted, moved)
-        if phase is None or stored is None:
-            return stored if phase is None else phase
-        return stored + phase
+            return None
+        return _shift_phase(self.readout_k(index), converted, moved)
 
     @classmethod
     def read(

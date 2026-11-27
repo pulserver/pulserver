@@ -13,8 +13,8 @@ execution stream are computed in the compiled extension, and the cache is
 written by the C library
 the interpreter reads it back with. The files are read in the logical frame and
 moved to the prescribed field-of-view offset before they are segmented. ADC
-phase modulation is not stored in the cache; the reconstruction proxy applies
-it from the sequence. The
+phase modulation is not stored in the cache; the reconstruction proxy computes
+the phase an offset adds to a readout from the sequence and the offset. The
 representation is described in {doc}`../explanations/scanner-representation`, and
 the cache layout in {doc}`../developer-guide/internals/ir-cache`.
 

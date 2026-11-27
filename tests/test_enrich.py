@@ -564,9 +564,9 @@ def test_a_readout_padded_to_the_frame_is_cut_to_its_own_samples():
     assert np.abs(np.asarray(acquisition.data)).min() > 0.0
 
 
-def curving(tmp_path, shift_m):
-    """A readout under a gradient that does not hold one value, moved by shift_m."""
-    system = pp.Opts(B0=3.0)
+def curving(system=None):
+    """A sequence whose one readout plays under a gradient that does not hold one value."""
+    system = system or pp.Opts(B0=3.0)
     seq = pp.Sequence(system)
     samples = 64
     waveform = 2.0e4 * np.sin(2 * np.pi * np.arange(samples) / samples)
@@ -574,11 +574,13 @@ def curving(tmp_path, shift_m):
         pp.make_arbitrary_grad("x", waveform=waveform, system=system),
         pp.make_adc(num_samples=samples, dwell=4e-6),
     )
-    if any(shift_m):
-        pp.TransformFOV(translation=shift_m, through_rotation=True).apply_to_sequence(
-            seq, in_place=True
-        )
-    return written(seq, tmp_path)
+    return seq
+
+
+def read_at(seq, tmp_path, shift_m):
+    path = tmp_path / "synthetic.seq"
+    seq.write(path)
+    return SequenceTable.read(path, fov_offset_m=shift_m)
 
 
 def test_a_curving_readout_carries_the_phase_its_receiver_cannot_apply(tmp_path):
@@ -586,9 +588,9 @@ def test_a_curving_readout_carries_the_phase_its_receiver_cannot_apply(tmp_path)
 
     Under a gradient that holds one value the shift is a phase and a frequency
     offset, which the receiver applies. Under one that does not, what is left
-    is a curve over the readout, and it arrives unapplied.
+    is a curve over the readout, and the proxy applies it.
     """
-    table = curving(tmp_path, (0.04, 0.0, 0.0))
+    table = read_at(curving(), tmp_path, (0.04, 0.0, 0.0))
     modulation = table.readout_phase_modulation(0)
     assert modulation is not None
     assert modulation.size == int(table.num_samples[0])
@@ -602,9 +604,35 @@ def test_a_curving_readout_carries_the_phase_its_receiver_cannot_apply(tmp_path)
     )
 
 
+def test_the_proxy_curve_is_the_one_the_shift_leaves_beyond_the_receiver_offsets(
+    tmp_path,
+):
+    """Computed from the unshifted design, it equals the modulation TransformFOV stores."""
+    shift = (0.04, 0.0, 0.0)
+    seq = curving()
+    table = read_at(seq, tmp_path, shift)
+    moved = pp.TransformFOV(translation=shift, through_rotation=True).apply_to_sequence(
+        seq
+    )
+    stored = np.asarray(moved.get_block(1).adc.phase_modulation)
+    difference = np.angle(np.exp(1j * (table.readout_phase_modulation(0) - stored)))
+    assert np.abs(difference).max() < 1e-9
+
+
+def test_a_phase_modulation_the_file_stores_is_not_applied(tmp_path):
+    """A file shifted at design time carries its curve there; the proxy applies only its own."""
+    seq = curving()
+    pp.TransformFOV(
+        translation=(0.04, 0.0, 0.0), through_rotation=True
+    ).apply_to_sequence(seq, in_place=True)
+    assert np.ptp(np.asarray(seq.get_block(1).adc.phase_modulation)) > 1e-3
+    table = read_at(seq, tmp_path, (0.0, 0.0, 0.0))
+    assert table.readout_phase_modulation(0) is None
+
+
 def test_an_unmoved_readout_arrives_as_it_was_received(tmp_path):
     """Nothing is applied where the field of view was not moved."""
-    table = curving(tmp_path, (0.0, 0.0, 0.0))
+    table = read_at(curving(), tmp_path, (0.0, 0.0, 0.0))
     assert table.readout_phase_modulation(0) is None
 
     samples = (np.arange(64, dtype=np.complex64) + 1j).reshape(1, 64)
@@ -622,10 +650,7 @@ def test_a_steady_readout_needs_no_curve(tmp_path):
         readout,
         pp.make_adc(num_samples=64, duration=2.56e-3, delay=readout.rise_time),
     )
-    pp.TransformFOV(
-        translation=(0.04, 0.0, 0.0), through_rotation=True
-    ).apply_to_sequence(seq, in_place=True)
-    assert written(seq, tmp_path).readout_phase_modulation(0) is None
+    assert read_at(seq, tmp_path, (0.04, 0.0, 0.0)).readout_phase_modulation(0) is None
 
 
 def test_the_header_states_the_shift_in_millimetres_along_read_phase_and_slice():

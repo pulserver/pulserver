@@ -104,7 +104,7 @@ noise scans and navigators included, and no other.
 | Field | Client | Proxy |
 | --- | --- | --- |
 | `number_of_samples` | The sample count of the readout's ADC event | Checked |
-| `active_channels`, data | The samples, demodulated by each ADC's frequency and phase offsets | Multiplied by the phase a field-of-view offset adds to a readout under a moving gradient, by the phase that centres the reconstruction grid (below), and by any phase modulation the sequence file stores |
+| `active_channels`, data | The samples, demodulated by each ADC's frequency and phase offsets | Multiplied by the phase a field-of-view offset adds to a readout under a moving gradient and by the phase that centres the reconstruction grid (below); an ADC phase modulation the sequence file stores is not applied |
 | `scan_counter` | 0 on every acquisition, or increasing by one from any start | Checked |
 | `flags` | None, or `LAST_IN_MEASUREMENT` on the last acquisition | Replaced |
 | `idx`, `sample_time_us`, `encoding_space_ref` | Any value | Replaced |
